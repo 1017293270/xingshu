@@ -183,6 +183,18 @@
   color: #5f5cd9;
 }
 
+.xs-icon-tile__image {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.xs-icon-tile--sm .xs-icon-tile__image {
+  width: 22px;
+  height: 22px;
+}
+
 .xs-icon-tile__node {
   position: absolute;
   right: 15px;

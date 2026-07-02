@@ -1,14 +1,12 @@
-import {
-  BookOpen,
-  ChartBar,
-  ChatCircleText,
-  FileText,
-  Notebook,
-  PresentationChart
-} from "@phosphor-icons/react";
 import { useState } from "react";
 import { XsAppCard, type XsAppCardData, XsCommandBox, XsShell } from "@/components/xs";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
+import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
+import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
+import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
+import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.png";
+import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
+import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import "./home.css";
 
 const recommendedApps: XsAppCardData[] = [
@@ -17,7 +15,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "智能问数",
     description: "经营指标、趋势变化和数据洞察",
     prompt: "帮我分析本月经营数据，并生成趋势图表",
-    icon: ChartBar,
+    imageSrc: appDataChatIcon,
     tone: "blue"
   },
   {
@@ -25,7 +23,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "知识问答",
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
-    icon: BookOpen,
+    imageSrc: appKnowledgeQaIcon,
     tone: "cyan"
   },
   {
@@ -33,7 +31,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "文档助手",
     description: "读取文档并提炼关键结论",
     prompt: "帮我总结这份项目材料的关键风险",
-    icon: FileText,
+    imageSrc: appDocumentAssistantIcon,
     tone: "green"
   },
   {
@@ -41,7 +39,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "报表生成",
     description: "生成可复用的分析报表和图表",
     prompt: "根据销售数据生成一份周报",
-    icon: PresentationChart,
+    imageSrc: appReportGenerationIcon,
     tone: "orange"
   },
   {
@@ -49,7 +47,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "智能写作",
     description: "报告总结、方案策划与工作汇报",
     prompt: "帮我写一份经营分析汇报提纲",
-    icon: Notebook,
+    imageSrc: appWritingIcon,
     tone: "purple"
   },
   {
@@ -57,7 +55,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "会议纪要",
     description: "提炼议题、结论和待办事项",
     prompt: "帮我整理今天会议的纪要和行动项",
-    icon: ChatCircleText,
+    imageSrc: appMeetingMinutesIcon,
     tone: "blue"
   }
 ];

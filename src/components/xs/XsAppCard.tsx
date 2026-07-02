@@ -7,7 +7,8 @@ export type XsAppCardData = {
   title: string;
   description: string;
   prompt: string;
-  icon: ComponentType<{ size?: number; weight?: "regular" | "duotone"; className?: string }>;
+  icon?: ComponentType<{ size?: number; weight?: "regular" | "duotone"; className?: string }>;
+  imageSrc?: string;
   tone?: "blue" | "cyan" | "green" | "orange" | "purple";
 };
 
@@ -25,7 +26,7 @@ export function XsAppCard({ app, selected = false, onSelect }: XsAppCardProps) {
       onClick={() => onSelect(app)}
       aria-label={`${app.title}：${app.description}`}
     >
-      <XsIconTile icon={app.icon} label={app.title} tone={app.tone} />
+      <XsIconTile icon={app.icon} imageSrc={app.imageSrc} label={app.title} tone={app.tone} />
       <span className="xs-app-card__body">
         <span className="xs-app-card__title">{app.title}</span>
         <span className="xs-app-card__desc">{app.description}</span>
