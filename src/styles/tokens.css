@@ -1,0 +1,46 @@
+:root {
+  --xs-bg: #F3F8FF;
+  --xs-bg-2: #EDF5FF;
+  --xs-surface: #FFFFFF;
+  --xs-surface-soft: #F8FBFF;
+  --xs-border: #DCE8FB;
+  --xs-border-strong: #C7D9F6;
+  --xs-primary: #1677FF;
+  --xs-primary-2: #2563EB;
+  --xs-cyan: #00C2FF;
+  --xs-success: #16A37A;
+  --xs-warning: #FFB020;
+  --xs-danger: #FF4D4F;
+  --xs-text: #081A3A;
+  --xs-text-2: #294469;
+  --xs-text-3: #6B7F9D;
+  --xs-radius-control: 12px;
+  --xs-radius-card: 14px;
+  --xs-sidebar-width: 320px;
+  --xs-shadow-soft: 0 10px 28px rgba(22, 119, 255, 0.08);
+  --xs-shadow-button: 0 12px 22px rgba(22, 119, 255, 0.2);
+  --xs-font-family: Source Han Sans SC, Noto Sans SC, Microsoft YaHei, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--xs-bg);
+  color: var(--xs-text);
+  font-family: var(--xs-font-family);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

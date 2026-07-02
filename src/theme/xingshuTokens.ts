@@ -1,0 +1,23 @@
+export const xingshuTokens = {
+  colorBg: "#F3F8FF",
+  colorBgSoft: "#EDF5FF",
+  colorSurface: "#FFFFFF",
+  colorSurfaceSoft: "#F8FBFF",
+  colorBorder: "#DCE8FB",
+  colorBorderStrong: "#C7D9F6",
+  colorPrimary: "#1677FF",
+  colorPrimaryStrong: "#2563EB",
+  colorCyan: "#00C2FF",
+  colorSuccess: "#16A37A",
+  colorWarning: "#FFB020",
+  colorDanger: "#FF4D4F",
+  colorText: "#081A3A",
+  colorTextSecondary: "#294469",
+  colorTextTertiary: "#6B7F9D",
+  radiusControl: 12,
+  radiusCard: 14,
+  sidebarWidth: 320,
+  shadowSoft: "0 10px 28px rgba(22, 119, 255, 0.08)",
+  shadowButton: "0 12px 22px rgba(22, 119, 255, 0.2)",
+  fontFamily: "Source Han Sans SC, Noto Sans SC, Microsoft YaHei, Arial, sans-serif"
+} as const;

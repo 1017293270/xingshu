@@ -1,0 +1,10 @@
+node_modules/
+dist/
+outputs/
+.superpowers/
+outputs/playwright/
+*.log
+*.err.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
