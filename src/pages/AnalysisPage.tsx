@@ -1,7 +1,7 @@
 import { Button } from "antd";
 import { CaretUp, Check, DownloadSimple } from "@phosphor-icons/react";
 import { XsCommandBox, XsEChart } from "@/components/xs";
-import { analysisRows, salesTrendOption } from "@/services/mock/xingshuData";
+import { getSalesAnalysisResult } from "@/services/dashboardService";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
@@ -9,6 +9,8 @@ import { PageFrame } from "./PageFrame";
 const reasoningSteps = ["理解问题", "确定数据范围", "数据处理", "趋势分析", "生成可视化结果"];
 
 export function AnalysisPage() {
+  const { rows, salesTrendOption } = getSalesAnalysisResult();
+
   return (
     <PageFrame title="新建对话" className="analysis-page">
       <section className="analysis-question" aria-label="用户提问">
@@ -62,7 +64,7 @@ export function AnalysisPage() {
                     <tr><th>季度</th><th>2023年销售额</th><th>2024年销售额</th><th>同比增长额</th><th>同比增长率</th></tr>
                   </thead>
                   <tbody>
-                    {analysisRows.map((row) => (
+                    {rows.map((row) => (
                       <tr key={row[0]} className={row[0] === "合计" ? "total-row" : ""}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>
                     ))}
                   </tbody>

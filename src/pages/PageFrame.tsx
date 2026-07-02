@@ -1,5 +1,6 @@
-import { useState, type PropsWithChildren, type ReactNode } from "react";
+import type { PropsWithChildren, ReactNode } from "react";
 import { XsShell } from "@/components/xs";
+import { useUiStore } from "@/stores/uiStore";
 import "./pages.css";
 
 type PageFrameProps = PropsWithChildren<{
@@ -10,10 +11,12 @@ type PageFrameProps = PropsWithChildren<{
 }>;
 
 export function PageFrame({ title, subtitle, actions, className = "", children }: PageFrameProps) {
-  const [isMoreOpen, setIsMoreOpen] = useState(true);
+  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
+  const toggleMore = useUiStore((state) => state.toggleMore);
+  const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
 
   return (
-    <XsShell isMoreOpen={isMoreOpen} onToggleMore={() => setIsMoreOpen((open) => !open)} onNewChat={() => undefined}>
+    <XsShell isMoreOpen={isMoreOpen} onToggleMore={toggleMore} onNewChat={clearHomeConversation}>
       <div className={`xs-page ${className}`}>
         <header className="xs-page__head">
           <div className="xs-page__title">

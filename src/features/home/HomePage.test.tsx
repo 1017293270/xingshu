@@ -3,9 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
+import { useUiStore } from "@/stores/uiStore";
 import { HomePage } from "./HomePage";
 
 function renderHomePage() {
+  useUiStore.getState().resetUiState();
+
   return render(
     <AppProviders>
       <MemoryRouter>

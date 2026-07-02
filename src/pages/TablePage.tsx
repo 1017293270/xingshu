@@ -1,20 +1,27 @@
 import { Button, Input } from "antd";
 import { Lightning, Plus } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
-import { sheetRows } from "@/services/mock/xingshuData";
+import { listRecentTables } from "@/services/tableService";
+import type { TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 
-const sheetIconByMark: Record<string, string> = {
-  排: tableRankingIcon,
-  通: tableContactListIcon,
-  费: tableExpenseStatisticsIcon,
-  库: tableInventoryIcon
+const sheetIconById: Record<TableTemplateIconId, string> = {
+  ranking: tableRankingIcon,
+  "contact-list": tableContactListIcon,
+  "expense-statistics": tableExpenseStatisticsIcon,
+  inventory: tableInventoryIcon
 };
 
 export function TablePage() {
+  const { data: recentTables = [] } = useQuery({
+    queryKey: ["recentTables"],
+    queryFn: listRecentTables
+  });
+
   return (
     <PageFrame title="智能制表">
       <section className="sheet-prompt" aria-label="制表需求输入">
@@ -24,14 +31,14 @@ export function TablePage() {
       </section>
       <h2 className="subsection-title">最近制表</h2>
       <section className="sheet-list" aria-label="最近制表">
-        {sheetRows.map(([mark, title, tag, desc]) => (
-          <article className="xs-card sheet-row" key={title}>
+        {recentTables.map((table) => (
+          <article className="xs-card sheet-row" key={table.id}>
             <span className="sheet-icon" aria-hidden="true">
-              <img src={sheetIconByMark[mark]} alt="" />
+              <img src={sheetIconById[table.iconId]} alt="" />
             </span>
             <div>
-              <h2>{title}</h2>
-              <p><span className="xs-tag">{tag}</span>　{desc}</p>
+              <h2>{table.title}</h2>
+              <p><span className="xs-tag">{table.tag}</span>　{table.description}</p>
             </div>
             <Button>复制制表要求</Button>
           </article>

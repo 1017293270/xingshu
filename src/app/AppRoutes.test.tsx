@@ -3,8 +3,11 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes } from "./AppRoutes";
+import { useUiStore } from "@/stores/uiStore";
 
 function renderRoute(path: string) {
+  useUiStore.getState().resetUiState();
+
   return render(
     <AppProviders>
       <MemoryRouter initialEntries={[path]}>

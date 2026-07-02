@@ -1,20 +1,31 @@
 import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt } from "@phosphor-icons/react";
-import { writingDocs } from "@/services/mock/xingshuData";
+import { useQuery } from "@tanstack/react-query";
+import { listWritingDocuments, listWritingScenes } from "@/services/writingService";
+import type { WritingSceneIconId } from "@/types/writing";
 import reportIcon from "@/assets/writing-scene-icons/writing-scene-report-summary.png";
 import planIcon from "@/assets/writing-scene-icons/writing-scene-solution-plan.png";
 import workIcon from "@/assets/writing-scene-icons/writing-scene-work-report.png";
 import copyIcon from "@/assets/writing-scene-icons/writing-scene-copywriting.png";
 import { PageFrame } from "./PageFrame";
 
-const scenes = [
-  ["报告总结", "快速生成各类数据分析报告、总结报告", reportIcon, "purple"],
-  ["方案策划", "生成项目方案、解决方案、实施计划等", planIcon, "blue"],
-  ["工作汇报", "生成日报、周报、月报、述职报告等", workIcon, "green"],
-  ["文案创作", "撰写产品文案、宣传文案、营销文案等", copyIcon, "orange"]
-];
+const sceneIconById: Record<WritingSceneIconId, string> = {
+  "report-summary": reportIcon,
+  "solution-plan": planIcon,
+  "work-report": workIcon,
+  copywriting: copyIcon
+};
 
 export function WritingPage() {
+  const { data: scenes = [] } = useQuery({
+    queryKey: ["writingScenes"],
+    queryFn: listWritingScenes
+  });
+  const { data: documents = [] } = useQuery({
+    queryKey: ["writingDocuments"],
+    queryFn: listWritingDocuments
+  });
+
   return (
     <PageFrame
       title="智能写作"
@@ -34,10 +45,10 @@ export function WritingPage() {
 
       <h2 className="subsection-title">推荐写作场景</h2>
       <section className="scene-row" aria-label="推荐写作场景">
-        {scenes.map(([title, desc, icon, tone]) => (
-          <article className="xs-card scene-card" key={title}>
-            <span className={`scene-icon scene-icon--${tone}`}><img src={icon} alt="" /></span>
-            <div><strong>{title}</strong><span>{desc}</span></div>
+        {scenes.map((scene) => (
+          <article className="xs-card scene-card" key={scene.id}>
+            <span className={`scene-icon scene-icon--${scene.tone}`}><img src={sceneIconById[scene.iconId]} alt="" /></span>
+            <div><strong>{scene.title}</strong><span>{scene.description}</span></div>
           </article>
         ))}
       </section>
@@ -47,8 +58,8 @@ export function WritingPage() {
         <table className="xs-table">
           <thead><tr><th>文稿名称</th><th>类型</th><th>字数</th><th>更新时间</th><th>操作</th></tr></thead>
           <tbody>
-            {writingDocs.map(([name, type, words, updated]) => (
-              <tr key={name}><td><FileText size={16} /> {name}</td><td>{type}</td><td>{words}</td><td>{updated}</td><td><Eye size={16} /></td></tr>
+            {documents.map((document) => (
+              <tr key={document.id}><td><FileText size={16} /> {document.name}</td><td>{document.type}</td><td>{document.words}</td><td>{document.updatedAt}</td><td><Eye size={16} /></td></tr>
             ))}
           </tbody>
         </table>

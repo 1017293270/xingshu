@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { XsAppCard, type XsAppCardData, XsCommandBox, XsShell } from "@/components/xs";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
@@ -7,6 +6,7 @@ import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
 import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
+import { useUiStore } from "@/stores/uiStore";
 import "./home.css";
 
 const recommendedApps: XsAppCardData[] = [
@@ -61,21 +61,22 @@ const recommendedApps: XsAppCardData[] = [
 ];
 
 export function HomePage() {
-  const [draft, setDraft] = useState("");
-  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
-  const [isMoreOpen, setIsMoreOpen] = useState(true);
-  const [sentStatus, setSentStatus] = useState("");
+  const draft = useUiStore((state) => state.homeDraft);
+  const selectedAppId = useUiStore((state) => state.selectedAppId);
+  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
+  const sentStatus = useUiStore((state) => state.sentStatus);
+  const setDraft = useUiStore((state) => state.setHomeDraft);
+  const selectApp = useUiStore((state) => state.selectApp);
+  const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
+  const setSentStatus = useUiStore((state) => state.setSentStatus);
+  const toggleMore = useUiStore((state) => state.toggleMore);
 
   function handleSelectApp(app: XsAppCardData) {
-    setSelectedAppId(app.id);
-    setDraft(app.prompt);
-    setSentStatus("");
+    selectApp(app.id, app.prompt);
   }
 
   function handleNewChat() {
-    setDraft("");
-    setSelectedAppId(null);
-    setSentStatus("");
+    clearHomeConversation();
   }
 
   function handleSubmit() {
@@ -89,7 +90,7 @@ export function HomePage() {
   return (
     <XsShell
       isMoreOpen={isMoreOpen}
-      onToggleMore={() => setIsMoreOpen((open) => !open)}
+      onToggleMore={toggleMore}
       onNewChat={handleNewChat}
     >
       <div className="home-page">
