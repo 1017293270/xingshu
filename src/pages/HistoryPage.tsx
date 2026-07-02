@@ -1,5 +1,7 @@
-import { ChartBar, MagnifyingGlass, Question } from "@phosphor-icons/react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { Button, Input } from "antd";
+import dataInsightIcon from "@/assets/history-icons/history-data-insight.png";
+import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.png";
 import { listHistorySessions } from "@/services/historyService";
 import { PageFrame } from "./PageFrame";
 
@@ -15,8 +17,8 @@ export function HistoryPage() {
       <section className="history-list" aria-label="历史对话列表">
         {listHistorySessions().map(([title, summary, tag, date]) => (
           <article className="xs-card history-card" key={title}>
-            <span className={`topic-icon${tag === "数据洞察" ? " topic-icon--green" : ""}`}>
-              {tag === "数据洞察" ? <ChartBar size={24} /> : <Question size={24} />}
+            <span className="topic-icon" aria-hidden="true">
+              <img src={tag === "数据洞察" ? dataInsightIcon : knowledgeQuickIcon} alt="" />
             </span>
             <div>
               <h2>{title}</h2>

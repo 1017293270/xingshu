@@ -1,16 +1,21 @@
 import { Button } from "antd";
-import { CirclesThreePlus, Database, Files, ShareNetwork, Stack, Table } from "@phosphor-icons/react";
 import { XsEChart, XsIconTile } from "@/components/xs";
+import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
+import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
+import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png";
+import kpiDataVolumeIcon from "@/assets/data-dashboard-icons/kpi-data-volume.png";
+import kpiMediaDocumentsIcon from "@/assets/data-dashboard-icons/kpi-media-documents.png";
+import kpiServiceCallsIcon from "@/assets/data-dashboard-icons/kpi-service-calls.png";
 import { getDataAssetChartOptions } from "@/services/dashboardService";
 import { PageFrame } from "./PageFrame";
 
 const kpis = [
-  ["数据资产总量", "12,846 ↑", "较昨日 ↑ 5.2%", Database, "blue"],
-  ["数据总量", "28.6 TB", "较昨日 ↑ 8.1%", Stack, "green"],
-  ["多媒体文档数量", "8,532", "较昨日 ↑ 6.7%", Files, "purple"],
-  ["数据表数量", "4,328", "较昨日 ↑ 7.3%", Table, "blue"],
-  ["数据接口数量", "1,256", "较昨日 ↑ 3.4%", ShareNetwork, "orange"],
-  ["数据服务调用量", "32.8 万次", "较昨日 ↑ 12.3%", CirclesThreePlus, "cyan"]
+  ["数据资产总量", "12,846 ↑", "较昨日 ↑ 5.2%", kpiDataAssetsIcon, "blue"],
+  ["数据总量", "28.6 TB", "较昨日 ↑ 8.1%", kpiDataVolumeIcon, "green"],
+  ["多媒体文档数量", "8,532", "较昨日 ↑ 6.7%", kpiMediaDocumentsIcon, "purple"],
+  ["数据表数量", "4,328", "较昨日 ↑ 7.3%", kpiDataTablesIcon, "blue"],
+  ["数据接口数量", "1,256", "较昨日 ↑ 3.4%", kpiDataApisIcon, "orange"],
+  ["数据服务调用量", "32.8 万次", "较昨日 ↑ 12.3%", kpiServiceCallsIcon, "cyan"]
 ] as const;
 
 export function DataDashboardPage() {
@@ -19,9 +24,9 @@ export function DataDashboardPage() {
   return (
     <PageFrame title="数据资产看板" subtitle="全局掌握企业数据资产规模、质量与应用价值" actions={<><span>数据更新于 2024-06-04 14:30:00</span><Button>2024-06-04</Button></>} className="data-dashboard-page">
       <section className="data-kpis" aria-label="数据资产指标">
-        {kpis.map(([label, value, delta, Icon, tone]) => (
+        {kpis.map(([label, value, delta, icon, tone]) => (
           <article className="xs-card stat-card" key={label}>
-            <XsIconTile icon={Icon} label={label} tone={tone} />
+            <XsIconTile imageSrc={icon} label={label} tone={tone} />
             <div><span>{label}</span><strong>{value}</strong><small>{delta}</small></div>
           </article>
         ))}
