@@ -107,7 +107,13 @@ export function HomePage() {
           <p>今天想了解哪些企业数据？</p>
         </section>
 
-        <XsCommandBox value={draft} onChange={setDraft} onSubmit={handleSubmit} />
+        <XsCommandBox
+          value={draft}
+          onChange={setDraft}
+          onSubmit={handleSubmit}
+          onAttach={() => setSentStatus("已打开附件选择")}
+          onVoice={() => setSentStatus("已准备语音输入")}
+        />
 
         {sentStatus ? (
           <div className="home-page__status" role="status">

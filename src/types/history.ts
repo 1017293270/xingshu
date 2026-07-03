@@ -1,4 +1,4 @@
-export type HistoryCategory = "知识快查" | "数据洞察" | "智能制表";
+export type HistoryCategory = "知识快查" | "数据洞察" | "文档处理";
 
 export type HistorySession = {
   id: string;

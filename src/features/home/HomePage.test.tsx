@@ -79,4 +79,15 @@ describe("HomePage", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("已发送：生成经营日报");
   });
+
+  it("shows feedback for command box attachment and voice actions", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole("button", { name: "附件" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已打开附件选择");
+
+    await user.click(screen.getByRole("button", { name: "语音" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已准备语音输入");
+  });
 });

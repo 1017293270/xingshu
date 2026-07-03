@@ -5,9 +5,11 @@ type XsCommandBoxProps = {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  onAttach?: () => void;
+  onVoice?: () => void;
 };
 
-export function XsCommandBox({ value, onChange, onSubmit }: XsCommandBoxProps) {
+export function XsCommandBox({ value, onChange, onSubmit, onAttach, onVoice }: XsCommandBoxProps) {
   return (
     <section className="xs-command-box" aria-label="星数命令输入区">
       <textarea
@@ -20,8 +22,8 @@ export function XsCommandBox({ value, onChange, onSubmit }: XsCommandBoxProps) {
       <div className="xs-command-box__toolbar">
         <div className="xs-command-box__hint">企业数据、文档、看板与 Agent 应用统一入口</div>
         <div className="xs-command-box__actions">
-          <Button aria-label="附件" icon={<Paperclip size={19} />} />
-          <Button aria-label="语音" icon={<Microphone size={19} />} />
+          <Button aria-label="附件" icon={<Paperclip size={19} />} onClick={onAttach} />
+          <Button aria-label="语音" icon={<Microphone size={19} />} onClick={onVoice} />
           <Button
             type="primary"
             className="xs-command-box__send"

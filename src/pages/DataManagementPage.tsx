@@ -2,6 +2,7 @@ import { Button, Input } from "antd";
 import { Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import metricKnowledge from "@/assets/data-management-icons/metric-knowledge-total.png";
 import metricDocument from "@/assets/data-management-icons/metric-document-total.png";
 import metricParsed from "@/assets/data-management-icons/metric-parsed-complete.png";
@@ -32,8 +33,14 @@ const knowledgeBaseIconById: Record<KnowledgeBaseIconId, string> = {
   "finance-audit": kbFinance
 };
 
+const assetTabs = ["知识库管理", "数据源管理", "数据量簇管理", "指标语义管理", "技能管理", "问题集管理"];
+
 export function DataManagementPage() {
+  const [searchParams] = useSearchParams();
+  const source = searchParams.get("source");
   const [query, setQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("知识库管理");
+  const [actionStatus, setActionStatus] = useState(source ? `已从看板定位：${source}` : "");
   const { data: stats = [] } = useQuery({
     queryKey: ["knowledgeBaseStats"],
     queryFn: getKnowledgeBaseStats
@@ -49,12 +56,28 @@ export function DataManagementPage() {
         .some((field) => field.toLowerCase().includes(normalizedQuery))
     )
     : knowledgeBases;
-  const statusText = normalizedQuery ? `已筛选 ${visibleKnowledgeBases.length} 个知识库` : `共 ${visibleKnowledgeBases.length} 个知识库`;
+  const statusText = actionStatus || (normalizedQuery ? `已筛选 ${visibleKnowledgeBases.length} 个知识库` : `共 ${visibleKnowledgeBases.length} 个知识库`);
+
+  const handleSearch = (value: string) => {
+    setQuery(value);
+    setActionStatus("");
+  };
 
   return (
-    <PageFrame title="数据资产管理" subtitle="统一管理企业数据资产，助力数据价值最大化" actions={<Button type="primary" icon={<Plus size={18} />}>新增知识库</Button>} className="data-management-page">
+    <PageFrame title="数据资产管理" subtitle="统一管理企业数据资产，助力数据价值最大化" actions={<Button type="primary" icon={<Plus size={18} />} onClick={() => setActionStatus("已创建知识库草稿")}>新增知识库</Button>} className="data-management-page">
       <nav className="asset-tabs" aria-label="资产管理类型">
-        {["知识库管理", "数据源管理", "数据量簇管理", "指标语义管理", "技能管理", "问题集管理"].map((tab, index) => <Button type={index === 0 ? "primary" : "default"} key={tab}>{tab}</Button>)}
+        {assetTabs.map((tab) => (
+          <Button
+            type={tab === activeTab ? "primary" : "default"}
+            key={tab}
+            onClick={() => {
+              setActiveTab(tab);
+              setActionStatus(`已切换到${tab}`);
+            }}
+          >
+            {tab}
+          </Button>
+        ))}
       </nav>
       <section className="asset-filter" aria-label="知识库筛选">
         <Input
@@ -62,7 +85,7 @@ export function DataManagementPage() {
           placeholder="搜索知识库名称、说明或更新时间"
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => handleSearch(event.target.value)}
         />
         <p role="status">{statusText}</p>
       </section>
@@ -76,12 +99,18 @@ export function DataManagementPage() {
       </section>
       <section className="kb-grid" aria-label="知识库列表">
         {visibleKnowledgeBases.map((knowledgeBase) => (
-          <article className="xs-card kb-card" key={knowledgeBase.id}>
+          <button
+            className="xs-card kb-card xs-card-button"
+            key={knowledgeBase.id}
+            type="button"
+            aria-label={`${knowledgeBase.title}：${knowledgeBase.description}`}
+            onClick={() => setActionStatus(`已打开知识库详情：${knowledgeBase.title}`)}
+          >
             <span className={`asset-image-tile asset-image-tile--${knowledgeBase.tone}`}><img src={knowledgeBaseIconById[knowledgeBase.iconId]} alt="" /></span>
             <h2>{knowledgeBase.title}</h2>
             <p>{knowledgeBase.description}</p>
             <div><strong>{knowledgeBase.docs}</strong><span>{knowledgeBase.updatedAt}</span></div>
-          </article>
+          </button>
         ))}
       </section>
     </PageFrame>

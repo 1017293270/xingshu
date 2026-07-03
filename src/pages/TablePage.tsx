@@ -7,7 +7,7 @@ import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-stati
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
 import { createTableFromPrompt, listRecentTables } from "@/services/tableService";
-import type { TableTemplateIconId } from "@/types/table";
+import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 
 const sheetIconById: Record<TableTemplateIconId, string> = {
@@ -38,6 +38,12 @@ export function TablePage() {
     }
   };
 
+  const handleCopyTemplate = (table: TableTemplate) => {
+    const nextPrompt = `${table.title}：${table.description}`;
+    setPrompt(nextPrompt);
+    setSubmissionStatus(`已复制制表要求：${table.title}`);
+  };
+
   return (
     <PageFrame title="智能制表">
       <section className="sheet-prompt" aria-label="制表需求输入">
@@ -49,7 +55,7 @@ export function TablePage() {
       <h2 className="subsection-title">最近制表</h2>
       <section className="sheet-list" aria-label="最近制表">
         {recentTables.map((table) => (
-          <article className="xs-card sheet-row" key={table.id}>
+          <article className="xs-card sheet-row" key={table.id} aria-label={`${table.title} ${table.description}`}>
             <span className="sheet-icon" aria-hidden="true">
               <img src={sheetIconById[table.iconId]} alt="" />
             </span>
@@ -57,7 +63,7 @@ export function TablePage() {
               <h2>{table.title}</h2>
               <p><span className="xs-tag">{table.tag}</span>　{table.description}</p>
             </div>
-            <Button>复制制表要求</Button>
+            <Button onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
           </article>
         ))}
       </section>
