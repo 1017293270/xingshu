@@ -1,4 +1,5 @@
 import { XsAppCard, type XsAppCardData, XsCommandBox, XsShell } from "@/components/xs";
+import { useNavigate } from "react-router-dom";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
@@ -6,6 +7,7 @@ import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
 import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
+import { sendAgentMessage } from "@/services/agentService";
 import { useUiStore } from "@/stores/uiStore";
 import "./home.css";
 
@@ -61,6 +63,7 @@ const recommendedApps: XsAppCardData[] = [
 ];
 
 export function HomePage() {
+  const navigate = useNavigate();
   const draft = useUiStore((state) => state.homeDraft);
   const selectedAppId = useUiStore((state) => state.selectedAppId);
   const isMoreOpen = useUiStore((state) => state.isMoreOpen);
@@ -69,6 +72,7 @@ export function HomePage() {
   const selectApp = useUiStore((state) => state.selectApp);
   const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
   const setSentStatus = useUiStore((state) => state.setSentStatus);
+  const setActiveAnalysisQuestion = useUiStore((state) => state.setActiveAnalysisQuestion);
   const toggleMore = useUiStore((state) => state.toggleMore);
 
   function handleSelectApp(app: XsAppCardData) {
@@ -79,12 +83,15 @@ export function HomePage() {
     clearHomeConversation();
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const command = draft.trim();
     if (!command) {
       return;
     }
+    await sendAgentMessage({ content: command });
+    setActiveAnalysisQuestion(command);
     setSentStatus(`已发送：${command}`);
+    navigate("/analysis");
   }
 
   return (

@@ -1,5 +1,6 @@
 import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { XsEChart, XsIconTile } from "@/components/xs";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
 import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
@@ -29,7 +30,7 @@ export function DataDashboardPage() {
   });
 
   return (
-    <PageFrame title="数据资产看板" subtitle="全局掌握企业数据资产规模、质量与应用价值" actions={<><span>数据更新于 2024-06-04 14:30:00</span><Button>2024-06-04</Button></>} className="data-dashboard-page">
+    <PageFrame title="数据资产看板" subtitle="全局掌握企业数据资产规模、质量与应用价值" actions={<><span>数据更新于 2024-06-04 14:30:00</span><Button>2024-06-04</Button><Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link></>} className="data-dashboard-page">
       <section className="data-kpis" aria-label="数据资产指标">
         {kpis.map((kpi) => (
           <article className="xs-card stat-card" key={kpi.id}>

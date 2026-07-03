@@ -46,6 +46,26 @@
   gap: 10px;
 }
 
+.xs-action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 4px 15px;
+  border: 1px solid var(--xs-border);
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.xs-action-link--primary {
+  border-color: var(--xs-primary);
+  color: #fff;
+  background: var(--xs-primary);
+  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
+}
+
 .xs-card {
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
@@ -73,6 +93,14 @@
   color: var(--xs-text);
   font-size: 22px;
   font-weight: 750;
+}
+
+.board-card h2,
+.data-card h2,
+.xs-card--inner h3 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .xs-table {
@@ -251,6 +279,17 @@
 .history-tools .ant-input-affix-wrapper,
 .sheet-prompt .ant-input {
   min-height: 46px;
+}
+
+.workflow-status {
+  margin: -10px 0 24px;
+  padding: 12px 14px;
+  border: 1px solid #cfe3ff;
+  border-radius: var(--xs-radius-control);
+  color: var(--xs-primary-2);
+  background: #eef6ff;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .history-list,
@@ -488,6 +527,25 @@
   flex-wrap: wrap;
 }
 
+.asset-filter {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) auto;
+  align-items: center;
+  gap: 14px;
+  margin: -8px 0 24px;
+}
+
+.asset-filter .ant-input {
+  min-height: 42px;
+}
+
+.asset-filter p {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .manage-stats {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -576,9 +634,14 @@
   }
 
   .history-tools,
-  .sheet-prompt {
+  .sheet-prompt,
+  .asset-filter {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .asset-filter {
+    display: flex;
   }
 
   .scene-row,

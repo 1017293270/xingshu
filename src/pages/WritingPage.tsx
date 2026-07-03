@@ -1,7 +1,8 @@
 import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { listWritingDocuments, listWritingScenes } from "@/services/writingService";
+import { useState } from "react";
+import { createWritingDraft, listWritingDocuments, listWritingScenes } from "@/services/writingService";
 import type { WritingSceneIconId } from "@/types/writing";
 import reportIcon from "@/assets/writing-scene-icons/writing-scene-report-summary.png";
 import planIcon from "@/assets/writing-scene-icons/writing-scene-solution-plan.png";
@@ -17,6 +18,8 @@ const sceneIconById: Record<WritingSceneIconId, string> = {
 };
 
 export function WritingPage() {
+  const [prompt, setPrompt] = useState("例如：撰写一份关于数据资产管理平台的产品介绍文档，包含产品概述、核心功能、应用场景和价值优势，字数约1500字");
+  const [submissionStatus, setSubmissionStatus] = useState("");
   const { data: scenes = [] } = useQuery({
     queryKey: ["writingScenes"],
     queryFn: listWritingScenes
@@ -25,6 +28,19 @@ export function WritingPage() {
     queryKey: ["writingDocuments"],
     queryFn: listWritingDocuments
   });
+
+  const handleSubmit = async () => {
+    const trimmedPrompt = prompt.trim();
+
+    if (!trimmedPrompt) {
+      return;
+    }
+
+    const result = await createWritingDraft({ prompt: trimmedPrompt });
+    if (result.status === "accepted") {
+      setSubmissionStatus(`已提交写作需求：${result.prompt}`);
+    }
+  };
 
   return (
     <PageFrame
@@ -35,12 +51,13 @@ export function WritingPage() {
       <section className="xs-card writing-panel" aria-label="写作内容输入">
         <h2>描述你要写作的内容</h2>
         <p>请详细描述写作主题、目标、要点、受众等要求，AI 将为你生成高质量内容</p>
-        <textarea defaultValue="例如：撰写一份关于数据资产管理平台的产品介绍文档，包含产品概述、核心功能、应用场景和价值优势，字数约1500字" />
+        <textarea aria-label="写作需求" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
         <div className="writing-tabs">
           {["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"].map((tab) => <Button key={tab}>{tab}</Button>)}
           <Button icon={<Paperclip size={18} />} aria-label="附件" />
-          <Button type="primary" icon={<PaperPlaneTilt size={18} />} aria-label="发送" />
+          <Button type="primary" icon={<PaperPlaneTilt size={18} />} aria-label="发送" onClick={handleSubmit} />
         </div>
+        {submissionStatus ? <p className="workflow-status" role="status">{submissionStatus}</p> : null}
       </section>
 
       <h2 className="subsection-title">推荐写作场景</h2>

@@ -20,11 +20,11 @@ export const salesTrendOption: EChartsOption = {
     data: ["Q1", "Q2", "Q3", "Q4"],
     axisTick: { show: false },
     axisLine: { lineStyle: { color: "#DCE8FB" } },
-    axisLabel: { color: "#6B7F9D" }
+    axisLabel: { color: "#6B7F9D", align: "right" }
   },
   yAxis: {
     type: "value",
-    axisLabel: { color: "#6B7F9D" },
+    axisLabel: { color: "#6B7F9D", align: "right" },
     splitLine: { lineStyle: { color: "#EDF2FB" } }
   },
   series: [
@@ -43,7 +43,7 @@ export const dashboardOptions: DashboardChartOptions = {
   revenue: {
     animation: false,
     grid: { left: 8, right: 8, top: 10, bottom: 20 },
-    xAxis: { type: "category", data: ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#6B7F9D", fontSize: 10 } },
+    xAxis: { type: "category", data: ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#6B7F9D", fontSize: 10, align: "right" } },
     yAxis: { show: false },
     series: [{ type: "bar", barWidth: 18, data: [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94], itemStyle: { borderRadius: [4, 4, 0, 0], color: "#8DB5FF" } }]
   },
@@ -51,7 +51,7 @@ export const dashboardOptions: DashboardChartOptions = {
     animation: false,
     grid: { left: 78, right: 48, top: 8, bottom: 8 },
     xAxis: { type: "value", min: 0, max: 40, show: false },
-    yAxis: { type: "category", inverse: true, data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469" } },
+    yAxis: { type: "category", inverse: true, data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469", align: "right" } },
     series: [{ type: "bar", barWidth: 12, data: [35, 26, 20, 8], showBackground: true, backgroundStyle: { color: "#D9E7FF", borderRadius: 8 }, label: { show: true, position: "right", formatter: "{c}%", color: "#081A3A" }, itemStyle: { borderRadius: 8, color: "#1677FF" } }]
   },
   salesLine: {
@@ -77,7 +77,7 @@ export const dashboardOptions: DashboardChartOptions = {
     animation: false,
     grid: { left: 52, right: 78, top: 4, bottom: 4 },
     xAxis: { type: "value", min: 0, max: 7200, show: false },
-    yAxis: { type: "category", inverse: true, data: ["华东", "华南", "华北", "西南", "华中"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469" } },
+    yAxis: { type: "category", inverse: true, data: ["华东", "华南", "华北", "西南", "华中"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469", align: "right" } },
     series: [{ type: "bar", barWidth: 12, data: [6820, 6120, 5720, 4350, 3680], showBackground: true, backgroundStyle: { color: "#D9E7FF", borderRadius: 8 }, label: { show: true, position: "right", formatter: ({ value }) => `￥${Number(value).toLocaleString()}万`, color: "#081A3A" }, itemStyle: { borderRadius: 8, color: "#1677FF" } }]
   }
 };
@@ -93,8 +93,8 @@ export const assetOptions: DataAssetChartOptions = {
     color: ["#1677FF", "#75C6F5"],
     grid: { left: 42, right: 34, top: 36, bottom: 34 },
     legend: { top: 0, left: 70, itemWidth: 18, itemHeight: 4, textStyle: { color: "#294469", fontSize: 12 } },
-    xAxis: { type: "category", data: ["01-01", "02-01", "03-01", "04-01", "05-01", "06-01"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#6B7F9D" } },
-    yAxis: [{ type: "value", min: 0, max: 15000, interval: 3000, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D" } }],
+    xAxis: { type: "category", data: ["01-01", "02-01", "03-01", "04-01", "05-01", "06-01"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
+    yAxis: [{ type: "value", min: 0, max: 15000, interval: 3000, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } }],
     series: [
       { name: "数据资产总量（个）", type: "line", smooth: true, symbolSize: 6, data: [5200, 6900, 9300, 11000, 12400, 13900], lineStyle: { width: 3 } },
       { name: "数据总量（TB）", type: "line", smooth: true, symbolSize: 6, data: [12, 17, 23, 27, 32, 37], lineStyle: { width: 3 } }
@@ -102,10 +102,10 @@ export const assetOptions: DataAssetChartOptions = {
   },
   top: {
     animation: false,
-    grid: { left: 34, right: 8, top: 20, bottom: 34 },
-    xAxis: { type: "category", data: ["经营分析", "客户洞察", "风险管理", "精准营销", "产品研发", "供应链", "财务", "人力", "市场", "其他"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#4B5D77", fontSize: 11 } },
-    yAxis: { type: "value", min: 0, max: 15, interval: 3, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D" } },
-    series: [{ type: "bar", barWidth: 28, data: [14.2, 11.6, 9.8, 8.7, 6.9, 5.3, 4.2, 3.6, 2.8, 1.5], label: { show: true, position: "top", color: "#081A3A" }, itemStyle: { borderRadius: [4, 4, 0, 0], color: "#2F7CF7" } }]
+    grid: { left: 34, right: 42, top: 20, bottom: 34 },
+    xAxis: { type: "category", data: ["经营分析", "客户洞察", "风险管理", "精准营销", "产品研发", "供应链", "财务", "人力", "市场", "其他"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#4B5D77", fontSize: 11, align: "right" } },
+    yAxis: { type: "value", min: 0, max: 15, interval: 3, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
+    series: [{ type: "bar", barWidth: 28, data: [14.2, 11.6, 9.8, 8.7, 6.9, 5.3, 4.2, 3.6, 2.8, 1.5], label: { show: true, position: "right", color: "#081A3A" }, itemStyle: { borderRadius: [4, 4, 0, 0], color: "#2F7CF7" } }]
   },
   source: {
     animation: false,
@@ -117,7 +117,7 @@ export const assetOptions: DataAssetChartOptions = {
       data: ["业务系统", "数据平台", "第三方数据", "手工录入", "其他"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#294469", fontSize: 13 }
+      axisLabel: { color: "#294469", fontSize: 13, align: "right" }
     },
     series: [{
       type: "bar",

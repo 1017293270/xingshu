@@ -2,6 +2,7 @@ import { Button } from "antd";
 import { CaretUp, Check, DownloadSimple } from "@phosphor-icons/react";
 import { XsCommandBox, XsEChart } from "@/components/xs";
 import { getSalesAnalysisResult } from "@/services/dashboardService";
+import { useUiStore } from "@/stores/uiStore";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
@@ -10,12 +11,13 @@ const reasoningSteps = ["理解问题", "确定数据范围", "数据处理", "�
 
 export function AnalysisPage() {
   const { rows, salesTrendOption } = getSalesAnalysisResult();
+  const activeAnalysisQuestion = useUiStore((state) => state.activeAnalysisQuestion);
 
   return (
     <PageFrame title="新建对话" className="analysis-page">
       <section className="analysis-question" aria-label="用户提问">
         <div>
-          <strong>请帮我分析2024年各季度的销售额趋势，并与2023年同期进行对比。</strong>
+          <strong>{activeAnalysisQuestion}</strong>
           <span>10:30</span>
         </div>
         <img src={userAvatar} alt="" />
