@@ -1,9 +1,12 @@
 source visual truth path:
+- `D:\xwechat_files\wxid_nsedghikq70t22_3393\temp\RWTemp\2026-07\2c4d7c88bcd8ba45afa64e1ba2f55766.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\03-source-home.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\01-brand-product-system-suite.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\02-orbit-agent-icons-components.png`
 
 implementation screenshot path:
+- `E:\starmath\outputs\xingshu-homepage-system\qa\react\home-react-1672x941.png`
+- `E:\starmath\outputs\xingshu-homepage-system\qa\react\home-reference-vs-react-1672x941.png`
 - `E:\starmath\outputs\xingshu-homepage-system\qa\homepage-1672x941-final.png`
 - `E:\starmath\outputs\xingshu-homepage-system\qa\homepage-1672-after-widefix.png`
 - `E:\starmath\outputs\xingshu-homepage-system\qa\homepage-2200-after-widefix.png`
@@ -43,6 +46,10 @@ focused region comparison evidence:
 - Copy and content: Existing product labels are retained: 新建对话, 历史对话, 智能制表, 智能写作, 我的看板, 我的云盘, 数据资产看板, 数据资产管理, 推荐应用, 智能问数, 知识问答, 文档助手, 报表生成, 会议纪要, 更多应用.
 
 **Patches Made Since QA**
+- Restored the React homepage to the supplied second reference: removed the small assistant mark above the greeting, restored `您好，张三 👋`, changed the subtitle to `我是您的数据管家，有什么可以帮您？`, and returned the recommended apps to large vertical icon cards without descriptions.
+- Generated and integrated the project asset `src/assets/home/xingshu-home-wave-bg-image2.png` with a masked full-main-width wave treatment so the background reads like the reference instead of a separate image strip.
+- Reconnected homepage recommended-app cards to the colorful image2 app icon set under `src/assets/generated-icons/` with source marker `xingshu-home-apps-image2-v1`.
+- Added React and Playwright coverage for the reference composition: background image loading, command-box size, card dimensions, hidden desktop descriptions, and correct image2 app icon source.
 - Removed the extra homepage operation overview cards because they drifted toward a dashboard and were not part of the original homepage function.
 - Fixed mobile vertical overflow by changing the app shell from full overflow clipping to horizontal-only clipping.
 - Tightened mobile app-card grid spacing and card dimensions.

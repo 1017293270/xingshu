@@ -17,6 +17,17 @@ function renderPage(page: ReactElement) {
 }
 
 describe("workflow page actions", () => {
+  it("renders the analysis reasoning as a completed timeline", () => {
+    renderPage(<AnalysisPage />);
+
+    const timeline = screen.getByRole("list", { name: "分析步骤时间线" });
+
+    expect(within(timeline).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(timeline).getByText("理解问题")).toBeInTheDocument();
+    expect(within(timeline).getByText("用户需要分析2024年各季度销售额趋势，并与2023年同期进行对比。")).toBeInTheDocument();
+    expect(within(timeline).getByText("生成可视化结果")).toBeInTheDocument();
+  });
+
   it("collapses reasoning and exports analysis results", async () => {
     const user = userEvent.setup();
     renderPage(<AnalysisPage />);

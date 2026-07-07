@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { ArrowUp, Microphone, Paperclip } from "@phosphor-icons/react";
+import { Microphone, Paperclip, PaperPlaneTilt } from "@phosphor-icons/react";
 
 type XsCommandBoxProps = {
   value: string;
@@ -16,7 +16,7 @@ export function XsCommandBox({ value, onChange, onSubmit, onAttach, onVoice }: X
         className="xs-command-box__input"
         aria-label="命令输入"
         value={value}
-        placeholder="向星数提问，或选择一个推荐应用开始"
+        placeholder="请输入您的问题，支持问题、找文件、写文档、做分析、用应用..."
         onChange={(event) => onChange(event.target.value)}
       />
       <div className="xs-command-box__toolbar">
@@ -28,7 +28,7 @@ export function XsCommandBox({ value, onChange, onSubmit, onAttach, onVoice }: X
             type="primary"
             className="xs-command-box__send"
             aria-label="发送"
-            icon={<ArrowUp size={19} weight="bold" />}
+            icon={<PaperPlaneTilt size={22} weight="fill" />}
             onClick={onSubmit}
           />
         </div>

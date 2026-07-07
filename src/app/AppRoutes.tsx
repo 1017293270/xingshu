@@ -14,6 +14,7 @@ const DataManagementPage = lazy(() =>
   import("@/pages/DataManagementPage").then((module) => ({ default: module.DataManagementPage }))
 );
 const CloudPage = lazy(() => import("@/pages/CloudPage").then((module) => ({ default: module.CloudPage })));
+const WelcomePage = lazy(() => import("@/pages/WelcomePage").then((module) => ({ default: module.WelcomePage })));
 
 export function AppRoutes() {
   return (
@@ -25,6 +26,7 @@ export function AppRoutes() {
         <Route path="/table" element={<TablePage />} />
         <Route path="/writing" element={<WritingPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/data-dashboard" element={<DataDashboardPage />} />
         <Route path="/data-management" element={<DataManagementPage />} />
         <Route path="/cloud" element={<CloudPage />} />

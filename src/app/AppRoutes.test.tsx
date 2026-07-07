@@ -26,6 +26,7 @@ describe("AppRoutes", () => {
     ["/table", "智能制表", "最近制表"],
     ["/writing", "智能写作", "推荐写作场景"],
     ["/dashboard", "我的看板", "经营分析看板"],
+    ["/welcome", "欢迎来到星数", "星数欢迎页"],
     ["/cloud", "我的云盘", "我的云盘内容"],
     ["/data-dashboard", "数据资产看板", "数据资产指标"],
     ["/data-management", "数据资产管理", "知识库列表"]
@@ -37,10 +38,39 @@ describe("AppRoutes", () => {
   });
 
   it("keeps the shared sidebar on routed pages", async () => {
-    renderRoute("/dashboard");
+    const { container } = renderRoute("/dashboard");
 
     expect(await screen.findByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "星数" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("xingshu-logo-transparent.png")
+    );
     expect(screen.getByRole("link", { name: /数据资产管理/ })).toHaveAttribute("href", "/data-management");
+    expect(container.querySelectorAll('[data-icon-source="xingshu-sidebar-image2-v1"]')).toHaveLength(9);
+    expect(screen.getByRole("button", { name: "新建对话" }).querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("icon-sidebar-new-chat.png")
+    );
+  });
+
+  it("uses the unified image2 icon kit on the welcome capability cards", async () => {
+    const { container } = renderRoute("/welcome");
+
+    expect(await screen.findByRole("heading", { name: "欢迎来到星数" })).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-icon-source="image2"]')).toHaveLength(2);
+
+    const kitIconSrcs = Array.from(
+      container.querySelectorAll<HTMLImageElement>('[data-icon-source="xingshu-image2-v1"]')
+    ).map((icon) => icon.src);
+
+    expect(kitIconSrcs).toHaveLength(3);
+    expect(kitIconSrcs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("icon-data-question-analytics.png"),
+        expect.stringContaining("icon-intelligent-writing.png"),
+        expect.stringContaining("icon-business-dashboard.png")
+      ])
+    );
   });
 
   it("starts an agent analysis from the home command box", async () => {

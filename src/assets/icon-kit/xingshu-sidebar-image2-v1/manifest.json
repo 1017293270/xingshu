@@ -1,0 +1,53 @@
+{
+  "name": "xingshu-sidebar-image2-v1",
+  "description": "Image2-generated sidebar-specific icon kit for Xingshu navigation. Optimized for 24-30px rendering.",
+  "source": "xingshu-sidebar-icon-kit-v1-sheet-source.png",
+  "transparentSheet": "xingshu-sidebar-icon-kit-v1-sheet-transparent.png",
+  "icons": [
+    {
+      "id": "new-chat",
+      "titleZh": "新建对话",
+      "file": "icon-sidebar-new-chat.png"
+    },
+    {
+      "id": "history-conversation",
+      "titleZh": "历史对话",
+      "file": "icon-sidebar-history-conversation.png"
+    },
+    {
+      "id": "smart-table",
+      "titleZh": "智能制表",
+      "file": "icon-sidebar-smart-table.png"
+    },
+    {
+      "id": "intelligent-writing",
+      "titleZh": "智能写作",
+      "file": "icon-sidebar-intelligent-writing.png"
+    },
+    {
+      "id": "business-dashboard",
+      "titleZh": "我的看板",
+      "file": "icon-sidebar-business-dashboard.png"
+    },
+    {
+      "id": "cloud-drive",
+      "titleZh": "我的云盘",
+      "file": "icon-sidebar-cloud-drive.png"
+    },
+    {
+      "id": "more-apps",
+      "titleZh": "更多",
+      "file": "icon-sidebar-more-apps.png"
+    },
+    {
+      "id": "data-asset-dashboard",
+      "titleZh": "数据资产看板",
+      "file": "icon-sidebar-data-asset-dashboard.png"
+    },
+    {
+      "id": "data-asset-management",
+      "titleZh": "数据资产管理",
+      "file": "icon-sidebar-data-asset-management.png"
+    }
+  ]
+}

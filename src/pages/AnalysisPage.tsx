@@ -1,15 +1,36 @@
 import { Button } from "antd";
-import { CaretUp, Check, DownloadSimple } from "@phosphor-icons/react";
+import { CaretUp, DownloadSimple } from "@phosphor-icons/react";
 import { useState } from "react";
-import { XsCommandBox, XsEChart } from "@/components/xs";
+import { XsCommandBox, XsEChart, XsTimeline, type XsTimelineItem } from "@/components/xs";
 import { sendAgentMessage } from "@/services/agentService";
 import { getSalesAnalysisResult } from "@/services/dashboardService";
 import { useUiStore } from "@/stores/uiStore";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
 
-const reasoningSteps = ["理解问题", "确定数据范围", "数据处理", "趋势分析", "生成可视化结果"];
+const reasoningSteps: XsTimelineItem[] = [
+  {
+    title: "理解问题",
+    description: "用户需要分析2024年各季度销售额趋势，并与2023年同期进行对比。"
+  },
+  {
+    title: "确定数据范围",
+    description: "筛选2023年和2024年的销售数据，按季度汇总销售额。"
+  },
+  {
+    title: "数据处理",
+    description: "清洗数据，处理缺失值和异常值，确保数据准确性。"
+  },
+  {
+    title: "趋势分析",
+    description: "分析2024年各季度销售额趋势，并与2023年同期进行对比计算同比增长率。"
+  },
+  {
+    title: "生成可视化结果",
+    description: "生成趋势图表和对比表格，清晰展示分析结果。"
+  }
+];
 
 export function AnalysisPage() {
   const { rows, salesTrendOption } = getSalesAnalysisResult();
@@ -69,17 +90,7 @@ export function AnalysisPage() {
           {isReasoningVisible ? (
             <section className="reasoning-block" aria-label="思考过程">
               <h2>思考过程（共 5 步）</h2>
-              <ol>
-                {reasoningSteps.map((step) => (
-                  <li key={step}>
-                    <span className="step-dot"><Check size={14} weight="bold" /></span>
-                    <div>
-                      <strong>{step}</strong>
-                      <p>{step === "生成可视化结果" ? "生成趋势图表和对比表格，清晰展示分析结果。" : "已完成相关数据确认与分析准备。"}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+              <XsTimeline items={reasoningSteps} ariaLabel="分析步骤时间线" />
             </section>
           ) : null}
 

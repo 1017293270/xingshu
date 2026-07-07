@@ -1,12 +1,13 @@
 import { XsAppCard, type XsAppCardData, XsCommandBox, XsShell } from "@/components/xs";
 import { useNavigate } from "react-router-dom";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-source.png";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
 import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
 import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.png";
+import appMoreAppsIcon from "@/assets/generated-icons/app-more-apps.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
+import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.png";
 import { sendAgentMessage } from "@/services/agentService";
 import { useUiStore } from "@/stores/uiStore";
 import "./home.css";
@@ -18,6 +19,7 @@ const recommendedApps: XsAppCardData[] = [
     description: "经营指标、趋势变化和数据洞察",
     prompt: "帮我分析本月经营数据，并生成趋势图表",
     imageSrc: appDataChatIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
   },
   {
@@ -26,6 +28,7 @@ const recommendedApps: XsAppCardData[] = [
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
     imageSrc: appKnowledgeQaIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "cyan"
   },
   {
@@ -34,6 +37,7 @@ const recommendedApps: XsAppCardData[] = [
     description: "读取文档并提炼关键结论",
     prompt: "帮我总结这份项目材料的关键风险",
     imageSrc: appDocumentAssistantIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "green"
   },
   {
@@ -42,6 +46,7 @@ const recommendedApps: XsAppCardData[] = [
     description: "生成可复用的分析报表和图表",
     prompt: "根据销售数据生成一份周报",
     imageSrc: appReportGenerationIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "orange"
   },
   {
@@ -50,6 +55,7 @@ const recommendedApps: XsAppCardData[] = [
     description: "报告总结、方案策划与工作汇报",
     prompt: "帮我写一份经营分析汇报提纲",
     imageSrc: appWritingIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "purple"
   },
   {
@@ -58,6 +64,16 @@ const recommendedApps: XsAppCardData[] = [
     description: "提炼议题、结论和待办事项",
     prompt: "帮我整理今天会议的纪要和行动项",
     imageSrc: appMeetingMinutesIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
+    tone: "blue"
+  },
+  {
+    id: "more-apps",
+    title: "更多应用",
+    description: "打开更多企业智能能力",
+    prompt: "帮我打开更多企业智能应用",
+    imageSrc: appMoreAppsIcon,
+    imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
   }
 ];
@@ -101,10 +117,12 @@ export function HomePage() {
       onNewChat={handleNewChat}
     >
       <div className="home-page">
+        <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
         <section className="home-page__hero" aria-labelledby="home-greeting">
-          <img className="home-page__assistant" src={assistantMark} alt="" />
-          <h1 id="home-greeting">您好，张三</h1>
-          <p>今天想了解哪些企业数据？</p>
+          <h1 id="home-greeting">
+            您好，张三 <span aria-hidden="true">👋</span>
+          </h1>
+          <p>我是您的数据管家，有什么可以帮您？</p>
         </section>
 
         <XsCommandBox

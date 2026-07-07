@@ -32,9 +32,37 @@ describe("HomePage", () => {
     expect(within(navigation).getByText("我的云盘")).toBeInTheDocument();
     expect(within(navigation).getByText("数据资产看板")).toBeInTheDocument();
     expect(within(navigation).getByText("数据资产管理")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "您好，张三" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(screen.getByText("我是您的数据管家，有什么可以帮您？")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "命令输入" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "推荐应用" })).toBeInTheDocument();
+  });
+
+  it("renders the full seven-card recommended app set", () => {
+    const { container } = renderHomePage();
+
+    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智能写作", "会议纪要", "更多应用"];
+
+    for (const appName of expectedApps) {
+      expect(screen.getByRole("button", { name: new RegExp(appName) })).toBeInTheDocument();
+    }
+
+    const iconSrcs = Array.from(
+      container.querySelectorAll<HTMLImageElement>('.xs-app-card [data-icon-source="xingshu-home-apps-image2-v1"]')
+    ).map((icon) => icon.src);
+
+    expect(iconSrcs).toHaveLength(7);
+    expect(iconSrcs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("app-data-chat.png"),
+        expect.stringContaining("app-knowledge-qa.png"),
+        expect.stringContaining("app-document-assistant.png"),
+        expect.stringContaining("app-report-generation.png"),
+        expect.stringContaining("app-writing.png"),
+        expect.stringContaining("app-meeting-minutes.png"),
+        expect.stringContaining("app-more-apps.png")
+      ])
+    );
   });
 
   it("writes an app prompt into the command box when an app card is selected", async () => {

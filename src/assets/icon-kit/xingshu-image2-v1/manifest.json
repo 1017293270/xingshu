@@ -1,0 +1,68 @@
+{
+  "name": "xingshu-image2-v1",
+  "description": "Unified image2-generated icon kit for Xingshu enterprise AI data app.",
+  "source": "xingshu-icon-kit-v1-sheet-source.png",
+  "transparentSheet": "xingshu-icon-kit-v1-sheet-transparent.png",
+  "icons": [
+    {
+      "id": "new-chat",
+      "titleZh": "新建对话",
+      "file": "icon-new-chat.png"
+    },
+    {
+      "id": "history-conversation",
+      "titleZh": "历史对话",
+      "file": "icon-history-conversation.png"
+    },
+    {
+      "id": "data-question-analytics",
+      "titleZh": "智能问数",
+      "file": "icon-data-question-analytics.png"
+    },
+    {
+      "id": "knowledge-qa",
+      "titleZh": "知识问答",
+      "file": "icon-knowledge-qa.png"
+    },
+    {
+      "id": "document-assistant",
+      "titleZh": "文档助手",
+      "file": "icon-document-assistant.png"
+    },
+    {
+      "id": "report-generation",
+      "titleZh": "报表生成",
+      "file": "icon-report-generation.png"
+    },
+    {
+      "id": "intelligent-writing",
+      "titleZh": "智能写作",
+      "file": "icon-intelligent-writing.png"
+    },
+    {
+      "id": "meeting-minutes",
+      "titleZh": "会议纪要",
+      "file": "icon-meeting-minutes.png"
+    },
+    {
+      "id": "business-dashboard",
+      "titleZh": "我的看板",
+      "file": "icon-business-dashboard.png"
+    },
+    {
+      "id": "cloud-drive",
+      "titleZh": "我的云盘",
+      "file": "icon-cloud-drive.png"
+    },
+    {
+      "id": "more-apps-grid",
+      "titleZh": "更多应用",
+      "file": "icon-more-apps-grid.png"
+    },
+    {
+      "id": "data-asset-management",
+      "titleZh": "数据资产管理",
+      "file": "icon-data-asset-management.png"
+    }
+  ]
+}
