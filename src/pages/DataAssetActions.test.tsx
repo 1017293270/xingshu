@@ -4,8 +4,19 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { AppRoutes } from "@/app/AppRoutes";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 
 function renderRoute(path: string) {
+  localStorage.clear();
+  useDataHubAuthStore.getState().clearAuthState();
+  useDataHubAuthStore.getState().setAuth({
+    token: "test-token",
+    userId: 1,
+    username: "zhangsan",
+    isAdmin: false
+  });
+  useDataHubAuthStore.getState().setCurrentSpaceId(7);
+
   return render(
     <AppProviders>
       <MemoryRouter initialEntries={[path]}>

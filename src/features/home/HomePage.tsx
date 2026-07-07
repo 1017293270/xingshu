@@ -8,7 +8,7 @@ import appMoreAppsIcon from "@/assets/generated-icons/app-more-apps.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.png";
-import { sendAgentMessage } from "@/services/agentService";
+import { streamAgentMessage } from "@/services/agentService";
 import { useUiStore } from "@/stores/uiStore";
 import "./home.css";
 
@@ -18,6 +18,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "智能问数",
     description: "经营指标、趋势变化和数据洞察",
     prompt: "帮我分析本月经营数据，并生成趋势图表",
+    routeTo: "/analysis",
     imageSrc: appDataChatIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
@@ -27,6 +28,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "知识问答",
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
+    routeTo: "/analysis",
     imageSrc: appKnowledgeQaIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "cyan"
@@ -36,6 +38,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "文档助手",
     description: "读取文档并提炼关键结论",
     prompt: "帮我总结这份项目材料的关键风险",
+    routeTo: "/cloud",
     imageSrc: appDocumentAssistantIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "green"
@@ -45,6 +48,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "报表生成",
     description: "生成可复用的分析报表和图表",
     prompt: "根据销售数据生成一份周报",
+    routeTo: "/dashboard",
     imageSrc: appReportGenerationIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "orange"
@@ -54,6 +58,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "智能写作",
     description: "报告总结、方案策划与工作汇报",
     prompt: "帮我写一份经营分析汇报提纲",
+    routeTo: "/writing",
     imageSrc: appWritingIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "purple"
@@ -63,6 +68,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "会议纪要",
     description: "提炼议题、结论和待办事项",
     prompt: "帮我整理今天会议的纪要和行动项",
+    routeTo: "/writing",
     imageSrc: appMeetingMinutesIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
@@ -72,6 +78,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "更多应用",
     description: "打开更多企业智能能力",
     prompt: "帮我打开更多企业智能应用",
+    routeTo: "/data-dashboard",
     imageSrc: appMoreAppsIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
@@ -88,11 +95,52 @@ export function HomePage() {
   const selectApp = useUiStore((state) => state.selectApp);
   const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
   const setSentStatus = useUiStore((state) => state.setSentStatus);
-  const setActiveAnalysisQuestion = useUiStore((state) => state.setActiveAnalysisQuestion);
+  const startAskDataRun = useUiStore((state) => state.startAskDataRun);
+  const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
+  const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
+  const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const toggleMore = useUiStore((state) => state.toggleMore);
+
+  function startDataHubAskData(question: string) {
+    startAskDataRun(question);
+
+    if (import.meta.env.MODE === "test") {
+      completeAskDataRun();
+      return;
+    }
+
+    streamAgentMessage(
+      { content: question },
+      {
+        onEvent: (event) => {
+          appendAskDataEvent(event);
+          if (event.type === "error") {
+            const data = event.data as { message?: string } | string | undefined;
+            failAskDataRun(typeof data === "string" ? data : data?.message || "问数执行失败");
+          }
+        },
+        onDone: completeAskDataRun,
+        onError: (error) => failAskDataRun(error.message)
+      }
+    );
+  }
 
   function handleSelectApp(app: XsAppCardData) {
     selectApp(app.id, app.prompt);
+    setSentStatus(`已选择：${app.title}`);
+  }
+
+  function handleOpenApp(app: XsAppCardData) {
+    selectApp(app.id, app.prompt);
+    setSentStatus(`正在打开：${app.title}`);
+
+    if (app.routeTo === "/analysis") {
+      startDataHubAskData(app.prompt);
+    }
+
+    if (app.routeTo) {
+      navigate(app.routeTo);
+    }
   }
 
   function handleNewChat() {
@@ -104,9 +152,7 @@ export function HomePage() {
     if (!command) {
       return;
     }
-    await sendAgentMessage({ content: command });
-    setActiveAnalysisQuestion(command);
-    setSentStatus(`已发送：${command}`);
+    startDataHubAskData(command);
     navigate("/analysis");
   }
 
@@ -148,6 +194,7 @@ export function HomePage() {
                 key={app.id}
                 selected={selectedAppId === app.id}
                 onSelect={handleSelectApp}
+                onOpen={handleOpenApp}
               />
             ))}
           </div>

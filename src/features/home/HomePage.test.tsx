@@ -44,7 +44,8 @@ describe("HomePage", () => {
     const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智能写作", "会议纪要", "更多应用"];
 
     for (const appName of expectedApps) {
-      expect(screen.getByRole("button", { name: new RegExp(appName) })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(`选择 ${appName}`) })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `打开 ${appName}` })).toBeInTheDocument();
     }
 
     const iconSrcs = Array.from(
@@ -69,11 +70,12 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(screen.getByRole("button", { name: /智能问数/ }));
+    await user.click(screen.getByRole("button", { name: /^选择 智能问数/ }));
 
     expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue(
       "帮我分析本月经营数据，并生成趋势图表"
     );
+    expect(screen.getByRole("status")).toHaveTextContent("已选择：智能问数");
   });
 
   it("clears the draft when starting a new chat", async () => {
@@ -105,7 +107,7 @@ describe("HomePage", () => {
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "生成经营日报");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已发送：生成经营日报");
+    expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
   });
 
   it("shows feedback for command box attachment and voice actions", async () => {

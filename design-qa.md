@@ -1,4 +1,41 @@
 source visual truth path:
+- `D:\xingshu\outputs\login-page-design-qa\login-source-image2.png`
+
+implementation screenshot path:
+- `D:\xingshu\outputs\login-page-design-qa\login-1440x900.png`
+- `D:\xingshu\outputs\login-page-design-qa\login-390x844-full.png`
+- `D:\xingshu\outputs\login-page-design-qa\login-source-vs-implementation.png`
+
+viewport:
+- Desktop: 1440 x 900
+- Mobile: 390 x 844 full page
+
+state:
+- Login route `/login`, empty form, data-hub authentication adapter connected through `src/services/`.
+
+full-view comparison evidence:
+- `D:\xingshu\outputs\login-page-design-qa\login-source-vs-implementation.png`
+
+**Findings**
+- No actionable P0/P1/P2 findings remain.
+
+**Required Fidelity Surfaces**
+- Visual style: Reuses the current welcome-page ice-blue background, official XingShu logo asset, white login panel, deep-blue hierarchy, restrained cyan accents, fine borders, and low shadows.
+- Layout: Desktop preserves the image2 two-column concept with trust badge, left enterprise capability narrative, and right login panel. Mobile stacks the content and form without overlap.
+- Icon assets: All login capability/trust/footer icons are local image2-generated PNG assets under `src/assets/login-icons/` and are marked in DOM with `data-icon-source="login-image2"`.
+- Controls and states: Username/password fields include labels, focus styling, validation errors, loading/disabled submit state, forgot-password guidance, no-space permission state, and inline backend error display.
+- Backend boundary: Login calls stay in `src/services/dataHubAuthService.ts` and `src/services/dataHubSpaceService.ts`; the page does not fetch directly.
+
+**Verification**
+- `npm test -- --reporter=dot`: 17 files / 75 tests passed.
+- `npm run build`: passed.
+- Local screenshot checks captured through Playwright against `http://127.0.0.1:5174/login`.
+
+final result: passed
+
+---
+
+source visual truth path:
 - `D:\xwechat_files\wxid_nsedghikq70t22_3393\temp\RWTemp\2026-07\2c4d7c88bcd8ba45afa64e1ba2f55766.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\03-source-home.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\01-brand-product-system-suite.png`

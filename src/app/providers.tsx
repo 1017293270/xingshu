@@ -14,7 +14,7 @@ const queryClient = new QueryClient({
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <ConfigProvider theme={antdTheme}>
+    <ConfigProvider button={{ autoInsertSpace: false }} theme={antdTheme}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ConfigProvider>
   );

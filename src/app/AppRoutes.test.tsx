@@ -4,10 +4,25 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes } from "./AppRoutes";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 
-function renderRoute(path: string) {
+function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
+  const authenticated = options.authenticated ?? true;
+
+  localStorage.clear();
   useUiStore.getState().resetUiState();
+  useDataHubAuthStore.getState().clearAuthState();
+
+  if (authenticated) {
+    useDataHubAuthStore.getState().setAuth({
+      token: "test-token",
+      userId: 1,
+      username: "zhangsan",
+      isAdmin: false
+    });
+    useDataHubAuthStore.getState().setCurrentSpaceId(7);
+  }
 
   return render(
     <AppProviders>
@@ -27,14 +42,22 @@ describe("AppRoutes", () => {
     ["/writing", "智能写作", "推荐写作场景"],
     ["/dashboard", "我的看板", "经营分析看板"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
+    ["/login", "可信数据智能入口", "星数登录页"],
     ["/cloud", "我的云盘", "我的云盘内容"],
     ["/data-dashboard", "数据资产看板", "数据资产指标"],
     ["/data-management", "数据资产管理", "知识库列表"]
   ])("renders %s", async (path, heading, landmark) => {
-    renderRoute(path);
+    renderRoute(path, { authenticated: !["/welcome", "/login"].includes(path) });
 
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
     expect(screen.getByLabelText(landmark)).toBeInTheDocument();
+  });
+
+  it("redirects protected app routes to login when no data-hub session exists", async () => {
+    renderRoute("/", { authenticated: false });
+
+    expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /您好，张三/ })).not.toBeInTheDocument();
   });
 
   it("keeps the shared sidebar on routed pages", async () => {
@@ -82,6 +105,26 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByRole("heading", { name: "已完成分析" })).toBeInTheDocument();
     expect(screen.getByText("分析本月经营数据")).toBeInTheDocument();
+  });
+
+  it("opens the target feature from a recommended app arrow", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(screen.getByRole("button", { name: "打开 智能问数" }));
+
+    expect(await screen.findByRole("heading", { name: "已完成分析" })).toBeInTheDocument();
+    expect(screen.getByText("帮我分析本月经营数据，并生成趋势图表")).toBeInTheDocument();
+  });
+
+  it("logs out from the sidebar account menu", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(screen.getByRole("button", { name: /账户菜单/ }));
+    await user.click(await screen.findByText("退出登录"));
+
+    expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
   });
 
   it("submits a table generation prompt through the mock service", async () => {

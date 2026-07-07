@@ -314,6 +314,14 @@
   font-weight: 700;
 }
 
+.workflow-status span {
+  display: block;
+}
+
+.workflow-status span + span {
+  margin-top: 4px;
+}
+
 .history-list,
 .sheet-list {
   display: grid;

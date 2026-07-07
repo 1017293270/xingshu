@@ -30,4 +30,13 @@ describe("useUiStore", () => {
 
     expect(useUiStore.getState().isMoreOpen).toBe(false);
   });
+
+  it("keeps ask-data failures visible when the stream closes after an error", () => {
+    useUiStore.getState().startAskDataRun("分析本月销售数据");
+    useUiStore.getState().failAskDataRun("问数连接失败");
+    useUiStore.getState().completeAskDataRun();
+
+    expect(useUiStore.getState().askDataStatus).toBe("error");
+    expect(useUiStore.getState().askDataError).toBe("问数连接失败");
+  });
 });

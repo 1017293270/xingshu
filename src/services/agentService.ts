@@ -1,4 +1,8 @@
 import type { AgentMessageInput, AgentMessageResult, ConversationSummary } from "@/types/agent";
+import {
+  streamDataHubAskData,
+  type DataHubAskDataStreamHandlers
+} from "@/services/dataHubAskDataService";
 
 export async function sendAgentMessage(input: AgentMessageInput): Promise<AgentMessageResult> {
   const conversationId = input.conversationId ?? "mock-conversation";
@@ -9,6 +13,21 @@ export async function sendAgentMessage(input: AgentMessageInput): Promise<AgentM
     status: "accepted",
     content: input.content
   };
+}
+
+export function streamAgentMessage(input: AgentMessageInput, handlers: DataHubAskDataStreamHandlers): AbortController {
+  return streamDataHubAskData(
+    {
+      message: input.content,
+      sessionId: input.sessionId,
+      chatId: input.chatId,
+      datasourceId: input.datasourceId,
+      spaceId: input.spaceId,
+      chatMode: "ask",
+      askStrategy: "cube_fallback"
+    },
+    handlers
+  );
 }
 
 export async function createConversation(): Promise<ConversationSummary> {

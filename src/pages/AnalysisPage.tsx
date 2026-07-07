@@ -2,7 +2,7 @@ import { Button } from "antd";
 import { CaretUp, DownloadSimple } from "@phosphor-icons/react";
 import { useState } from "react";
 import { XsCommandBox, XsEChart, XsTimeline, type XsTimelineItem } from "@/components/xs";
-import { sendAgentMessage } from "@/services/agentService";
+import { streamAgentMessage } from "@/services/agentService";
 import { getSalesAnalysisResult } from "@/services/dashboardService";
 import { useUiStore } from "@/stores/uiStore";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
@@ -35,7 +35,13 @@ const reasoningSteps: XsTimelineItem[] = [
 export function AnalysisPage() {
   const { rows, salesTrendOption } = getSalesAnalysisResult();
   const activeAnalysisQuestion = useUiStore((state) => state.activeAnalysisQuestion);
-  const setActiveAnalysisQuestion = useUiStore((state) => state.setActiveAnalysisQuestion);
+  const askDataStatus = useUiStore((state) => state.askDataStatus);
+  const askDataEvents = useUiStore((state) => state.askDataEvents);
+  const askDataError = useUiStore((state) => state.askDataError);
+  const startAskDataRun = useUiStore((state) => state.startAskDataRun);
+  const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
+  const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
+  const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState("");
@@ -52,6 +58,45 @@ export function AnalysisPage() {
     setWorkflowStatus("已生成分析结果导出任务");
   };
 
+  const streamDataHubQuestion = (question: string) => {
+    startAskDataRun(question);
+
+    if (import.meta.env.MODE === "test") {
+      completeAskDataRun();
+      return;
+    }
+
+    streamAgentMessage(
+      { content: question },
+      {
+        onEvent: (event) => {
+          appendAskDataEvent(event);
+          if (event.type === "error") {
+            const data = event.data as { message?: string } | string | undefined;
+            failAskDataRun(typeof data === "string" ? data : data?.message || "问数执行失败");
+          }
+        },
+        onDone: completeAskDataRun,
+        onError: (error) => failAskDataRun(error.message)
+      }
+    );
+  };
+
+  const askDataStatusText = (() => {
+    if (askDataStatus === "streaming") {
+      return `正在调用 data-hub 问数，已接收 ${askDataEvents.length} 个过程事件`;
+    }
+    if (askDataStatus === "done") {
+      return askDataEvents.length > 0
+        ? `data-hub 问数完成，共接收 ${askDataEvents.length} 个过程事件`
+        : "data-hub 问数已提交";
+    }
+    if (askDataStatus === "error") {
+      return `data-hub 问数失败：${askDataError || "未知错误"}`;
+    }
+    return "";
+  })();
+
   const handleFollowUp = async () => {
     const command = followUpDraft.trim();
 
@@ -59,8 +104,7 @@ export function AnalysisPage() {
       return;
     }
 
-    await sendAgentMessage({ content: command });
-    setActiveAnalysisQuestion(command);
+    streamDataHubQuestion(command);
     setFollowUpDraft("");
     setWorkflowStatus(`已继续追问：${command}`);
   };
@@ -85,7 +129,12 @@ export function AnalysisPage() {
             </div>
             <Button aria-label={isReasoningVisible ? "收起分析过程" : "展开分析过程"} icon={<CaretUp size={18} />} onClick={handleToggleReasoning} />
           </header>
-          {workflowStatus ? <p className="workflow-status" role="status">{workflowStatus}</p> : null}
+          {askDataStatusText || workflowStatus ? (
+            <div className="workflow-status" role="status">
+              {askDataStatusText ? <span>{askDataStatusText}</span> : null}
+              {workflowStatus ? <span>{workflowStatus}</span> : null}
+            </div>
+          ) : null}
 
           {isReasoningVisible ? (
             <section className="reasoning-block" aria-label="思考过程">

@@ -145,6 +145,17 @@
   box-shadow: 0 14px 28px rgba(26, 83, 164, 0.08);
 }
 
+.home-page .xs-app-card__main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  gap: 12px;
+  text-align: center;
+}
+
 .home-page .xs-app-card .xs-icon-tile {
   width: 74px;
   height: 74px;
@@ -181,6 +192,66 @@
 @media (max-width: 1500px) {
   .home-page__app-grid {
     gap: 16px;
+  }
+}
+
+@media (min-width: 901px) {
+  .home-page {
+    min-height: 0;
+  }
+
+  .home-page__bg {
+    top: 18px;
+    height: min(360px, 40vh);
+  }
+
+  .home-page__hero {
+    margin: clamp(64px, 8vh, 92px) auto clamp(34px, 4.2vh, 48px);
+  }
+
+  .home-page__hero h1 {
+    font-size: clamp(42px, 3vw, 52px);
+  }
+
+  .home-page__hero p {
+    font-size: clamp(20px, 1.55vw, 25px);
+  }
+
+  .home-page .xs-command-box__input {
+    height: clamp(84px, 10vh, 104px);
+    padding-top: 24px;
+  }
+
+  .home-page .xs-command-box__toolbar {
+    min-height: clamp(58px, 7vh, 68px);
+  }
+
+  .home-page__apps {
+    margin-top: clamp(22px, 3vh, 32px);
+  }
+
+  .home-page__apps h2 {
+    margin-bottom: clamp(14px, 2vh, 20px);
+    font-size: 24px;
+  }
+
+  .home-page .xs-app-card {
+    min-height: clamp(164px, 21vh, 188px);
+    padding: 18px 10px 16px;
+  }
+
+  .home-page .xs-app-card .xs-icon-tile {
+    width: clamp(58px, 6.6vh, 70px);
+    height: clamp(58px, 6.6vh, 70px);
+  }
+
+  .home-page .xs-app-card .xs-icon-tile__image {
+    width: clamp(56px, 6.3vh, 66px);
+    height: clamp(56px, 6.3vh, 66px);
+  }
+
+  .home-page .xs-app-card__title {
+    font-size: 18px;
   }
 }
 
@@ -233,6 +304,12 @@
     justify-content: flex-start;
     min-height: 122px;
     padding: 18px;
+    text-align: left;
+  }
+
+  .home-page .xs-app-card__main {
+    flex-direction: row;
+    justify-content: flex-start;
     text-align: left;
   }
 

@@ -1,8 +1,10 @@
 import {
   CaretDown,
-  CaretUp
+  CaretUp,
+  SignOut,
+  UserCircle
 } from "@phosphor-icons/react";
-import { Button } from "antd";
+import { Button, Dropdown, type MenuProps } from "antd";
 import { NavLink, useNavigate } from "react-router-dom";
 import { XsIconTile } from "./XsIconTile";
 import logoSource from "@/assets/brand/xingshu-logo-transparent.png";
@@ -16,6 +18,9 @@ import moreAppsIcon from "@/assets/icon-kit/xingshu-sidebar-image2-v1/icon-sideb
 import newChatIcon from "@/assets/icon-kit/xingshu-sidebar-image2-v1/icon-sidebar-new-chat.png";
 import smartTableIcon from "@/assets/icon-kit/xingshu-sidebar-image2-v1/icon-sidebar-smart-table.png";
 import writingIcon from "@/assets/icon-kit/xingshu-sidebar-image2-v1/icon-sidebar-intelligent-writing.png";
+import { logoutDataHub } from "@/services/dataHubAuthService";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
+import { useUiStore } from "@/stores/uiStore";
 
 const sidebarIconSource = "xingshu-sidebar-image2-v1";
 
@@ -46,10 +51,44 @@ type XsSidebarProps = {
 
 export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProps) {
   const navigate = useNavigate();
+  const user = useDataHubAuthStore((state) => state.user);
+  const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
+  const resetUiState = useUiStore((state) => state.resetUiState);
+  const username = user?.username || "张三";
+  const userRole = user?.isAdmin ? "系统管理员" : "企业管理员";
+
+  const accountMenuItems: MenuProps["items"] = [
+    {
+      key: "profile",
+      icon: <UserCircle size={17} />,
+      label: `${username} · ${userRole}`,
+      disabled: true
+    },
+    {
+      type: "divider"
+    },
+    {
+      key: "logout",
+      danger: true,
+      icon: <SignOut size={17} />,
+      label: "退出登录"
+    }
+  ];
 
   function handleNewChat() {
     onNewChat();
     navigate("/");
+  }
+
+  function handleAccountMenuClick({ key }: { key: string }) {
+    if (key !== "logout") {
+      return;
+    }
+
+    logoutDataHub();
+    clearAuthState();
+    resetUiState();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -120,13 +159,20 @@ export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProp
         ) : null}
       </nav>
 
-      <div className="xs-sidebar__user">
-        <img src={avatarSource} alt="" />
-        <div>
-          <strong>张三</strong>
-          <span>企业管理员</span>
-        </div>
-      </div>
+      <Dropdown
+        menu={{ items: accountMenuItems, onClick: handleAccountMenuClick }}
+        placement="topLeft"
+        trigger={["click"]}
+      >
+        <button type="button" className="xs-sidebar__user" aria-label={`${username} ${userRole} 账户菜单`}>
+          <img src={avatarSource} alt="" />
+          <div>
+            <strong>{username}</strong>
+            <span>{userRole}</span>
+          </div>
+          <CaretUp className="xs-sidebar__user-caret" size={15} />
+        </button>
+      </Dropdown>
     </aside>
   );
 }

@@ -1,6 +1,10 @@
 export type AgentMessageInput = {
   conversationId?: string;
+  sessionId?: string;
+  chatId?: string;
   content: string;
+  datasourceId?: number;
+  spaceId?: number;
 };
 
 export type AgentMessageResult = {
