@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react";
-import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { routeTitles } from "@/components/xs/navigation";
 import { HomePage } from "@/features/home/HomePage";
+import { AppLayout } from "./AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const AnalysisPage = lazy(() => import("@/pages/AnalysisPage").then((module) => ({ default: module.AnalysisPage })));
@@ -25,27 +26,40 @@ const AiSettingsPage = lazy(() =>
   import("@/pages/AiSettingsPage").then((module) => ({ default: module.AiSettingsPage }))
 );
 
-export function AppRoutes() {
-  const protectedElement = (element: ReactNode) => <ProtectedRoute>{element}</ProtectedRoute>;
+function AppRouteTitle() {
+  const location = useLocation();
 
+  useEffect(() => {
+    document.title = `${routeTitles[location.pathname] || "星数"} · 星数`;
+  }, [location.pathname]);
+
+  return null;
+}
+
+export function AppRoutes() {
   return (
-    <Suspense fallback={<div className="route-loading" role="status">页面加载中</div>}>
-      <Routes>
-        <Route path="/" element={protectedElement(<HomePage />)} />
-        <Route path="/analysis" element={protectedElement(<AnalysisPage />)} />
-        <Route path="/history" element={protectedElement(<HistoryPage />)} />
-        <Route path="/table" element={protectedElement(<TablePage />)} />
-        <Route path="/writing" element={protectedElement(<WritingPage />)} />
-        <Route path="/dashboard" element={protectedElement(<DashboardPage />)} />
-        <Route path="/dashboard-editor" element={protectedElement(<DashboardEditorPage />)} />
-        <Route path="/welcome" element={<WelcomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/settings/ai" element={protectedElement(<AiSettingsPage />)} />
-        <Route path="/data-dashboard" element={protectedElement(<DataDashboardPage />)} />
-        <Route path="/data-management" element={protectedElement(<DataManagementPage />)} />
-        <Route path="/cloud" element={protectedElement(<CloudPage />)} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <>
+      <AppRouteTitle />
+      <Suspense fallback={<div className="route-loading" role="status">页面加载中</div>}>
+        <Routes>
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/table" element={<TablePage />} />
+            <Route path="/writing" element={<WritingPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/dashboard-editor" element={<DashboardEditorPage />} />
+            <Route path="/settings/ai" element={<AiSettingsPage />} />
+            <Route path="/data-dashboard" element={<DataDashboardPage />} />
+            <Route path="/data-management" element={<DataManagementPage />} />
+            <Route path="/cloud" element={<CloudPage />} />
+          </Route>
+          <Route path="/welcome" element={<WelcomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </>
   );
 }

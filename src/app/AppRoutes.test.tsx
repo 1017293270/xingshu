@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -81,6 +81,47 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("button", { name: "新建对话" }).querySelector("svg")).toBeInTheDocument();
   });
 
+  it("exposes every product destination from the mobile navigation drawer", async () => {
+    const user = userEvent.setup();
+    renderRoute("/dashboard");
+
+    await user.click(await screen.findByRole("button", { name: "打开主导航" }));
+
+    const navigationDialog = screen.getByRole("dialog", { name: "星数主导航" });
+    expect(navigationDialog).toBeVisible();
+    expect(within(navigationDialog).getByRole("link", { name: "历史对话" })).toHaveAttribute("href", "/history");
+    expect(within(navigationDialog).getByRole("link", { name: "智能写作" })).toHaveAttribute("href", "/writing");
+    expect(within(navigationDialog).getByRole("link", { name: "数据资产管理" })).toHaveAttribute(
+      "href",
+      "/data-management"
+    );
+    expect(within(navigationDialog).getByRole("button", { name: "移动端账户菜单" })).toBeVisible();
+  });
+
+  it("announces and focuses the new page after navigation", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(screen.getByRole("link", { name: "我的看板" }));
+
+    const heading = await screen.findByRole("heading", { name: "我的看板", level: 1 });
+    expect(heading).toHaveFocus();
+    expect(document.title).toBe("我的看板 · 星数");
+  });
+
+  it("keeps focus on the destination heading after navigating from the mobile drawer", async () => {
+    const user = userEvent.setup();
+    renderRoute("/dashboard");
+
+    await user.click(await screen.findByRole("button", { name: "打开主导航" }));
+    const navigationDialog = screen.getByRole("dialog", { name: "星数主导航" });
+    await user.click(within(navigationDialog).getByRole("link", { name: "历史对话" }));
+
+    const heading = await screen.findByRole("heading", { name: "历史对话", level: 1 });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "星数主导航" })).not.toBeInTheDocument());
+    await waitFor(() => expect(heading).toHaveFocus());
+  });
+
   it("uses the unified image2 icon kit on the welcome capability cards", async () => {
     const { container } = renderRoute("/welcome");
 
@@ -130,6 +171,7 @@ describe("AppRoutes", () => {
     await user.click(await screen.findByText("退出登录"));
 
     expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
+    expect(document.title).toBe("登录 · 星数");
   });
 
   it("submits a table generation prompt through the mock service", async () => {

@@ -4,6 +4,7 @@ export { XsCommandBox } from "./XsCommandBox";
 export { XsEChart } from "./XsEChart";
 export { XsEmptyState } from "./XsEmptyState";
 export { XsIconTile } from "./XsIconTile";
+export { XsMobileNav } from "./XsMobileNav";
 export { XsShell } from "./XsShell";
 export { XsStatusBar } from "./XsStatusBar";
 export type { XsStatusTone } from "./XsStatusBar";

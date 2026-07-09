@@ -1,4 +1,4 @@
-import { XsAppCard, type XsAppCardData, XsCommandBox, XsShell } from "@/components/xs";
+import { XsAppCard, type XsAppCardData, XsCommandBox } from "@/components/xs";
 import { useNavigate } from "react-router-dom";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
@@ -89,17 +89,14 @@ export function HomePage() {
   const navigate = useNavigate();
   const draft = useUiStore((state) => state.homeDraft);
   const selectedAppId = useUiStore((state) => state.selectedAppId);
-  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
   const sentStatus = useUiStore((state) => state.sentStatus);
   const setDraft = useUiStore((state) => state.setHomeDraft);
   const selectApp = useUiStore((state) => state.selectApp);
-  const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
   const setSentStatus = useUiStore((state) => state.setSentStatus);
   const startAskDataRun = useUiStore((state) => state.startAskDataRun);
   const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
   const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
-  const toggleMore = useUiStore((state) => state.toggleMore);
 
   function startDataHubAskData(question: string) {
     startAskDataRun(question, null);
@@ -143,10 +140,6 @@ export function HomePage() {
     }
   }
 
-  function handleNewChat() {
-    clearHomeConversation();
-  }
-
   async function handleSubmit() {
     const command = draft.trim();
     if (!command) {
@@ -157,48 +150,42 @@ export function HomePage() {
   }
 
   return (
-    <XsShell
-      isMoreOpen={isMoreOpen}
-      onToggleMore={toggleMore}
-      onNewChat={handleNewChat}
-    >
-      <div className="home-page">
-        <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
-        <section className="home-page__hero" aria-labelledby="home-greeting">
-          <h1 id="home-greeting">
-            您好，张三 <span aria-hidden="true">👋</span>
-          </h1>
-          <p>我是您的数据管家，有什么可以帮您？</p>
-        </section>
+    <div className="home-page">
+      <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
+      <section className="home-page__hero" aria-labelledby="home-greeting">
+        <h1 id="home-greeting">
+          您好，张三 <span aria-hidden="true">👋</span>
+        </h1>
+        <p>我是您的数据管家，有什么可以帮您？</p>
+      </section>
 
-        <XsCommandBox
-          value={draft}
-          onChange={setDraft}
-          onSubmit={handleSubmit}
-          onVoice={() => setSentStatus("已准备语音输入")}
-        />
+      <XsCommandBox
+        value={draft}
+        onChange={setDraft}
+        onSubmit={handleSubmit}
+        onVoice={() => setSentStatus("已准备语音输入")}
+      />
 
-        {sentStatus ? (
-          <div className="home-page__status" role="status">
-            {sentStatus}
-          </div>
-        ) : null}
+      {sentStatus ? (
+        <div className="home-page__status" role="status">
+          {sentStatus}
+        </div>
+      ) : null}
 
-        <section className="home-page__apps" aria-labelledby="home-apps-title">
-          <h2 id="home-apps-title">推荐应用</h2>
-          <div className="home-page__app-grid">
-            {recommendedApps.map((app) => (
-              <XsAppCard
-                app={app}
-                key={app.id}
-                selected={selectedAppId === app.id}
-                onSelect={handleSelectApp}
-                onOpen={handleOpenApp}
-              />
-            ))}
-          </div>
-        </section>
-      </div>
-    </XsShell>
+      <section className="home-page__apps" aria-labelledby="home-apps-title">
+        <h2 id="home-apps-title">推荐应用</h2>
+        <div className="home-page__app-grid">
+          {recommendedApps.map((app) => (
+            <XsAppCard
+              app={app}
+              key={app.id}
+              selected={selectedAppId === app.id}
+              onSelect={handleSelectApp}
+              onOpen={handleOpenApp}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }

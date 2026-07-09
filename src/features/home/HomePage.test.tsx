@@ -3,8 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
+import { XsShell } from "@/components/xs";
 import { useUiStore } from "@/stores/uiStore";
 import { HomePage } from "./HomePage";
+
+function HomeWorkspaceFixture() {
+  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
+  const toggleMore = useUiStore((state) => state.toggleMore);
+  const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
+
+  return (
+    <XsShell isMoreOpen={isMoreOpen} onToggleMore={toggleMore} onNewChat={clearHomeConversation}>
+      <HomePage />
+    </XsShell>
+  );
+}
 
 function renderHomePage() {
   useUiStore.getState().resetUiState();
@@ -12,7 +25,7 @@ function renderHomePage() {
   return render(
     <AppProviders>
       <MemoryRouter>
-        <HomePage />
+        <HomeWorkspaceFixture />
       </MemoryRouter>
     </AppProviders>
   );
