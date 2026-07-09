@@ -36,11 +36,11 @@ function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
 describe("AppRoutes", () => {
   it.each([
     ["/", "您好，张三", "推荐应用"],
-    ["/analysis", "已完成分析", "分析结果"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
     ["/writing", "智能写作", "推荐写作场景"],
     ["/dashboard", "我的看板", "经营分析看板"],
+    ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
     ["/login", "可信数据智能入口", "星数登录页"],
     ["/cloud", "我的云盘", "我的云盘内容"],
@@ -51,6 +51,14 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
     expect(screen.getByLabelText(landmark)).toBeInTheDocument();
+  });
+
+  it("opens analysis as a blank ask-data workspace before the user asks", async () => {
+    renderRoute("/analysis");
+
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("用户提问")).not.toBeInTheDocument();
   });
 
   it("redirects protected app routes to login when no data-hub session exists", async () => {
@@ -103,7 +111,7 @@ describe("AppRoutes", () => {
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "分析本月经营数据");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("heading", { name: "已完成分析" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "问数完成" })).toBeInTheDocument();
     expect(screen.getByText("分析本月经营数据")).toBeInTheDocument();
   });
 
@@ -113,7 +121,7 @@ describe("AppRoutes", () => {
 
     await user.click(screen.getByRole("button", { name: "打开 智能问数" }));
 
-    expect(await screen.findByRole("heading", { name: "已完成分析" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "问数完成" })).toBeInTheDocument();
     expect(screen.getByText("帮我分析本月经营数据，并生成趋势图表")).toBeInTheDocument();
   });
 
@@ -156,6 +164,19 @@ describe("AppRoutes", () => {
     await user.click(screen.getByRole("link", { name: "管理数据资产" }));
 
     expect(await screen.findByRole("heading", { name: "数据资产管理" })).toBeInTheDocument();
+  });
+
+  it("opens the embedded dashboard editor from the dashboard page", async () => {
+    const user = userEvent.setup();
+    renderRoute("/dashboard");
+
+    await user.click(await screen.findByRole("button", { name: "编辑" }));
+
+    expect(await screen.findByRole("heading", { name: "看板编辑器" })).toBeInTheDocument();
+    expect(screen.getByTitle("看板编辑器子应用")).toHaveAttribute(
+      "src",
+      expect.stringContaining("/workbenches")
+    );
   });
 
   it("filters knowledge bases in data asset management", async () => {

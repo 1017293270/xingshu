@@ -1,0 +1,22 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="insightStroke" x1="46" y1="44" x2="210" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1677FF"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="insightAccent" x1="72" y1="66" x2="196" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20C7FF"/>
+      <stop offset="1" stop-color="#1677FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="44" y="50" width="168" height="150" rx="22" stroke="url(#insightStroke)" stroke-width="13"/>
+  <path d="M75 166L106 134L136 149L181 98" stroke="url(#insightStroke)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="75" cy="166" r="11" fill="white" stroke="url(#insightAccent)" stroke-width="9"/>
+  <circle cx="106" cy="134" r="11" fill="white" stroke="url(#insightAccent)" stroke-width="9"/>
+  <circle cx="136" cy="149" r="11" fill="white" stroke="url(#insightAccent)" stroke-width="9"/>
+  <circle cx="181" cy="98" r="11" fill="white" stroke="url(#insightAccent)" stroke-width="9"/>
+  <path d="M78 88H120" stroke="url(#insightAccent)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M78 111H101" stroke="url(#insightStroke)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M192 69L210 51" stroke="url(#insightAccent)" stroke-width="11" stroke-linecap="round"/>
+  <path d="M46 214L62 198" stroke="url(#insightAccent)" stroke-width="11" stroke-linecap="round"/>
+</svg>

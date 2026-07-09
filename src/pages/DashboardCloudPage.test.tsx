@@ -19,10 +19,12 @@ describe("dashboard and cloud page actions", () => {
     renderPage(<DashboardPage />);
 
     expect(screen.getByText("经营分析全景看板")).toBeInTheDocument();
-    expect(screen.getByText("12 个指标 · 8 个组件 · 更新于今日 14:30")).toBeInTheDocument();
+    expect(screen.getByText(/近 12 个月 · 12 个指标 · 8 个组件 · 更新于今日 14:30/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "看板市场" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getAllByRole("article", { name: /看板组件：/ })).toHaveLength(8);
+    expect(screen.getByText("在线用户")).toBeInTheDocument();
+    expect(screen.queryByLabelText("实时运营柱状图")).not.toBeInTheDocument();
   });
 
   it("switches the active dashboard and reports the status", async () => {

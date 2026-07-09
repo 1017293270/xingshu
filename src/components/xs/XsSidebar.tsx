@@ -1,6 +1,7 @@
 import {
   CaretDown,
   CaretUp,
+  GearSix,
   SignOut,
   UserCircle
 } from "@phosphor-icons/react";
@@ -65,6 +66,11 @@ export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProp
       disabled: true
     },
     {
+      key: "ai-settings",
+      icon: <GearSix size={17} />,
+      label: "AI 配置"
+    },
+    {
       type: "divider"
     },
     {
@@ -81,6 +87,11 @@ export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProp
   }
 
   function handleAccountMenuClick({ key }: { key: string }) {
+    if (key === "ai-settings") {
+      navigate("/settings/ai");
+      return;
+    }
+
     if (key !== "logout") {
       return;
     }

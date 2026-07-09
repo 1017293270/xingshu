@@ -9,6 +9,9 @@ const HistoryPage = lazy(() => import("@/pages/HistoryPage").then((module) => ({
 const TablePage = lazy(() => import("@/pages/TablePage").then((module) => ({ default: module.TablePage })));
 const WritingPage = lazy(() => import("@/pages/WritingPage").then((module) => ({ default: module.WritingPage })));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const DashboardEditorPage = lazy(() =>
+  import("@/pages/DashboardEditorPage").then((module) => ({ default: module.DashboardEditorPage }))
+);
 const DataDashboardPage = lazy(() =>
   import("@/pages/DataDashboardPage").then((module) => ({ default: module.DataDashboardPage }))
 );
@@ -18,6 +21,9 @@ const DataManagementPage = lazy(() =>
 const CloudPage = lazy(() => import("@/pages/CloudPage").then((module) => ({ default: module.CloudPage })));
 const WelcomePage = lazy(() => import("@/pages/WelcomePage").then((module) => ({ default: module.WelcomePage })));
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
+const AiSettingsPage = lazy(() =>
+  import("@/pages/AiSettingsPage").then((module) => ({ default: module.AiSettingsPage }))
+);
 
 export function AppRoutes() {
   const protectedElement = (element: ReactNode) => <ProtectedRoute>{element}</ProtectedRoute>;
@@ -31,8 +37,10 @@ export function AppRoutes() {
         <Route path="/table" element={protectedElement(<TablePage />)} />
         <Route path="/writing" element={protectedElement(<WritingPage />)} />
         <Route path="/dashboard" element={protectedElement(<DashboardPage />)} />
+        <Route path="/dashboard-editor" element={protectedElement(<DashboardEditorPage />)} />
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/settings/ai" element={protectedElement(<AiSettingsPage />)} />
         <Route path="/data-dashboard" element={protectedElement(<DataDashboardPage />)} />
         <Route path="/data-management" element={protectedElement(<DataManagementPage />)} />
         <Route path="/cloud" element={protectedElement(<CloudPage />)} />

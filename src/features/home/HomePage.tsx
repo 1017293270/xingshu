@@ -102,7 +102,7 @@ export function HomePage() {
   const toggleMore = useUiStore((state) => state.toggleMore);
 
   function startDataHubAskData(question: string) {
-    startAskDataRun(question);
+    startAskDataRun(question, null);
 
     if (import.meta.env.MODE === "test") {
       completeAskDataRun();
@@ -175,7 +175,6 @@ export function HomePage() {
           value={draft}
           onChange={setDraft}
           onSubmit={handleSubmit}
-          onAttach={() => setSentStatus("已打开附件选择")}
           onVoice={() => setSentStatus("已准备语音输入")}
         />
 

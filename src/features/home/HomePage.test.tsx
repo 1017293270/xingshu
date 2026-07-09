@@ -110,12 +110,12 @@ describe("HomePage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
   });
 
-  it("shows feedback for command box attachment and voice actions", async () => {
+  it("shows feedback for the command box voice action", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(screen.getByRole("button", { name: "附件" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已打开附件选择");
+    expect(screen.queryByRole("button", { name: "附件" })).not.toBeInTheDocument();
+    expect(screen.queryByText("企业数据、文档、看板与 Agent 应用统一入口")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "语音" }));
     expect(screen.getByRole("status")).toHaveTextContent("已准备语音输入");

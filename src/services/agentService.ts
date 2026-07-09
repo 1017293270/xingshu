@@ -23,7 +23,7 @@ export function streamAgentMessage(input: AgentMessageInput, handlers: DataHubAs
       chatId: input.chatId,
       datasourceId: input.datasourceId,
       spaceId: input.spaceId,
-      chatMode: "ask",
+      chatMode: "agent",
       askStrategy: "cube_fallback"
     },
     handlers

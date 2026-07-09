@@ -39,46 +39,154 @@ export const salesTrendOption: EChartsOption = {
   ]
 };
 
+const revenueMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
+
 export const dashboardOptions: DashboardChartOptions = {
   revenue: {
     animation: false,
-    grid: { left: 8, right: 8, top: 10, bottom: 20 },
-    xAxis: { type: "category", data: ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#6B7F9D", fontSize: 10, align: "right" } },
-    yAxis: { show: false },
-    series: [{ type: "bar", barWidth: 18, data: [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94], itemStyle: { borderRadius: [4, 4, 0, 0], color: "#8DB5FF" } }]
+    grid: { left: 36, right: 12, top: 18, bottom: 28 },
+    tooltip: { trigger: "axis" },
+    xAxis: {
+      type: "category",
+      data: revenueMonths,
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right", interval: 1 }
+    },
+    yAxis: {
+      type: "value",
+      splitNumber: 3,
+      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right", formatter: "{value}" },
+      splitLine: { lineStyle: { color: "#EDF2FB" } },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    series: [
+      {
+        type: "bar",
+        barWidth: 16,
+        data: revenueValues.map((value, index) => ({
+          value,
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: index === revenueValues.length - 1 ? "#1677FF" : "#8DB5FF"
+          }
+        }))
+      }
+    ]
   },
   channel: {
     animation: false,
     grid: { left: 78, right: 48, top: 8, bottom: 8 },
     xAxis: { type: "value", min: 0, max: 40, show: false },
-    yAxis: { type: "category", inverse: true, data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469", align: "right" } },
-    series: [{ type: "bar", barWidth: 12, data: [35, 26, 20, 8], showBackground: true, backgroundStyle: { color: "#D9E7FF", borderRadius: 8 }, label: { show: true, position: "right", formatter: "{c}%", color: "#081A3A" }, itemStyle: { borderRadius: 8, color: "#1677FF" } }]
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"],
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
+    },
+    series: [
+      {
+        type: "bar",
+        barWidth: 12,
+        data: [
+          { value: 35, itemStyle: { color: "#1677FF", borderRadius: 8 } },
+          { value: 26, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
+          { value: 20, itemStyle: { color: "#8DB5FF", borderRadius: 8 } },
+          { value: 8, itemStyle: { color: "#B7CFFF", borderRadius: 8 } }
+        ],
+        showBackground: true,
+        backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
+        label: { show: true, position: "right", formatter: "{c}%", color: "#081A3A", fontSize: 12 }
+      }
+    ]
   },
   salesLine: {
     animation: false,
-    grid: { left: 8, right: 8, top: 16, bottom: 8 },
-    xAxis: { show: false, type: "category", data: [1, 2, 3, 4, 5, 6, 7, 8] },
-    yAxis: { show: false },
-    series: [{ type: "line", smooth: true, symbol: "none", data: [24, 32, 26, 38, 46, 42, 52, 48], lineStyle: { width: 3, color: "#81A4FF" } }]
+    grid: { left: 36, right: 12, top: 16, bottom: 28 },
+    tooltip: { trigger: "axis" },
+    xAxis: {
+      type: "category",
+      data: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right" }
+    },
+    yAxis: {
+      type: "value",
+      splitNumber: 3,
+      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right" },
+      splitLine: { lineStyle: { color: "#EDF2FB" } },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    series: [
+      {
+        type: "line",
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 6,
+        data: [24, 32, 26, 38, 46, 42, 52, 48],
+        lineStyle: { width: 3, color: "#1677FF" },
+        itemStyle: { color: "#1677FF" },
+        areaStyle: { color: "rgba(22, 119, 255, 0.12)" }
+      }
+    ]
   },
   customer: {
     animation: false,
-    color: ["#7FA2FF", "#63D5AC", "#F5B0A8"],
-    series: [{ type: "pie", radius: ["48%", "76%"], center: ["50%", "48%"], label: { show: false }, data: [75, 15, 10] }]
-  },
-  ops: {
-    animation: false,
-    grid: { left: 0, right: 0, top: 4, bottom: 0 },
-    xAxis: { show: false, type: "category", data: [1, 2, 3, 4, 5, 6, 7, 8] },
-    yAxis: { show: false },
-    series: [{ type: "bar", barWidth: 22, data: [40, 32, 52, 47, 60, 50, 44, 53], itemStyle: { borderRadius: [3, 3, 0, 0], color: "#99B8FF" } }]
+    color: ["#1677FF", "#16A37A", "#F0A090"],
+    series: [
+      {
+        type: "pie",
+        radius: ["48%", "72%"],
+        center: ["50%", "46%"],
+        label: { show: false },
+        data: [
+          { name: "企业客户", value: 75 },
+          { name: "中小客户", value: 15 },
+          { name: "个人用户", value: 10 }
+        ]
+      }
+    ]
   },
   region: {
     animation: false,
-    grid: { left: 52, right: 78, top: 4, bottom: 4 },
+    grid: { left: 52, right: 86, top: 4, bottom: 4 },
     xAxis: { type: "value", min: 0, max: 7200, show: false },
-    yAxis: { type: "category", inverse: true, data: ["华东", "华南", "华北", "西南", "华中"], axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: "#294469", align: "right" } },
-    series: [{ type: "bar", barWidth: 12, data: [6820, 6120, 5720, 4350, 3680], showBackground: true, backgroundStyle: { color: "#D9E7FF", borderRadius: 8 }, label: { show: true, position: "right", formatter: ({ value }) => `￥${Number(value).toLocaleString()}万`, color: "#081A3A" }, itemStyle: { borderRadius: 8, color: "#1677FF" } }]
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: ["华东", "华南", "华北", "西南", "华中"],
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
+    },
+    series: [
+      {
+        type: "bar",
+        barWidth: 12,
+        data: [
+          { value: 6820, itemStyle: { color: "#1677FF", borderRadius: 8 } },
+          { value: 6120, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },
+          { value: 5720, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
+          { value: 4350, itemStyle: { color: "#8DB5FF", borderRadius: 8 } },
+          { value: 3680, itemStyle: { color: "#B7CFFF", borderRadius: 8 } }
+        ],
+        showBackground: true,
+        backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
+        label: {
+          show: true,
+          position: "right",
+          formatter: ({ value }) => `￥${Number(value).toLocaleString()}万`,
+          color: "#081A3A",
+          fontSize: 12
+        }
+      }
+    ]
   }
 };
 

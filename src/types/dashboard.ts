@@ -7,7 +7,6 @@ export type DashboardChartOptions = {
   channel: EChartsOption;
   salesLine: EChartsOption;
   customer: EChartsOption;
-  ops: EChartsOption;
   region: EChartsOption;
 };
 

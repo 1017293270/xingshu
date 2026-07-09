@@ -293,7 +293,21 @@
   border-color: var(--xs-border-strong);
   border-radius: var(--xs-radius-control);
   color: var(--xs-text);
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
+}
+
+.login-panel__form .ant-input,
+.login-panel__form .ant-input-password .ant-input {
+  color: var(--xs-text);
+  background: transparent;
+}
+
+.login-panel__form .ant-input:-webkit-autofill,
+.login-panel__form .ant-input:-webkit-autofill:hover,
+.login-panel__form .ant-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--xs-text);
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: var(--xs-text);
 }
 
 .login-panel__form .ant-input-affix-wrapper:hover,
