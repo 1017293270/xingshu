@@ -8,6 +8,7 @@ export type DashboardChartOptions = {
   salesLine: EChartsOption;
   customer: EChartsOption;
   region: EChartsOption;
+  productRank: EChartsOption;
 };
 
 export type DataAssetChartOptions = {

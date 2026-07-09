@@ -280,8 +280,15 @@
 }
 
 .xs-echart {
+  position: relative;
   width: 100%;
   min-height: 220px;
+}
+
+/* 画布绝对定位，尺寸只跟随外层盒子，避免 ECharts 自身高度反哺布局 */
+.xs-echart__canvas {
+  position: absolute;
+  inset: 0;
 }
 
 .chart-mini {
@@ -1275,30 +1282,86 @@
 }
 
 .xs-shell__main:has(.dashboard-page) {
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding-left: clamp(24px, 1.6vw, 36px);
   padding-right: clamp(24px, 1.6vw, 36px);
 }
 
-.board-scroll {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 10px;
-  scrollbar-gutter: stable;
-}
-
+/* 看板编排：单列 → 双列 → 12 列全景，三档轨道，无横向滚动 */
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(320px, 1fr));
-  gap: 22px;
-  width: max(100%, 1480px);
-  min-width: 1480px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "revenue"
+    "forecast"
+    "ops"
+    "channel"
+    "customer"
+    "region"
+    "top"
+    "alert";
+  gap: 18px;
+  width: 100%;
+  min-width: 0;
   padding-bottom: 6px;
   align-items: stretch;
+}
+
+@media (min-width: 901px) {
+  .board-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "revenue revenue"
+      "forecast ops"
+      "channel customer"
+      "region alert"
+      "top top";
+    gap: 22px;
+  }
+}
+
+@media (min-width: 1480px) {
+  .board-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "revenue revenue revenue revenue revenue revenue forecast forecast forecast ops ops ops"
+      "channel channel channel channel customer customer customer customer region region region region"
+      "top top top top top top top alert alert alert alert alert";
+  }
+}
+
+.board-card--revenue {
+  grid-area: revenue;
+}
+
+.board-card--forecast {
+  grid-area: forecast;
+}
+
+.board-card--ops {
+  grid-area: ops;
+}
+
+.board-card--channel {
+  grid-area: channel;
+}
+
+.board-card--customer {
+  grid-area: customer;
+}
+
+.board-card--region {
+  grid-area: region;
+}
+
+.board-card--top {
+  grid-area: top;
+}
+
+.board-card--alert {
+  grid-area: alert;
 }
 
 .dashboard-control-bar {
@@ -1401,12 +1464,15 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  height: 400px;
+  min-height: 320px;
   padding: 24px 26px;
-  overflow: hidden;
   box-shadow: 0 6px 18px rgba(22, 119, 255, 0.06);
+}
+
+.board-card--revenue {
+  min-height: 380px;
 }
 
 .board-card__head {
@@ -1594,11 +1660,11 @@
 }
 
 .legend-dot--sme {
-  background: #16a37a;
+  background: #00c2ff;
 }
 
 .legend-dot--personal {
-  background: #f0a090;
+  background: #b7cfff;
 }
 
 .ops-grid {
@@ -1639,7 +1705,6 @@
   color: var(--xs-text-3);
 }
 
-.ranking-list,
 .alert-list,
 .source-bars {
   display: grid;
@@ -1647,106 +1712,10 @@
   margin: 0;
 }
 
-.ranking-list,
 .alert-list {
   flex: 1 1 auto;
   align-content: start;
   min-height: 0;
-  overflow: auto;
-}
-
-.ranking-list__row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.ranking-list__rank {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  color: var(--xs-text-2);
-  background: #eef4ff;
-  font-size: 13px;
-  font-weight: 760;
-}
-
-.ranking-list__rank--1 {
-  color: #fff;
-  background: var(--xs-primary);
-}
-
-.ranking-list__rank--2 {
-  color: var(--xs-primary-2);
-  background: #dceaff;
-}
-
-.ranking-list__body {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.ranking-list__meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ranking-list__name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--xs-text);
-  font-size: 14px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ranking-list__meta b {
-  flex: 0 0 auto;
-  color: var(--xs-text);
-  font-size: 14px;
-  font-weight: 760;
-}
-
-.ranking-list__change {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 750;
-}
-
-.ranking-list__change--up {
-  color: var(--xs-success);
-}
-
-.ranking-list__change--down {
-  color: var(--xs-danger);
-}
-
-.ranking-list__change--flat {
-  color: var(--xs-text-3);
-}
-
-.ranking-list__bar {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8f0fc;
-}
-
-.ranking-list__bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #5b9bff, #1677ff);
 }
 
 .alert-list__item {
@@ -1817,13 +1786,17 @@
 .board-card .chart-panel {
   flex: 1 1 auto;
   width: 100%;
-  min-height: 0;
+  min-height: 200px;
   height: auto;
   margin: 0;
 }
 
+.board-card .chart-panel--hero {
+  min-height: 240px;
+}
+
 .board-card .chart-panel--donut {
-  min-height: 160px;
+  min-height: 180px;
 }
 
 .board-card .chart-mini,
@@ -1836,15 +1809,25 @@
 
 @media (min-width: 1800px) {
   .board-grid {
-    gap: 24px;
-    min-width: 0;
-    width: 100%;
+    gap: 26px;
   }
 
   .board-card {
-    height: 430px;
-    padding: 26px 28px;
-    gap: 16px;
+    min-height: 360px;
+    padding: 28px 30px;
+    gap: 18px;
+  }
+
+  .board-card--revenue {
+    min-height: 420px;
+  }
+
+  .board-card .chart-panel {
+    min-height: 230px;
+  }
+
+  .board-card .chart-panel--hero {
+    min-height: 270px;
   }
 
   .board-card__head h2,
@@ -2218,5 +2201,34 @@
   .dashboard-editor-shell__frame,
   .dashboard-editor-shell__frame iframe {
     min-height: 620px;
+  }
+
+  .dashboard-page .xs-page__title h1 {
+    font-size: 30px;
+  }
+
+  .board-card {
+    min-height: 300px;
+    padding: 20px;
+  }
+
+  .board-card--revenue {
+    min-height: 340px;
+  }
+
+  .revenue-value strong {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 480px) {
+  .board-card__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .legend-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
   }
 }

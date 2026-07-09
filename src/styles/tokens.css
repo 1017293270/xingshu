@@ -19,7 +19,7 @@
   --xs-sidebar-width: 320px;
   --xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1600px);
   --xs-data-track: clamp(1220px, calc((100vw - var(--xs-sidebar-width)) * 0.84), 1680px);
-  --xs-dashboard-track: clamp(1360px, calc((100vw - var(--xs-sidebar-width)) * 0.94), 1960px);
+  --xs-dashboard-track: clamp(1080px, calc((100vw - var(--xs-sidebar-width)) * 0.87), 1960px);
   --xs-shadow-soft: 0 10px 28px rgba(22, 119, 255, 0.08);
   --xs-shadow-button: 0 12px 22px rgba(22, 119, 255, 0.2);
   --xs-font-family: Source Han Sans SC, Noto Sans SC, Microsoft YaHei, Arial, sans-serif;

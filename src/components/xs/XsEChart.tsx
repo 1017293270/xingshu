@@ -19,6 +19,7 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
     let disposed = false;
     const element = chartRef.current;
     const handleResize = () => chart?.resize();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleResize);
 
     void import("echarts").then((echarts) => {
       if (disposed) {
@@ -30,14 +31,20 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
       element.dataset.echartsReady = "true";
       element.dataset.echartsRenderer = "canvas";
       window.addEventListener("resize", handleResize);
+      observer?.observe(element);
     });
 
     return () => {
       disposed = true;
+      observer?.disconnect();
       window.removeEventListener("resize", handleResize);
       chart?.dispose();
     };
   }, [option]);
 
-  return <div ref={chartRef} className={`xs-echart ${className}`} role="img" aria-label={label} />;
+  return (
+    <div className={`xs-echart ${className}`} role="img" aria-label={label}>
+      <div ref={chartRef} className="xs-echart__canvas" />
+    </div>
+  );
 }

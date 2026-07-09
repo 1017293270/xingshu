@@ -45,14 +45,14 @@ const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
 export const dashboardOptions: DashboardChartOptions = {
   revenue: {
     animation: false,
-    grid: { left: 20, right: 10, top: 16, bottom: 28 },
+    grid: { left: 6, right: 6, top: 14, bottom: 4, containLabel: true },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
       data: revenueMonths,
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "right", interval: 1 }
+      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "center", interval: 1 }
     },
     yAxis: {
       type: "value",
@@ -78,7 +78,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   channel: {
     animation: false,
-    grid: { left: 76, right: 46, top: 12, bottom: 10 },
+    grid: { left: 8, right: 48, top: 14, bottom: 8, containLabel: true },
     xAxis: { type: "value", min: 0, max: 40, show: false },
     yAxis: {
       type: "category",
@@ -106,14 +106,14 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   salesLine: {
     animation: false,
-    grid: { left: 20, right: 12, top: 16, bottom: 28 },
+    grid: { left: 6, right: 10, top: 14, bottom: 4, containLabel: true },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
       data: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "right" }
+      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "center", interval: 1 }
     },
     yAxis: {
       type: "value",
@@ -138,7 +138,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   customer: {
     animation: false,
-    color: ["#1677FF", "#16A37A", "#F0A090"],
+    color: ["#1677FF", "#00C2FF", "#B7CFFF"],
     series: [
       {
         type: "pie",
@@ -155,7 +155,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   region: {
     animation: false,
-    grid: { left: 48, right: 84, top: 12, bottom: 10 },
+    grid: { left: 8, right: 92, top: 14, bottom: 8, containLabel: true },
     xAxis: { type: "value", min: 0, max: 7200, show: false },
     yAxis: {
       type: "category",
@@ -183,7 +183,50 @@ export const dashboardOptions: DashboardChartOptions = {
           position: "right",
           formatter: ({ value }) => `￥${Number(value).toLocaleString()}万`,
           color: "#081A3A",
-          fontSize: 11
+          fontSize: 12
+        }
+      }
+    ]
+  },
+  productRank: {
+    animation: false,
+    grid: { left: 8, right: 116, top: 14, bottom: 8, containLabel: true },
+    xAxis: { type: "value", min: 0, max: 1.4, show: false },
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: ["AI 数据分析平台", "智能知识库系统", "数据可视化套件", "自动化报告引擎"],
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
+    },
+    series: [
+      {
+        type: "bar",
+        barWidth: 13,
+        data: [
+          { value: 1.24, itemStyle: { color: "#1677FF", borderRadius: 8 } },
+          { value: 0.86, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },
+          { value: 0.52, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
+          { value: 0.38, itemStyle: { color: "#8DB5FF", borderRadius: 8 } }
+        ],
+        showBackground: true,
+        backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
+        label: {
+          show: true,
+          position: "right",
+          fontSize: 12,
+          color: "#081A3A",
+          fontWeight: 700,
+          formatter: ({ value, dataIndex }) => {
+            const changes = ["{up|↑12%}", "{up|↑8%}", "{flat|—}", "{down|↓3%}"];
+            return `￥${Number(value).toFixed(2)}亿 ${changes[dataIndex] ?? ""}`;
+          },
+          rich: {
+            up: { color: "#16A37A", fontSize: 12, fontWeight: 700 },
+            down: { color: "#FF4D4F", fontSize: 12, fontWeight: 700 },
+            flat: { color: "#6B7F9D", fontSize: 12, fontWeight: 700 }
+          }
         }
       }
     ]

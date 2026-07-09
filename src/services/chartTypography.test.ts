@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { getDashboardChartOptions, getDataAssetChartOptions, getSalesAnalysisResult } from "./dashboardService";
 
 const allowedAlignments = new Set(["left", "right"]);
+const allowedAxisAlignments = new Set(["left", "right", "center"]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -47,12 +48,12 @@ describe("chart typography", () => {
     ...Object.values(getDataAssetChartOptions())
   ];
 
-  it("uses explicit left or right alignment for visible chart axis text", () => {
+  it("uses explicit alignment for visible chart axis text", () => {
     const labels = chartOptions.flatMap(collectAxisLabels);
 
     expect(labels.length).toBeGreaterThan(0);
     for (const label of labels) {
-      expect(allowedAlignments.has(String(label.align))).toBe(true);
+      expect(allowedAxisAlignments.has(String(label.align))).toBe(true);
     }
   });
 
