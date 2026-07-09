@@ -15,12 +15,14 @@ export const antdTheme: ThemeConfig = {
     colorError: xingshuTokens.colorDanger,
     borderRadius: xingshuTokens.radiusControl,
     fontFamily: xingshuTokens.fontFamily,
-    controlHeight: 40
+    controlHeight: xingshuTokens.controlHeight,
+    motionUnit: xingshuTokens.motionFast / 1000,
+    motionBase: 0
   },
   components: {
     Button: {
       borderRadius: xingshuTokens.radiusControl,
-      controlHeight: 40,
+      controlHeight: xingshuTokens.controlHeight,
       primaryShadow: xingshuTokens.shadowButton
     },
     Card: {
