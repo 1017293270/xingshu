@@ -22,13 +22,14 @@ export function XsEmptyState({
     return (
       <Alert
         className={`xs-empty-state xs-empty-state--error ${className}`.trim()}
+        role="alert"
         type="error"
         showIcon
         message={title ?? "加载失败"}
         description={description}
         action={
           actionLabel && onAction ? (
-            <Button size="small" onClick={onAction}>
+            <Button size="small" aria-label={actionLabel} onClick={onAction}>
               {actionLabel}
             </Button>
           ) : undefined
@@ -49,7 +50,7 @@ export function XsEmptyState({
         }
       >
         {actionLabel && onAction ? (
-          <Button type="primary" onClick={onAction}>
+          <Button type="primary" aria-label={actionLabel} onClick={onAction}>
             {actionLabel}
           </Button>
         ) : null}

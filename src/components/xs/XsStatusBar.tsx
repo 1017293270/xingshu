@@ -37,7 +37,7 @@ export function XsStatusBar({ message, tone = "info", label, className = "" }: X
         type="error"
         showIcon
         message={message}
-        role="status"
+        role="alert"
       />
     );
   }

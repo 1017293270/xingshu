@@ -37,7 +37,9 @@ describe("data asset actions", () => {
     await user.click(screen.getByRole("link", { name: "客户基础信息表" }));
 
     expect(await screen.findByRole("heading", { name: "数据资产管理" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已从看板定位：客户基础信息表");
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
+      "已从看板定位：客户基础信息表"
+    );
   });
 
   it("switches management tabs, creates a draft, and opens knowledge base details", async () => {

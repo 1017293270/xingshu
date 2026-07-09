@@ -13,7 +13,7 @@ import kbHr from "@/assets/data-management-icons/kb-human-resources.png";
 import kbMarket from "@/assets/data-management-icons/kb-market-marketing.png";
 import kbTech from "@/assets/data-management-icons/kb-tech-rd.png";
 import kbFinance from "@/assets/data-management-icons/kb-finance-audit.png";
-import { XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
 import { getKnowledgeBaseStats, listKnowledgeBases } from "@/services/dataAssetService";
 import type { KnowledgeBaseIconId, KnowledgeBaseStatIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
@@ -42,13 +42,27 @@ export function DataManagementPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("知识库管理");
   const [actionStatus, setActionStatus] = useState(source ? `已从看板定位：${source}` : "");
-  const { data: stats = [] } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ["knowledgeBaseStats"],
     queryFn: getKnowledgeBaseStats
   });
-  const { data: knowledgeBases = [] } = useQuery({
+  const knowledgeBasesQuery = useQuery({
     queryKey: ["knowledgeBases"],
     queryFn: listKnowledgeBases
+  });
+  const stats = statsQuery.data ?? [];
+  const knowledgeBases = knowledgeBasesQuery.data ?? [];
+  const statsStatus = resolveXsAsyncStatus({
+    isPending: statsQuery.isPending,
+    isFetching: statsQuery.isFetching,
+    isError: statsQuery.isError,
+    hasData: statsQuery.data !== undefined
+  });
+  const knowledgeBasesStatus = resolveXsAsyncStatus({
+    isPending: knowledgeBasesQuery.isPending,
+    isFetching: knowledgeBasesQuery.isFetching,
+    isError: knowledgeBasesQuery.isError,
+    hasData: knowledgeBasesQuery.data !== undefined
   });
   const normalizedQuery = query.trim().toLowerCase();
   const visibleKnowledgeBases = normalizedQuery
@@ -57,7 +71,13 @@ export function DataManagementPage() {
         .some((field) => field.toLowerCase().includes(normalizedQuery))
     )
     : knowledgeBases;
-  const statusText = actionStatus || (normalizedQuery ? `已筛选 ${visibleKnowledgeBases.length} 个知识库` : `共 ${visibleKnowledgeBases.length} 个知识库`);
+  const statusText =
+    actionStatus ||
+    (knowledgeBasesStatus === "ready"
+      ? normalizedQuery
+        ? `已筛选 ${visibleKnowledgeBases.length} 个知识库`
+        : `共 ${visibleKnowledgeBases.length} 个知识库`
+      : "");
 
   const handleSearch = (value: string) => {
     setQuery(value);
@@ -93,30 +113,47 @@ export function DataManagementPage() {
           message={statusText}
         />
       </section>
-      <section className="manage-stats" aria-label="知识库统计">
-        {stats.map((stat) => (
-          <article className="xs-card stat-card" key={stat.id}>
-            <div><span>{stat.label}</span><strong>{stat.value}</strong></div>
-            <span className={`asset-image-tile asset-image-tile--${stat.tone}`}><img src={statIconById[stat.iconId]} alt="" /></span>
-          </article>
-        ))}
-      </section>
-      <section className="kb-grid" aria-label="知识库列表">
-        {visibleKnowledgeBases.map((knowledgeBase) => (
-          <button
-            className="xs-card kb-card xs-card-button"
-            key={knowledgeBase.id}
-            type="button"
-            aria-label={`${knowledgeBase.title}：${knowledgeBase.description}`}
-            onClick={() => setActionStatus(`已打开知识库详情：${knowledgeBase.title}`)}
-          >
-            <span className={`asset-image-tile asset-image-tile--${knowledgeBase.tone}`}><img src={knowledgeBaseIconById[knowledgeBase.iconId]} alt="" /></span>
-            <h2>{knowledgeBase.title}</h2>
-            <p>{knowledgeBase.description}</p>
-            <div><strong>{knowledgeBase.docs}</strong><span>{knowledgeBase.updatedAt}</span></div>
-          </button>
-        ))}
-      </section>
+      <XsAsyncPanel
+        status={statsStatus}
+        empty={stats.length === 0}
+        emptyDescription="暂无知识库统计。"
+        error="知识库统计加载失败，请稍后重试。"
+        onRetry={() => void statsQuery.refetch()}
+      >
+        <section className="manage-stats" aria-label="知识库统计">
+          {stats.map((stat) => (
+            <article className="xs-card stat-card" key={stat.id}>
+              <div><span>{stat.label}</span><strong>{stat.value}</strong></div>
+              <span className={`asset-image-tile asset-image-tile--${stat.tone}`}><img src={statIconById[stat.iconId]} alt="" /></span>
+            </article>
+          ))}
+        </section>
+      </XsAsyncPanel>
+      <XsAsyncPanel
+        status={knowledgeBasesStatus}
+        empty={visibleKnowledgeBases.length === 0}
+        emptyTitle={normalizedQuery ? "未找到匹配的知识库" : undefined}
+        emptyDescription={normalizedQuery ? "调整搜索词后再试试。" : "暂无知识库。"}
+        error="知识库列表加载失败，请稍后重试。"
+        onRetry={() => void knowledgeBasesQuery.refetch()}
+      >
+        <section className="kb-grid" aria-label="知识库列表">
+          {visibleKnowledgeBases.map((knowledgeBase) => (
+            <button
+              className="xs-card kb-card xs-card-button"
+              key={knowledgeBase.id}
+              type="button"
+              aria-label={`${knowledgeBase.title}：${knowledgeBase.description}`}
+              onClick={() => setActionStatus(`已打开知识库详情：${knowledgeBase.title}`)}
+            >
+              <span className={`asset-image-tile asset-image-tile--${knowledgeBase.tone}`}><img src={knowledgeBaseIconById[knowledgeBase.iconId]} alt="" /></span>
+              <h2>{knowledgeBase.title}</h2>
+              <p>{knowledgeBase.description}</p>
+              <div><strong>{knowledgeBase.docs}</strong><span>{knowledgeBase.updatedAt}</span></div>
+            </button>
+          ))}
+        </section>
+      </XsAsyncPanel>
     </PageFrame>
   );
 }

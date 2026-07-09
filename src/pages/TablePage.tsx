@@ -6,7 +6,7 @@ import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
-import { XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
 import { createTableFromPrompt, listRecentTables } from "@/services/tableService";
 import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
@@ -23,9 +23,16 @@ const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销�
 export function TablePage() {
   const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
-  const { data: recentTables = [] } = useQuery({
+  const recentTablesQuery = useQuery({
     queryKey: ["recentTables"],
     queryFn: listRecentTables
+  });
+  const recentTables = recentTablesQuery.data ?? [];
+  const recentTablesStatus = resolveXsAsyncStatus({
+    isPending: recentTablesQuery.isPending,
+    isFetching: recentTablesQuery.isFetching,
+    isError: recentTablesQuery.isError,
+    hasData: recentTablesQuery.data !== undefined
   });
 
   const handleGenerate = async () => {
@@ -66,25 +73,33 @@ export function TablePage() {
       </section>
       <XsStatusBar className="table-page__status" tone="success" label="操作" message={submissionStatus} />
       <h2 className="subsection-title">最近制表</h2>
-      <section className="sheet-list" aria-label="最近制表">
-        {recentTables.map((table) => (
-          <article className="xs-card sheet-row" key={table.id} aria-label={`${table.title} ${table.description}`}>
-            <span className="sheet-icon" aria-hidden="true">
-              <img src={sheetIconById[table.iconId]} alt="" />
-            </span>
-            <div className="sheet-row__body">
-              <h2 className="sheet-row__title">{table.title}</h2>
-              <p className="sheet-row__meta">
-                <Tag bordered={false} color="blue">
-                  {table.tag}
-                </Tag>
-                <span>{table.description}</span>
-              </p>
-            </div>
-            <Button onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
-          </article>
-        ))}
-      </section>
+      <XsAsyncPanel
+        status={recentTablesStatus}
+        empty={recentTables.length === 0}
+        emptyDescription="暂无最近制表记录。"
+        error="最近制表加载失败，请稍后重试。"
+        onRetry={() => void recentTablesQuery.refetch()}
+      >
+        <section className="sheet-list" aria-label="最近制表">
+          {recentTables.map((table) => (
+            <article className="xs-card sheet-row" key={table.id} aria-label={`${table.title} ${table.description}`}>
+              <span className="sheet-icon" aria-hidden="true">
+                <img src={sheetIconById[table.iconId]} alt="" />
+              </span>
+              <div className="sheet-row__body">
+                <h2 className="sheet-row__title">{table.title}</h2>
+                <p className="sheet-row__meta">
+                  <Tag bordered={false} color="blue">
+                    {table.tag}
+                  </Tag>
+                  <span>{table.description}</span>
+                </p>
+              </div>
+              <Button onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
+            </article>
+          ))}
+        </section>
+      </XsAsyncPanel>
       <p className="page-disclaimer">内容由 AI 生成，仅供参考，请按实际业务需求调整。</p>
     </PageFrame>
   );

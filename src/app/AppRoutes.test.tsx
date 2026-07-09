@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes } from "./AppRoutes";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
@@ -34,6 +34,10 @@ function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
 }
 
 describe("AppRoutes", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it.each([
     ["/", "您好，张三", "推荐应用"],
     ["/history", "历史对话", "历史对话列表"],
@@ -50,7 +54,7 @@ describe("AppRoutes", () => {
     renderRoute(path, { authenticated: !["/welcome", "/login"].includes(path) });
 
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
-    expect(screen.getByLabelText(landmark)).toBeInTheDocument();
+    expect(await screen.findByLabelText(landmark)).toBeInTheDocument();
   });
 
   it("opens analysis as a blank ask-data workspace before the user asks", async () => {
@@ -217,15 +221,19 @@ describe("AppRoutes", () => {
 
   it("opens the embedded dashboard editor from the dashboard page", async () => {
     const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ type: "opaque" }));
     renderRoute("/dashboard");
 
     await user.click(await screen.findByRole("button", { name: "编辑" }));
 
     expect(await screen.findByRole("heading", { name: "看板编辑器" })).toBeInTheDocument();
-    expect(screen.getByTitle("看板编辑器子应用")).toHaveAttribute(
+    const editorFrame = await screen.findByTitle("看板编辑器子应用");
+    expect(editorFrame).toHaveAttribute(
       "src",
       expect.stringContaining("/workbenches")
     );
+    fireEvent.load(editorFrame);
+    expect(await screen.findByText("已连接")).toBeInTheDocument();
   });
 
   it("filters knowledge bases in data asset management", async () => {

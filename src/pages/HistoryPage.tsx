@@ -1,12 +1,12 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { Button, Input, Segmented, Space, Tag, Tooltip } from "antd";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
 import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
 import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.svg";
-import { XsEmptyState, XsStatusBar, type XsStatusTone } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar, type XsStatusTone } from "@/components/xs";
 import { filterHistorySessions, loadDataHubHistoryReplay } from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
@@ -51,15 +51,24 @@ export function HistoryPage() {
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState<NonNullable<HistoryFilter["category"]>>("全部");
   const [actionStatus, setActionStatus] = useState("");
-  const { data: sessions = [], isError, isFetching, refetch } = useQuery({
+  const historyQuery = useQuery({
     queryKey: ["historySessions", { keyword, category }],
-    queryFn: () => filterHistorySessions({ keyword, category })
+    queryFn: () => filterHistorySessions({ keyword, category }),
+    placeholderData: keepPreviousData
+  });
+  const sessions = historyQuery.data ?? [];
+  const hasActiveFilter = Boolean(keyword.trim()) || category !== "全部";
+  const asyncStatus = resolveXsAsyncStatus({
+    isPending: historyQuery.isPending,
+    isFetching: historyQuery.isFetching,
+    isError: historyQuery.isError,
+    hasData: historyQuery.data !== undefined
   });
   const statusText =
-    actionStatus || (isFetching ? "正在同步 data-hub 历史对话" : `已筛选 ${sessions.length} 条历史对话`);
+    actionStatus || (asyncStatus === "ready" ? `已筛选 ${sessions.length} 条历史对话` : "");
   const statusTone = useMemo(
-    () => resolveStatusTone(statusText, isFetching && !actionStatus),
-    [actionStatus, isFetching, statusText]
+    () => resolveStatusTone(statusText, false),
+    [statusText]
   );
 
   async function handleRestoreSession(session: HistorySession) {
@@ -116,23 +125,20 @@ export function HistoryPage() {
           label={statusTone === "info" ? "筛选结果" : undefined}
           message={statusText}
         />
-        {isError ? (
-          <XsEmptyState
-            className="history-empty-state"
-            tone="error"
-            title="历史记录同步失败"
-            description="请确认 data-hub 会话服务可用后重试。"
-            actionLabel="重试"
-            onAction={() => void refetch()}
-          />
-        ) : null}
       </div>
-      <section className="history-list" aria-label="历史对话列表">
-        {!isError && sessions.length === 0 ? (
-          <XsEmptyState className="history-empty-state" description="暂无历史对话。" />
-        ) : null}
-        {!isError &&
-          sessions.map((session) => (
+      <XsAsyncPanel
+        className="history-page__async"
+        status={asyncStatus}
+        empty={sessions.length === 0}
+        emptyTitle={hasActiveFilter ? "暂无匹配的历史对话" : "还没有历史对话"}
+        emptyDescription={hasActiveFilter ? "调整搜索词或分类后再试试。" : "开始一次新对话后，记录会显示在这里。"}
+        emptyActionLabel="开始新对话"
+        onEmptyAction={() => navigate("/")}
+        error="历史记录同步失败，请确认 data-hub 会话服务可用后重试。"
+        onRetry={() => void historyQuery.refetch()}
+      >
+        <section className="history-list" aria-label="历史对话列表">
+          {sessions.map((session) => (
             <button
               className="xs-card history-card xs-card-button"
               key={session.id}
@@ -157,7 +163,8 @@ export function HistoryPage() {
               </div>
             </button>
           ))}
-      </section>
+        </section>
+      </XsAsyncPanel>
     </PageFrame>
   );
 }

@@ -1,8 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
+import * as historyService from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import { HistoryPage } from "./HistoryPage";
 
@@ -31,7 +33,59 @@ function renderHistoryPage() {
   );
 }
 
+function renderHistoryPageWithIsolatedQuery() {
+  useUiStore.getState().resetUiState();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0 } }
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <HistoryPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 describe("HistoryPage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows loading without an empty-state flash, then offers a new conversation", async () => {
+    let resolveSessions!: (sessions: []) => void;
+    vi.spyOn(historyService, "filterHistorySessions").mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSessions = resolve;
+      })
+    );
+    renderHistoryPageWithIsolatedQuery();
+
+    expect(await screen.findByRole("status", { name: "正在加载" })).toBeInTheDocument();
+    expect(screen.queryByText("还没有历史对话")).not.toBeInTheDocument();
+
+    resolveSessions([]);
+
+    expect(await screen.findByText("还没有历史对话")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始新对话" })).toBeInTheDocument();
+  });
+
+  it("retries an initial history loading error", async () => {
+    const user = userEvent.setup();
+    const filterSpy = vi
+      .spyOn(historyService, "filterHistorySessions")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce([]);
+    renderHistoryPageWithIsolatedQuery();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("历史记录同步失败");
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(await screen.findByText("还没有历史对话")).toBeInTheDocument();
+    expect(filterSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("filters history sessions by search keyword from an accessible search box", async () => {
     const user = userEvent.setup();
     renderHistoryPage();
@@ -68,7 +122,7 @@ describe("HistoryPage", () => {
 
     await user.click(segmentedOption("全部"));
 
-    expect(await within(historyList).findByRole("heading", { name: "员工报销流程说明" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "员工报销流程说明" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 5 条历史对话");
   });
 

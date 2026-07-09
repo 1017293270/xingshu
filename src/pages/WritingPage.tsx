@@ -2,7 +2,7 @@ import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
 import { createWritingDraft, listWritingDocuments, listWritingScenes } from "@/services/writingService";
 import type { WritingSceneIconId } from "@/types/writing";
 import reportIcon from "@/assets/writing-scene-icons/writing-scene-report-summary.png";
@@ -36,13 +36,27 @@ const scenePrompts: Record<WritingSceneIconId, string> = {
 export function WritingPage() {
   const [prompt, setPrompt] = useState("例如：撰写一份关于数据资产管理平台的产品介绍文档，包含产品概述、核心功能、应用场景和价值优势，字数约1500字");
   const [submissionStatus, setSubmissionStatus] = useState("");
-  const { data: scenes = [] } = useQuery({
+  const scenesQuery = useQuery({
     queryKey: ["writingScenes"],
     queryFn: listWritingScenes
   });
-  const { data: documents = [] } = useQuery({
+  const documentsQuery = useQuery({
     queryKey: ["writingDocuments"],
     queryFn: listWritingDocuments
+  });
+  const scenes = scenesQuery.data ?? [];
+  const documents = documentsQuery.data ?? [];
+  const scenesStatus = resolveXsAsyncStatus({
+    isPending: scenesQuery.isPending,
+    isFetching: scenesQuery.isFetching,
+    isError: scenesQuery.isError,
+    hasData: scenesQuery.data !== undefined
+  });
+  const documentsStatus = resolveXsAsyncStatus({
+    isPending: documentsQuery.isPending,
+    isFetching: documentsQuery.isFetching,
+    isError: documentsQuery.isError,
+    hasData: documentsQuery.data !== undefined
   });
 
   const handleSubmit = async () => {
@@ -87,39 +101,55 @@ export function WritingPage() {
       </section>
 
       <h2 className="subsection-title">推荐写作场景</h2>
-      <section className="scene-row" aria-label="推荐写作场景">
-        {scenes.map((scene) => (
-          <button className="xs-card scene-card" key={scene.id} type="button" aria-label={`${scene.title}：${scene.description}`} onClick={() => handleSelectScene(scene.iconId)}>
-            <span className={`scene-icon scene-icon--${scene.tone}`}><img src={sceneIconById[scene.iconId]} alt="" /></span>
-            <div><strong>{scene.title}</strong><span>{scene.description}</span></div>
-          </button>
-        ))}
-      </section>
+      <XsAsyncPanel
+        status={scenesStatus}
+        empty={scenes.length === 0}
+        emptyDescription="暂无推荐写作场景。"
+        error="推荐写作场景加载失败，请稍后重试。"
+        onRetry={() => void scenesQuery.refetch()}
+      >
+        <section className="scene-row" aria-label="推荐写作场景">
+          {scenes.map((scene) => (
+            <button className="xs-card scene-card" key={scene.id} type="button" aria-label={`${scene.title}：${scene.description}`} onClick={() => handleSelectScene(scene.iconId)}>
+              <span className={`scene-icon scene-icon--${scene.tone}`}><img src={sceneIconById[scene.iconId]} alt="" /></span>
+              <div><strong>{scene.title}</strong><span>{scene.description}</span></div>
+            </button>
+          ))}
+        </section>
+      </XsAsyncPanel>
 
-      <section className="xs-card doc-table" aria-label="我的文稿">
-        <h2>我的文稿</h2>
-        <table className="xs-table">
-          <thead><tr><th>文稿名称</th><th>类型</th><th>字数</th><th>更新时间</th><th>操作</th></tr></thead>
-          <tbody>
-            {documents.map((document) => (
-              <tr key={document.id}>
-                <td><FileText size={16} /> {document.name}</td>
-                <td>{document.type}</td>
-                <td>{document.words}</td>
-                <td>{document.updatedAt}</td>
-                <td>
-                  <Button
-                    type="text"
-                    icon={<Eye size={16} />}
-                    aria-label={`查看 ${document.name}`}
-                    onClick={() => setSubmissionStatus(`已打开文稿：${document.name}`)}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <XsAsyncPanel
+        status={documentsStatus}
+        empty={documents.length === 0}
+        emptyDescription="暂无文稿。"
+        error="文稿列表加载失败，请稍后重试。"
+        onRetry={() => void documentsQuery.refetch()}
+      >
+        <section className="xs-card doc-table" aria-label="我的文稿">
+          <h2>我的文稿</h2>
+          <table className="xs-table">
+            <thead><tr><th>文稿名称</th><th>类型</th><th>字数</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody>
+              {documents.map((document) => (
+                <tr key={document.id}>
+                  <td><FileText size={16} /> {document.name}</td>
+                  <td>{document.type}</td>
+                  <td>{document.words}</td>
+                  <td>{document.updatedAt}</td>
+                  <td>
+                    <Button
+                      type="text"
+                      icon={<Eye size={16} />}
+                      aria-label={`查看 ${document.name}`}
+                      onClick={() => setSubmissionStatus(`已打开文稿：${document.name}`)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </XsAsyncPanel>
     </PageFrame>
   );
 }
