@@ -1,7 +1,7 @@
-import { Button } from "antd";
+import { Button, Tag } from "antd";
 import { ArrowsClockwise, Database, Files, ShieldCheck, UploadSimple } from "@phosphor-icons/react";
 import { useState } from "react";
-import { XsIconTile } from "@/components/xs";
+import { XsIconTile, XsStatusBar } from "@/components/xs";
 import cloudDriveIcon from "@/assets/cloud-icons/cloud-drive.png";
 import { PageFrame } from "./PageFrame";
 
@@ -87,12 +87,14 @@ export function CloudPage() {
             <div className="cloud-recent__row" key={item.name}>
               <strong>{item.name}</strong>
               <span>{item.owner}</span>
-              <span className="xs-tag">{item.status}</span>
+              <Tag bordered={false} color="blue">
+                {item.status}
+              </Tag>
             </div>
           ))}
         </div>
       </section>
-      {workflowStatus ? <p className="workflow-status cloud-status" role="status">{workflowStatus}</p> : null}
+      <XsStatusBar className="cloud-status" tone="success" label="操作" message={workflowStatus} />
     </PageFrame>
   );
 }

@@ -45,14 +45,14 @@ const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
 export const dashboardOptions: DashboardChartOptions = {
   revenue: {
     animation: false,
-    grid: { left: 28, right: 8, top: 12, bottom: 24 },
+    grid: { left: 20, right: 10, top: 16, bottom: 28 },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
       data: revenueMonths,
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right", interval: 1 }
+      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "right", interval: 1 }
     },
     yAxis: {
       type: "value",
@@ -65,7 +65,7 @@ export const dashboardOptions: DashboardChartOptions = {
     series: [
       {
         type: "bar",
-        barWidth: 14,
+        barWidth: 18,
         data: revenueValues.map((value, index) => ({
           value,
           itemStyle: {
@@ -78,7 +78,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   channel: {
     animation: false,
-    grid: { left: 72, right: 42, top: 8, bottom: 8 },
+    grid: { left: 76, right: 46, top: 12, bottom: 10 },
     xAxis: { type: "value", min: 0, max: 40, show: false },
     yAxis: {
       type: "category",
@@ -86,12 +86,12 @@ export const dashboardOptions: DashboardChartOptions = {
       data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#294469", align: "right", fontSize: 12 }
+      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
     },
     series: [
       {
         type: "bar",
-        barWidth: 11,
+        barWidth: 13,
         data: [
           { value: 35, itemStyle: { color: "#1677FF", borderRadius: 8 } },
           { value: 26, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
@@ -106,14 +106,14 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   salesLine: {
     animation: false,
-    grid: { left: 28, right: 10, top: 14, bottom: 24 },
+    grid: { left: 20, right: 12, top: 16, bottom: 28 },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
       data: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right" }
+      axisLabel: { color: "#6B7F9D", fontSize: 12, align: "right" }
     },
     yAxis: {
       type: "value",
@@ -155,7 +155,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   region: {
     animation: false,
-    grid: { left: 44, right: 78, top: 8, bottom: 8 },
+    grid: { left: 48, right: 84, top: 12, bottom: 10 },
     xAxis: { type: "value", min: 0, max: 7200, show: false },
     yAxis: {
       type: "category",
@@ -163,12 +163,12 @@ export const dashboardOptions: DashboardChartOptions = {
       data: ["华东", "华南", "华北", "西南", "华中"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#294469", align: "right", fontSize: 12 }
+      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
     },
     series: [
       {
         type: "bar",
-        barWidth: 11,
+        barWidth: 13,
         data: [
           { value: 6820, itemStyle: { color: "#1677FF", borderRadius: 8 } },
           { value: 6120, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },

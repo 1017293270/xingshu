@@ -6,6 +6,19 @@ import { AppProviders } from "@/app/providers";
 import { useUiStore } from "@/stores/uiStore";
 import { HistoryPage } from "./HistoryPage";
 
+function segmentedOption(name: string) {
+  const option = screen
+    .getAllByText(name)
+    .map((element) => element.closest(".ant-segmented-item"))
+    .find(Boolean);
+
+  if (!option) {
+    throw new Error(`未找到筛选项：${name}`);
+  }
+
+  return option;
+}
+
 function renderHistoryPage() {
   useUiStore.getState().resetUiState();
 
@@ -40,7 +53,7 @@ describe("HistoryPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Q2销售业绩分析" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "数据洞察" }));
+    await user.click(segmentedOption("数据洞察"));
 
     const historyList = screen.getByRole("region", { name: "历史对话列表" });
     expect(within(historyList).getByRole("heading", { name: "Q2销售业绩分析" })).toBeInTheDocument();
@@ -48,12 +61,12 @@ describe("HistoryPage", () => {
     expect(within(historyList).queryByRole("heading", { name: "员工报销流程说明" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 2 条历史对话");
 
-    await user.click(screen.getByRole("button", { name: "文档处理" }));
+    await user.click(segmentedOption("文档处理"));
 
     expect(within(historyList).queryByRole("heading", { name: "Q2销售业绩分析" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 0 条历史对话");
 
-    await user.click(screen.getByRole("button", { name: "全部" }));
+    await user.click(segmentedOption("全部"));
 
     expect(await within(historyList).findByRole("heading", { name: "员工报销流程说明" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 5 条历史对话");

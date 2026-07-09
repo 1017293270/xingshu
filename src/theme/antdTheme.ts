@@ -35,6 +35,20 @@ export const antdTheme: ThemeConfig = {
       itemBorderRadius: xingshuTokens.radiusControl,
       itemSelectedBg: "#EAF3FF",
       itemSelectedColor: xingshuTokens.colorPrimaryStrong
+    },
+    Segmented: {
+      borderRadius: xingshuTokens.radiusControl,
+      itemSelectedBg: "#FFFFFF",
+      itemSelectedColor: xingshuTokens.colorPrimaryStrong,
+      trackBg: "#F3F8FF"
+    },
+    Tag: {
+      borderRadiusSM: 999,
+      defaultBg: "#EAF3FF",
+      defaultColor: xingshuTokens.colorPrimaryStrong
+    },
+    Alert: {
+      borderRadiusLG: xingshuTokens.radiusCard
     }
   }
 };

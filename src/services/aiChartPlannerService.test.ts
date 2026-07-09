@@ -189,6 +189,72 @@ describe("aiChartPlannerService", () => {
     ]);
   });
 
+  it("falls back to a local chart plan when AI returns truncated JSON for multiple tables", async () => {
+    const firstTable = table(
+      [
+        { key: "count", title: "记录数", type: "number" },
+        { key: "project_name", title: "项目名称表" }
+      ],
+      [
+        { count: 718, project_name: "演示账号" },
+        { count: 321, project_name: "大连甘小警" },
+        { count: 264, project_name: "六角井社区" }
+      ]
+    );
+    const secondTable = {
+      ...table(
+        [
+          { key: "count", title: "记录数", type: "number" },
+          { key: "created_at", title: "创建日期", type: "time" }
+        ],
+        [
+          { count: 10, created_at: "2025-04-01T00:00:00.000" },
+          { count: 14, created_at: "2025-05-01T00:00:00.000" }
+        ]
+      ),
+      tableIndex: 1
+    };
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: "{\"chartable\":true,\"reason\":\"包含两张结果表"
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    const plan = await planAiChart(
+      { question: "这里有两个结果表，生成图表", tables: [firstTable, secondTable] },
+      {
+        providerConfig: {
+          provider: "minimax",
+          baseUrl: "https://api.minimaxi.com/v1",
+          apiKey: "key",
+          model: "MiniMax-M3",
+          temperature: 0.2
+        },
+        fetcher: fetcher as unknown as typeof fetch
+      }
+    );
+    const spec = buildGeneratedChartSpec(plan, [firstTable, secondTable]);
+
+    expect(plan).toMatchObject({
+      chartable: true,
+      chartType: "bar",
+      tableIndex: 0,
+      dimensionKey: "project_name",
+      metricKeys: ["count"]
+    });
+    expect(plan.reason).toContain("本地规则");
+    expect(spec).toMatchObject({ title: "项目名称表分布", tableTitle: "结果表 1" });
+  });
+
   it("falls back to not chartable when AI references missing fields", async () => {
     const dataTable = table(
       [

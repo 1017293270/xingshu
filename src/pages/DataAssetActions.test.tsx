@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -45,7 +45,8 @@ describe("data asset actions", () => {
     renderRoute("/data-management");
 
     await screen.findByRole("heading", { name: "数据资产管理" });
-    await user.click(screen.getByRole("button", { name: "数据源管理" }));
+    const assetTabs = screen.getByRole("radiogroup", { name: "资产管理类型" });
+    await user.click(within(assetTabs).getByText("数据源管理"));
     expect(screen.getByRole("status")).toHaveTextContent("已切换到数据源管理");
 
     await user.click(screen.getByRole("button", { name: "新增知识库" }));

@@ -77,11 +77,8 @@ describe("AppRoutes", () => {
       expect.stringContaining("xingshu-logo-transparent.png")
     );
     expect(screen.getByRole("link", { name: /数据资产管理/ })).toHaveAttribute("href", "/data-management");
-    expect(container.querySelectorAll('[data-icon-source="xingshu-sidebar-image2-v1"]')).toHaveLength(9);
-    expect(screen.getByRole("button", { name: "新建对话" }).querySelector("img")).toHaveAttribute(
-      "src",
-      expect.stringContaining("icon-sidebar-new-chat.png")
-    );
+    expect(container.querySelectorAll(".xs-sidebar__nav .xs-icon-tile svg")).toHaveLength(8);
+    expect(screen.getByRole("button", { name: "新建对话" }).querySelector("svg")).toBeInTheDocument();
   });
 
   it("uses the unified image2 icon kit on the welcome capability cards", async () => {

@@ -2,7 +2,7 @@ import { Button } from "antd";
 import { Plus, WarningCircle, CheckCircle, SquaresFour } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { XsEChart } from "@/components/xs";
+import { XsEChart, XsStatusBar } from "@/components/xs";
 import { getDashboardChartOptions } from "@/services/dashboardService";
 import { PageFrame } from "./PageFrame";
 
@@ -70,11 +70,7 @@ export function DashboardPage() {
         </>
       }
     >
-      {workflowStatus ? (
-        <p className="workflow-status" role="status">
-          {workflowStatus}
-        </p>
-      ) : null}
+      <XsStatusBar className="dashboard-page__status" tone="success" label="操作" message={workflowStatus} />
       <section className="dashboard-control-bar" aria-label="看板状态">
         <div className="dashboard-control-bar__meta">
           <span className="dashboard-active-name">{activeDashboardName}</span>

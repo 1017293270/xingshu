@@ -2,7 +2,7 @@ import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { XsEChart, XsIconTile } from "@/components/xs";
+import { XsEChart, XsIconTile, XsStatusBar } from "@/components/xs";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
 import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
 import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png";
@@ -41,7 +41,7 @@ export function DataDashboardPage() {
 
   return (
     <PageFrame title="数据资产看板" subtitle="全局掌握企业数据资产规模、质量与应用价值" actions={<><span>数据更新于 {currentDate} 14:30:00</span><Button onClick={handleDateChange}>{currentDate}</Button><Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link></>} className="data-dashboard-page">
-      {workflowStatus ? <p className="workflow-status" role="status">{workflowStatus}</p> : null}
+      <XsStatusBar tone="success" label="操作" message={workflowStatus} />
       <section className="data-kpis" aria-label="数据资产指标">
         {kpis.map((kpi) => (
           <Link className="xs-card stat-card xs-card-link" key={kpi.id} to={`/data-management?source=${encodeURIComponent(kpi.label)}`}>

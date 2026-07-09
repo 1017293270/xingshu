@@ -2,6 +2,7 @@ import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { XsStatusBar } from "@/components/xs";
 import { createWritingDraft, listWritingDocuments, listWritingScenes } from "@/services/writingService";
 import type { WritingSceneIconId } from "@/types/writing";
 import reportIcon from "@/assets/writing-scene-icons/writing-scene-report-summary.png";
@@ -82,7 +83,7 @@ export function WritingPage() {
           <Button icon={<Paperclip size={18} />} aria-label="附件" onClick={() => setSubmissionStatus("已打开写作附件选择")} />
           <Button type="primary" icon={<PaperPlaneTilt size={18} />} aria-label="发送" onClick={handleSubmit} />
         </div>
-        {submissionStatus ? <p className="workflow-status" role="status">{submissionStatus}</p> : null}
+        <XsStatusBar tone="success" label="操作" message={submissionStatus} />
       </section>
 
       <h2 className="subsection-title">推荐写作场景</h2>

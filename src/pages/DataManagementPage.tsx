@@ -1,5 +1,5 @@
-import { Button, Input } from "antd";
-import { Plus } from "@phosphor-icons/react";
+import { Button, Input, Segmented } from "antd";
+import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -13,6 +13,7 @@ import kbHr from "@/assets/data-management-icons/kb-human-resources.png";
 import kbMarket from "@/assets/data-management-icons/kb-market-marketing.png";
 import kbTech from "@/assets/data-management-icons/kb-tech-rd.png";
 import kbFinance from "@/assets/data-management-icons/kb-finance-audit.png";
+import { XsStatusBar } from "@/components/xs";
 import { getKnowledgeBaseStats, listKnowledgeBases } from "@/services/dataAssetService";
 import type { KnowledgeBaseIconId, KnowledgeBaseStatIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
@@ -66,28 +67,31 @@ export function DataManagementPage() {
   return (
     <PageFrame title="数据资产管理" subtitle="统一管理企业数据资产，助力数据价值最大化" actions={<Button type="primary" icon={<Plus size={18} />} onClick={() => setActionStatus("已创建知识库草稿")}>新增知识库</Button>} className="data-management-page">
       <nav className="asset-tabs" aria-label="资产管理类型">
-        {assetTabs.map((tab) => (
-          <Button
-            type={tab === activeTab ? "primary" : "default"}
-            key={tab}
-            onClick={() => {
-              setActiveTab(tab);
-              setActionStatus(`已切换到${tab}`);
-            }}
-          >
-            {tab}
-          </Button>
-        ))}
+        <Segmented
+          aria-label="资产管理类型"
+          options={assetTabs}
+          value={activeTab}
+          onChange={(value) => {
+            setActiveTab(String(value));
+            setActionStatus(`已切换到${value}`);
+          }}
+        />
       </nav>
       <section className="asset-filter" aria-label="知识库筛选">
         <Input
           aria-label="知识库搜索"
-          placeholder="搜索知识库名称、说明或更新时间"
+          allowClear
           type="search"
+          prefix={<MagnifyingGlass size={18} />}
+          placeholder="搜索知识库名称、说明或更新时间"
           value={query}
           onChange={(event) => handleSearch(event.target.value)}
         />
-        <p role="status">{statusText}</p>
+        <XsStatusBar
+          tone="info"
+          label={normalizedQuery || actionStatus ? "筛选结果" : "汇总"}
+          message={statusText}
+        />
       </section>
       <section className="manage-stats" aria-label="知识库统计">
         {stats.map((stat) => (

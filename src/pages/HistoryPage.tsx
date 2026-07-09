@@ -1,11 +1,12 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { Button, Input } from "antd";
+import { Button, Input, Segmented, Space, Tag, Tooltip } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import historyConversationIcon from "@/assets/icon-kit/xingshu-sidebar-image2-v1/icon-sidebar-history-conversation.png";
+import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
 import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
 import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.svg";
+import { XsEmptyState, XsStatusBar, type XsStatusTone } from "@/components/xs";
 import { filterHistorySessions, loadDataHubHistoryReplay } from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
@@ -28,6 +29,22 @@ function getHistoryIcon(category: HistoryCategory) {
   return historyIconByCategory[category];
 }
 
+function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
+  if (message.includes("失败")) {
+    return "error";
+  }
+
+  if (isFetching || message.startsWith("正在")) {
+    return "loading";
+  }
+
+  if (message.startsWith("已恢复")) {
+    return "success";
+  }
+
+  return "info";
+}
+
 export function HistoryPage() {
   const navigate = useNavigate();
   const restoreAskDataHistory = useUiStore((state) => state.restoreAskDataHistory);
@@ -38,7 +55,12 @@ export function HistoryPage() {
     queryKey: ["historySessions", { keyword, category }],
     queryFn: () => filterHistorySessions({ keyword, category })
   });
-  const statusText = actionStatus || (isFetching ? "正在同步 data-hub 历史对话" : `已筛选 ${sessions.length} 条历史对话`);
+  const statusText =
+    actionStatus || (isFetching ? "正在同步 data-hub 历史对话" : `已筛选 ${sessions.length} 条历史对话`);
+  const statusTone = useMemo(
+    () => resolveStatusTone(statusText, isFetching && !actionStatus),
+    [actionStatus, isFetching, statusText]
+  );
 
   async function handleRestoreSession(session: HistorySession) {
     if (!session.sessionId || session.source !== "data-hub") {
@@ -64,62 +86,77 @@ export function HistoryPage() {
   }
 
   return (
-    <PageFrame title="历史对话">
-      <section className="history-tools" aria-label="历史对话筛选">
-        <Input
-          aria-label="历史搜索"
-          prefix={<MagnifyingGlass size={18} />}
-          placeholder="搜索历史对话..."
-          value={keyword}
-          onChange={(event) => {
-            setKeyword(event.target.value);
-            setActionStatus("");
-          }}
-        />
-        {historyCategoryFilters.map((tab) => (
-          <Button
-            aria-pressed={category === tab}
-            autoInsertSpace={false}
-            key={tab}
-            type={category === tab ? "primary" : "default"}
-            onClick={() => {
-              setCategory(tab);
+    <PageFrame title="历史对话" className="history-page">
+      <div className="history-page__chrome">
+        <section className="history-tools" aria-label="历史对话筛选">
+          <Input
+            aria-label="历史搜索"
+            allowClear
+            prefix={<MagnifyingGlass size={18} />}
+            placeholder="搜索历史对话..."
+            value={keyword}
+            onChange={(event) => {
+              setKeyword(event.target.value);
               setActionStatus("");
             }}
-          >
-            {tab}
-          </Button>
-        ))}
-      </section>
-      <p className="workflow-status" role="status">{statusText}</p>
-      {isError ? (
-        <section className="datahub-empty-state history-empty-state" role="alert">
-          <span>历史记录同步失败，请确认 data-hub 会话服务可用。</span>
-          <Button onClick={() => void refetch()}>重试</Button>
+          />
+          <Segmented
+            aria-label="历史分类筛选"
+            options={historyCategoryFilters}
+            value={category}
+            onChange={(value) => {
+              setCategory(value as NonNullable<HistoryFilter["category"]>);
+              setActionStatus("");
+            }}
+          />
         </section>
-      ) : null}
+        <XsStatusBar
+          className="history-page__status"
+          tone={statusTone}
+          label={statusTone === "info" ? "筛选结果" : undefined}
+          message={statusText}
+        />
+        {isError ? (
+          <XsEmptyState
+            className="history-empty-state"
+            tone="error"
+            title="历史记录同步失败"
+            description="请确认 data-hub 会话服务可用后重试。"
+            actionLabel="重试"
+            onAction={() => void refetch()}
+          />
+        ) : null}
+      </div>
       <section className="history-list" aria-label="历史对话列表">
         {!isError && sessions.length === 0 ? (
-          <div className="datahub-empty-state history-empty-state" role="note">暂无历史对话。</div>
+          <XsEmptyState className="history-empty-state" description="暂无历史对话。" />
         ) : null}
-        {!isError && sessions.map((session) => (
-          <button
-            className="xs-card history-card xs-card-button"
-            key={session.id}
-            type="button"
-            aria-label={`${session.title}：${session.summary}`}
-            onClick={() => void handleRestoreSession(session)}
-          >
-            <span className="topic-icon" aria-hidden="true">
-              <img src={getHistoryIcon(session.category)} alt="" />
-            </span>
-            <div>
-              <h2>{session.title}</h2>
-              <p>{session.summary}</p>
-              <div className="tagline"><span className="xs-tag">{session.category}</span><span>{session.updatedAt}</span></div>
-            </div>
-          </button>
-        ))}
+        {!isError &&
+          sessions.map((session) => (
+            <button
+              className="xs-card history-card xs-card-button"
+              key={session.id}
+              type="button"
+              aria-label={`${session.title}：${session.summary}`}
+              onClick={() => void handleRestoreSession(session)}
+            >
+              <span className="topic-icon" aria-hidden="true">
+                <img src={getHistoryIcon(session.category)} alt="" />
+              </span>
+              <div className="history-card__body">
+                <Tooltip title={session.title} placement="topLeft">
+                  <h2 className="history-card__title">{session.title}</h2>
+                </Tooltip>
+                <p>{session.summary}</p>
+                <Space size={10} className="tagline" wrap>
+                  <Tag bordered={false} color="blue">
+                    {session.category}
+                  </Tag>
+                  <span>{session.updatedAt}</span>
+                </Space>
+              </div>
+            </button>
+          ))}
       </section>
     </PageFrame>
   );

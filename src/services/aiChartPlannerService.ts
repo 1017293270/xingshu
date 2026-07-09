@@ -102,6 +102,47 @@ function findChartableShape(summary: AiChartPlanRequestSummary) {
   });
 }
 
+function createLocalChartPlan(summary: AiChartPlanRequestSummary, reason = "已使用本地规则生成图表建议。"): AiChartPlanResult | null {
+  const table = findChartableShape(summary);
+  if (!table) {
+    return null;
+  }
+
+  const timeColumn = table.columns.find((column) => column.type === "time");
+  const dimensionColumn = timeColumn ?? table.columns.find((column) => column.type === "dimension");
+  const metricColumn = table.columns.find((column) => column.type === "number");
+
+  if (!dimensionColumn || !metricColumn) {
+    return null;
+  }
+
+  const chartType: AiChartType = timeColumn ? "line" : "bar";
+  const allowedTypes: AiChartType[] = timeColumn ? ["line", "bar"] : ["bar", "pie"];
+
+  return {
+    chartable: true,
+    reason,
+    chartType,
+    allowedTypes,
+    title: `${dimensionColumn.title}分布`,
+    tableIndex: table.tableIndex,
+    dimensionKey: dimensionColumn.key,
+    metricKeys: [metricColumn.key]
+  };
+}
+
+function isRecoverableAiPlanError(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /AI 没有返回可解析|AI 返回格式不正确|AI 没有返回图表判断内容/i.test(error.message);
+}
+
 function getLocalGuardResult(summary: AiChartPlanRequestSummary): AiChartPlanResult | null {
   if (summary.tables.length === 0) {
     return { chartable: false, reason: "暂无可用于生成图表的问数表格。" };
@@ -260,7 +301,18 @@ export async function planAiChart(
     return { chartable: false, reason: "请先配置 AI 供应商和 API Key。" };
   }
 
-  return requestRemoteAiPlan(summary, options.providerConfig, options.fetcher ?? fetch);
+  try {
+    return await requestRemoteAiPlan(summary, options.providerConfig, options.fetcher ?? fetch);
+  } catch (error) {
+    if (isRecoverableAiPlanError(error)) {
+      const fallbackPlan = createLocalChartPlan(summary, "AI 返回内容不完整，已使用本地规则生成图表建议。");
+      if (fallbackPlan) {
+        return fallbackPlan;
+      }
+    }
+
+    throw error;
+  }
 }
 
 function findTableForPlan(plan: AiChartPlanResult, tables: DataHubTableResult[]) {
