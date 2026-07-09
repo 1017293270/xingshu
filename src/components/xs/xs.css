@@ -829,6 +829,10 @@
   border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 10px 26px rgba(8, 26, 58, 0.05);
+  transition:
+    transform var(--xs-motion-base) var(--xs-motion-ease-out),
+    border-color var(--xs-motion-base) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-base) var(--xs-motion-ease-out);
 }
 
 .xs-app-card:hover,
@@ -837,6 +841,14 @@
 .xs-app-card:has(.xs-app-card__arrow:focus-visible) {
   border-color: var(--xs-border-strong);
   box-shadow: 0 16px 34px rgba(22, 119, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.xs-app-card:has(.xs-app-card__main:active),
+.xs-app-card:has(.xs-app-card__arrow:active) {
+  border-color: var(--xs-primary);
+  box-shadow: 0 10px 22px rgba(22, 119, 255, 0.1);
+  transform: translateY(0) scale(0.99);
 }
 
 .xs-app-card__main {
@@ -1189,5 +1201,18 @@
   .xs-app-card .xs-icon-tile {
     width: 56px;
     height: 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-app-card:hover,
+  .xs-app-card--selected,
+  .xs-app-card:has(.xs-app-card__main:focus-visible),
+  .xs-app-card:has(.xs-app-card__arrow:focus-visible),
+  .xs-app-card:has(.xs-app-card__main:active),
+  .xs-app-card:has(.xs-app-card__arrow:active),
+  .xs-app-card__arrow:hover,
+  .xs-app-card__arrow:active {
+    transform: none;
   }
 }

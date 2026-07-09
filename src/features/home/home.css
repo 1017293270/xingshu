@@ -159,13 +159,6 @@
 .home-page .xs-app-card .xs-icon-tile {
   width: 74px;
   height: 74px;
-  border: 0;
-  background: transparent;
-}
-
-.home-page .xs-app-card .xs-icon-tile__image {
-  width: 70px;
-  height: 70px;
 }
 
 .home-page .xs-app-card__title {
@@ -245,11 +238,6 @@
     height: clamp(58px, 6.6vh, 70px);
   }
 
-  .home-page .xs-app-card .xs-icon-tile__image {
-    width: clamp(56px, 6.3vh, 66px);
-    height: clamp(56px, 6.3vh, 66px);
-  }
-
   .home-page .xs-app-card__title {
     font-size: 18px;
   }
@@ -316,11 +304,6 @@
   .home-page .xs-app-card .xs-icon-tile {
     width: 62px;
     height: 62px;
-  }
-
-  .home-page .xs-app-card .xs-icon-tile__image {
-    width: 60px;
-    height: 60px;
   }
 
   .home-page .xs-app-card__desc {

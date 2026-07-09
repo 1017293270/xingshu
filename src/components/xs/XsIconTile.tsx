@@ -1,7 +1,13 @@
 import type { ComponentType } from "react";
 
+export type XsIconComponent = ComponentType<{
+  size?: number;
+  weight?: "regular" | "duotone";
+  className?: string;
+}>;
+
 type XsIconTileProps = {
-  icon?: ComponentType<{ size?: number; weight?: "regular" | "duotone"; className?: string }>;
+  icon?: XsIconComponent;
   imageSrc?: string;
   imageSource?: string;
   label: string;

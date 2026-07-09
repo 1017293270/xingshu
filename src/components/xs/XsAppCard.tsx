@@ -1,6 +1,5 @@
 import { ArrowRight } from "@phosphor-icons/react";
-import type { ComponentType } from "react";
-import { XsIconTile } from "./XsIconTile";
+import { XsIconTile, type XsIconComponent } from "./XsIconTile";
 
 export type XsAppCardData = {
   id: string;
@@ -8,7 +7,7 @@ export type XsAppCardData = {
   description: string;
   prompt: string;
   routeTo?: string;
-  icon?: ComponentType<{ size?: number; weight?: "regular" | "duotone"; className?: string }>;
+  icon?: XsIconComponent;
   imageSrc?: string;
   imageSource?: string;
   tone?: "blue" | "cyan" | "green" | "orange" | "purple";
@@ -29,6 +28,7 @@ export function XsAppCard({ app, selected = false, onSelect, onOpen }: XsAppCard
         className="xs-app-card__main"
         onClick={() => onSelect(app)}
         aria-label={`选择 ${app.title}：${app.description}`}
+        aria-pressed={selected}
       >
         <XsIconTile
           icon={app.icon}

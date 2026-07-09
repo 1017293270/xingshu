@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -32,6 +33,28 @@ function renderHomePage() {
 }
 
 describe("HomePage", () => {
+  it("keeps runtime brand PNG assets in an auditable registry", () => {
+    const registryPath = "src/assets/iconRegistry.ts";
+
+    expect(existsSync(registryPath)).toBe(true);
+    const registrySource = readFileSync(registryPath, "utf8");
+    expect(registrySource).toContain("assetPath");
+    expect(registrySource).toContain("sourcePath");
+    expect(registrySource).toContain("allowedWidthsPx");
+    expect(registrySource).toContain("pages");
+    expect(registrySource).toContain("xingshu-logo");
+    expect(registrySource).toContain("assistant-mark");
+  });
+
+  it("removes card movement when reduced motion is requested", () => {
+    const xsCss = readFileSync("src/components/xs/xs.css", "utf8").replaceAll("\r\n", "\n");
+
+    expect(xsCss).toContain(
+      "@media (prefers-reduced-motion: reduce) {\n  .xs-app-card:hover,\n  .xs-app-card--selected"
+    );
+    expect(xsCss).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.xs-app-card[\s\S]*?transform: none;/);
+  });
+
   it("renders the required enterprise agent entry structure", () => {
     renderHomePage();
 
@@ -51,32 +74,27 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "推荐应用" })).toBeInTheDocument();
   });
 
-  it("renders the full seven-card recommended app set", () => {
+  it("uses the linear XingShu icon system and exposes selection state", async () => {
+    const user = userEvent.setup();
     const { container } = renderHomePage();
 
     const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智能写作", "会议纪要", "更多应用"];
 
     for (const appName of expectedApps) {
-      expect(screen.getByRole("button", { name: new RegExp(`选择 ${appName}`) })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(`选择 ${appName}`) })).toHaveAttribute(
+        "aria-pressed",
+        "false"
+      );
       expect(screen.getByRole("button", { name: `打开 ${appName}` })).toBeInTheDocument();
     }
 
-    const iconSrcs = Array.from(
-      container.querySelectorAll<HTMLImageElement>('.xs-app-card [data-icon-source="xingshu-home-apps-image2-v1"]')
-    ).map((icon) => icon.src);
+    expect(screen.queryByText("👋")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-icon-source="xingshu-home-apps-image2-v1"]')).toBeNull();
+    expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(7);
 
-    expect(iconSrcs).toHaveLength(7);
-    expect(iconSrcs).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("app-data-chat.png"),
-        expect.stringContaining("app-knowledge-qa.png"),
-        expect.stringContaining("app-document-assistant.png"),
-        expect.stringContaining("app-report-generation.png"),
-        expect.stringContaining("app-writing.png"),
-        expect.stringContaining("app-meeting-minutes.png"),
-        expect.stringContaining("app-more-apps.png")
-      ])
-    );
+    const dataChatButton = screen.getByRole("button", { name: /选择 智能问数/ });
+    await user.click(dataChatButton);
+    expect(dataChatButton).toHaveAttribute("aria-pressed", "true");
   });
 
   it("writes an app prompt into the command box when an app card is selected", async () => {
