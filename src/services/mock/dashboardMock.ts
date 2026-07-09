@@ -45,7 +45,7 @@ const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
 export const dashboardOptions: DashboardChartOptions = {
   revenue: {
     animation: false,
-    grid: { left: 36, right: 12, top: 18, bottom: 28 },
+    grid: { left: 28, right: 8, top: 12, bottom: 24 },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
@@ -57,7 +57,7 @@ export const dashboardOptions: DashboardChartOptions = {
     yAxis: {
       type: "value",
       splitNumber: 3,
-      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right", formatter: "{value}" },
+      axisLabel: { show: false },
       splitLine: { lineStyle: { color: "#EDF2FB" } },
       axisLine: { show: false },
       axisTick: { show: false }
@@ -65,7 +65,7 @@ export const dashboardOptions: DashboardChartOptions = {
     series: [
       {
         type: "bar",
-        barWidth: 16,
+        barWidth: 14,
         data: revenueValues.map((value, index) => ({
           value,
           itemStyle: {
@@ -78,7 +78,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   channel: {
     animation: false,
-    grid: { left: 78, right: 48, top: 8, bottom: 8 },
+    grid: { left: 72, right: 42, top: 8, bottom: 8 },
     xAxis: { type: "value", min: 0, max: 40, show: false },
     yAxis: {
       type: "category",
@@ -86,12 +86,12 @@ export const dashboardOptions: DashboardChartOptions = {
       data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
+      axisLabel: { color: "#294469", align: "right", fontSize: 12 }
     },
     series: [
       {
         type: "bar",
-        barWidth: 12,
+        barWidth: 11,
         data: [
           { value: 35, itemStyle: { color: "#1677FF", borderRadius: 8 } },
           { value: 26, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
@@ -106,7 +106,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   salesLine: {
     animation: false,
-    grid: { left: 36, right: 12, top: 16, bottom: 28 },
+    grid: { left: 28, right: 10, top: 14, bottom: 24 },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
@@ -118,7 +118,7 @@ export const dashboardOptions: DashboardChartOptions = {
     yAxis: {
       type: "value",
       splitNumber: 3,
-      axisLabel: { color: "#6B7F9D", fontSize: 11, align: "right" },
+      axisLabel: { show: false },
       splitLine: { lineStyle: { color: "#EDF2FB" } },
       axisLine: { show: false },
       axisTick: { show: false }
@@ -128,11 +128,11 @@ export const dashboardOptions: DashboardChartOptions = {
         type: "line",
         smooth: true,
         symbol: "circle",
-        symbolSize: 6,
+        symbolSize: 5,
         data: [24, 32, 26, 38, 46, 42, 52, 48],
         lineStyle: { width: 3, color: "#1677FF" },
         itemStyle: { color: "#1677FF" },
-        areaStyle: { color: "rgba(22, 119, 255, 0.12)" }
+        areaStyle: { color: "rgba(22, 119, 255, 0.10)" }
       }
     ]
   },
@@ -142,8 +142,8 @@ export const dashboardOptions: DashboardChartOptions = {
     series: [
       {
         type: "pie",
-        radius: ["48%", "72%"],
-        center: ["50%", "46%"],
+        radius: ["46%", "72%"],
+        center: ["50%", "50%"],
         label: { show: false },
         data: [
           { name: "企业客户", value: 75 },
@@ -155,7 +155,7 @@ export const dashboardOptions: DashboardChartOptions = {
   },
   region: {
     animation: false,
-    grid: { left: 52, right: 86, top: 4, bottom: 4 },
+    grid: { left: 44, right: 78, top: 8, bottom: 8 },
     xAxis: { type: "value", min: 0, max: 7200, show: false },
     yAxis: {
       type: "category",
@@ -163,12 +163,12 @@ export const dashboardOptions: DashboardChartOptions = {
       data: ["华东", "华南", "华北", "西南", "华中"],
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#294469", align: "right", fontSize: 13 }
+      axisLabel: { color: "#294469", align: "right", fontSize: 12 }
     },
     series: [
       {
         type: "bar",
-        barWidth: 12,
+        barWidth: 11,
         data: [
           { value: 6820, itemStyle: { color: "#1677FF", borderRadius: 8 } },
           { value: 6120, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },
@@ -183,7 +183,7 @@ export const dashboardOptions: DashboardChartOptions = {
           position: "right",
           formatter: ({ value }) => `￥${Number(value).toLocaleString()}万`,
           color: "#081A3A",
-          fontSize: 12
+          fontSize: 11
         }
       }
     ]
