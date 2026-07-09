@@ -77,6 +77,38 @@ export function writeDataHubSpaceId(spaceId: number | null) {
   storage.setItem(DATA_HUB_SPACE_ID_KEY, String(spaceId));
 }
 
+export function writeDataHubSession(user: DataHubLoginResponse, spaceId: number) {
+  const storage = getStorage();
+  if (!storage) {
+    return;
+  }
+
+  const previousValues = new Map<string, string | null>([
+    [DATA_HUB_TOKEN_KEY, storage.getItem(DATA_HUB_TOKEN_KEY)],
+    [DATA_HUB_USER_KEY, storage.getItem(DATA_HUB_USER_KEY)],
+    [DATA_HUB_SPACE_ID_KEY, storage.getItem(DATA_HUB_SPACE_ID_KEY)]
+  ]);
+
+  try {
+    storage.setItem(DATA_HUB_TOKEN_KEY, user.token);
+    storage.setItem(DATA_HUB_USER_KEY, JSON.stringify(user));
+    storage.setItem(DATA_HUB_SPACE_ID_KEY, String(spaceId));
+  } catch (error) {
+    for (const [key, previousValue] of previousValues) {
+      try {
+        if (previousValue === null) {
+          storage.removeItem(key);
+        } else {
+          storage.setItem(key, previousValue);
+        }
+      } catch {
+        // Preserve the original storage error after best-effort rollback.
+      }
+    }
+    throw error;
+  }
+}
+
 export function clearDataHubSession() {
   const storage = getStorage();
   if (!storage) {

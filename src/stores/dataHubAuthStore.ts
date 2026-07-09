@@ -3,6 +3,7 @@ import {
   clearDataHubSession,
   readDataHubSession,
   writeDataHubAuth,
+  writeDataHubSession,
   writeDataHubSpaceId
 } from "@/services/dataHubSession";
 import type { DataHubLoginResponse } from "@/types/dataHub";
@@ -14,6 +15,7 @@ type DataHubAuthState = {
 };
 
 type DataHubAuthActions = {
+  setSession: (user: DataHubLoginResponse, spaceId: number) => void;
   setAuth: (user: DataHubLoginResponse) => void;
   setCurrentSpaceId: (spaceId: number | null) => void;
   clearAuthState: () => void;
@@ -26,6 +28,10 @@ export const useDataHubAuthStore = create<DataHubAuthState & DataHubAuthActions>
   token: initialSession.token,
   user: initialSession.user,
   currentSpaceId: initialSession.spaceId,
+  setSession: (user, spaceId) => {
+    writeDataHubSession(user, spaceId);
+    set({ token: user.token, user, currentSpaceId: spaceId });
+  },
   setAuth: (user) => {
     writeDataHubAuth(user);
     set({ token: user.token, user });

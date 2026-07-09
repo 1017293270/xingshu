@@ -17,14 +17,37 @@ vi.mock("@/services/dataHubSpaceService", () => ({
   ensureDataHubSpace: vi.fn()
 }));
 
-function renderLoginRoute() {
+const userFixture = {
+  token: "token-abc",
+  userId: 2,
+  username: "alice",
+  isAdmin: false
+};
+
+const spaceFixture = {
+  id: 9,
+  spaceName: "Alice 的空间",
+  ownerId: 2,
+  myRole: "owner",
+  memberCount: 1,
+  createdAt: "2026-07-10"
+};
+
+function renderLoginRoute(from = "/") {
   return render(
     <AppProviders>
-      <MemoryRouter initialEntries={["/login"]}>
+      <MemoryRouter initialEntries={[{ pathname: "/login", state: { from } }]}>
         <AppRoutes />
       </MemoryRouter>
     </AppProviders>
   );
+}
+
+async function submitLoginForm(username = "alice", password = "secret") {
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("用户名"), username);
+  await user.type(screen.getByLabelText("密码"), password);
+  await user.click(screen.getByRole("button", { name: "登录" }));
 }
 
 describe("LoginPage", () => {
@@ -93,6 +116,80 @@ describe("LoginPage", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal), timeoutMs: 8000 })
     );
     expect(readDataHubSession()).toMatchObject({ token: "token-123", spaceId: 7 });
+  });
+
+  it("commits auth only after the data space is ready and returns to the requested route", async () => {
+    vi.mocked(loginToDataHub).mockResolvedValue(userFixture);
+    vi.mocked(ensureDataHubSpace).mockResolvedValue(spaceFixture);
+    renderLoginRoute("/analysis");
+
+    await submitLoginForm();
+
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(useDataHubAuthStore.getState()).toMatchObject({
+      token: userFixture.token,
+      currentSpaceId: spaceFixture.id,
+      user: { username: "alice" }
+    });
+    expect(ensureDataHubSpace).toHaveBeenCalledWith(
+      "alice",
+      expect.objectContaining({
+        authToken: userFixture.token,
+        persistSelection: false,
+        signal: expect.any(AbortSignal),
+        spaceId: null,
+        timeoutMs: 8000
+      })
+    );
+  });
+
+  it("does not persist a partial session when space preparation fails", async () => {
+    vi.mocked(loginToDataHub).mockResolvedValue(userFixture);
+    vi.mocked(ensureDataHubSpace).mockRejectedValue(new Error("空间初始化失败"));
+    renderLoginRoute();
+
+    await submitLoginForm();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("空间初始化失败");
+    expect(useDataHubAuthStore.getState()).toMatchObject({ token: null, user: null, currentSpaceId: null });
+    expect(readDataHubSession()).toEqual({ token: null, user: null, spaceId: null });
+  });
+
+  it("rejects external return targets after login", async () => {
+    vi.mocked(loginToDataHub).mockResolvedValue(userFixture);
+    vi.mocked(ensureDataHubSpace).mockResolvedValue(spaceFixture);
+    renderLoginRoute("//example.com/collect-session");
+
+    await submitLoginForm();
+
+    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(document.title).toBe("首页 · 星数");
+  });
+
+  it("rejects backslash-based external return targets after login", async () => {
+    vi.mocked(loginToDataHub).mockResolvedValue(userFixture);
+    vi.mocked(ensureDataHubSpace).mockResolvedValue(spaceFixture);
+    renderLoginRoute("/\\example.com/collect-session");
+
+    await submitLoginForm();
+
+    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(document.title).toBe("首页 · 星数");
+  });
+
+  it("aborts a pending login when the page unmounts", async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.mocked(loginToDataHub).mockImplementation((_values, options) => {
+      requestSignal = options?.signal;
+      return new Promise(() => {});
+    });
+    const view = renderLoginRoute();
+
+    await submitLoginForm();
+    await waitFor(() => expect(loginToDataHub).toHaveBeenCalledOnce());
+    view.unmount();
+
+    expect(requestSignal?.aborted).toBe(true);
   });
 
   it("creates or selects a platform space before entering the app", async () => {

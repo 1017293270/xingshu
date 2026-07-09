@@ -5,6 +5,7 @@ export const dataHubApiBaseUrl = import.meta.env.VITE_DATAHUB_API_BASE_URL ?? ""
 const defaultRequestTimeoutMs = 15_000;
 
 type DataHubRequestOptions = RequestInit & {
+  authToken?: string;
   baseUrl?: string;
   includeAuth?: boolean;
   spaceId?: number | null;
@@ -65,17 +66,23 @@ function isDataHubEnvelope<T>(payload: unknown): payload is DataHubApiResponse<T
   );
 }
 
-function applySessionHeaders(headers: Headers, includeAuth: boolean, explicitSpaceId?: number | null) {
+function applySessionHeaders(
+  headers: Headers,
+  includeAuth: boolean,
+  explicitSpaceId?: number | null,
+  explicitAuthToken?: string
+) {
   if (!includeAuth) {
     return;
   }
 
   const session = readDataHubSession();
-  if (session.token) {
-    headers.set("Authorization", `Bearer ${session.token}`);
+  const authToken = explicitAuthToken || session.token;
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
   }
 
-  const spaceId = explicitSpaceId ?? session.spaceId;
+  const spaceId = explicitSpaceId === undefined ? session.spaceId : explicitSpaceId;
   if (spaceId !== null && spaceId !== undefined) {
     headers.set("X-Space-Id", String(spaceId));
   }
@@ -84,6 +91,7 @@ function applySessionHeaders(headers: Headers, includeAuth: boolean, explicitSpa
 export async function requestDataHub<T>(path: string, options: DataHubRequestOptions = {}): Promise<T> {
   const {
     baseUrl = dataHubApiBaseUrl,
+    authToken,
     includeAuth = true,
     timeoutMs = defaultRequestTimeoutMs,
     headers: inputHeaders,
@@ -105,7 +113,7 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
     headers.set("Content-Type", "application/json");
   }
 
-  applySessionHeaders(headers, includeAuth, spaceId);
+  applySessionHeaders(headers, includeAuth, spaceId, authToken);
 
   if (inputSignal?.aborted) {
     abortFromInput();

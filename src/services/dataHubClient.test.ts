@@ -49,7 +49,7 @@ describe("dataHubClient", () => {
     expect(headers.get("X-Space-Id")).toBe("7");
   });
 
-  it("stores login results for later authenticated requests", async () => {
+  it("returns login results without persisting a partial session", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -67,10 +67,20 @@ describe("dataHubClient", () => {
     const user = await loginToDataHub({ username: "alice", password: "secret" });
 
     expect(user.token).toBe("token-abc");
-    expect(readDataHubSession()).toMatchObject({
-      token: "token-abc",
-      user: { userId: 2, username: "alice" }
-    });
+    expect(readDataHubSession()).toEqual({ token: null, user: null, spaceId: null });
+  });
+
+  it("supports an explicit auth token while preparing an atomic login session", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 200, message: "success", data: [] })));
+    vi.stubGlobal("fetch", fetchMock);
+    writeDataHubAuth({ token: "stale-token", userId: 1, username: "stale", isAdmin: false });
+    writeDataHubSpaceId(77);
+
+    await requestDataHub("/api/spaces", { authToken: "temporary-login-token", spaceId: null });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer temporary-login-token");
+    expect(new Headers(init.headers).get("X-Space-Id")).toBeNull();
   });
 
   it("ensures a platform space by reusing the first existing space", async () => {

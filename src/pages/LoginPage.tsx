@@ -1,7 +1,7 @@
 import { Button, Form, Input } from "antd";
 import { LockKey, User } from "@phosphor-icons/react";
-import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/brand/xingshu-logo-transparent.png";
 import askDataIcon from "@/assets/login-icons/login-askdata-dashboard-image2.png";
 import dataHubIcon from "@/assets/login-icons/login-datahub-connection-image2.png";
@@ -40,14 +40,47 @@ const capabilityItems = [
 
 const loginStepTimeoutMs = 8_000;
 
+function getSafeReturnPath(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    /[\\\u0000-\u001F\u007F]/.test(value)
+  ) {
+    return "/";
+  }
+
+  try {
+    const origin = window.location.origin;
+    const target = new URL(value, `${origin}/`);
+    if (target.origin !== origin || target.pathname === "/login") {
+      return "/";
+    }
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
-  const setAuth = useDataHubAuthStore((state) => state.setAuth);
-  const setCurrentSpaceId = useDataHubAuthStore((state) => state.setCurrentSpaceId);
+  const location = useLocation();
+  const setSession = useDataHubAuthStore((state) => state.setSession);
+  const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const loginAbortRef = useRef<AbortController | null>(null);
+  const returnPath = getSafeReturnPath((location.state as { from?: unknown } | null)?.from);
+
+  useEffect(
+    () => () => {
+      const activeController = loginAbortRef.current;
+      loginAbortRef.current = null;
+      activeController?.abort();
+    },
+    []
+  );
 
   async function handleLogin(values: LoginFormValues) {
     loginAbortRef.current?.abort();
@@ -62,18 +95,30 @@ export function LoginPage() {
         signal: controller.signal,
         timeoutMs: loginStepTimeoutMs
       });
-      setAuth(user);
       setStatusMessage("正在准备平台空间");
 
       const firstSpace = await ensureDataHubSpace(user.username || values.username, {
+        authToken: user.token,
+        persistSelection: false,
         signal: controller.signal,
+        spaceId: null,
         timeoutMs: loginStepTimeoutMs
       });
 
-      setCurrentSpaceId(firstSpace.id);
+      if (controller.signal.aborted || loginAbortRef.current !== controller) {
+        return;
+      }
+
+      setSession(user, firstSpace.id);
       setStatusMessage(`已进入 ${firstSpace.spaceName}`);
-      navigate("/", { replace: true });
+      navigate(returnPath, { replace: true });
     } catch (error) {
+      if (loginAbortRef.current !== controller) {
+        return;
+      }
+
+      clearAuthState();
+
       if (error instanceof DataHubServiceError && error.code === "REQUEST_CANCELLED") {
         setStatusMessage("已取消登录");
         return;
@@ -83,8 +128,8 @@ export function LoginPage() {
       setFormError(message || "用户名或密码错误");
       setStatusMessage("");
     } finally {
-      setIsSubmitting(false);
       if (loginAbortRef.current === controller) {
+        setIsSubmitting(false);
         loginAbortRef.current = null;
       }
     }
@@ -172,7 +217,7 @@ export function LoginPage() {
                 label="密码"
                 name="password"
                 validateStatus={formError ? "error" : undefined}
-                help={formError || undefined}
+                help={formError ? <span role="alert">{formError}</span> : undefined}
                 rules={[{ required: true, message: "请输入密码" }]}
               >
                 <Input.Password

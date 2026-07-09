@@ -3,8 +3,14 @@ import { writeDataHubSpaceId } from "@/services/dataHubSession";
 import type { DataHubSpace, DataHubSpaceCreateInput } from "@/types/dataHub";
 
 type DataHubRequestControl = {
+  authToken?: string;
   signal?: AbortSignal;
+  spaceId?: number | null;
   timeoutMs?: number;
+};
+
+type EnsureDataHubSpaceOptions = DataHubRequestControl & {
+  persistSelection?: boolean;
 };
 
 export async function listDataHubSpaces(options: DataHubRequestControl = {}): Promise<DataHubSpace[]> {
@@ -28,18 +34,23 @@ export function selectDataHubSpace(spaceId: number | null) {
 
 export async function ensureDataHubSpace(
   username: string,
-  options: DataHubRequestControl = {}
+  options: EnsureDataHubSpaceOptions = {}
 ): Promise<DataHubSpace> {
-  const spaces = await listDataHubSpaces(options);
+  const { persistSelection = true, ...requestOptions } = options;
+  const spaces = await listDataHubSpaces(requestOptions);
   const firstSpace = spaces[0];
 
   if (firstSpace) {
-    writeDataHubSpaceId(firstSpace.id);
+    if (persistSelection) {
+      writeDataHubSpaceId(firstSpace.id);
+    }
     return firstSpace;
   }
 
-  const space = await createDataHubSpace({ spaceName: `${username}的空间` }, options);
-  writeDataHubSpaceId(space.id);
+  const space = await createDataHubSpace({ spaceName: `${username}的空间` }, requestOptions);
+  if (persistSelection) {
+    writeDataHubSpaceId(space.id);
+  }
   return space;
 }
 
