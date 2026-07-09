@@ -3,7 +3,6 @@ import {
   Brain,
   CaretDown,
   CaretUp,
-  ChartPieSlice,
   CheckCircle,
   CircleNotch,
   Database,
@@ -14,8 +13,8 @@ import {
   PresentationChart,
   WarningCircle
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
-import { XsCommandBox, XsEChart } from "@/components/xs";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { XsChartCard, XsCommandBox } from "@/components/xs";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
 import { createAttachmentQueue } from "@/services/attachmentService";
@@ -385,6 +384,56 @@ function chartTypeLabel(type: AiChartType) {
   return "柱状";
 }
 
+function AiChartSuccessCard({
+  state,
+  onTypeChange
+}: {
+  state: Extract<AiChartUiState, { status: "success" }>;
+  onTypeChange: (type: AiChartType) => void;
+}) {
+  const option = useMemo(
+    () => buildGeneratedChartOption(state.spec, state.activeType),
+    [state.activeType, state.spec]
+  );
+  const chartTable = useMemo(() => {
+    const selectedKeys = new Set([state.spec.dimensionKey, ...state.spec.metricKeys]);
+    const columns = state.spec.table.columns.filter((column) => selectedKeys.has(column.key));
+    const rows = state.spec.table.rows.map((row) =>
+      Object.fromEntries(columns.map((column) => [column.key, row[column.key]]))
+    );
+
+    return {
+      ...state.spec.table,
+      columns,
+      rows,
+      totalRows: state.spec.table.totalRows,
+      groupLabel: `${state.spec.title}数据`
+    };
+  }, [state.spec]);
+
+  return (
+    <section className="ai-chart-card ai-chart-card--success" role="region" aria-label="智能图表建议">
+      <XsChartCard
+        contained={false}
+        title={state.spec.title}
+        summary={state.spec.reason}
+        option={option}
+        table={chartTable}
+        chartClassName="chart-large ai-chart-card__chart"
+        action={
+          <Segmented
+            size="small"
+            value={state.activeType}
+            options={state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type }))}
+            onChange={(value) => onTypeChange(value as AiChartType)}
+          />
+        }
+        beforeChart={<span className="ai-chart-card__source">来源：{state.spec.tableTitle}</span>}
+      />
+    </section>
+  );
+}
+
 function AiChartSuggestionCard({
   state,
   onTypeChange
@@ -424,31 +473,7 @@ function AiChartSuggestionCard({
     );
   }
 
-  const option = buildGeneratedChartOption(state.spec, state.activeType);
-
-  return (
-    <section className="ai-chart-card ai-chart-card--success" role="region" aria-label="智能图表建议">
-      <div className="ai-chart-card__head">
-        <div className="ai-chart-card__title">
-          <span className="ai-chart-card__icon" aria-hidden="true">
-            <ChartPieSlice size={20} weight="bold" />
-          </span>
-          <div>
-            <strong>{state.spec.title}</strong>
-            <p>{state.spec.reason}</p>
-            <span className="ai-chart-card__source">来源：{state.spec.tableTitle}</span>
-          </div>
-        </div>
-        <Segmented
-          size="small"
-          value={state.activeType}
-          options={state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type }))}
-          onChange={(value) => onTypeChange(value as AiChartType)}
-        />
-      </div>
-      <XsEChart option={option} label={state.spec.title} className="chart-large ai-chart-card__chart" />
-    </section>
-  );
+  return <AiChartSuccessCard state={state} onTypeChange={onTypeChange} />;
 }
 
 export function AnalysisPage() {

@@ -31,6 +31,11 @@ describe("data asset actions", () => {
     const user = userEvent.setup();
     renderRoute("/data-dashboard");
 
+    expect(await screen.findByText(/结构化数据共 5,861 项/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: /数据资产类型分布.*结构化数据共 5,861 项/ })
+    ).toBeInTheDocument();
+
     await user.click(await screen.findByRole("button", { name: "2024-06-04" }));
     expect(screen.getByRole("status")).toHaveTextContent("已切换数据日期：2024-06-03");
 

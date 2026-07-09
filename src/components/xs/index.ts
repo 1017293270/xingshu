@@ -2,6 +2,8 @@ export { XsAppCard } from "./XsAppCard";
 export type { XsAppCardData } from "./XsAppCard";
 export { resolveXsAsyncStatus, XsAsyncPanel } from "./XsAsyncPanel";
 export type { XsAsyncStatus } from "./XsAsyncPanel";
+export { XsChartCard } from "./XsChartCard";
+export type { XsChartCardProps } from "./XsChartCard";
 export { XsCommandBox } from "./XsCommandBox";
 export { XsEChart } from "./XsEChart";
 export { XsEmptyState } from "./XsEmptyState";

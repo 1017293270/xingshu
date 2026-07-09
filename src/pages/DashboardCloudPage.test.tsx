@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,20 @@ describe("dashboard and cloud page actions", () => {
 
     expect(screen.getByText("风险监控看板")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已切换至风险监控看板");
+  });
+
+  it("exposes a chart conclusion and its source data", async () => {
+    const user = userEvent.setup();
+    renderPage(<DashboardPage />);
+    const revenueCard = screen.getByRole("article", { name: "看板组件：月度营收趋势" });
+
+    expect(within(revenueCard).getByText(/12 月营收指数回升至 94/)).toBeInTheDocument();
+    expect(within(revenueCard).getByRole("img", { name: /月度营收趋势.*12 月营收指数/ })).toBeInTheDocument();
+    await user.click(within(revenueCard).getByText("查看数据"));
+
+    const sourceTable = within(revenueCard).getByRole("table", { name: "月度营收趋势数据" });
+    expect(within(sourceTable).getByRole("columnheader", { name: "月份" })).toHaveAttribute("scope", "col");
+    expect(within(sourceTable).getByRole("cell", { name: "12月" })).toBeInTheDocument();
   });
 
   it("reports when a new dashboard task is created", async () => {

@@ -2,8 +2,8 @@ import { Button } from "antd";
 import { Plus, WarningCircle, CheckCircle, SquaresFour } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { XsEChart, XsStatusBar } from "@/components/xs";
-import { getDashboardChartOptions } from "@/services/dashboardService";
+import { XsChartCard, XsStatusBar } from "@/components/xs";
+import { getDashboardChartInsights, getDashboardChartOptions } from "@/services/dashboardService";
 import { PageFrame } from "./PageFrame";
 
 const dashboardNames = ["经营分析看板", "风险监控看板"];
@@ -15,6 +15,7 @@ const alertItems = [
 
 export function DashboardPage() {
   const options = getDashboardChartOptions();
+  const chartInsights = getDashboardChartInsights();
   const navigate = useNavigate();
   const [activeDashboardName, setActiveDashboardName] = useState(dashboardNames[0]);
   const [workflowStatus, setWorkflowStatus] = useState("");
@@ -91,46 +92,60 @@ export function DashboardPage() {
       </section>
 
       <section className="board-grid" aria-label={activeDashboardName}>
-        <article className="xs-card board-card board-card--revenue" aria-label="看板组件：月度营收趋势">
-          <div className="board-card__head">
-            <h2>月度营收趋势</h2>
-            {cardAction("月度营收趋势")}
-          </div>
-          <div className="revenue-value">
-            <strong>
-              ￥2.84<span className="revenue-unit">亿</span>
-            </strong>
-            <div className="revenue-delta">
-              <span className="revenue-delta__change">↑ 8.3% 环比</span>
-              <small>vs 同期 +15.2%</small>
+        <XsChartCard
+          title="月度营收趋势"
+          summary={chartInsights.revenue.summary}
+          option={options.revenue}
+          table={chartInsights.revenue.table}
+          headingLevel={2}
+          ariaLabel="看板组件：月度营收趋势"
+          className="board-card board-card--revenue"
+          chartClassName="chart-panel chart-panel--hero"
+          action={cardAction("月度营收趋势")}
+          beforeChart={
+            <div className="revenue-value">
+              <strong>
+                ￥2.84<span className="revenue-unit">亿</span>
+              </strong>
+              <div className="revenue-delta">
+                <span className="revenue-delta__change">↑ 8.3% 环比</span>
+                <small>vs 同期 +15.2%</small>
+              </div>
             </div>
-          </div>
-          <XsEChart option={options.revenue} label="月度营收趋势图" className="chart-panel chart-panel--hero" />
-          <div className="metric-row">
-            <span>
-              完成率 <b>94%</b>
-            </span>
-            <span>
-              上月 <b>￥2.62亿</b>
-            </span>
-          </div>
-        </article>
+          }
+          afterChart={
+            <div className="metric-row">
+              <span>
+                完成率 <b>94%</b>
+              </span>
+              <span>
+                上月 <b>￥2.62亿</b>
+              </span>
+            </div>
+          }
+        />
 
-        <article className="xs-card board-card board-card--forecast" aria-label="看板组件：销售预测">
-          <div className="board-card__head">
-            <h2>销售预测</h2>
-            {cardAction("销售预测")}
-          </div>
-          <XsEChart option={options.salesLine} label="销售预测折线图" className="chart-panel" />
-          <div className="metric-row">
-            <span>
-              Q3预测 <b>1.86亿</b>
-            </span>
-            <span>
-              Q4目标 <b>2.15亿</b>
-            </span>
-          </div>
-        </article>
+        <XsChartCard
+          title="销售预测"
+          summary={chartInsights.salesLine.summary}
+          option={options.salesLine}
+          table={chartInsights.salesLine.table}
+          headingLevel={2}
+          ariaLabel="看板组件：销售预测"
+          className="board-card board-card--forecast"
+          chartClassName="chart-panel"
+          action={cardAction("销售预测")}
+          afterChart={
+            <div className="metric-row">
+              <span>
+                Q3预测 <b>1.86亿</b>
+              </span>
+              <span>
+                Q4目标 <b>2.15亿</b>
+              </span>
+            </div>
+          }
+        />
 
         <article className="xs-card board-card board-card--ops" aria-label="看板组件：实时运营概览">
           <div className="board-card__head">
@@ -157,24 +172,34 @@ export function DashboardPage() {
           </div>
         </article>
 
-        <article className="xs-card board-card board-card--channel" aria-label="看板组件：渠道转化分析">
-          <div className="board-card__head">
-            <h2>渠道转化分析</h2>
-            {cardAction("渠道转化分析")}
-          </div>
-          <XsEChart option={options.channel} label="渠道转化分析图" className="chart-panel" />
-          <p className="board-card__footnote">
-            综合转化率 <strong>3.2%</strong> <span className="success-text">↑ 0.4pp</span>
-          </p>
-        </article>
+        <XsChartCard
+          title="渠道转化分析"
+          summary={chartInsights.channel.summary}
+          option={options.channel}
+          table={chartInsights.channel.table}
+          headingLevel={2}
+          ariaLabel="看板组件：渠道转化分析"
+          className="board-card board-card--channel"
+          chartClassName="chart-panel"
+          action={cardAction("渠道转化分析")}
+          afterChart={
+            <p className="board-card__footnote">
+              综合转化率 <strong>3.2%</strong> <span className="success-text">↑ 0.4pp</span>
+            </p>
+          }
+        />
 
-        <article className="xs-card board-card board-card--customer" aria-label="看板组件：客户画像分布">
-          <div className="board-card__head">
-            <h2>客户画像分布</h2>
-            {cardAction("客户画像分布")}
-          </div>
-          <div className="board-card__split">
-            <XsEChart option={options.customer} label="客户画像分布图" className="chart-panel chart-panel--donut" />
+        <XsChartCard
+          title="客户画像分布"
+          summary={chartInsights.customer.summary}
+          option={options.customer}
+          table={chartInsights.customer.table}
+          headingLevel={2}
+          ariaLabel="看板组件：客户画像分布"
+          className="board-card board-card--customer"
+          chartClassName="chart-panel chart-panel--donut"
+          action={cardAction("客户画像分布")}
+          chartAside={
             <div className="legend-grid">
               <span>
                 <i className="legend-dot legend-dot--enterprise" />
@@ -189,24 +214,32 @@ export function DashboardPage() {
                 个人用户 10%
               </span>
             </div>
-          </div>
-        </article>
+          }
+        />
 
-        <article className="xs-card board-card board-card--region" aria-label="看板组件：区域业绩排行">
-          <div className="board-card__head">
-            <h2>区域业绩排行</h2>
-            {cardAction("区域业绩排行")}
-          </div>
-          <XsEChart option={options.region} label="区域业绩排行图" className="chart-panel" />
-        </article>
+        <XsChartCard
+          title="区域业绩排行"
+          summary={chartInsights.region.summary}
+          option={options.region}
+          table={chartInsights.region.table}
+          headingLevel={2}
+          ariaLabel="看板组件：区域业绩排行"
+          className="board-card board-card--region"
+          chartClassName="chart-panel"
+          action={cardAction("区域业绩排行")}
+        />
 
-        <article className="xs-card board-card board-card--top" aria-label="看板组件：TOP 产品营收">
-          <div className="board-card__head">
-            <h2>TOP 产品营收</h2>
-            {cardAction("TOP 产品营收")}
-          </div>
-          <XsEChart option={options.productRank} label="TOP 产品营收排行图" className="chart-panel" />
-        </article>
+        <XsChartCard
+          title="TOP 产品营收"
+          summary={chartInsights.productRank.summary}
+          option={options.productRank}
+          table={chartInsights.productRank.table}
+          headingLevel={2}
+          ariaLabel="看板组件：TOP 产品营收"
+          className="board-card board-card--top"
+          chartClassName="chart-panel"
+          action={cardAction("TOP 产品营收")}
+        />
 
         <article className="xs-card board-card board-card--alert" aria-label="看板组件：智能预警">
           <div className="board-card__head">

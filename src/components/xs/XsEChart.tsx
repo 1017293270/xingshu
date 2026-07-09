@@ -1,14 +1,29 @@
 import type { EChartsOption, EChartsType } from "echarts";
 import { useEffect, useRef } from "react";
 
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+
 type XsEChartProps = {
   option: EChartsOption;
   label: string;
   className?: string;
 };
 
+const setOptionOptions = {
+  notMerge: false,
+  lazyUpdate: true,
+  replaceMerge: ["series", "xAxis", "yAxis"]
+};
+
 export function XsEChart({ option, label, className = "" }: XsEChartProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const chartInstanceRef = useRef<EChartsType | null>(null);
+  const latestOptionRef = useRef(option);
+  const reducedMotion = usePrefersReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+
+  latestOptionRef.current = option;
+  reducedMotionRef.current = reducedMotion;
 
   useEffect(() => {
     if (!chartRef.current || import.meta.env.MODE === "test") {
@@ -17,8 +32,18 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
 
     let chart: EChartsType | null = null;
     let disposed = false;
+    let resizeFrame: number | null = null;
     const element = chartRef.current;
-    const handleResize = () => chart?.resize();
+    const handleResize = () => {
+      if (resizeFrame !== null) {
+        return;
+      }
+
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        chart?.resize();
+      });
+    };
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleResize);
 
     void import("echarts").then((echarts) => {
@@ -27,20 +52,39 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
       }
 
       chart = echarts.init(element, null, { renderer: "canvas" });
-      chart.setOption(option);
+      chartInstanceRef.current = chart;
+      chart.setOption(
+        reducedMotionRef.current
+          ? { ...latestOptionRef.current, animation: false }
+          : latestOptionRef.current,
+        setOptionOptions
+      );
       element.dataset.echartsReady = "true";
       element.dataset.echartsRenderer = "canvas";
-      window.addEventListener("resize", handleResize);
       observer?.observe(element);
     });
 
     return () => {
       disposed = true;
       observer?.disconnect();
-      window.removeEventListener("resize", handleResize);
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      if (chartInstanceRef.current === chart) {
+        chartInstanceRef.current = null;
+      }
       chart?.dispose();
     };
-  }, [option]);
+  }, []);
+
+  useEffect(() => {
+    const chart = chartInstanceRef.current;
+    if (!chart) {
+      return;
+    }
+
+    chart.setOption(reducedMotion ? { ...option, animation: false } : option, setOptionOptions);
+  }, [option, reducedMotion]);
 
   return (
     <div className={`xs-echart ${className}`} role="img" aria-label={label}>

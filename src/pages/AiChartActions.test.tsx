@@ -101,8 +101,16 @@ describe("AI chart actions", () => {
 
     const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
     expect(within(chartCard).getByText("收入人群占比")).toBeInTheDocument();
-    expect(within(chartCard).getByRole("img", { name: "收入人群占比" })).toBeInTheDocument();
+    expect(
+      within(chartCard).getByRole("img", { name: /收入人群占比.*有收入人群维度和占比数值/ })
+    ).toBeInTheDocument();
     expect(within(chartCard).getByRole("radio", { name: "柱状" })).toBeInTheDocument();
+
+    await user.click(within(chartCard).getByText("查看数据"));
+    const sourceTable = within(chartCard).getByRole("table", { name: "收入人群占比数据" });
+    expect(within(sourceTable).getByRole("columnheader", { name: "收入人群" })).toHaveAttribute("scope", "col");
+    expect(within(sourceTable).getByRole("cell", { name: "中收入" })).toBeInTheDocument();
+    expect(within(sourceTable).getByRole("cell", { name: "50" })).toBeInTheDocument();
   });
 
   it("shows which result table AI used when multiple tables are available", async () => {

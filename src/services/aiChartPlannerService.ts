@@ -350,6 +350,13 @@ export function buildGeneratedChartSpec(
     return null;
   }
 
+  const hasFiniteMetricValue = table.rows.some((row) =>
+    plan.metricKeys?.some((key) => toNumber(row[key]) !== null)
+  );
+  if (!hasFiniteMetricValue) {
+    return null;
+  }
+
   const allowedTypes = (plan.allowedTypes?.length ? plan.allowedTypes : [plan.chartType]).filter((type) =>
     supportedChartTypes.includes(type)
   );
@@ -380,7 +387,7 @@ export function buildGeneratedChartOption(spec: GeneratedChartSpec, chartType = 
   const metrics = spec.metricKeys.map((key) => ({
     key,
     name: metricTitle(spec.table, key),
-    values: spec.table.rows.map((row) => toNumber(row[key]) ?? 0)
+    values: spec.table.rows.map((row) => toNumber(row[key]))
   }));
 
   if (chartType === "pie") {
@@ -396,7 +403,10 @@ export function buildGeneratedChartOption(spec: GeneratedChartSpec, chartType = 
           type: "pie",
           radius: ["42%", "68%"],
           center: ["50%", "48%"],
-          data: categories.map((name, index) => ({ name, value: metric.values[index] }))
+          data: categories.flatMap((name, index) => {
+            const value = metric.values[index];
+            return value === null ? [] : [{ name, value }];
+          })
         }
       ]
     };

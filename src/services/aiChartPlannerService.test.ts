@@ -189,6 +189,82 @@ describe("aiChartPlannerService", () => {
     ]);
   });
 
+  it("preserves missing metrics instead of inventing zero values", () => {
+    const dataTable = table(
+      [
+        { key: "category", title: "分类" },
+        { key: "value", title: "金额", type: "number" }
+      ],
+      [
+        { category: "A", value: null },
+        { category: "B", value: "not-a-number" },
+        { category: "C", value: 12 }
+      ]
+    );
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "包含分类和金额",
+        chartType: "bar",
+        allowedTypes: ["bar", "pie"],
+        title: "分类金额",
+        dimensionKey: "category",
+        metricKeys: ["value"]
+      },
+      [dataTable]
+    );
+
+    const barSeries = buildGeneratedChartOption(spec!, "bar").series as Array<{ data?: unknown[] }>;
+    const pieSeries = buildGeneratedChartOption(spec!, "pie").series as Array<{
+      data?: Array<{ name: string; value: number }>;
+    }>;
+
+    expect(barSeries[0]?.data).toEqual([null, null, 12]);
+    expect(pieSeries[0]?.data).toEqual([{ name: "C", value: 12 }]);
+  });
+
+  it.each([
+    [
+      "missing",
+      [
+        { category: "A", value: null },
+        { category: "B", value: undefined },
+        { category: "C", value: "" }
+      ]
+    ],
+    [
+      "invalid",
+      [
+        { category: "A", value: "not-a-number" },
+        { category: "B", value: Number.NaN },
+        { category: "C", value: Number.POSITIVE_INFINITY }
+      ]
+    ]
+  ])("rejects chart specs when every selected metric value is %s", (_case, rows) => {
+    const dataTable = table(
+      [
+        { key: "category", title: "分类" },
+        { key: "value", title: "金额", type: "number" }
+      ],
+      rows
+    );
+
+    expect(
+      buildGeneratedChartSpec(
+        {
+          chartable: true,
+          reason: "包含分类和金额",
+          chartType: "bar",
+          allowedTypes: ["bar", "pie"],
+          title: "分类金额",
+          dimensionKey: "category",
+          metricKeys: ["value"]
+        },
+        [dataTable]
+      )
+    ).toBeNull();
+  });
+
   it("falls back to a local chart plan when AI returns truncated JSON for multiple tables", async () => {
     const firstTable = table(
       [

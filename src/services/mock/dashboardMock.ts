@@ -39,8 +39,18 @@ export const salesTrendOption: EChartsOption = {
   ]
 };
 
-const revenueMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
-const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
+export const revenueMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+export const revenueValues = [48, 56, 58, 70, 82, 100, 98, 94, 90, 88, 87, 94];
+export const salesForecastLabels = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"];
+export const salesForecastValues = [24, 32, 26, 38, 46, 42, 52, 48];
+export const channelLabels = ["搜索引擎", "社交媒体", "直接访问", "广告投放"];
+export const channelValues = [35, 26, 20, 8];
+export const customerLabels = ["企业客户", "中小客户", "个人用户"];
+export const customerValues = [75, 15, 10];
+export const regionLabels = ["华东", "华南", "华北", "西南", "华中"];
+export const regionValues = [6820, 6120, 5720, 4350, 3680];
+export const productLabels = ["AI 数据分析平台", "智能知识库系统", "数据可视化套件", "自动化报告引擎"];
+export const productValues = [1.24, 0.86, 0.52, 0.38];
 
 export const dashboardOptions: DashboardChartOptions = {
   revenue: {
@@ -83,7 +93,7 @@ export const dashboardOptions: DashboardChartOptions = {
     yAxis: {
       type: "category",
       inverse: true,
-      data: ["搜索引擎", "社交媒体", "直接访问", "广告投放"],
+      data: channelLabels,
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: "#294469", align: "right", fontSize: 13 }
@@ -92,12 +102,10 @@ export const dashboardOptions: DashboardChartOptions = {
       {
         type: "bar",
         barWidth: 13,
-        data: [
-          { value: 35, itemStyle: { color: "#1677FF", borderRadius: 8 } },
-          { value: 26, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
-          { value: 20, itemStyle: { color: "#8DB5FF", borderRadius: 8 } },
-          { value: 8, itemStyle: { color: "#B7CFFF", borderRadius: 8 } }
-        ],
+        data: channelValues.map((value, index) => ({
+          value,
+          itemStyle: { color: ["#1677FF", "#5B9BFF", "#8DB5FF", "#B7CFFF"][index], borderRadius: 8 }
+        })),
         showBackground: true,
         backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
         label: { show: true, position: "right", formatter: "{c}%", color: "#081A3A", fontSize: 12 }
@@ -110,7 +118,7 @@ export const dashboardOptions: DashboardChartOptions = {
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
-      data: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+      data: salesForecastLabels,
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: "#6B7F9D", fontSize: 12, align: "center", interval: 1 }
@@ -129,7 +137,7 @@ export const dashboardOptions: DashboardChartOptions = {
         smooth: true,
         symbol: "circle",
         symbolSize: 5,
-        data: [24, 32, 26, 38, 46, 42, 52, 48],
+        data: salesForecastValues,
         lineStyle: { width: 3, color: "#1677FF" },
         itemStyle: { color: "#1677FF" },
         areaStyle: { color: "rgba(22, 119, 255, 0.10)" }
@@ -145,11 +153,7 @@ export const dashboardOptions: DashboardChartOptions = {
         radius: ["46%", "72%"],
         center: ["50%", "50%"],
         label: { show: false },
-        data: [
-          { name: "企业客户", value: 75 },
-          { name: "中小客户", value: 15 },
-          { name: "个人用户", value: 10 }
-        ]
+        data: customerLabels.map((name, index) => ({ name, value: customerValues[index] }))
       }
     ]
   },
@@ -160,7 +164,7 @@ export const dashboardOptions: DashboardChartOptions = {
     yAxis: {
       type: "category",
       inverse: true,
-      data: ["华东", "华南", "华北", "西南", "华中"],
+      data: regionLabels,
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: "#294469", align: "right", fontSize: 13 }
@@ -169,13 +173,10 @@ export const dashboardOptions: DashboardChartOptions = {
       {
         type: "bar",
         barWidth: 13,
-        data: [
-          { value: 6820, itemStyle: { color: "#1677FF", borderRadius: 8 } },
-          { value: 6120, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },
-          { value: 5720, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
-          { value: 4350, itemStyle: { color: "#8DB5FF", borderRadius: 8 } },
-          { value: 3680, itemStyle: { color: "#B7CFFF", borderRadius: 8 } }
-        ],
+        data: regionValues.map((value, index) => ({
+          value,
+          itemStyle: { color: ["#1677FF", "#3D8BFF", "#5B9BFF", "#8DB5FF", "#B7CFFF"][index], borderRadius: 8 }
+        })),
         showBackground: true,
         backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
         label: {
@@ -195,7 +196,7 @@ export const dashboardOptions: DashboardChartOptions = {
     yAxis: {
       type: "category",
       inverse: true,
-      data: ["AI 数据分析平台", "智能知识库系统", "数据可视化套件", "自动化报告引擎"],
+      data: productLabels,
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: "#294469", align: "right", fontSize: 13 }
@@ -204,12 +205,10 @@ export const dashboardOptions: DashboardChartOptions = {
       {
         type: "bar",
         barWidth: 13,
-        data: [
-          { value: 1.24, itemStyle: { color: "#1677FF", borderRadius: 8 } },
-          { value: 0.86, itemStyle: { color: "#3D8BFF", borderRadius: 8 } },
-          { value: 0.52, itemStyle: { color: "#5B9BFF", borderRadius: 8 } },
-          { value: 0.38, itemStyle: { color: "#8DB5FF", borderRadius: 8 } }
-        ],
+        data: productValues.map((value, index) => ({
+          value,
+          itemStyle: { color: ["#1677FF", "#3D8BFF", "#5B9BFF", "#8DB5FF"][index], borderRadius: 8 }
+        })),
         showBackground: true,
         backgroundStyle: { color: "#EEF4FF", borderRadius: 8 },
         label: {
@@ -233,30 +232,81 @@ export const dashboardOptions: DashboardChartOptions = {
   }
 };
 
+export const assetTypeLabels = ["结构化数据", "半结构化数据", "非结构化数据", "API 数据", "其他"] as const;
+export const assetTypeValues = [5861, 3123, 2402, 1080, 380] as const;
+export const dataAssetSnapshot = {
+  date: "06-04",
+  assetCount: assetTypeValues.reduce((total, value) => total + value, 0),
+  dataVolumeTb: 28.6
+} as const;
+export const assetGrowthLabels = ["01-01", "02-01", "03-01", "04-01", "05-01", dataAssetSnapshot.date] as const;
+export const assetGrowthValues = {
+  assetCount: [5200, 6900, 9300, 11000, 12400, dataAssetSnapshot.assetCount],
+  dataVolumeTb: [12, 17, 23, 27, 28, dataAssetSnapshot.dataVolumeTb]
+} as const;
+export const assetApplicationLabels = ["经营分析", "客户洞察", "风险管理", "精准营销", "产品研发", "供应链", "财务", "人力", "市场", "其他"] as const;
+export const assetApplicationValues = [14.2, 11.6, 9.8, 8.7, 6.9, 5.3, 4.2, 3.6, 2.8, 1.5] as const;
+export const assetSourceLabels = ["业务系统", "数据平台", "第三方数据", "手工录入", "其他"] as const;
+export const assetSourceValues = [42.3, 24.6, 15.8, 10.2, 7.1] as const;
+
 export const assetOptions: DataAssetChartOptions = {
   donut: {
     animation: false,
     color: ["#2C75FF", "#75C9F2", "#91DFAD", "#F1DB3D", "#E9A7FF"],
-    series: [{ type: "pie", radius: ["44%", "72%"], center: ["38%", "50%"], label: { show: false }, data: [5861, 3123, 2402, 1080, 380] }]
+    legend: {
+      orient: "vertical",
+      right: 0,
+      top: "middle",
+      data: [...assetTypeLabels],
+      textStyle: { color: "#294469", fontSize: 12 }
+    },
+    series: [{
+      type: "pie",
+      radius: ["44%", "72%"],
+      center: ["38%", "50%"],
+      label: { show: false },
+      data: assetTypeLabels.map((name, index) => ({ name, value: assetTypeValues[index] }))
+    }]
   },
   growth: {
     animation: false,
     color: ["#1677FF", "#75C6F5"],
-    grid: { left: 42, right: 34, top: 36, bottom: 34 },
+    grid: { left: 42, right: 46, top: 36, bottom: 34 },
     legend: { top: 0, left: 70, itemWidth: 18, itemHeight: 4, textStyle: { color: "#294469", fontSize: 12 } },
-    xAxis: { type: "category", data: ["01-01", "02-01", "03-01", "04-01", "05-01", "06-01"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
-    yAxis: [{ type: "value", min: 0, max: 15000, interval: 3000, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } }],
+    xAxis: { type: "category", data: [...assetGrowthLabels], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
+    yAxis: [
+      {
+        name: "个",
+        type: "value",
+        position: "left",
+        min: 0,
+        max: 15000,
+        interval: 3000,
+        splitLine: { lineStyle: { color: "#EDF2FB" } },
+        axisLabel: { color: "#6B7F9D", align: "right" }
+      },
+      {
+        name: "TB",
+        type: "value",
+        position: "right",
+        min: 0,
+        max: 40,
+        interval: 8,
+        splitLine: { show: false },
+        axisLabel: { color: "#6B7F9D", align: "left" }
+      }
+    ],
     series: [
-      { name: "数据资产总量（个）", type: "line", smooth: true, symbolSize: 6, data: [5200, 6900, 9300, 11000, 12400, 13900], lineStyle: { width: 3 } },
-      { name: "数据总量（TB）", type: "line", smooth: true, symbolSize: 6, data: [12, 17, 23, 27, 32, 37], lineStyle: { width: 3 } }
+      { name: "数据资产总量（个）", type: "line", smooth: true, symbolSize: 6, data: [...assetGrowthValues.assetCount], lineStyle: { width: 3 } },
+      { name: "数据总量（TB）", type: "line", yAxisIndex: 1, smooth: true, symbolSize: 6, data: [...assetGrowthValues.dataVolumeTb], lineStyle: { width: 3 } }
     ]
   },
   top: {
     animation: false,
     grid: { left: 34, right: 42, top: 20, bottom: 34 },
-    xAxis: { type: "category", data: ["经营分析", "客户洞察", "风险管理", "精准营销", "产品研发", "供应链", "财务", "人力", "市场", "其他"], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#4B5D77", fontSize: 11, align: "right" } },
+    xAxis: { type: "category", data: [...assetApplicationLabels], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#4B5D77", fontSize: 11, align: "right" } },
     yAxis: { type: "value", min: 0, max: 15, interval: 3, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
-    series: [{ type: "bar", barWidth: 28, data: [14.2, 11.6, 9.8, 8.7, 6.9, 5.3, 4.2, 3.6, 2.8, 1.5], label: { show: true, position: "right", color: "#081A3A" }, itemStyle: { borderRadius: [4, 4, 0, 0], color: "#2F7CF7" } }]
+    series: [{ type: "bar", barWidth: 28, data: [...assetApplicationValues], label: { show: true, position: "right", color: "#081A3A" }, itemStyle: { borderRadius: [4, 4, 0, 0], color: "#2F7CF7" } }]
   },
   source: {
     animation: false,
@@ -265,7 +315,7 @@ export const assetOptions: DataAssetChartOptions = {
     yAxis: {
       type: "category",
       inverse: true,
-      data: ["业务系统", "数据平台", "第三方数据", "手工录入", "其他"],
+      data: [...assetSourceLabels],
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: "#294469", fontSize: 13, align: "right" }
@@ -273,7 +323,7 @@ export const assetOptions: DataAssetChartOptions = {
     series: [{
       type: "bar",
       barWidth: 14,
-      data: [42.3, 24.6, 15.8, 10.2, 7.1],
+      data: [...assetSourceValues],
       showBackground: true,
       backgroundStyle: { color: "#EDF5FF", borderRadius: 9 },
       label: { show: true, position: "right", formatter: "{c}%", color: "#294469", fontSize: 13, fontWeight: 700 },

@@ -2,14 +2,14 @@ import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsEChart, XsIconTile, XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsChartCard, XsIconTile, XsStatusBar } from "@/components/xs";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
 import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
 import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png";
 import kpiDataVolumeIcon from "@/assets/data-dashboard-icons/kpi-data-volume.png";
 import kpiMediaDocumentsIcon from "@/assets/data-dashboard-icons/kpi-media-documents.png";
 import kpiServiceCallsIcon from "@/assets/data-dashboard-icons/kpi-service-calls.png";
-import { getDataAssetChartOptions } from "@/services/dashboardService";
+import { getDataAssetChartInsights, getDataAssetChartOptions } from "@/services/dashboardService";
 import { getDataAssetKpis } from "@/services/dataAssetService";
 import type { DataAssetKpiIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
@@ -27,6 +27,7 @@ export function DataDashboardPage() {
   const [currentDate, setCurrentDate] = useState("2024-06-04");
   const [workflowStatus, setWorkflowStatus] = useState("");
   const options = getDataAssetChartOptions();
+  const chartInsights = getDataAssetChartInsights();
   const kpiQuery = useQuery({
     queryKey: ["dataAssetKpis"],
     queryFn: getDataAssetKpis
@@ -66,12 +67,48 @@ export function DataDashboardPage() {
         </section>
       </XsAsyncPanel>
       <section className="data-dashboard-grid" aria-label="数据资产图表">
-        <article className="xs-card data-card"><h2>数据资产类型分布</h2><Link className="xs-mini-link" to="/data-management?source=数据资产类型分布">查看明细</Link><XsEChart option={options.donut} label="数据资产类型分布图" className="chart-large" /></article>
-        <article className="xs-card data-card"><h2>数据资产增长趋势</h2><Link className="xs-mini-link" to="/data-management?source=数据资产增长趋势">查看明细</Link><XsEChart option={options.growth} label="数据资产增长趋势图" className="chart-large" /></article>
-        <article className="xs-card data-card"><h2>数据来源分布</h2><Link className="xs-mini-link" to="/data-management?source=数据来源分布">查看明细</Link><XsEChart option={options.source} label="数据来源分布图" className="chart-large" /></article>
+        <XsChartCard
+          title="数据资产类型分布"
+          summary={chartInsights.donut.summary}
+          option={options.donut}
+          table={chartInsights.donut.table}
+          headingLevel={2}
+          className="data-card"
+          chartClassName="chart-large"
+          action={<Link className="xs-mini-link" to="/data-management?source=数据资产类型分布">查看明细</Link>}
+        />
+        <XsChartCard
+          title="数据资产增长趋势"
+          summary={chartInsights.growth.summary}
+          option={options.growth}
+          table={chartInsights.growth.table}
+          headingLevel={2}
+          className="data-card"
+          chartClassName="chart-large"
+          action={<Link className="xs-mini-link" to="/data-management?source=数据资产增长趋势">查看明细</Link>}
+        />
+        <XsChartCard
+          title="数据来源分布"
+          summary={chartInsights.source.summary}
+          option={options.source}
+          table={chartInsights.source.table}
+          headingLevel={2}
+          className="data-card"
+          chartClassName="chart-large"
+          action={<Link className="xs-mini-link" to="/data-management?source=数据来源分布">查看明细</Link>}
+        />
       </section>
       <section className="data-bottom-grid" aria-label="数据资产应用">
-        <article className="xs-card data-card"><h2>数据应用场景 Top10</h2><Link className="xs-mini-link" to="/data-management?source=数据应用场景 Top10">查看明细</Link><XsEChart option={options.top} label="数据应用场景排行图" className="chart-large" /></article>
+        <XsChartCard
+          title="数据应用场景 Top10"
+          summary={chartInsights.top.summary}
+          option={options.top}
+          table={chartInsights.top.table}
+          headingLevel={2}
+          className="data-card"
+          chartClassName="chart-large"
+          action={<Link className="xs-mini-link" to="/data-management?source=数据应用场景 Top10">查看明细</Link>}
+        />
         <article className="xs-card data-card data-table"><h2>热门数据资产</h2><table className="xs-table"><tbody>{hotAssets.map((name, index) => <tr key={name}><td>{index + 1}　<Link to={`/data-management?source=${encodeURIComponent(name)}`}>{name}</Link></td><td>{[12.6, 9.8, 8.7, 6.3, 5.4][index]} TB</td></tr>)}</tbody></table></article>
       </section>
     </PageFrame>
