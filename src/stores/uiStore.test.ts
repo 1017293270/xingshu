@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAttachmentQueue } from "@/services/attachmentService";
 import { useUiStore } from "./uiStore";
 
 describe("useUiStore", () => {
@@ -31,18 +32,30 @@ describe("useUiStore", () => {
     expect(useUiStore.getState().isMoreOpen).toBe(false);
   });
 
+  it("keeps a removable local attachment queue across the home and analysis command boxes", () => {
+    const attachments = createAttachmentQueue([
+      new File(["region,revenue"], "sales.csv", { type: "text/csv" }),
+      new File(["notes"], "notes.txt", { type: "text/plain" })
+    ]);
+
+    useUiStore.getState().queuePendingAttachments(attachments);
+    useUiStore.getState().removePendingAttachment(attachments[0]!.id);
+
+    expect(useUiStore.getState().pendingAttachments.map((item) => item.name)).toEqual(["notes.txt"]);
+  });
+
   it("keeps ask-data failures visible when the stream closes after an error", () => {
-    useUiStore.getState().startAskDataRun("分析本月销售数据");
-    useUiStore.getState().failAskDataRun("问数连接失败");
-    useUiStore.getState().completeAskDataRun();
+    const runId = useUiStore.getState().startAskDataRun("分析本月销售数据");
+    useUiStore.getState().failAskDataRun(runId, "问数连接失败");
+    useUiStore.getState().completeAskDataRun(runId);
 
     expect(useUiStore.getState().askDataStatus).toBe("error");
     expect(useUiStore.getState().askDataError).toBe("问数连接失败");
   });
 
   it("captures the data-hub session id from stream events", () => {
-    useUiStore.getState().startAskDataRun("统计咨询量", null);
-    useUiStore.getState().appendAskDataEvent({
+    const runId = useUiStore.getState().startAskDataRun("统计咨询量", null);
+    useUiStore.getState().appendAskDataEvent(runId, {
       type: "routing_intent",
       sessionId: "session-123",
       data: { intent: "ASK_DATA" }
@@ -52,13 +65,13 @@ describe("useUiStore", () => {
   });
 
   it("keeps the current data-hub session when asking a follow-up", () => {
-    useUiStore.getState().startAskDataRun("统计咨询量", null);
-    useUiStore.getState().appendAskDataEvent({
+    const firstRunId = useUiStore.getState().startAskDataRun("统计咨询量", null);
+    useUiStore.getState().appendAskDataEvent(firstRunId, {
       type: "done",
       sessionId: "session-123",
       data: { summary: "完成" }
     });
-    useUiStore.getState().completeAskDataRun();
+    useUiStore.getState().completeAskDataRun(firstRunId);
 
     useUiStore.getState().startAskDataRun("按社区拆分");
 
@@ -78,5 +91,43 @@ describe("useUiStore", () => {
 
     expect(useUiStore.getState().activeAnalysisSessionId).toBe("history-session-1");
     expect(useUiStore.getState().analysisTurns.map((turn) => turn.question)).toEqual(["历史问题", "继续追问"]);
+  });
+
+  it("ignores late events from a cancelled run", () => {
+    const staleEvent = { type: "text", data: "旧回答", timestamp: 1 };
+    const currentEvent = { type: "text", data: "新回答", timestamp: 2 };
+    const first = useUiStore.getState().startAskDataRun("问题一", null);
+    useUiStore.getState().cancelAskDataRun(first);
+    const second = useUiStore.getState().startAskDataRun("问题二", null);
+
+    useUiStore.getState().appendAskDataEvent(first, staleEvent);
+    useUiStore.getState().appendAskDataEvent(second, currentEvent);
+
+    expect(useUiStore.getState().analysisTurns.at(-1)?.events).toEqual([currentEvent]);
+    expect(useUiStore.getState().activeAskDataRunId).toBe(second);
+  });
+
+  it("aborts a bound controller after invalidating its run", () => {
+    const runId = useUiStore.getState().startAskDataRun("停止测试", null);
+    const abort = vi.fn();
+    useUiStore.getState().bindAskDataController(runId, { abort } as unknown as AbortController);
+
+    useUiStore.getState().cancelAskDataRun(runId);
+
+    expect(abort).toHaveBeenCalledOnce();
+    expect(useUiStore.getState().activeAskDataRunId).toBeNull();
+    expect(useUiStore.getState().analysisTurns.at(-1)?.status).toBe("cancelled");
+  });
+
+  it("invalidates and aborts the previous stream when a new run starts", () => {
+    const first = useUiStore.getState().startAskDataRun("问题一", null);
+    const abort = vi.fn();
+    useUiStore.getState().bindAskDataController(first, { abort } as unknown as AbortController);
+
+    const second = useUiStore.getState().startAskDataRun("问题二");
+
+    expect(abort).toHaveBeenCalledOnce();
+    expect(useUiStore.getState().activeAskDataRunId).toBe(second);
+    expect(useUiStore.getState().analysisTurns.find((turn) => turn.id === first)?.status).toBe("cancelled");
   });
 });

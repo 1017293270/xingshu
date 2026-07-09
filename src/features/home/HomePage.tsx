@@ -8,7 +8,9 @@ import appMoreAppsIcon from "@/assets/generated-icons/app-more-apps.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.png";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { createAttachmentQueue } from "@/services/attachmentService";
 import { useUiStore } from "@/stores/uiStore";
 import "./home.css";
 
@@ -90,6 +92,7 @@ export function HomePage() {
   const draft = useUiStore((state) => state.homeDraft);
   const selectedAppId = useUiStore((state) => state.selectedAppId);
   const sentStatus = useUiStore((state) => state.sentStatus);
+  const pendingAttachments = useUiStore((state) => state.pendingAttachments);
   const setDraft = useUiStore((state) => state.setHomeDraft);
   const selectApp = useUiStore((state) => state.selectApp);
   const setSentStatus = useUiStore((state) => state.setSentStatus);
@@ -97,29 +100,55 @@ export function HomePage() {
   const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
   const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
+  const bindAskDataController = useUiStore((state) => state.bindAskDataController);
+  const queuePendingAttachments = useUiStore((state) => state.queuePendingAttachments);
+  const removePendingAttachment = useUiStore((state) => state.removePendingAttachment);
+  const voiceInput = useVoiceInput({
+    onAudioReady: () => setSentStatus("语音录入完成；转写服务尚未接入"),
+    onError: setSentStatus
+  });
 
   function startDataHubAskData(question: string) {
-    startAskDataRun(question, null);
+    const runId = startAskDataRun(question, null);
 
     if (import.meta.env.MODE === "test") {
-      completeAskDataRun();
+      completeAskDataRun(runId);
       return;
     }
 
-    streamAgentMessage(
+    const controller = streamAgentMessage(
       { content: question },
       {
         onEvent: (event) => {
-          appendAskDataEvent(event);
+          appendAskDataEvent(runId, event);
           if (event.type === "error") {
             const data = event.data as { message?: string } | string | undefined;
-            failAskDataRun(typeof data === "string" ? data : data?.message || "问数执行失败");
+            failAskDataRun(runId, typeof data === "string" ? data : data?.message || "问数执行失败");
           }
         },
-        onDone: completeAskDataRun,
-        onError: (error) => failAskDataRun(error.message)
+        onDone: () => completeAskDataRun(runId),
+        onError: (error) => failAskDataRun(runId, error.message)
       }
     );
+    bindAskDataController(runId, controller);
+  }
+
+  function handleAttachments(files: File[]) {
+    const queue = createAttachmentQueue(files);
+    const ready = queue.filter((item) => item.status === "ready");
+    const rejected = queue.filter((item) => item.status === "rejected");
+    queuePendingAttachments(queue);
+
+    if (rejected.length > 0) {
+      setSentStatus(
+        ready.length > 0
+          ? `${ready.length} 个附件已加入本地队列；${rejected[0].name}：${rejected[0].error}`
+          : `${rejected[0].name}：${rejected[0].error}`
+      );
+      return;
+    }
+
+    setSentStatus(`${ready.length} 个附件已加入本地队列，尚未上传`);
   }
 
   function handleSelectApp(app: XsAppCardData) {
@@ -163,7 +192,18 @@ export function HomePage() {
         value={draft}
         onChange={setDraft}
         onSubmit={handleSubmit}
-        onVoice={() => setSentStatus("已准备语音输入")}
+        onAttach={handleAttachments}
+        attachments={pendingAttachments}
+        onRemoveAttachment={removePendingAttachment}
+        onVoice={() => {
+          setSentStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
+          voiceInput.toggle();
+        }}
+        onCancelVoice={() => {
+          voiceInput.cancel();
+          setSentStatus("已取消语音输入");
+        }}
+        voiceState={voiceInput.state}
       />
 
       {sentStatus ? (

@@ -19,8 +19,8 @@ function renderPage(page: ReactElement) {
 
 function seedRatioResult() {
   const store = useUiStore.getState();
-  store.startAskDataRun("每个收入人群占比多少");
-  store.appendAskDataEvent({
+  const runId = store.startAskDataRun("每个收入人群占比多少");
+  store.appendAskDataEvent(runId, {
     type: "table",
     data: {
       columns: [
@@ -36,7 +36,7 @@ function seedRatioResult() {
       source: "cube"
     }
   });
-  store.completeAskDataRun();
+  store.completeAskDataRun(runId);
 }
 
 describe("AI chart actions", () => {
@@ -142,8 +142,8 @@ describe("AI chart actions", () => {
     );
 
     const store = useUiStore.getState();
-    store.startAskDataRun("按不同维度统计咨询");
-    store.appendAskDataEvent({
+    const runId = store.startAskDataRun("按不同维度统计咨询");
+    store.appendAskDataEvent(runId, {
       type: "table",
       data: {
         columns: [
@@ -158,7 +158,7 @@ describe("AI chart actions", () => {
         source: "cube"
       }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "table",
       data: {
         columns: [
@@ -173,7 +173,7 @@ describe("AI chart actions", () => {
         source: "cube"
       }
     });
-    store.completeAskDataRun();
+    store.completeAskDataRun(runId);
     renderPage(<AnalysisPage />);
 
     await user.click(screen.getByRole("button", { name: "AI 生成图表" }));

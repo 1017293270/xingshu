@@ -78,7 +78,9 @@ export type DataHubChatEvent = {
   createdAt?: string;
 };
 
-export type DataHubAskDataStatus = "idle" | "streaming" | "done" | "error";
+export type DataHubAskDataStatus = "idle" | "streaming" | "done" | "error" | "cancelled";
+
+export type DataHubAskRunId = string;
 
 export type DataHubSseEventType =
   | "routing_intent"

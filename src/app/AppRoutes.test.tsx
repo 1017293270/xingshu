@@ -54,11 +54,21 @@ describe("AppRoutes", () => {
   });
 
   it("opens analysis as a blank ask-data workspace before the user asks", async () => {
+    const user = userEvent.setup();
     renderRoute("/analysis");
 
     expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /销售额|咨询量|客户增长|收入与利润率/ })).toHaveLength(4);
     expect(screen.getByRole("textbox", { name: "命令输入" })).toBeInTheDocument();
     expect(screen.queryByLabelText("用户提问")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "分析最近 30 天客户增长趋势" }));
+
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("分析最近 30 天客户增长趋势");
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
+      "已填入快捷问题，确认后即可发送"
+    );
   });
 
   it("redirects protected app routes to login when no data-hub session exists", async () => {

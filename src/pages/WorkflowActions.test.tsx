@@ -28,24 +28,24 @@ describe("workflow page actions", () => {
 
   it("renders the data-hub ask-data process and result table", () => {
     const store = useUiStore.getState();
-    store.startAskDataRun("目前咨询数最多的社区是哪个社区");
-    store.appendAskDataEvent({
+    const runId = store.startAskDataRun("目前咨询数最多的社区是哪个社区");
+    store.appendAskDataEvent(runId, {
       type: "routing_decompose",
       data: { executionMode: "SIMPLE", subQuestions: ["统计各社区/项目的咨询数，找出咨询数最多的社区"] }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "react_step",
       data: { round: 1, action: "locate_datasource", status: "success", summary: "datasourceId=1, name=101.43.17.8" }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "react_step",
       data: { round: 1, action: "match_skill", status: "success", summary: "已匹配事件域业务 Skill" }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "react_step",
       data: { round: 2, action: "execute_query", status: "success", summary: "已执行 Cube Query，rows=1" }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "table",
       data: {
         columns: [
@@ -62,11 +62,11 @@ describe("workflow page actions", () => {
         source: "cube"
       }
     });
-    store.appendAskDataEvent({
+    store.appendAskDataEvent(runId, {
       type: "done",
       data: { summary: "目前咨询数最多的社区为演示账号，累计咨询记录 716 条。", loopRounds: 6 }
     });
-    store.completeAskDataRun();
+    store.completeAskDataRun(runId);
 
     renderPage(<AnalysisPage />);
 
@@ -87,8 +87,8 @@ describe("workflow page actions", () => {
 
   it("collapses reasoning and exports analysis results", async () => {
     const user = userEvent.setup();
-    useUiStore.getState().startAskDataRun("分析销售数据");
-    useUiStore.getState().completeAskDataRun();
+    const runId = useUiStore.getState().startAskDataRun("分析销售数据");
+    useUiStore.getState().completeAskDataRun(runId);
     renderPage(<AnalysisPage />);
 
     await user.click(screen.getByRole("button", { name: "收起分析过程" }));
@@ -112,8 +112,8 @@ describe("workflow page actions", () => {
     Object.defineProperty(window.URL, "createObjectURL", { configurable: true, value: createObjectURL });
     Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
 
-    useUiStore.getState().startAskDataRun("导出咨询统计");
-    useUiStore.getState().appendAskDataEvent({
+    const runId = useUiStore.getState().startAskDataRun("导出咨询统计");
+    useUiStore.getState().appendAskDataEvent(runId, {
       type: "table",
       data: {
         columns: [
@@ -130,7 +130,7 @@ describe("workflow page actions", () => {
         source: "cube"
       }
     });
-    useUiStore.getState().completeAskDataRun();
+    useUiStore.getState().completeAskDataRun(runId);
 
     renderPage(<AnalysisPage />);
 
@@ -147,7 +147,7 @@ describe("workflow page actions", () => {
     Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
   });
 
-  it("submits a follow-up analysis question and handles voice input", async () => {
+  it("submits a follow-up question and exposes attachment and voice feedback", async () => {
     const user = userEvent.setup();
     renderPage(<AnalysisPage />);
 
@@ -157,10 +157,20 @@ describe("workflow page actions", () => {
     expect(screen.getByText("继续分析利润率")).toBeInTheDocument();
     expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("已继续追问：继续分析利润率");
 
-    expect(screen.queryByRole("button", { name: "附件" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "附件" })).toBeInTheDocument();
+    await user.upload(
+      screen.getByLabelText("添加附件"),
+      new File(["利润率"], "利润率.csv", { type: "text/csv" })
+    );
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
+      "1 个附件已加入本地队列，尚未上传"
+    );
+    expect(screen.getByRole("list", { name: "附件队列" })).toHaveTextContent("利润率.csv");
 
     await user.click(screen.getByRole("button", { name: "语音" }));
-    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("已准备语音输入");
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
+      "当前浏览器不支持语音输入"
+    );
   });
 
   it("keeps the restored history turn visible when submitting a follow-up", async () => {
@@ -180,6 +190,22 @@ describe("workflow page actions", () => {
     expect(screen.getByText("继续追问")).toBeInTheDocument();
   });
 
+  it("stops an active ask-data run and exposes the cancelled state", async () => {
+    const user = userEvent.setup();
+    const runId = useUiStore.getState().startAskDataRun("停止这次问数", null);
+    const abort = vi.fn();
+    useUiStore.getState().bindAskDataController(runId, { abort } as unknown as AbortController);
+    renderPage(<AnalysisPage />);
+
+    await user.click(screen.getByRole("button", { name: "停止生成" }));
+
+    expect(abort).toHaveBeenCalledOnce();
+    expect(screen.getByRole("heading", { name: "已停止生成" })).toBeInTheDocument();
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
+      "已停止本次问数生成"
+    );
+  });
+
   it("auto-scrolls the ask-data workspace until the user scrolls upward", () => {
     const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       callback(0);
@@ -188,7 +214,7 @@ describe("workflow page actions", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
     const store = useUiStore.getState();
     let scrollHeight = 500;
-    store.startAskDataRun("连续问数滚动");
+    const runId = store.startAskDataRun("连续问数滚动");
 
     const { container } = renderPage(<AnalysisPage />);
     const workspace = container.querySelector(".analysis-workspace") as HTMLDivElement;
@@ -201,7 +227,7 @@ describe("workflow page actions", () => {
     scrollHeight = 900;
 
     act(() => {
-      store.appendAskDataEvent({ type: "content", data: "第一段结果" });
+      store.appendAskDataEvent(runId, { type: "content", data: "第一段结果" });
     });
 
     expect(workspace.scrollTop).toBe(900);
@@ -211,7 +237,7 @@ describe("workflow page actions", () => {
     scrollHeight = 1200;
 
     act(() => {
-      store.appendAskDataEvent({ type: "content", data: "第二段结果" });
+      store.appendAskDataEvent(runId, { type: "content", data: "第二段结果" });
     });
 
     expect(workspace.scrollTop).toBe(160);

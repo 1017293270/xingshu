@@ -1,6 +1,7 @@
 import { Button, Progress, Segmented, Tag } from "antd";
 import {
   Brain,
+  CaretDown,
   CaretUp,
   ChartPieSlice,
   CheckCircle,
@@ -15,7 +16,9 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { XsCommandBox, XsEChart } from "@/components/xs";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { createAttachmentQueue } from "@/services/attachmentService";
 import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
@@ -28,7 +31,12 @@ import { loadAiProviderConfig } from "@/services/aiProviderConfigService";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import { useUiStore } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
-import type { DataHubReactStepData, DataHubTableResult, DataHubToolResultData } from "@/types/dataHub";
+import type {
+  DataHubAskDataStatus,
+  DataHubReactStepData,
+  DataHubTableResult,
+  DataHubToolResultData
+} from "@/types/dataHub";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
@@ -52,6 +60,13 @@ type AiChartUiState =
   | { status: "error"; message: string };
 
 const autoScrollBottomThreshold = 96;
+
+const quickQuestions = [
+  "本月销售额与目标完成率怎么样？",
+  "目前咨询量最高的社区是哪个？",
+  "分析最近 30 天客户增长趋势",
+  "对比各区域收入与利润率"
+];
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined || value === "") {
@@ -149,7 +164,7 @@ function collectStepDetails(steps: DataHubReactStepData[], actions: string[]) {
 
 function buildThinkingPhases(
   askTurn: ReturnType<typeof createDataHubAskTurn>,
-  askDataStatus: "idle" | "streaming" | "done" | "error"
+  askDataStatus: DataHubAskDataStatus
 ): ThinkingPhase[] {
   const steps = askTurn.reactSteps;
   const hasDecompose = Boolean(askTurn.decompose?.subQuestions?.length);
@@ -256,7 +271,7 @@ const phaseStatusMeta: Record<ThinkingPhaseStatus, { label: string; color: strin
   error: { label: "异常", color: "error" }
 };
 
-function DataHubThinkingProcess({ phases, active }: { phases: ThinkingPhase[]; active: boolean }) {
+function DataHubThinkingProcess({ phases }: { phases: ThinkingPhase[] }) {
   return (
     <div className="datahub-thinking-panel">
       <div className="datahub-thinking-panel__head">
@@ -271,7 +286,6 @@ function DataHubThinkingProcess({ phases, active }: { phases: ThinkingPhase[]; a
         {phases.map((phase, index) => {
           const Icon = phase.icon;
           const meta = phaseStatusMeta[phase.status];
-          const isActive = phase.status === "active";
           const visibleDetail = phase.details[0];
           const extraDetails = phase.details.slice(1);
 
@@ -280,8 +294,6 @@ function DataHubThinkingProcess({ phases, active }: { phases: ThinkingPhase[]; a
               <span className="datahub-step__index" aria-hidden="true">
                 {phase.status === "complete" ? (
                   <CheckCircle size={20} weight="fill" />
-                ) : isActive ? (
-                  <CircleNotch size={20} weight="bold" />
                 ) : (
                   <Icon size={18} weight="bold" />
                 )}
@@ -290,7 +302,6 @@ function DataHubThinkingProcess({ phases, active }: { phases: ThinkingPhase[]; a
                 <div className="datahub-step__title">
                   <strong>{phase.title}</strong>
                   <Tag color={meta.color}>{meta.label}</Tag>
-                  {isActive ? <span className="thinking-dots" aria-label="正在思考"><i /><i /><i /></span> : null}
                 </div>
                 <p>{phase.description}</p>
                 {visibleDetail ? <span className="datahub-step__hint">{visibleDetail}</span> : null}
@@ -307,7 +318,6 @@ function DataHubThinkingProcess({ phases, active }: { phases: ThinkingPhase[]; a
                     </div>
                   </details>
                 ) : null}
-                {isActive && active ? <div className="datahub-thinking-shimmer" aria-hidden="true" /> : null}
               </div>
             </li>
           );
@@ -447,14 +457,24 @@ export function AnalysisPage() {
   const askDataEvents = useUiStore((state) => state.askDataEvents);
   const askDataError = useUiStore((state) => state.askDataError);
   const analysisTurns = useUiStore((state) => state.analysisTurns);
+  const activeAskDataRunId = useUiStore((state) => state.activeAskDataRunId);
+  const pendingAttachments = useUiStore((state) => state.pendingAttachments);
   const startAskDataRun = useUiStore((state) => state.startAskDataRun);
   const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
   const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
+  const cancelAskDataRun = useUiStore((state) => state.cancelAskDataRun);
+  const bindAskDataController = useUiStore((state) => state.bindAskDataController);
+  const queuePendingAttachments = useUiStore((state) => state.queuePendingAttachments);
+  const removePendingAttachment = useUiStore((state) => state.removePendingAttachment);
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
+  const voiceInput = useVoiceInput({
+    onAudioReady: () => setWorkflowStatus("语音录入完成；转写服务尚未接入"),
+    onError: setWorkflowStatus
+  });
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -648,27 +668,28 @@ export function AnalysisPage() {
 
   const streamDataHubQuestion = (question: string) => {
     const sessionId = useUiStore.getState().activeAnalysisSessionId;
-    startAskDataRun(question);
+    const runId = startAskDataRun(question);
 
     if (import.meta.env.MODE === "test") {
-      completeAskDataRun();
+      completeAskDataRun(runId);
       return;
     }
 
-    streamAgentMessage(
+    const controller = streamAgentMessage(
       { content: question, sessionId: sessionId ?? undefined },
       {
         onEvent: (event) => {
-          appendAskDataEvent(event);
+          appendAskDataEvent(runId, event);
           if (event.type === "error") {
             const data = event.data as { message?: string } | string | undefined;
-            failAskDataRun(typeof data === "string" ? data : data?.message || "问数执行失败");
+            failAskDataRun(runId, typeof data === "string" ? data : data?.message || "问数执行失败");
           }
         },
-        onDone: completeAskDataRun,
-        onError: (error) => failAskDataRun(error.message)
+        onDone: () => completeAskDataRun(runId),
+        onError: (error) => failAskDataRun(runId, error.message)
       }
     );
+    bindAskDataController(runId, controller);
   };
 
   const askDataStatusText = (() => {
@@ -683,8 +704,37 @@ export function AnalysisPage() {
     if (askDataStatus === "error") {
       return `data-hub 问数失败：${askDataError || "未知错误"}`;
     }
+    if (askDataStatus === "cancelled") {
+      return "已停止本次问数生成";
+    }
     return "";
   })();
+
+  const handleStop = () => {
+    if (!activeAskDataRunId) {
+      return;
+    }
+
+    cancelAskDataRun(activeAskDataRunId);
+    setWorkflowStatus("已停止生成，你可以修改问题后重新发送");
+  };
+
+  const handleAttachments = (files: File[]) => {
+    const queue = createAttachmentQueue(files);
+    const ready = queue.filter((item) => item.status === "ready");
+    const rejected = queue.filter((item) => item.status === "rejected");
+    queuePendingAttachments(queue);
+    if (rejected.length > 0) {
+      setWorkflowStatus(
+        ready.length > 0
+          ? `${ready.length} 个附件已加入本地队列；${rejected[0].name}：${rejected[0].error}`
+          : `${rejected[0].name}：${rejected[0].error}`
+      );
+      return;
+    }
+
+    setWorkflowStatus(`${queue.length} 个附件已加入本地队列，尚未上传`);
+  };
 
   const handleFollowUp = async () => {
     const command = followUpDraft.trim();
@@ -695,11 +745,16 @@ export function AnalysisPage() {
 
     streamDataHubQuestion(command);
     setFollowUpDraft("");
-    setWorkflowStatus(`已继续追问：${command}`);
+    setWorkflowStatus(
+      pendingAttachments.length > 0
+        ? `已继续追问：${command}；附件仍仅保存在本地`
+        : `已继续追问：${command}`
+    );
   };
 
   return (
-    <PageFrame title="新建对话" className="analysis-page">
+    <PageFrame title="新建对话" className="analysis-page" hideHeader>
+      {hasConversation ? <h1 className="sr-only">智能问数</h1> : null}
       <div className="analysis-workspace" ref={workspaceRef} onScroll={handleWorkspaceScroll}>
         {hasConversation ? (
           <div className="analysis-turn-list">
@@ -714,11 +769,15 @@ export function AnalysisPage() {
                     ? "问数完成"
                     : turn.status === "error"
                       ? "问数失败"
+                      : turn.status === "cancelled"
+                        ? "已停止生成"
                       : "已完成分析";
               const statusDescription =
-                turn.status === "idle"
-                  ? "请从首页发起智能问数，星数会同步展示 data-hub 的意图路由、语义匹配、查询执行和结果表格。"
-                  : turnAsk.error?.message || turnAsk.assistantContent || "正在连接 data-hub 问数 Agent，请稍候。";
+                  turn.status === "idle"
+                    ? "请从首页发起智能问数，星数会同步展示 data-hub 的意图路由、语义匹配、查询执行和结果表格。"
+                    : turn.status === "cancelled"
+                      ? "本次问数已停止，你可以修改问题后重新发送。"
+                    : turnAsk.error?.message || turnAsk.assistantContent || "正在连接 data-hub 问数 Agent，请稍候。";
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const isGeneratingAiChart = aiChartState.status === "loading";
 
@@ -736,10 +795,16 @@ export function AnalysisPage() {
                     <article className="xs-card analysis-card">
                       <header className="analysis-card__head">
                         <div>
-                          <h1>{statusTitle}</h1>
+                          <h2>{statusTitle}</h2>
                           <p>{statusDescription}</p>
                         </div>
-                        <Button aria-label={isReasoningVisible ? "收起分析过程" : "展开分析过程"} icon={<CaretUp size={18} />} onClick={handleToggleReasoning} />
+                        <Button
+                          aria-label={isReasoningVisible ? "收起分析过程" : "展开分析过程"}
+                          aria-expanded={isReasoningVisible}
+                          aria-controls={`analysis-reasoning-${turn.id}`}
+                          icon={isReasoningVisible ? <CaretUp size={18} /> : <CaretDown size={18} />}
+                          onClick={handleToggleReasoning}
+                        />
                       </header>
                       {isLatestTurn && (askDataStatusText || workflowStatus) ? (
                         <div className="sr-only" role="status">
@@ -748,9 +813,13 @@ export function AnalysisPage() {
                       ) : null}
 
                       {isReasoningVisible ? (
-                        <section className="reasoning-block" aria-label="思考过程">
+                        <section
+                          className="reasoning-block"
+                          id={`analysis-reasoning-${turn.id}`}
+                          aria-label="思考过程"
+                        >
                           <h2>问数过程（5 步）</h2>
-                          <DataHubThinkingProcess phases={thinkingPhases} active={turn.status === "streaming"} />
+                          <DataHubThinkingProcess phases={thinkingPhases} />
 
                           {turnAsk.infoMessages.length > 0 ? (
                             <div className="datahub-info-list">
@@ -806,7 +875,31 @@ export function AnalysisPage() {
             <div className="analysis-bottom-sentinel" ref={bottomSentinelRef} aria-hidden="true" />
           </div>
         ) : (
-          <div className="analysis-empty-canvas" aria-label="空白问数工作区" />
+          <section
+            className="analysis-empty-canvas analysis-empty-state"
+            aria-labelledby="analysis-empty-title"
+            aria-label="空白问数工作区"
+          >
+            <img src={assistantMark} alt="" aria-hidden="true" />
+            <div className="analysis-empty-state__copy">
+              <h1 id="analysis-empty-title">从一个经营问题开始</h1>
+              <p>星数只会在当前 data-hub 空间及您有权访问的数据范围内查询和生成结果。</p>
+            </div>
+            <div className="analysis-empty-state__prompts" aria-label="快捷问题">
+              {quickQuestions.map((question) => (
+                <button
+                  type="button"
+                  key={question}
+                  onClick={() => {
+                    setFollowUpDraft(question);
+                    setWorkflowStatus("已填入快捷问题，确认后即可发送");
+                  }}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
       </div>
 
@@ -815,8 +908,26 @@ export function AnalysisPage() {
           value={followUpDraft}
           onChange={setFollowUpDraft}
           onSubmit={handleFollowUp}
-          onVoice={() => setWorkflowStatus("已准备语音输入")}
+          onAttach={handleAttachments}
+          attachments={pendingAttachments}
+          onRemoveAttachment={removePendingAttachment}
+          onVoice={() => {
+            setWorkflowStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
+            voiceInput.toggle();
+          }}
+          onCancelVoice={() => {
+            voiceInput.cancel();
+            setWorkflowStatus("已取消语音输入");
+          }}
+          onStop={handleStop}
+          busy={askDataStatus === "streaming"}
+          voiceState={voiceInput.state}
         />
+        {workflowStatus ? (
+          <div className="analysis-composer__status" role="status">
+            {workflowStatus}
+          </div>
+        ) : null}
       </div>
     </PageFrame>
   );

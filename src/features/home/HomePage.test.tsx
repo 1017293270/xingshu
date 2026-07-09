@@ -123,14 +123,21 @@ describe("HomePage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
   });
 
-  it("shows feedback for the command box voice action", async () => {
+  it("accepts attachments and reports unsupported voice input", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    expect(screen.queryByRole("button", { name: "附件" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "附件" })).toBeInTheDocument();
     expect(screen.queryByText("企业数据、文档、看板与 Agent 应用统一入口")).not.toBeInTheDocument();
 
+    await user.upload(
+      screen.getByLabelText("添加附件"),
+      new File(["经营数据"], "经营日报.txt", { type: "text/plain" })
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("1 个附件已加入本地队列，尚未上传");
+    expect(screen.getByRole("list", { name: "附件队列" })).toHaveTextContent("经营日报.txt");
+
     await user.click(screen.getByRole("button", { name: "语音" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已准备语音输入");
+    expect(screen.getByRole("status")).toHaveTextContent("当前浏览器不支持语音输入");
   });
 });
