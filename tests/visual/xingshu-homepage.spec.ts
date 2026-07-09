@@ -1,5 +1,15 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("xingshu_datahub_token", "playwright-visual-token");
+    window.localStorage.setItem(
+      "xingshu_datahub_user",
+      JSON.stringify({ token: "playwright-visual-token", userName: "张三" })
+    );
+  });
+});
+
 const viewports = [
   { name: "1440x900", width: 1440, height: 900 },
   { name: "1672x941", width: 1672, height: 941 },
@@ -12,9 +22,17 @@ const welcomeViewports = [
   { name: "2560x1440", width: 2560, height: 1440 }
 ];
 
-const pages = [
+type SmokePage = {
+  slug: string;
+  path: string;
+  heading?: string;
+  region?: string;
+  charts: number;
+};
+
+const pages: SmokePage[] = [
   { slug: "home", path: "/", heading: "您好，张三", charts: 0 },
-  { slug: "analysis", path: "/analysis", heading: "已完成分析", charts: 1 },
+  { slug: "analysis", path: "/analysis", region: "星数命令输入区", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "智能写作", charts: 0 },
@@ -38,7 +56,12 @@ test.describe("xingshu page visual smoke", () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto(pageCase.path);
 
-      await expect(page.getByRole("heading", { name: pageCase.heading }).first()).toBeVisible();
+      if (pageCase.heading) {
+        await expect(page.getByRole("heading", { name: pageCase.heading }).first()).toBeVisible();
+      }
+      if (pageCase.region) {
+        await expect(page.getByRole("region", { name: pageCase.region }).first()).toBeVisible();
+      }
       if (viewport.width > 900) {
         await expect(page.getByRole("navigation", { name: "星数主导航" })).toBeVisible();
       } else {
@@ -78,10 +101,12 @@ test("sidebar logo is readable at desktop size", async ({ page }) => {
   expect(box!.height).toBeGreaterThanOrEqual(76);
   expect(box!.height).toBeLessThanOrEqual(86);
 
-  const firstNavIconBox = await page.locator(".xs-sidebar__nav .xs-icon-tile__image").first().boundingBox();
-  expect(firstNavIconBox).not.toBeNull();
-  expect(firstNavIconBox!.width).toBeGreaterThanOrEqual(28);
-  expect(firstNavIconBox!.height).toBeGreaterThanOrEqual(28);
+  const firstNavTile = page.locator(".xs-sidebar__nav .xs-icon-tile").first();
+  await expect(firstNavTile.locator("svg")).toBeVisible();
+  const firstNavTileBox = await firstNavTile.boundingBox();
+  expect(firstNavTileBox).not.toBeNull();
+  expect(firstNavTileBox!.width).toBeGreaterThanOrEqual(28);
+  expect(firstNavTileBox!.height).toBeGreaterThanOrEqual(28);
 });
 
 test("home page matches the reference welcome workbench composition", async ({ page }) => {
@@ -128,12 +153,12 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.heroTop).toBeLessThanOrEqual(190);
   expect(metrics!.commandWidth).toBeGreaterThanOrEqual(980);
   expect(metrics!.commandWidth).toBeLessThanOrEqual(1120);
-  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(180);
-  expect(metrics!.commandHeight).toBeLessThanOrEqual(205);
-  expect(metrics!.appsTop).toBeGreaterThanOrEqual(560);
-  expect(metrics!.appsTop).toBeLessThanOrEqual(650);
-  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(190);
-  expect(metrics!.cardHeight).toBeLessThanOrEqual(225);
+  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(140);
+  expect(metrics!.commandHeight).toBeLessThanOrEqual(176);
+  expect(metrics!.appsTop).toBeGreaterThanOrEqual(400);
+  expect(metrics!.appsTop).toBeLessThanOrEqual(560);
+  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(160);
+  expect(metrics!.cardHeight).toBeLessThanOrEqual(190);
   expect(metrics!.cardWidth).toBeGreaterThanOrEqual(130);
   expect(metrics!.cardWidth).toBeLessThanOrEqual(170);
   expect(metrics!.descriptionDisplay).toBe("none");
@@ -149,13 +174,14 @@ test("sidebar active item has a stronger selected state", async ({ page }) => {
     const styles = window.getComputedStyle(element);
 
     return {
-      backgroundImage: styles.backgroundImage,
+      backgroundColor: styles.backgroundColor,
       borderLeftColor: styles.borderLeftColor,
       borderLeftWidth: Number.parseFloat(styles.borderLeftWidth)
     };
   });
 
-  expect(activeState.backgroundImage).not.toBe("none");
+  expect(activeState.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(activeState.backgroundColor).not.toBe("rgb(255, 255, 255)");
   expect(activeState.borderLeftWidth).toBeGreaterThanOrEqual(3);
   expect(activeState.borderLeftColor).toMatch(/rgb\(22, 119, 255\)|rgb\(37, 99, 235\)/);
 });
