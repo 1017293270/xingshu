@@ -1,8 +1,7 @@
-import { Button, Input, Segmented } from "antd";
+import { Button, Input, Segmented, Space } from "antd";
 import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import metricKnowledge from "@/assets/data-management-icons/metric-knowledge-total.png";
 import metricDocument from "@/assets/data-management-icons/metric-document-total.png";
 import metricParsed from "@/assets/data-management-icons/metric-parsed-complete.png";
@@ -17,6 +16,7 @@ import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs
 import { getKnowledgeBaseStats, listKnowledgeBases } from "@/services/dataAssetService";
 import type { KnowledgeBaseIconId, KnowledgeBaseStatIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
+import "./styles/data-assets.css";
 
 const statIconById: Record<KnowledgeBaseStatIconId, string> = {
   "knowledge-total": metricKnowledge,
@@ -34,14 +34,16 @@ const knowledgeBaseIconById: Record<KnowledgeBaseIconId, string> = {
   "finance-audit": kbFinance
 };
 
-const assetTabs = ["知识库管理", "数据源管理", "数据量簇管理", "指标语义管理", "技能管理", "问题集管理"];
+const assetTabs = [
+  { label: "知识库管理", value: "知识库管理" },
+  { label: "数据源管理", value: "数据源管理", disabled: true },
+  { label: "数据表管理", value: "数据表管理", disabled: true },
+  { label: "数据接口管理", value: "数据接口管理", disabled: true },
+  { label: "指标管理", value: "指标管理", disabled: true }
+];
 
 export function DataManagementPage() {
-  const [searchParams] = useSearchParams();
-  const source = searchParams.get("source");
   const [query, setQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("知识库管理");
-  const [actionStatus, setActionStatus] = useState(source ? `已从看板定位：${source}` : "");
   const statsQuery = useQuery({
     queryKey: ["knowledgeBaseStats"],
     queryFn: getKnowledgeBaseStats
@@ -72,30 +74,47 @@ export function DataManagementPage() {
     )
     : knowledgeBases;
   const statusText =
-    actionStatus ||
-    (knowledgeBasesStatus === "ready"
+    knowledgeBasesStatus === "ready"
       ? normalizedQuery
         ? `已筛选 ${visibleKnowledgeBases.length} 个知识库`
         : `共 ${visibleKnowledgeBases.length} 个知识库`
-      : "");
+      : "";
 
   const handleSearch = (value: string) => {
     setQuery(value);
-    setActionStatus("");
   };
 
   return (
-    <PageFrame title="数据资产管理" subtitle="统一管理企业数据资产，助力数据价值最大化" actions={<Button type="primary" icon={<Plus size={18} />} onClick={() => setActionStatus("已创建知识库草稿")}>新增知识库</Button>} className="data-management-page">
+    <PageFrame
+      title="数据资产管理"
+      subtitle="统一管理企业数据资产，助力数据价值最大化"
+      actions={(
+        <Space size={8} wrap>
+          <Button
+            type="primary"
+            icon={<Plus size={18} />}
+            aria-describedby="knowledge-actions-availability"
+            disabled
+          >
+            新增知识库
+          </Button>
+          <span id="knowledge-actions-availability" className="asset-tabs__availability">
+            新增与知识库详情即将开放
+          </span>
+        </Space>
+      )}
+      className="data-management-page"
+    >
       <nav className="asset-tabs" aria-label="资产管理类型">
         <Segmented
           aria-label="资产管理类型"
+          aria-describedby="asset-tabs-availability"
           options={assetTabs}
-          value={activeTab}
-          onChange={(value) => {
-            setActiveTab(String(value));
-            setActionStatus(`已切换到${value}`);
-          }}
+          value="知识库管理"
         />
+        <p id="asset-tabs-availability" className="asset-tabs__availability">
+          当前仅开放知识库管理；数据源、数据表、数据接口和指标管理即将开放。
+        </p>
       </nav>
       <section className="asset-filter" aria-label="知识库筛选">
         <Input
@@ -109,7 +128,7 @@ export function DataManagementPage() {
         />
         <XsStatusBar
           tone="info"
-          label={normalizedQuery || actionStatus ? "筛选结果" : "汇总"}
+          label={normalizedQuery ? "筛选结果" : "汇总"}
           message={statusText}
         />
       </section>
@@ -139,18 +158,24 @@ export function DataManagementPage() {
       >
         <section className="kb-grid" aria-label="知识库列表">
           {visibleKnowledgeBases.map((knowledgeBase) => (
-            <button
-              className="xs-card kb-card xs-card-button"
+            <article
+              className="xs-card kb-card"
               key={knowledgeBase.id}
-              type="button"
-              aria-label={`${knowledgeBase.title}：${knowledgeBase.description}`}
-              onClick={() => setActionStatus(`已打开知识库详情：${knowledgeBase.title}`)}
+              aria-label={`知识库：${knowledgeBase.title}`}
             >
               <span className={`asset-image-tile asset-image-tile--${knowledgeBase.tone}`}><img src={knowledgeBaseIconById[knowledgeBase.iconId]} alt="" /></span>
               <h2>{knowledgeBase.title}</h2>
               <p>{knowledgeBase.description}</p>
               <div><strong>{knowledgeBase.docs}</strong><span>{knowledgeBase.updatedAt}</span></div>
-            </button>
+              <Button
+                type="link"
+                aria-label={`查看 ${knowledgeBase.title} 详情`}
+                aria-describedby="knowledge-actions-availability"
+                disabled
+              >
+                查看详情
+              </Button>
+            </article>
           ))}
         </section>
       </XsAsyncPanel>

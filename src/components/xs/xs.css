@@ -1030,6 +1030,18 @@
   white-space: nowrap;
 }
 
+@media (max-width: 900px) {
+  .xs-status-bar {
+    align-items: flex-start;
+  }
+
+  .xs-status-bar__message {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}
+
 .xs-empty-state {
   display: flex;
   align-items: center;

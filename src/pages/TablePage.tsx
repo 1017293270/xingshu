@@ -1,15 +1,17 @@
 import { Button, Input, Tag } from "antd";
 import { Lightning, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
 import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
+import type { XsStatusTone } from "@/components/xs";
 import { createTableFromPrompt, listRecentTables } from "@/services/tableService";
 import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
+import "./styles/workflows.css";
 
 const sheetIconById: Record<TableTemplateIconId, string> = {
   ranking: tableRankingIcon,
@@ -23,6 +25,9 @@ const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销�
 export function TablePage() {
   const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
+  const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
   const recentTablesQuery = useQuery({
     queryKey: ["recentTables"],
     queryFn: listRecentTables
@@ -38,25 +43,44 @@ export function TablePage() {
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
 
-    if (!trimmedPrompt) {
+    if (!trimmedPrompt || isGeneratingRef.current) {
       return;
     }
 
-    const result = await createTableFromPrompt(trimmedPrompt);
-    if (result.status === "accepted") {
-      setSubmissionStatus(`已提交制表需求：${result.prompt}`);
+    isGeneratingRef.current = true;
+    setIsGenerating(true);
+    setSubmissionTone("loading");
+    setSubmissionStatus("正在提交制表需求");
+
+    try {
+      const result = await createTableFromPrompt(trimmedPrompt);
+      if (result.status === "accepted") {
+        setSubmissionTone("info");
+        setSubmissionStatus(`制表需求已加入生成队列，尚未生成：${result.prompt}`);
+      }
+    } catch {
+      setSubmissionTone("error");
+      setSubmissionStatus("制表需求提交失败，请稍后重试");
+    } finally {
+      isGeneratingRef.current = false;
+      setIsGenerating(false);
     }
   };
 
   const handleCopyTemplate = (table: TableTemplate) => {
+    if (isGeneratingRef.current) {
+      return;
+    }
+
     const nextPrompt = `${table.title}：${table.description}`;
     setPrompt(nextPrompt);
+    setSubmissionTone("success");
     setSubmissionStatus(`已复制制表要求：${table.title}`);
   };
 
   return (
     <PageFrame title="智能制表" className="table-page">
-      <section className="sheet-prompt" aria-label="制表需求输入">
+      <section className="sheet-prompt" aria-label="制表需求输入" aria-busy={isGenerating}>
         <span className="sheet-prompt__addon" aria-hidden="true">
           <Plus size={18} weight="bold" />
         </span>
@@ -64,14 +88,21 @@ export function TablePage() {
           aria-label="制表需求"
           placeholder={tablePromptPlaceholder}
           value={prompt}
+          disabled={isGenerating}
           onChange={(event) => setPrompt(event.target.value)}
           onPressEnter={handleGenerate}
         />
-        <Button type="primary" icon={<Lightning size={18} />} onClick={handleGenerate}>
+        <Button
+          type="primary"
+          icon={<Lightning size={18} />}
+          loading={isGenerating}
+          disabled={isGenerating}
+          onClick={handleGenerate}
+        >
           生成
         </Button>
       </section>
-      <XsStatusBar className="table-page__status" tone="success" label="操作" message={submissionStatus} />
+      <XsStatusBar className="table-page__status" tone={submissionTone} label="操作" message={submissionStatus} />
       <h2 className="subsection-title">最近制表</h2>
       <XsAsyncPanel
         status={recentTablesStatus}
@@ -87,7 +118,9 @@ export function TablePage() {
                 <img src={sheetIconById[table.iconId]} alt="" />
               </span>
               <div className="sheet-row__body">
-                <h2 className="sheet-row__title">{table.title}</h2>
+                <h2 className="sheet-row__title" title={table.title}>
+                  {table.title}
+                </h2>
                 <p className="sheet-row__meta">
                   <Tag bordered={false} color="blue">
                     {table.tag}
@@ -95,7 +128,7 @@ export function TablePage() {
                   <span>{table.description}</span>
                 </p>
               </div>
-              <Button onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
+              <Button disabled={isGenerating} onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
             </article>
           ))}
         </section>

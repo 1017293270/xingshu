@@ -1,0 +1,228 @@
+.xs-page {
+  width: min(100%, var(--xs-page-track));
+  margin: 0 auto;
+}
+
+.xs-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 24px 0 28px;
+}
+
+.xs-page__title h1 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 34px;
+  line-height: 1.2;
+  font-weight: 760;
+}
+
+.xs-page__title p,
+.xs-page__actions,
+.page-disclaimer {
+  color: var(--xs-text-3);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.xs-page__title p {
+  margin: 8px 0 0;
+}
+
+.xs-page__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.xs-page .ant-btn,
+.xs-action-link,
+.xs-mini-link {
+  min-height: 32px;
+}
+
+.xs-page summary {
+  min-height: 32px;
+}
+
+.xs-action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 15px;
+  border: 1px solid var(--xs-border);
+  border-radius: 8px;
+  color: var(--xs-interactive-text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.xs-action-link--primary {
+  border-color: var(--xs-primary);
+  color: #fff;
+  background: var(--xs-primary);
+  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
+}
+
+.xs-card {
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--xs-shadow-soft);
+}
+
+.xs-card-link,
+.xs-card-button {
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.xs-card-button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.xs-card-link:hover,
+.xs-card-button:hover {
+  border-color: #b8d6ff;
+  box-shadow: 0 14px 32px rgba(22, 119, 255, 0.12);
+}
+
+.xs-mini-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 8px 0 2px;
+  color: var(--xs-interactive-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.xs-card--inner {
+  padding: 22px;
+  box-shadow: none;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.section-title-row h2,
+.subsection-title,
+.xs-card h2 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.xs-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--xs-text-2);
+  font-size: 14px;
+}
+
+.xs-table th,
+.xs-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #edf2fb;
+  text-align: left;
+}
+
+.xs-table th {
+  color: var(--xs-text);
+  background: #f7fbff;
+  font-weight: 700;
+}
+
+.total-row td {
+  color: var(--xs-primary-2);
+  font-weight: 750;
+}
+
+.xs-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--xs-primary-2);
+  background: #eaf3ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.xs-echart {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+}
+
+/* 画布绝对定位，尺寸只跟随外层盒子，避免 ECharts 自身高度反哺布局 */
+.xs-echart__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.chart-mini {
+  min-height: 120px;
+}
+
+.chart-medium {
+  min-height: 190px;
+}
+
+.chart-large {
+  min-height: 300px;
+}
+
+.xs-status-bar {
+  animation: xs-page-status-in 160ms var(--xs-motion-ease-out) both;
+}
+
+@keyframes xs-page-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .xs-page {
+    width: 100%;
+  }
+
+  .xs-page__head {
+    display: block;
+  }
+
+  .xs-page__actions {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  .xs-page .ant-btn,
+  .xs-action-link,
+  .xs-mini-link,
+  .xs-page summary {
+    min-height: 44px;
+  }
+}

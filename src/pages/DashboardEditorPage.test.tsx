@@ -88,7 +88,10 @@ describe("DashboardEditorPage", () => {
 
     expect(screen.queryByText("已连接")).not.toBeInTheDocument();
     expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
-    resolveReconnect({ ok: true, message: "看板编辑器已连接" });
+    await act(async () => {
+      resolveReconnect({ ok: true, message: "看板编辑器已连接" });
+      await Promise.resolve();
+    });
   });
 
   it("unmounts an iframe that never finishes loading", async () => {

@@ -67,7 +67,11 @@ describe("chart typography", () => {
   });
 
   it("keeps chart card titles on one line", () => {
-    const css = readFileSync("src/pages/pages.css", "utf8");
+    const css = [
+      "src/pages/styles/data-assets.css",
+      "src/pages/styles/dashboard.css",
+      "src/pages/pages.css"
+    ].map((path) => readFileSync(path, "utf8")).join("\n");
 
     expect(css).toContain(".data-card h2");
     expect(css).toContain(".board-card h2");

@@ -16,6 +16,7 @@ import {
   customerValues,
   dashboardOptions,
   dataAssetSnapshot,
+  dataAssetUpdate,
   productLabels,
   productValues,
   regionLabels,
@@ -144,6 +145,16 @@ export function getDashboardChartOptions() {
 
 export function getDataAssetChartOptions() {
   return assetOptions;
+}
+
+export function getDataAssetUpdateStatus(now: Date = new Date()) {
+  const updatedAtTime = Date.parse(dataAssetUpdate.updatedAt);
+  const staleAfterMs = dataAssetUpdate.staleAfterHours * 60 * 60 * 1000;
+
+  return {
+    ...dataAssetUpdate,
+    isStale: Number.isFinite(updatedAtTime) && now.getTime() - updatedAtTime > staleAfterMs
+  };
 }
 
 export function getSalesAnalysisResult() {

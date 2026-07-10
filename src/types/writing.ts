@@ -18,13 +18,23 @@ export type WritingDocument = {
   updatedAt: string;
 };
 
+export type WritingDraftAttachment = {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+};
+
 export type WritingDraftInput = {
   prompt: string;
   sceneId?: string;
+  attachments?: WritingDraftAttachment[];
 };
 
 export type WritingDraftResult = {
   id: string;
   status: "accepted";
   prompt: string;
+  attachmentCount: number;
 };

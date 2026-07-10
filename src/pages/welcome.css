@@ -1,7 +1,8 @@
 .welcome-page {
   position: relative;
   min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100dvh;
+  overflow-x: clip;
   color: var(--xs-text);
   background:
     radial-gradient(circle at 74% 22%, rgba(22, 119, 255, 0.16), transparent 30%),
@@ -28,6 +29,7 @@
   grid-template-rows: auto 1fr;
   width: min(calc(100% - 64px), 1560px);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 34px 0 44px;
 }

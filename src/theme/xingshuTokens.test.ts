@@ -16,4 +16,9 @@ describe("xingshuTokens", () => {
     expect(xingshuTokens.colorTextTertiary).toBe("#5F7391");
     expect(xingshuTokens.colorInteractiveText).toBe("#1D4ED8");
   });
+
+  it("caps wide-screen content tracks at the visual specification widths", () => {
+    expect(css).toContain("--xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1440px);");
+    expect(css).toContain("--xs-data-track: clamp(1220px, calc((100vw - var(--xs-sidebar-width)) * 0.84), 1480px);");
+  });
 });

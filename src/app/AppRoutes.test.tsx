@@ -196,7 +196,9 @@ describe("AppRoutes", () => {
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成华南区客户销售排行");
     await user.click(screen.getByRole("button", { name: /生成/ }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("已提交制表需求：生成华南区客户销售排行");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "制表需求已加入生成队列，尚未生成：生成华南区客户销售排行"
+    );
   });
 
   it("submits a writing prompt through the mock service", async () => {
@@ -207,7 +209,9 @@ describe("AppRoutes", () => {
     await user.type(screen.getByRole("textbox", { name: "写作需求" }), "写一份数据资产月报");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("已提交写作需求：写一份数据资产月报");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "写作需求已加入生成队列，尚未生成：写一份数据资产月报"
+    );
   });
 
   it("opens data asset management from the data dashboard", async () => {

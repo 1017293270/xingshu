@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { XsAsyncPanel } from "@/components/xs";
 import { normalizeDashboardEditorUrl, probeDashboardEditor } from "@/services/dashboardEditorService";
 import { PageFrame } from "./PageFrame";
+import "./styles/dashboard.css";
 
 const DEFAULT_DASHBOARD_EDITOR_URL = "http://127.0.0.1:5174/workbenches";
 

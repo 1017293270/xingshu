@@ -1,0 +1,203 @@
+.cloud-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
+  align-items: center;
+  gap: 24px;
+  padding: 28px;
+}
+
+.cloud-workbench__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.cloud-workbench__intro h2 {
+  margin: 4px 0 10px;
+  font-size: 24px;
+}
+
+.cloud-workbench__intro p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--xs-text-2);
+  line-height: 1.7;
+}
+
+.cloud-eyebrow {
+  color: var(--xs-primary-2);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.cloud-workbench__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cloud-workbench__metrics div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e6efff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f6faff, #ffffff);
+}
+
+.cloud-workbench__metrics span,
+.cloud-lane p,
+.cloud-recent__row span {
+  color: var(--xs-text-3);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.cloud-workbench__metrics strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--xs-primary-2);
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.cloud-lane-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.cloud-lane {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px;
+  min-height: 166px;
+}
+
+.cloud-lane h2 {
+  margin: 0 0 10px;
+}
+
+.cloud-lane strong {
+  display: block;
+  color: var(--xs-text);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.cloud-lane p {
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+
+.cloud-recent {
+  padding: 24px;
+}
+
+.cloud-recent .section-title-row {
+  margin-bottom: 12px;
+}
+
+.cloud-recent .ant-btn-link {
+  min-height: 32px;
+  color: var(--xs-interactive-text);
+}
+
+.cloud-recent__list {
+  display: grid;
+  border-top: 1px solid #edf2fb;
+}
+
+.cloud-recent__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.45fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  border-bottom: 1px solid #edf2fb;
+}
+
+.cloud-recent__row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xs-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-status {
+  width: fit-content;
+  max-width: 100%;
+  margin: 16px 0 0;
+}
+
+.cloud-status .xs-status-bar__message {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.cloud-status progress {
+  width: min(180px, 36vw);
+  height: 8px;
+  overflow: hidden;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  color: var(--xs-primary);
+  background: #dceaff;
+  accent-color: var(--xs-primary);
+}
+
+.cloud-status progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #dceaff;
+}
+
+.cloud-status progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--xs-primary), #52c8ff);
+}
+
+.cloud-status progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--xs-primary), #52c8ff);
+}
+
+@media (max-width: 900px) {
+  .cloud-workbench,
+  .cloud-lane-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-workbench__intro {
+    flex-direction: column;
+  }
+
+  .cloud-lane,
+  .cloud-recent__row {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-workbench__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-status {
+    width: 100%;
+  }
+
+  .cloud-status progress {
+    width: min(100%, 240px);
+  }
+}
+
+@media (pointer: coarse) {
+  .cloud-recent .ant-btn-link {
+    min-height: 44px;
+  }
+}

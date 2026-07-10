@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getDataAssetKpis } from "./dataAssetService";
-import { getDashboardChartInsights, getDataAssetChartInsights } from "./dashboardService";
+import {
+  getDashboardChartInsights,
+  getDataAssetChartInsights,
+  getDataAssetUpdateStatus
+} from "./dashboardService";
 import { assetTypeValues } from "./mock/dashboardMock";
 
 function numericValue(value: string) {
@@ -37,5 +41,15 @@ describe("dashboardService chart insights", () => {
     });
     expect(insights.growth.summary).toContain(assetCount.toLocaleString("zh-CN"));
     expect(insights.growth.summary).toContain(`${dataVolumeTb} TB`);
+  });
+
+  it("derives dashboard freshness from the adapter timestamp", () => {
+    expect(getDataAssetUpdateStatus(new Date("2024-06-05T13:30:00+08:00"))).toEqual({
+      updatedAt: "2024-06-04T14:30:00+08:00",
+      updatedAtLabel: "2024-06-04 14:30:00",
+      staleAfterHours: 24,
+      isStale: false
+    });
+    expect(getDataAssetUpdateStatus(new Date("2024-06-05T15:00:00+08:00")).isStale).toBe(true);
   });
 });

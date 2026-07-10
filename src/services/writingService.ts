@@ -13,6 +13,7 @@ export async function createWritingDraft(input: WritingDraftInput): Promise<Writ
   return {
     id: "writing-draft-mock",
     status: "accepted",
-    prompt: input.prompt
+    prompt: input.prompt,
+    attachmentCount: input.attachments?.length ?? 0
   };
 }

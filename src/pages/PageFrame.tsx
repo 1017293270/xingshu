@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from "react";
+import "./styles/page-shell.css";
 import "./pages.css";
 
 type PageFrameProps = PropsWithChildren<{

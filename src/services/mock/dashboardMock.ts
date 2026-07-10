@@ -239,6 +239,11 @@ export const dataAssetSnapshot = {
   assetCount: assetTypeValues.reduce((total, value) => total + value, 0),
   dataVolumeTb: 28.6
 } as const;
+export const dataAssetUpdate = {
+  updatedAt: "2024-06-04T14:30:00+08:00",
+  updatedAtLabel: "2024-06-04 14:30:00",
+  staleAfterHours: 24
+} as const;
 export const assetGrowthLabels = ["01-01", "02-01", "03-01", "04-01", "05-01", dataAssetSnapshot.date] as const;
 export const assetGrowthValues = {
   assetCount: [5200, 6900, 9300, 11000, 12400, dataAssetSnapshot.assetCount],

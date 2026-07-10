@@ -1,6 +1,5 @@
 import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { resolveXsAsyncStatus, XsAsyncPanel, XsChartCard, XsIconTile, XsStatusBar } from "@/components/xs";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
@@ -9,10 +8,15 @@ import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png
 import kpiDataVolumeIcon from "@/assets/data-dashboard-icons/kpi-data-volume.png";
 import kpiMediaDocumentsIcon from "@/assets/data-dashboard-icons/kpi-media-documents.png";
 import kpiServiceCallsIcon from "@/assets/data-dashboard-icons/kpi-service-calls.png";
-import { getDataAssetChartInsights, getDataAssetChartOptions } from "@/services/dashboardService";
+import {
+  getDataAssetChartInsights,
+  getDataAssetChartOptions,
+  getDataAssetUpdateStatus
+} from "@/services/dashboardService";
 import { getDataAssetKpis } from "@/services/dataAssetService";
 import type { DataAssetKpiIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
+import "./styles/data-assets.css";
 
 const kpiIconById: Record<DataAssetKpiIconId, string> = {
   "data-assets": kpiDataAssetsIcon,
@@ -24,10 +28,12 @@ const kpiIconById: Record<DataAssetKpiIconId, string> = {
 };
 
 export function DataDashboardPage() {
-  const [currentDate, setCurrentDate] = useState("2024-06-04");
-  const [workflowStatus, setWorkflowStatus] = useState("");
   const options = getDataAssetChartOptions();
   const chartInsights = getDataAssetChartInsights();
+  const dataUpdate = getDataAssetUpdateStatus();
+  const freshnessMessage = dataUpdate.isStale
+    ? `数据已超过 ${dataUpdate.staleAfterHours} 小时未更新，请谨慎解读当前指标。`
+    : "";
   const kpiQuery = useQuery({
     queryKey: ["dataAssetKpis"],
     queryFn: getDataAssetKpis
@@ -40,16 +46,42 @@ export function DataDashboardPage() {
     hasData: kpiQuery.data !== undefined
   });
   const hotAssets = ["客户基础信息表", "交易订单明细表", "产品销售汇总表", "供应商信息表", "用户行为日志表"];
-
-  const handleDateChange = () => {
-    const nextDate = currentDate === "2024-06-04" ? "2024-06-03" : "2024-06-04";
-    setCurrentDate(nextDate);
-    setWorkflowStatus(`已切换数据日期：${nextDate}`);
-  };
+  const unavailableDetailAction = (name: string) => (
+    <Button
+      type="link"
+      className="xs-mini-link"
+      aria-label={`查看 ${name} 明细`}
+      aria-describedby="data-asset-details-availability"
+      disabled
+    >
+      查看明细
+    </Button>
+  );
 
   return (
-    <PageFrame title="数据资产看板" subtitle="全局掌握企业数据资产规模、质量与应用价值" actions={<><span>数据更新于 {currentDate} 14:30:00</span><Button onClick={handleDateChange}>{currentDate}</Button><Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link></>} className="data-dashboard-page">
-      <XsStatusBar tone="success" label="操作" message={workflowStatus} />
+    <PageFrame
+      title="数据资产看板"
+      subtitle="全局掌握企业数据资产规模、质量与应用价值"
+      actions={
+        <>
+          <time dateTime={dataUpdate.updatedAt}>数据更新于 {dataUpdate.updatedAtLabel}</time>
+          <Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link>
+        </>
+      }
+      className="data-dashboard-page"
+    >
+      <XsStatusBar
+        tone="warning"
+        label="数据新鲜度"
+        message={freshnessMessage}
+      />
+      <div id="data-asset-details-availability">
+        <XsStatusBar
+          tone="info"
+          label="明细功能"
+          message="指标下钻、资产明细与热门资产详情即将开放；当前可查看图表摘要与来源数据。"
+        />
+      </div>
       <XsAsyncPanel
         status={kpiStatus}
         empty={kpis.length === 0}
@@ -57,12 +89,17 @@ export function DataDashboardPage() {
         error="数据资产指标加载失败，请稍后重试。"
         onRetry={() => void kpiQuery.refetch()}
       >
-        <section className="data-kpis" aria-label="数据资产指标">
+        <section className="data-kpis data-kpis--mobile-2x2" aria-label="数据资产指标">
           {kpis.map((kpi) => (
-            <Link className="xs-card stat-card xs-card-link" key={kpi.id} to={`/data-management?source=${encodeURIComponent(kpi.label)}`}>
+            <article
+              className="xs-card stat-card"
+              key={kpi.id}
+              aria-label={`${kpi.label}，指标下钻即将开放`}
+              aria-describedby="data-asset-details-availability"
+            >
               <XsIconTile imageSrc={kpiIconById[kpi.iconId]} label={kpi.label} tone={kpi.tone} />
               <div><span>{kpi.label}</span><strong>{kpi.value}</strong><small>{kpi.delta}</small></div>
-            </Link>
+            </article>
           ))}
         </section>
       </XsAsyncPanel>
@@ -75,7 +112,7 @@ export function DataDashboardPage() {
           headingLevel={2}
           className="data-card"
           chartClassName="chart-large"
-          action={<Link className="xs-mini-link" to="/data-management?source=数据资产类型分布">查看明细</Link>}
+          action={unavailableDetailAction("数据资产类型分布")}
         />
         <XsChartCard
           title="数据资产增长趋势"
@@ -85,7 +122,7 @@ export function DataDashboardPage() {
           headingLevel={2}
           className="data-card"
           chartClassName="chart-large"
-          action={<Link className="xs-mini-link" to="/data-management?source=数据资产增长趋势">查看明细</Link>}
+          action={unavailableDetailAction("数据资产增长趋势")}
         />
         <XsChartCard
           title="数据来源分布"
@@ -95,7 +132,7 @@ export function DataDashboardPage() {
           headingLevel={2}
           className="data-card"
           chartClassName="chart-large"
-          action={<Link className="xs-mini-link" to="/data-management?source=数据来源分布">查看明细</Link>}
+          action={unavailableDetailAction("数据来源分布")}
         />
       </section>
       <section className="data-bottom-grid" aria-label="数据资产应用">
@@ -107,9 +144,30 @@ export function DataDashboardPage() {
           headingLevel={2}
           className="data-card"
           chartClassName="chart-large"
-          action={<Link className="xs-mini-link" to="/data-management?source=数据应用场景 Top10">查看明细</Link>}
+          action={unavailableDetailAction("数据应用场景 Top10")}
         />
-        <article className="xs-card data-card data-table"><h2>热门数据资产</h2><table className="xs-table"><tbody>{hotAssets.map((name, index) => <tr key={name}><td>{index + 1}　<Link to={`/data-management?source=${encodeURIComponent(name)}`}>{name}</Link></td><td>{[12.6, 9.8, 8.7, 6.3, 5.4][index]} TB</td></tr>)}</tbody></table></article>
+        <article className="xs-card data-card data-table">
+          <h2>热门数据资产</h2>
+          <table className="xs-table">
+            <caption className="sr-only">热门数据资产</caption>
+            <thead>
+              <tr>
+                <th scope="col">排名</th>
+                <th scope="col">资产名称</th>
+                <th scope="col">存储量</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hotAssets.map((name, index) => (
+                <tr key={name}>
+                  <td>{index + 1}</td>
+                  <td aria-describedby="data-asset-details-availability"><strong>{name}</strong></td>
+                  <td>{[12.6, 9.8, 8.7, 6.3, 5.4][index]} TB</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
       </section>
     </PageFrame>
   );

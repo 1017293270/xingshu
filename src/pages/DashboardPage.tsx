@@ -5,8 +5,9 @@ import { useNavigate } from "react-router-dom";
 import { XsChartCard, XsStatusBar } from "@/components/xs";
 import { getDashboardChartInsights, getDashboardChartOptions } from "@/services/dashboardService";
 import { PageFrame } from "./PageFrame";
+import "./styles/dashboard.css";
 
-const dashboardNames = ["经营分析看板", "风险监控看板"];
+const activeDashboardName = "经营分析看板";
 const alertItems = [
   { title: "销售额环比下降 12.3%", time: "5分钟前", tone: "warning" as const },
   { title: "服务器响应延迟升高", time: "23分钟前", tone: "warning" as const },
@@ -17,34 +18,18 @@ export function DashboardPage() {
   const options = getDashboardChartOptions();
   const chartInsights = getDashboardChartInsights();
   const navigate = useNavigate();
-  const [activeDashboardName, setActiveDashboardName] = useState(dashboardNames[0]);
   const [workflowStatus, setWorkflowStatus] = useState("");
-
-  const handleSwitchDashboard = () => {
-    const currentIndex = dashboardNames.indexOf(activeDashboardName);
-    const nextName = dashboardNames[(currentIndex + 1) % dashboardNames.length];
-
-    setActiveDashboardName(nextName);
-    setWorkflowStatus(`已切换至${nextName}`);
-  };
-
-  const handleCreateDashboard = () => {
-    setWorkflowStatus("已创建新建看板任务");
-  };
-
-  const handleOpenMarket = () => {
-    setWorkflowStatus("已打开看板市场");
-  };
+  const [handledAlerts, setHandledAlerts] = useState<Set<string>>(() => new Set());
+  const unhandledAlertCount = alertItems.filter(
+    (alert) => alert.tone === "warning" && !handledAlerts.has(alert.title)
+  ).length;
 
   const handleEditDashboard = () => {
     navigate("/dashboard-editor");
   };
 
-  const handleOpenCard = (title: string) => {
-    setWorkflowStatus(`已打开看板组件：${title}`);
-  };
-
   const handleAlert = (title: string) => {
+    setHandledAlerts((current) => new Set(current).add(title));
     setWorkflowStatus(`已处理预警：${title}`);
   };
 
@@ -53,7 +38,8 @@ export function DashboardPage() {
       type="link"
       className="xs-card-action"
       aria-label={`查看 ${title}`}
-      onClick={() => handleOpenCard(title)}
+      aria-describedby="dashboard-card-details-availability"
+      disabled
     >
       查看
     </Button>
@@ -65,14 +51,26 @@ export function DashboardPage() {
       subtitle="经营分析全景看板"
       className="dashboard-page"
       actions={
-        <>
-          <Button icon={<SquaresFour size={18} />} onClick={handleOpenMarket}>
+        <div className="dashboard-upcoming-actions">
+          <Button
+            icon={<SquaresFour size={18} />}
+            disabled
+            aria-describedby="dashboard-actions-availability"
+          >
             看板市场
           </Button>
-          <Button type="primary" icon={<Plus size={18} />} onClick={handleCreateDashboard}>
+          <Button
+            type="primary"
+            icon={<Plus size={18} />}
+            disabled
+            aria-describedby="dashboard-actions-availability"
+          >
             新建看板
           </Button>
-        </>
+          <span id="dashboard-actions-availability" className="dashboard-upcoming-actions__label">
+            即将开放
+          </span>
+        </div>
       }
     >
       <XsStatusBar className="dashboard-page__status" tone="success" label="操作" message={workflowStatus} />
@@ -82,9 +80,20 @@ export function DashboardPage() {
           <span className="dashboard-control-bar__summary">
             近 12 个月 · 12 个指标 · 8 个组件 · 更新于今日 14:30
           </span>
+          <span
+            id="dashboard-card-details-availability"
+            className="dashboard-upcoming-actions__label"
+          >
+            组件详情即将开放，可通过“查看数据”展开当前图表来源。
+          </span>
         </div>
         <div className="dashboard-control-bar__actions">
-          <Button onClick={handleSwitchDashboard}>切换看板</Button>
+          <Button disabled aria-describedby="dashboard-switch-availability">
+            切换看板
+          </Button>
+          <span id="dashboard-switch-availability" className="dashboard-upcoming-actions__label">
+            即将开放
+          </span>
           <Button autoInsertSpace={false} onClick={handleEditDashboard}>
             编辑
           </Button>
@@ -244,27 +253,57 @@ export function DashboardPage() {
         <article className="xs-card board-card board-card--alert" aria-label="看板组件：智能预警">
           <div className="board-card__head">
             <h2 className="board-card__alert-title">
-              智能预警 <span className="board-card__alert-pill">3条未处理</span>
+              智能预警{" "}
+              <span className="board-card__alert-pill">
+                {unhandledAlertCount > 0 ? `${unhandledAlertCount}条未处理` : "全部已处理"}
+              </span>
             </h2>
           </div>
           <div className="alert-list">
-            {alertItems.map((alert) => (
-              <button
-                type="button"
-                className={`alert-list__item alert-list__item--${alert.tone}`}
-                key={alert.title}
-                aria-label={`处理 ${alert.title}`}
-                onClick={() => handleAlert(alert.title)}
-              >
-                <span className="alert-list__icon">
-                  {alert.tone === "warning" ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
-                </span>
-                <span className="alert-list__body">
-                  <span className="alert-list__title">{alert.title}</span>
-                  <small>{alert.time}</small>
-                </span>
-              </button>
-            ))}
+            {alertItems.map((alert) => {
+              if (alert.tone === "success") {
+                return (
+                  <div
+                    className="alert-list__item alert-list__item--success is-handled"
+                    key={alert.title}
+                    aria-label={`已完成 ${alert.title}`}
+                  >
+                    <span className="alert-list__icon">
+                      <CheckCircle size={18} />
+                    </span>
+                    <span className="alert-list__body">
+                      <span className="alert-list__title">{alert.title}</span>
+                      <small>{alert.time} · 已完成</small>
+                    </span>
+                  </div>
+                );
+              }
+
+              const isHandled = handledAlerts.has(alert.title);
+
+              return (
+                <button
+                  type="button"
+                  className={`alert-list__item alert-list__item--${isHandled ? "success" : "warning"}${isHandled ? " is-handled" : ""}`}
+                  key={alert.title}
+                  aria-label={`${isHandled ? "已处理" : "处理"} ${alert.title}`}
+                  disabled={isHandled}
+                  onClick={() => handleAlert(alert.title)}
+                >
+                  <span className="alert-list__icon">
+                    {isHandled ? (
+                      <CheckCircle size={18} />
+                    ) : (
+                      <WarningCircle size={18} />
+                    )}
+                  </span>
+                  <span className="alert-list__body">
+                    <span className="alert-list__title">{alert.title}</span>
+                    <small>{alert.time} · {isHandled ? "已处理" : "待处理"}</small>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </article>
       </section>
