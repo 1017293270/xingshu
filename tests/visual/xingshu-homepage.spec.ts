@@ -1,12 +1,32 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({
+      json: { code: 200, message: "visual test fixture", data: [] },
+      status: 200
+    })
+  );
+
   await page.addInitScript(() => {
-    window.localStorage.setItem("xingshu_datahub_token", "playwright-visual-token");
-    window.localStorage.setItem(
-      "xingshu_datahub_user",
-      JSON.stringify({ token: "playwright-visual-token", userName: "张三" })
-    );
+    const publicRoutes = ["/login", "/welcome"];
+
+    if (publicRoutes.includes(window.location.pathname)) {
+      window.localStorage.removeItem("xingshu_datahub_token");
+      window.localStorage.removeItem("xingshu_datahub_user");
+      window.localStorage.removeItem("xingshu_datahub_space_id");
+      return;
+    }
+
+    const user = {
+      token: "playwright-visual-token",
+      userId: 1,
+      username: "张三",
+      isAdmin: true
+    };
+    window.localStorage.setItem("xingshu_datahub_token", user.token);
+    window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
+    window.localStorage.setItem("xingshu_datahub_space_id", "1");
   });
 });
 
@@ -27,63 +47,160 @@ type SmokePage = {
   path: string;
   heading?: string;
   region?: string;
+  readyText?: string;
+  shell?: boolean;
   charts: number;
 };
 
 const pages: SmokePage[] = [
+  { slug: "login", path: "/login", heading: "登录星数", shell: false, charts: 0 },
   { slug: "home", path: "/", heading: "您好，张三", charts: 0 },
   { slug: "analysis", path: "/analysis", region: "星数命令输入区", charts: 0 },
-  { slug: "history", path: "/history", heading: "历史对话", charts: 0 },
+  { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "智能写作", charts: 0 },
   { slug: "dashboard", path: "/dashboard", heading: "我的看板", charts: 6 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
-  { slug: "data-management", path: "/data-management", heading: "数据资产管理", charts: 0 }
+  {
+    slug: "data-management",
+    path: "/data-management",
+    heading: "数据资产管理",
+    readyText: "财务审计知识库",
+    charts: 0
+  },
+  { slug: "ai-settings", path: "/settings/ai", heading: "AI 配置", charts: 0 }
 ];
+
+async function settleResponsiveLayout(page: Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+    });
+  });
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const overflow = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth,
+    viewport: window.innerWidth
+  }));
+
+  expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
+}
+
+async function expectReducedMotionStatic(page: Page) {
+  const motionViolations = await page.locator("body *").evaluateAll((elements) => {
+    const toSeconds = (value: string) => {
+      const trimmed = value.trim();
+      const amount = Number.parseFloat(trimmed);
+      return Number.isFinite(amount) ? amount * (trimmed.endsWith("ms") ? 0.001 : 1) : 0;
+    };
+
+    return elements.flatMap((element) => {
+      const styles = window.getComputedStyle(element);
+      const animationDurations = styles.animationDuration.split(",").map(toSeconds);
+      const transitionDurations = styles.transitionDuration.split(",").map(toSeconds);
+      const hasFiniteAnimation =
+        styles.animationName !== "none" && Math.max(0, ...animationDurations) > 0.001;
+      const hasTransition =
+        styles.transitionProperty !== "none" && Math.max(0, ...transitionDurations) > 0.001;
+      const hasInfiniteAnimation = styles.animationIterationCount.split(",").includes("infinite");
+
+      if (!hasFiniteAnimation && !hasTransition && !hasInfiniteAnimation) {
+        return [];
+      }
+
+      return [
+        {
+          animationDuration: styles.animationDuration,
+          animationIterationCount: styles.animationIterationCount,
+          animationName: styles.animationName,
+          element: `${element.tagName.toLowerCase()}.${Array.from(element.classList).join(".")}`,
+          transitionDuration: styles.transitionDuration,
+          transitionProperty: styles.transitionProperty
+        }
+      ];
+    });
+  });
+
+  expect(motionViolations).toEqual([]);
+  expect(
+    await page.locator("html").evaluate((element) => window.getComputedStyle(element).scrollBehavior)
+  ).not.toBe("smooth");
+}
 
 test.describe("xingshu page visual smoke", () => {
   for (const pageCase of pages) {
     for (const viewport of viewports) {
       test(`renders ${pageCase.slug} at ${viewport.name}`, async ({ page }) => {
-      const consoleErrors: string[] = [];
-      page.on("console", (message) => {
-        if (message.type() === "error") {
-          consoleErrors.push(message.text());
+        const runtimeErrors: string[] = [];
+        page.on("console", (message) => {
+          if (message.type() === "error") {
+            runtimeErrors.push(message.text());
+          }
+        });
+        page.on("pageerror", (error) => runtimeErrors.push(error.message));
+
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto(pageCase.path);
+
+        if (pageCase.heading) {
+          await expect(page.getByRole("heading", { name: pageCase.heading }).first()).toBeVisible();
         }
+        if (pageCase.region) {
+          await expect(page.getByRole("region", { name: pageCase.region }).first()).toBeVisible();
+        }
+        if (pageCase.readyText) {
+          await expect(page.getByText(pageCase.readyText, { exact: false }).first()).toBeVisible();
+        }
+
+        if (pageCase.shell !== false && viewport.width > 900) {
+          await expect(page.getByRole("navigation", { name: "星数主导航" })).toBeVisible();
+        }
+        if (pageCase.shell !== false && viewport.width <= 900) {
+          await expect(page.getByRole("button", { name: "打开主导航" })).toBeVisible();
+        }
+        if (pageCase.charts > 0) {
+          await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(pageCase.charts);
+          await expect(page.locator('[data-echarts-renderer="canvas"]')).toHaveCount(pageCase.charts);
+        }
+
+        await settleResponsiveLayout(page);
+        await expectNoHorizontalOverflow(page);
+
+        await page.screenshot({
+          path: `outputs/xingshu-homepage-system/qa/react/${pageCase.slug}-react-${viewport.name}.png`,
+          animations: "disabled",
+          fullPage: true
+        });
+        expect(runtimeErrors).toEqual([]);
       });
+    }
+  }
+});
 
+test.describe("dashboard editor unavailable state", () => {
+  for (const viewport of viewports) {
+    test(`renders an honest editor error at ${viewport.name}`, async ({ page }) => {
+      await page.route(/\/workbenches(?:[/?#]|$)/, (route) => route.abort("connectionrefused"));
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.goto(pageCase.path);
+      await page.goto("/dashboard-editor");
 
-      if (pageCase.heading) {
-        await expect(page.getByRole("heading", { name: pageCase.heading }).first()).toBeVisible();
-      }
-      if (pageCase.region) {
-        await expect(page.getByRole("region", { name: pageCase.region }).first()).toBeVisible();
-      }
-      if (viewport.width > 900) {
-        await expect(page.getByRole("navigation", { name: "星数主导航" })).toBeVisible();
-      } else {
-        await expect(page.getByRole("button", { name: "新建对话" })).toBeVisible();
-      }
-      if (pageCase.charts > 0) {
-        await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(pageCase.charts);
-        await expect(page.locator('[data-echarts-renderer="canvas"]')).toHaveCount(pageCase.charts);
-      }
-
-      const hasHorizontalOverflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > window.innerWidth
-      );
-      expect(hasHorizontalOverflow).toBe(false);
-      expect(consoleErrors).toEqual([]);
+      await expect(page.getByRole("heading", { name: "看板编辑器" })).toBeVisible();
+      await expect(page.getByText("暂时无法连接看板编辑器", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "重试" })).toBeVisible();
+      await settleResponsiveLayout(page);
+      await expectNoHorizontalOverflow(page);
 
       await page.screenshot({
-        path: `outputs/xingshu-homepage-system/qa/react/${pageCase.slug}-react-${viewport.name}.png`,
+        path: `outputs/xingshu-homepage-system/qa/react/dashboard-editor-error-react-${viewport.name}.png`,
+        animations: "disabled",
         fullPage: true
       });
     });
-  }
   }
 });
 
@@ -112,7 +229,7 @@ test("sidebar logo is readable at desktop size", async ({ page }) => {
 test("home page matches the reference welcome workbench composition", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /您好，张三/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
   await expect(page.getByText("我是您的数据管家，有什么可以帮您？")).toBeVisible();
 
   const metrics = await page.evaluate(() => {
@@ -122,9 +239,19 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const apps = document.querySelector(".home-page__apps");
     const firstCard = document.querySelector(".home-page .xs-app-card");
     const firstDescription = document.querySelector(".home-page .xs-app-card__desc");
-    const firstIcon = document.querySelector<HTMLImageElement>(".home-page .xs-app-card .xs-icon-tile__image");
+    const firstIcon = document.querySelector(".home-page .xs-app-card .xs-icon-tile svg");
+    const firstIconNode = document.querySelector(".home-page .xs-app-card .xs-icon-tile__node");
 
-    if (!hero || !background || !command || !apps || !firstCard || !firstDescription || !firstIcon) {
+    if (
+      !hero ||
+      !background ||
+      !command ||
+      !apps ||
+      !firstCard ||
+      !firstDescription ||
+      !firstIcon ||
+      !firstIconNode
+    ) {
       return null;
     }
 
@@ -142,7 +269,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
       cardHeight: cardRect.height,
       cardWidth: cardRect.width,
       descriptionDisplay: descriptionStyles.display,
-      iconSource: firstIcon.dataset.iconSource ?? "",
+      generatedIconCount: document.querySelectorAll(".home-page .xs-icon-tile__image").length,
+      iconTagName: firstIcon.tagName.toLowerCase(),
       backgroundLoaded: background.complete && background.naturalWidth > 0
     };
   });
@@ -162,7 +290,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.cardWidth).toBeGreaterThanOrEqual(130);
   expect(metrics!.cardWidth).toBeLessThanOrEqual(170);
   expect(metrics!.descriptionDisplay).toBe("none");
-  expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
+  expect(metrics!.generatedIconCount).toBe(0);
+  expect(metrics!.iconTagName).toBe("svg");
 });
 
 test("sidebar active item has a stronger selected state", async ({ page }) => {
@@ -241,7 +370,7 @@ test("dashboard alert title keeps the pending count readable", async ({ page }) 
   });
 
   expect(titleMetrics).not.toBeNull();
-  expect(titleMetrics!.text).toContain("3条未处理");
+  expect(titleMetrics!.text).toContain("2条未处理");
   expect(titleMetrics!.scrollWidth).toBeLessThanOrEqual(titleMetrics!.clientWidth + 1);
 });
 
@@ -335,15 +464,90 @@ test.describe("xingshu welcome page visual smoke", () => {
   }
 });
 
+test("mobile navigation reaches every product destination and account route", async ({ page }) => {
+  const destinations: Array<{
+    label: string;
+    path: string;
+    heading: string;
+    charts?: number;
+    readyText?: string;
+  }> = [
+    { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
+    { label: "智能制表", path: "/table", heading: "智能制表" },
+    { label: "智能写作", path: "/writing", heading: "智能写作" },
+    { label: "我的看板", path: "/dashboard", heading: "我的看板", charts: 6 },
+    { label: "我的云盘", path: "/cloud", heading: "我的云盘" },
+    { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
+    {
+      label: "数据资产管理",
+      path: "/data-management",
+      heading: "数据资产管理",
+      readyText: "财务审计知识库"
+    }
+  ];
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  for (const destination of destinations) {
+    await page.getByRole("button", { name: "打开主导航" }).click();
+    const drawer = page.getByRole("dialog", { name: "星数主导航" });
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("link", { name: destination.label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${destination.path.replace("/", "\\/")}$`));
+    await expect(page.getByRole("heading", { name: destination.heading, level: 1 })).toBeVisible();
+    if (destination.readyText) {
+      await expect(page.getByText(destination.readyText, { exact: false }).first()).toBeVisible();
+    }
+    if (destination.charts) {
+      await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(destination.charts);
+    }
+    await expect(drawer).toBeHidden();
+  }
+
+  await page.getByRole("button", { name: "打开主导航" }).click();
+  let drawer = page.getByRole("dialog", { name: "星数主导航" });
+  await drawer.getByRole("button", { name: "新建对话" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "您好，张三", level: 1 })).toBeVisible();
+  await expect(drawer).toBeHidden();
+
+  await page.getByRole("button", { name: "打开主导航" }).click();
+  drawer = page.getByRole("dialog", { name: "星数主导航" });
+  await drawer.getByRole("button", { name: "移动端账户菜单" }).click();
+  await expect(page.getByRole("menuitem", { name: /AI 配置/ })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /退出登录/ })).toBeVisible();
+  await page.getByRole("menuitem", { name: /AI 配置/ }).click();
+  await expect(page).toHaveURL(/\/settings\/ai$/);
+  await expect(page.getByRole("heading", { name: "AI 配置", level: 1 })).toBeVisible();
+});
+
+test("reduced motion keeps feedback visible while suppressing nonessential motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "您好，张三", level: 1 })).toBeVisible();
+  await expectReducedMotionStatic(page);
+
+  await page.getByRole("button", { name: /选择 智能问数/ }).click();
+  await expect(page.locator(".home-page__status")).toHaveText("已选择：智能问数");
+  await expectReducedMotionStatic(page);
+
+  await page.goto("/analysis");
+  await expect(page.getByRole("region", { name: "星数命令输入区" })).toBeVisible();
+  await expectReducedMotionStatic(page);
+  await expectNoHorizontalOverflow(page);
+});
+
 test.describe("desktop content density", () => {
   const wideTrackCases = [
-    { path: "/", selector: ".home-page__apps" },
-    { path: "/table", selector: ".xs-page" },
-    { path: "/writing", selector: ".xs-page" },
-    { path: "/analysis", selector: ".xs-page" },
-    { path: "/dashboard", selector: ".xs-page" },
-    { path: "/data-dashboard", selector: ".xs-page" },
-    { path: "/data-management", selector: ".xs-page" }
+    { path: "/", selector: ".home-page__apps", minWidth: 1439, maxWidth: 1441 },
+    { path: "/table", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
+    { path: "/writing", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
+    { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
+    { path: "/dashboard", selector: ".xs-page", minWidth: 1634, maxWidth: 1638 },
+    { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
+    { path: "/data-management", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 }
   ];
 
   for (const pageCase of wideTrackCases) {
@@ -351,20 +555,12 @@ test.describe("desktop content density", () => {
       await page.setViewportSize({ width: 2200, height: 944 });
       await page.goto(pageCase.path);
 
-      const ratio = await page.locator(pageCase.selector).first().evaluate((element) => {
-        const main = document.querySelector(".xs-shell__main");
-        if (!main) {
-          return 0;
-        }
-
-        const mainRect = main.getBoundingClientRect();
-        const styles = window.getComputedStyle(main);
-        const usableWidth = mainRect.width - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
-        return element.getBoundingClientRect().width / usableWidth;
+      const trackWidth = await page.locator(pageCase.selector).first().evaluate((element) => {
+        return element.getBoundingClientRect().width;
       });
 
-      expect(ratio).toBeGreaterThanOrEqual(0.82);
-      expect(ratio).toBeLessThanOrEqual(0.92);
+      expect(trackWidth).toBeGreaterThanOrEqual(pageCase.minWidth);
+      expect(trackWidth).toBeLessThanOrEqual(pageCase.maxWidth);
     });
   }
 
