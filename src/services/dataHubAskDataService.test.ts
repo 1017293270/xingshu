@@ -1,10 +1,26 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { buildDataHubChatRequest, parseDataHubSseBlocks } from "./dataHubAskDataService";
-import { writeDataHubSpaceId } from "./dataHubSession";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildDataHubChatRequest,
+  parseDataHubSseBlocks,
+  streamDataHubAskData
+} from "./dataHubAskDataService";
+import {
+  DATA_HUB_SESSION_EXPIRED_EVENT,
+  readDataHubSession,
+  writeDataHubAuth,
+  writeDataHubSpaceId
+} from "./dataHubSession";
 
 describe("dataHubAskDataService", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("builds data-hub ask-data requests with safe defaults", () => {
@@ -49,5 +65,40 @@ describe("dataHubAskDataService", () => {
     expect(parsed.events).toEqual([]);
     expect(parsed.isDone).toBe(true);
     expect(parsed.rest).toBe("");
+  });
+
+  it("expires the active session when the ask-data stream returns 401", () => {
+    class UnauthorizedXMLHttpRequest {
+      status = 401;
+      responseText = JSON.stringify({ message: "Unauthorized" });
+      onprogress: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onloadend: (() => void) | null = null;
+
+      open() {}
+      setRequestHeader() {}
+      abort() {}
+      send() {
+        this.onloadend?.();
+      }
+    }
+
+    vi.stubGlobal("XMLHttpRequest", UnauthorizedXMLHttpRequest);
+    writeDataHubAuth({ token: "expired-stream-token", userId: 1, username: "demo", isAdmin: false });
+    writeDataHubSpaceId(5);
+    const sessionExpiredListener = vi.fn();
+    const onError = vi.fn();
+    window.addEventListener(DATA_HUB_SESSION_EXPIRED_EVENT, sessionExpiredListener, { once: true });
+
+    streamDataHubAskData(
+      { message: "统计今年事件数", chatId: "chat-401" },
+      { onEvent: vi.fn(), onError }
+    );
+
+    expect(readDataHubSession().token).toBeNull();
+    expect(sessionExpiredListener).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "登录状态已过期，请重新登录" })
+    );
   });
 });

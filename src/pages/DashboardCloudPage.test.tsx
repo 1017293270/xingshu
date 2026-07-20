@@ -1,7 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AppProviders } from "@/app/providers";
 import {
   createMockCloudService,
@@ -32,70 +32,34 @@ function deferred<T>() {
 }
 
 describe("dashboard and cloud page actions", () => {
-  it("renders the restored dashboard header and eight compact widgets", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("renders the dashboard library with real creation paths instead of the fixed demo", () => {
     renderPage(<DashboardPage />);
 
-    expect(screen.getByText("经营分析全景看板")).toBeInTheDocument();
-    expect(screen.getByText(/近 12 个月 · 12 个指标 · 8 个组件 · 更新于今日 14:30/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "看板市场" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "新建看板" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
-    expect(screen.getAllByText("即将开放")).toHaveLength(2);
-    expect(screen.getAllByRole("article", { name: /看板组件：/ })).toHaveLength(8);
-    expect(screen.getByText("在线用户")).toBeInTheDocument();
-    expect(screen.queryByLabelText("实时运营柱状图")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "大屏库" })).toBeInTheDocument();
+    expect(screen.getByLabelText("大屏库空状态")).toBeInTheDocument();
+    expect(screen.getByText("暂无大屏")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "创建第一个大屏" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "新建大屏" })).toHaveLength(2);
+    screen.getAllByRole("button", { name: "新建大屏" }).forEach((button) => expect(button).toBeEnabled());
+    expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
+    expect(screen.queryByText("经营分析全景看板")).not.toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /看板组件：/ })).not.toBeInTheDocument();
   });
 
-  it("marks dashboard switching as unavailable without reporting false success", () => {
-    renderPage(<DashboardPage />);
-
-    expect(screen.getByText("经营分析看板")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "切换看板" })).toBeDisabled();
-    expect(screen.queryByText("风险监控看板")).not.toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  });
-
-  it("exposes a chart conclusion and its source data", async () => {
-    const user = userEvent.setup();
-    renderPage(<DashboardPage />);
-    const revenueCard = screen.getByRole("article", { name: "看板组件：月度营收趋势" });
-
-    expect(within(revenueCard).getByText(/12 月营收指数回升至 94/)).toBeInTheDocument();
-    expect(within(revenueCard).getByRole("img", { name: /月度营收趋势.*12 月营收指数/ })).toBeInTheDocument();
-    await user.click(within(revenueCard).getByText("查看数据"));
-
-    const sourceTable = within(revenueCard).getByRole("table", { name: "月度营收趋势数据" });
-    expect(within(sourceTable).getByRole("columnheader", { name: "月份" })).toHaveAttribute("scope", "col");
-    expect(within(sourceTable).getByRole("cell", { name: "12月" })).toBeInTheDocument();
-  });
-
-  it("does not create a dashboard task while the feature is unavailable", () => {
-    renderPage(<DashboardPage />);
-
-    expect(screen.getByRole("button", { name: "新建看板" })).toBeDisabled();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  });
-
-  it("marks unavailable dashboard card details without reporting false success", () => {
-    renderPage(<DashboardPage />);
-
-    expect(screen.getByRole("button", { name: "查看 月度营收趋势" })).toBeDisabled();
-    expect(screen.getByText(/组件详情即将开放/)).toBeInTheDocument();
-    expect(screen.queryByText(/已打开看板组件/)).not.toBeInTheDocument();
-  });
-
-  it("handles warning alerts without treating completed records as pending", async () => {
+  it("creates a full-hd blank draft from the dashboard library", async () => {
     const user = userEvent.setup();
     renderPage(<DashboardPage />);
 
-    expect(screen.getByText("2条未处理")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /数据同步已完成/ })).not.toBeInTheDocument();
-    expect(screen.getByText("1小时前 · 已完成")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "新建大屏" })[0]);
 
-    await user.click(screen.getByRole("button", { name: "处理 销售额环比下降 12.3%" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已处理预警：销售额环比下降 12.3%");
-    expect(screen.getByRole("button", { name: "已处理 销售额环比下降 12.3%" })).toBeDisabled();
-    expect(screen.getByText("1条未处理")).toBeInTheDocument();
+    const records = JSON.parse(localStorage.getItem("xingshu.dashboard.records.v1") ?? "[]") as Array<{
+      schema: { canvas: { width: number; height: number }; widgets: unknown[] };
+    }>;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.schema.canvas).toMatchObject({ width: 1920, height: 1080 });
+    expect(records[0]?.schema.widgets).toHaveLength(0);
   });
 
   it("uploads a validated file and syncs its visible material state", async () => {

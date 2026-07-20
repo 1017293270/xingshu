@@ -1,26 +1,74 @@
 import {
-  CaretDown,
+  CaretLeft,
+  CaretRight,
   CaretUp,
   PlusCircle,
   SquaresFour
 } from "@phosphor-icons/react";
-import { Button, Dropdown } from "antd";
-import { NavLink, useNavigate } from "react-router-dom";
-import { XsIconTile } from "./XsIconTile";
+import { Button, Dropdown, Layout, Menu, type MenuProps } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { primaryNavigation, secondaryNavigation } from "./navigation";
 import { useXsAccountMenu } from "./useXsAccountMenu";
 import logoSource from "@/assets/brand/xingshu-logo-transparent.png";
 import avatarSource from "@/assets/brand/zhangsan-avatar-source.png";
+import { xingshuTokens } from "@/theme/xingshuTokens";
+
+const { Sider } = Layout;
+const MORE_MENU_KEY = "more";
 
 type XsSidebarProps = {
-  isMoreOpen: boolean;
-  onToggleMore: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onNewChat: () => void;
 };
 
-export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProps) {
+export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebarProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { accountMenuItems, handleAccountMenuClick, username, userRole } = useXsAccountMenu();
+  const [openKeys, setOpenKeys] = useState<string[]>([MORE_MENU_KEY]);
+
+  useEffect(() => {
+    if (collapsed) {
+      setOpenKeys([]);
+      return;
+    }
+
+    setOpenKeys((keys) => (keys.length > 0 ? keys : [MORE_MENU_KEY]));
+  }, [collapsed]);
+
+  const selectedKeys = useMemo(() => {
+    const match = [...primaryNavigation, ...secondaryNavigation].find((item) => item.to === location.pathname);
+    return match ? [match.to] : [];
+  }, [location.pathname]);
+
+  const menuItems: MenuProps["items"] = useMemo(
+    () => [
+      ...primaryNavigation.map((item) => {
+        const Icon = item.icon;
+        return {
+          key: item.to,
+          icon: <Icon size={20} weight="regular" />,
+          label: <Link to={item.to}>{item.label}</Link>
+        };
+      }),
+      {
+        key: MORE_MENU_KEY,
+        icon: <SquaresFour size={20} weight="regular" />,
+        label: "更多",
+        children: secondaryNavigation.map((item) => {
+          const Icon = item.icon;
+          return {
+            key: item.to,
+            icon: <Icon size={20} weight="regular" />,
+            label: <Link to={item.to}>{item.label}</Link>
+          };
+        })
+      }
+    ],
+    []
+  );
 
   function handleNewChat() {
     onNewChat();
@@ -28,60 +76,48 @@ export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProp
   }
 
   return (
-    <aside className="xs-sidebar">
+    <Sider
+      className={`xs-sidebar${collapsed ? " xs-sidebar--collapsed" : ""}`}
+      theme="light"
+      width={xingshuTokens.sidebarWidth}
+      collapsedWidth={xingshuTokens.sidebarCollapsedWidth}
+      collapsed={collapsed}
+      collapsible
+      trigger={null}
+      aria-label="星数侧边栏"
+    >
       <div className="xs-sidebar__brand">
         <img src={logoSource} alt="星数" />
+        <Button
+          type="text"
+          className="xs-sidebar__collapse"
+          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          aria-expanded={!collapsed}
+          icon={collapsed ? <CaretRight size={18} /> : <CaretLeft size={18} />}
+          onClick={onToggleCollapsed}
+        />
       </div>
 
       <Button
         type="default"
         className="xs-sidebar__new-chat"
         icon={<PlusCircle size={20} weight="regular" />}
+        aria-label="新建对话"
         onClick={handleNewChat}
       >
-        新建对话
+        <span className="xs-sidebar__new-chat-label" aria-hidden={collapsed}>新建对话</span>
       </Button>
 
       <nav className="xs-sidebar__nav" aria-label="星数主导航">
-        {primaryNavigation.map((item) => (
-          <NavLink
-            className={({ isActive }) => `xs-sidebar__nav-item${isActive ? " is-active" : ""}`}
-            to={item.to}
-            key={item.label}
-          >
-            <XsIconTile icon={item.icon} label={item.label} size="sm" />
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-
-        <button
-          type="button"
-          className="xs-sidebar__nav-item xs-sidebar__nav-button"
-          aria-expanded={isMoreOpen}
-          aria-controls="xs-sidebar-more-navigation"
-          onClick={onToggleMore}
-        >
-          <XsIconTile icon={SquaresFour} label="更多" size="sm" />
-          <span>更多</span>
-          {isMoreOpen ? <CaretUp size={16} /> : <CaretDown size={16} />}
-        </button>
-
-        {isMoreOpen ? (
-          <div className="xs-sidebar__more" id="xs-sidebar-more-navigation">
-            {secondaryNavigation.map((item) => (
-              <NavLink
-                className={({ isActive }) =>
-                  `xs-sidebar__nav-item xs-sidebar__nav-item--sub${isActive ? " is-active" : ""}`
-                }
-                to={item.to}
-                key={item.label}
-              >
-                <XsIconTile icon={item.icon} label={item.label} size="sm" />
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
-        ) : null}
+        <Menu
+          className="xs-sidebar__menu"
+          mode="inline"
+          inlineCollapsed={collapsed}
+          selectedKeys={selectedKeys}
+          openKeys={openKeys}
+          onOpenChange={setOpenKeys}
+          items={menuItems}
+        />
       </nav>
 
       <Dropdown
@@ -91,13 +127,13 @@ export function XsSidebar({ isMoreOpen, onToggleMore, onNewChat }: XsSidebarProp
       >
         <button type="button" className="xs-sidebar__user" aria-label={`${username} ${userRole} 账户菜单`}>
           <img src={avatarSource} alt="" />
-          <div>
+          <div className="xs-sidebar__user-copy" aria-hidden={collapsed}>
             <strong>{username}</strong>
             <span>{userRole}</span>
           </div>
-          <CaretUp className="xs-sidebar__user-caret" size={15} />
+          <CaretUp className="xs-sidebar__user-caret" size={15} aria-hidden="true" />
         </button>
       </Dropdown>
-    </aside>
+    </Sider>
   );
 }

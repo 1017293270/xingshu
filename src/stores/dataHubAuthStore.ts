@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import {
   clearDataHubSession,
+  clearDataHubSessionExpiredNotice,
+  hasDataHubSessionExpiredNotice,
+  markDataHubSessionExpiredNotice,
   readDataHubSession,
   writeDataHubAuth,
   writeDataHubSession,
@@ -12,6 +15,7 @@ type DataHubAuthState = {
   token: string | null;
   user: DataHubLoginResponse | null;
   currentSpaceId: number | null;
+  sessionExpired: boolean;
 };
 
 type DataHubAuthActions = {
@@ -19,6 +23,7 @@ type DataHubAuthActions = {
   setAuth: (user: DataHubLoginResponse) => void;
   setCurrentSpaceId: (spaceId: number | null) => void;
   clearAuthState: () => void;
+  expireAuthState: () => void;
   refreshFromStorage: () => void;
 };
 
@@ -28,13 +33,16 @@ export const useDataHubAuthStore = create<DataHubAuthState & DataHubAuthActions>
   token: initialSession.token,
   user: initialSession.user,
   currentSpaceId: initialSession.spaceId,
+  sessionExpired: hasDataHubSessionExpiredNotice(),
   setSession: (user, spaceId) => {
     writeDataHubSession(user, spaceId);
-    set({ token: user.token, user, currentSpaceId: spaceId });
+    clearDataHubSessionExpiredNotice();
+    set({ token: user.token, user, currentSpaceId: spaceId, sessionExpired: false });
   },
   setAuth: (user) => {
     writeDataHubAuth(user);
-    set({ token: user.token, user });
+    clearDataHubSessionExpiredNotice();
+    set({ token: user.token, user, sessionExpired: false });
   },
   setCurrentSpaceId: (spaceId) => {
     writeDataHubSpaceId(spaceId);
@@ -42,14 +50,21 @@ export const useDataHubAuthStore = create<DataHubAuthState & DataHubAuthActions>
   },
   clearAuthState: () => {
     clearDataHubSession();
-    set({ token: null, user: null, currentSpaceId: null });
+    clearDataHubSessionExpiredNotice();
+    set({ token: null, user: null, currentSpaceId: null, sessionExpired: false });
+  },
+  expireAuthState: () => {
+    markDataHubSessionExpiredNotice();
+    clearDataHubSession();
+    set({ token: null, user: null, currentSpaceId: null, sessionExpired: true });
   },
   refreshFromStorage: () => {
     const session = readDataHubSession();
     set({
       token: session.token,
       user: session.user,
-      currentSpaceId: session.spaceId
+      currentSpaceId: session.spaceId,
+      sessionExpired: hasDataHubSessionExpiredNotice()
     });
   }
 }));

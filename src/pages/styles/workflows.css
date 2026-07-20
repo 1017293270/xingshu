@@ -35,7 +35,11 @@
   font-weight: 650;
 }
 
-.table-page__status {
+.workflow-status-slot {
+  min-height: 40px;
+}
+
+.table-page__status-slot {
   margin-bottom: 18px;
 }
 
@@ -212,7 +216,7 @@
   color: var(--xs-danger);
 }
 
-.writing-panel > .xs-status-bar {
+.writing-panel__status-slot {
   margin-top: 12px;
 }
 

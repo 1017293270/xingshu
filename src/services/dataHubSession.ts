@@ -3,6 +3,9 @@ import type { DataHubLoginResponse } from "@/types/dataHub";
 export const DATA_HUB_TOKEN_KEY = "xingshu_datahub_token";
 export const DATA_HUB_USER_KEY = "xingshu_datahub_user";
 export const DATA_HUB_SPACE_ID_KEY = "xingshu_datahub_space_id";
+export const DATA_HUB_SESSION_EXPIRED_EVENT = "xingshu:data-hub-session-expired";
+export const DATA_HUB_SESSION_EXPIRED_MESSAGE = "登录状态已过期，请重新登录";
+export const DATA_HUB_SESSION_EXPIRED_NOTICE_KEY = "xingshu_datahub_session_expired";
 
 export type DataHubSessionSnapshot = {
   token: string | null;
@@ -118,4 +121,47 @@ export function clearDataHubSession() {
   storage.removeItem(DATA_HUB_TOKEN_KEY);
   storage.removeItem(DATA_HUB_USER_KEY);
   storage.removeItem(DATA_HUB_SPACE_ID_KEY);
+}
+
+function getSessionStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function hasDataHubSessionExpiredNotice() {
+  return getSessionStorage()?.getItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY) === "1";
+}
+
+export function markDataHubSessionExpiredNotice() {
+  try {
+    getSessionStorage()?.setItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY, "1");
+  } catch {
+    // The in-memory auth state still preserves the notice when session storage is unavailable.
+  }
+}
+
+export function clearDataHubSessionExpiredNotice() {
+  try {
+    getSessionStorage()?.removeItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY);
+  } catch {
+    // Clearing auth must continue even when session storage is unavailable.
+  }
+}
+
+export function expireDataHubSession(expiredToken: string | null | undefined) {
+  if (!expiredToken || readDataHubSession().token !== expiredToken) {
+    return false;
+  }
+
+  markDataHubSessionExpiredNotice();
+  clearDataHubSession();
+  window.dispatchEvent(new Event(DATA_HUB_SESSION_EXPIRED_EVENT));
+  return true;
 }

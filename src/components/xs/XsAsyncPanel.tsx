@@ -96,13 +96,15 @@ export function XsAsyncPanel({
   if (status === "error") {
     return (
       <div className={classes}>
-        <XsEmptyState
-          tone="error"
-          title={errorTitle}
-          description={error}
-          actionLabel={onRetry ? "重试" : undefined}
-          onAction={onRetry}
-        />
+        <div className="xs-async-panel__content" data-view="error">
+          <XsEmptyState
+            tone="error"
+            title={errorTitle}
+            description={error}
+            actionLabel={onRetry ? "重试" : undefined}
+            onAction={onRetry}
+          />
+        </div>
       </div>
     );
   }
@@ -119,16 +121,18 @@ export function XsAsyncPanel({
           刷新失败，正在显示上次数据。
         </div>
       ) : null}
-      {empty ? (
-        <XsEmptyState
-          title={emptyTitle}
-          description={emptyDescription}
-          actionLabel={emptyActionLabel}
-          onAction={onEmptyAction}
-        />
-      ) : (
-        children
-      )}
+      <div className="xs-async-panel__content" data-view={empty ? "empty" : "content"}>
+        {empty ? (
+          <XsEmptyState
+            title={emptyTitle}
+            description={emptyDescription}
+            actionLabel={emptyActionLabel}
+            onAction={onEmptyAction}
+          />
+        ) : (
+          children
+        )}
+      </div>
     </div>
   );
 }

@@ -53,6 +53,13 @@
   box-shadow: 0 14px 36px rgba(35, 104, 210, 0.12);
 }
 
+.home-page .xs-command-box:focus-within {
+  border-color: #8db9f7;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, 0.14),
+    0 14px 36px rgba(35, 104, 210, 0.12);
+}
+
 .home-page .xs-command-box__input {
   height: 116px;
   padding: 30px 38px 18px;
@@ -64,10 +71,16 @@
   color: #7d8da7;
 }
 
+.home-page .xs-command-box__input:focus-visible {
+  box-shadow: none;
+}
+
 .home-page .xs-command-box__toolbar {
   min-height: 72px;
   padding: 0 24px 0 38px;
-  border-top-color: #e6eefc;
+  border-top: 0 !important;
+  box-shadow: none;
+  background: transparent;
 }
 
 .home-page .xs-command-box__hint {
@@ -84,11 +97,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
   color: var(--xs-primary);
   border-color: #e0eaff;
-  border-radius: 50%;
+  border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 8px 18px rgba(21, 88, 184, 0.08);
 }
@@ -98,9 +112,22 @@
   height: 56px;
   color: #ffffff;
   border: 0;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #32a2ff 0%, #1f67f2 100%);
-  box-shadow: 0 13px 24px rgba(31, 103, 242, 0.28);
+  border-radius: 16px;
+  background: #176ff2;
+  box-shadow: 0 13px 24px rgba(23, 111, 242, 0.24);
+}
+
+.home-page .xs-command-box__send.ant-btn:not(:disabled):hover,
+.home-page .xs-command-box__send.ant-btn:not(:disabled):focus-visible {
+  color: #ffffff;
+  background: #0f63e8;
+}
+
+.home-page .xs-command-box__send.ant-btn:disabled {
+  color: #91add5;
+  border: 1px solid #d8e5f7;
+  background: #edf3fb;
+  box-shadow: none;
 }
 
 .home-page__status {
@@ -159,6 +186,13 @@
 .home-page .xs-app-card .xs-icon-tile {
   width: 74px;
   height: 74px;
+  border: 0;
+  background: transparent;
+}
+
+.home-page .xs-app-card .xs-icon-tile__image {
+  width: 70px;
+  height: 70px;
 }
 
 .home-page .xs-app-card__title {
@@ -238,6 +272,11 @@
     height: clamp(58px, 6.6vh, 70px);
   }
 
+  .home-page .xs-app-card .xs-icon-tile__image {
+    width: clamp(56px, 6.3vh, 66px);
+    height: clamp(56px, 6.3vh, 66px);
+  }
+
   .home-page .xs-app-card__title {
     font-size: 18px;
   }
@@ -304,6 +343,11 @@
   .home-page .xs-app-card .xs-icon-tile {
     width: 62px;
     height: 62px;
+  }
+
+  .home-page .xs-app-card .xs-icon-tile__image {
+    width: 60px;
+    height: 60px;
   }
 
   .home-page .xs-app-card__desc {

@@ -1,14 +1,9 @@
 import { Button, Form, Input } from "antd";
-import { LockKey, User } from "@phosphor-icons/react";
+import { Checks, Database, LockKey, ShieldCheck, User, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/brand/xingshu-logo-transparent.png";
-import askDataIcon from "@/assets/login-icons/login-askdata-dashboard-image2.png";
-import dataHubIcon from "@/assets/login-icons/login-datahub-connection-image2.png";
-import knowledgeIcon from "@/assets/login-icons/login-knowledge-docs-image2.png";
-import permissionIcon from "@/assets/login-icons/login-permission-image2.png";
-import secureAuthIcon from "@/assets/login-icons/login-secure-auth-image2.png";
-import traceAgentIcon from "@/assets/login-icons/login-agent-trace-image2.png";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 import { loginToDataHub } from "@/services/dataHubAuthService";
 import { DataHubServiceError } from "@/services/dataHubClient";
 import { ensureDataHubSpace } from "@/services/dataHubSpaceService";
@@ -20,23 +15,13 @@ type LoginFormValues = {
   password: string;
 };
 
-const capabilityItems = [
-  {
-    title: "统一数据权限",
-    description: "细粒度权限管控，保障数据安全合规可控。",
-    iconSrc: permissionIcon
-  },
-  {
-    title: "问数与看板",
-    description: "自然语言问数，实时洞察业务指标与趋势。",
-    iconSrc: askDataIcon
-  },
-  {
-    title: "知识与文档",
-    description: "沉淀企业知识资产，驱动高效协同与复用。",
-    iconSrc: knowledgeIcon
-  }
-];
+const demoScript = {
+  question: "本月华东区销售额同比增长多少？",
+  thinking: "正在校验权限并检索数据",
+  answer: "同比增长 12.6%，主要由新能源产品线贡献，环比提升 3.2 个百分点。"
+};
+
+type DemoPhase = "question" | "thinking" | "answer" | "hold";
 
 const loginStepTimeoutMs = 8_000;
 
@@ -62,16 +47,118 @@ function getSafeReturnPath(value: unknown) {
   }
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(() => {
+    if (typeof window.matchMedia !== "function") {
+      return true;
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = () => setReduced(media.matches);
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
+
+  return reduced;
+}
+
+function useAskDemo(reducedMotion: boolean) {
+  const [state, setState] = useState<{ phase: DemoPhase; questionChars: number; answerChars: number }>(() =>
+    reducedMotion
+      ? { phase: "hold", questionChars: demoScript.question.length, answerChars: demoScript.answer.length }
+      : { phase: "question", questionChars: 0, answerChars: 0 }
+  );
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setState({
+        phase: "hold",
+        questionChars: demoScript.question.length,
+        answerChars: demoScript.answer.length
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timer = 0;
+    const schedule = (step: () => void, delay: number) => {
+      timer = window.setTimeout(() => {
+        if (!cancelled) {
+          step();
+        }
+      }, delay);
+    };
+
+    const play = () => {
+      setState({ phase: "question", questionChars: 0, answerChars: 0 });
+
+      let typed = 0;
+      const typeQuestion = () => {
+        typed += 1;
+        setState((prev) => ({ ...prev, questionChars: typed }));
+        if (typed < demoScript.question.length) {
+          schedule(typeQuestion, 48);
+          return;
+        }
+        schedule(() => {
+          setState((prev) => ({ ...prev, phase: "thinking" }));
+          schedule(playAnswer, 900);
+        }, 260);
+      };
+
+      const playAnswer = () => {
+        setState((prev) => ({ ...prev, phase: "answer" }));
+        let answerTyped = 0;
+        const typeAnswer = () => {
+          answerTyped += 1;
+          setState((prev) => ({ ...prev, answerChars: answerTyped }));
+          if (answerTyped < demoScript.answer.length) {
+            schedule(typeAnswer, 34);
+            return;
+          }
+          schedule(() => {
+            setState((prev) => ({ ...prev, phase: "hold" }));
+            schedule(play, 3_400);
+          }, 280);
+        };
+        schedule(typeAnswer, 140);
+      };
+
+      schedule(typeQuestion, 520);
+    };
+
+    play();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [reducedMotion]);
+
+  return state;
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useDataHubAuthStore((state) => state.setSession);
   const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
+  const sessionExpired = useDataHubAuthStore((state) => state.sessionExpired);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const loginAbortRef = useRef<AbortController | null>(null);
-  const returnPath = getSafeReturnPath((location.state as { from?: unknown } | null)?.from);
+  const locationState = location.state as { from?: unknown; sessionExpired?: boolean } | null;
+  const returnPath = getSafeReturnPath(locationState?.from);
+  const isSessionExpired = locationState?.sessionExpired === true || sessionExpired;
+  const reducedMotion = usePrefersReducedMotion();
+  const demo = useAskDemo(reducedMotion);
 
   useEffect(
     () => () => {
@@ -143,54 +230,122 @@ export function LoginPage() {
     setStatusMessage("请联系企业管理员重置密码");
   }
 
+  const isAnswerVisible = demo.phase === "answer" || demo.phase === "hold";
+
   return (
     <main className="login-page" aria-label="星数登录页">
-      <div className="login-page__shell">
-        <header className="login-page__header" aria-label="星数登录页顶部">
-          <Link className="login-page__brand" to="/welcome" aria-label="返回星数欢迎页">
+      <div className="login-page__atmosphere" aria-hidden="true">
+        <span className="login-page__orbit login-page__orbit--outer">
+          <i />
+        </span>
+        <span className="login-page__orbit login-page__orbit--inner">
+          <i />
+        </span>
+        <span className="login-page__orbit login-page__orbit--faint">
+          <i />
+        </span>
+        <span className="login-page__stars">
+          {Array.from({ length: 7 }, (_, index) => (
+            <i key={index} />
+          ))}
+        </span>
+      </div>
+
+      <section className="login-showcase" aria-labelledby="login-page-title">
+        <header className="login-showcase__header login-enter" style={{ animationDelay: "0ms" }}>
+          <Link className="login-showcase__brand" to="/welcome" aria-label="返回星数欢迎页">
             <img src={logo} alt="星数 XingShu" />
           </Link>
-          <div className="login-page__trust">
-            <img src={secureAuthIcon} alt="" data-icon-source="login-image2" />
-            <span>企业级安全防护已启用</span>
-          </div>
         </header>
 
-        <section className="login-page__content" aria-labelledby="login-page-title">
-          <div className="login-page__copy">
-            <p className="login-page__eyebrow">XINGSHU AGENT HUB</p>
-            <h1 id="login-page-title">可信数据智能入口</h1>
-            <p className="login-page__lead">连接数据、知识与 Agent 应用，让企业问题可追溯、可验证、可执行。</p>
+        <div className="login-showcase__body">
+          <p className="login-showcase__eyebrow login-enter" style={{ animationDelay: "70ms" }}>
+            XINGSHU · 企业智能中枢
+          </p>
+          <h1 id="login-page-title" className="login-enter" style={{ animationDelay: "140ms" }}>
+            让每一次问数，
+            <br />
+            都有据可依
+          </h1>
+          <p className="login-showcase__lead login-enter" style={{ animationDelay: "210ms" }}>
+            连接企业数据、知识与 Agent 应用，回答可追溯、可验证、可执行。
+          </p>
 
-            <div className="login-page__capabilities" aria-label="登录页可信能力">
-              {capabilityItems.map((item) => (
-                <article className="login-page__capability" key={item.title}>
-                  <img src={item.iconSrc} alt="" data-icon-source="login-image2" />
-                  <span>
-                    <strong>{item.title}</strong>
-                    <em>{item.description}</em>
+          <div className="login-ask-demo login-enter" style={{ animationDelay: "300ms" }} aria-hidden="true">
+            <div className="login-ask-demo__header">
+              <span className="login-ask-demo__live">
+                <i />
+                问数 · 实时演示
+              </span>
+              <span className="login-ask-demo__badge">
+                <Checks size={13} weight="bold" />
+                全程可追溯
+              </span>
+            </div>
+
+            <div className="login-ask-demo__thread">
+              {demo.questionChars > 0 || demo.phase !== "question" ? (
+                <p className="login-ask-demo__question">
+                  {demoScript.question.slice(0, demo.questionChars)}
+                  {demo.phase === "question" ? <span className="login-ask-demo__caret" /> : null}
+                </p>
+              ) : null}
+
+              {demo.phase === "thinking" ? (
+                <p className="login-ask-demo__thinking">
+                  <span className="login-ask-demo__dots">
+                    <i />
+                    <i />
+                    <i />
                   </span>
-                </article>
-              ))}
+                  {demoScript.thinking}
+                </p>
+              ) : null}
+
+              {isAnswerVisible ? (
+                <div className="login-ask-demo__answer">
+                  <img src={assistantMark} alt="" />
+                  <p>
+                    {demoScript.answer.slice(0, demo.answerChars)}
+                    {demo.phase === "answer" ? <span className="login-ask-demo__caret" /> : null}
+                  </p>
+                </div>
+              ) : null}
             </div>
 
-            <div className="login-page__signals" aria-label="接入能力">
-              <span>
-                <img src={traceAgentIcon} alt="" data-icon-source="login-image2" />
-                可追溯 Agent 流程
-              </span>
-              <span>
-                <img src={dataHubIcon} alt="" data-icon-source="login-image2" />
-                data-hub 权限体系
-              </span>
-            </div>
           </div>
+        </div>
+      </section>
 
-          <section className="login-panel" aria-label="登录星数">
+      <section className="login-access" aria-label="登录星数">
+        <div className="login-access__secure login-enter" style={{ animationDelay: "120ms" }}>
+          <ShieldCheck size={15} weight="fill" />
+          企业级安全防护已启用
+        </div>
+
+        <div className="login-access__inner">
+          <div className="login-panel login-enter" style={{ animationDelay: "200ms" }}>
+            <div className="login-panel__meta">
+              <span>SECURE ACCESS</span>
+              <span className="login-panel__connection">
+                <i aria-hidden="true" />
+                安全连接
+              </span>
+            </div>
             <div className="login-panel__head">
               <h2>登录星数</h2>
               <p>使用企业账号继续</p>
             </div>
+
+            {isSessionExpired ? (
+              <div className="login-panel__session-alert" role="alert">
+                <WarningCircle size={20} weight="fill" aria-hidden="true" />
+                <span>
+                  <strong>登录状态已过期，请重新登录</strong>
+                  <small>为保护企业数据，当前会话已安全退出。</small>
+                </span>
+              </div>
+            ) : null}
 
             <Form<LoginFormValues>
               className="login-panel__form"
@@ -208,7 +363,7 @@ export function LoginPage() {
                 <Input
                   autoComplete="username"
                   disabled={isSubmitting}
-                  prefix={<User size={19} />}
+                  prefix={<User size={18} />}
                   placeholder="请输入用户名"
                 />
               </Form.Item>
@@ -223,7 +378,7 @@ export function LoginPage() {
                 <Input.Password
                   autoComplete="current-password"
                   disabled={isSubmitting}
-                  prefix={<LockKey size={19} />}
+                  prefix={<LockKey size={18} />}
                   placeholder="请输入密码"
                 />
               </Form.Item>
@@ -255,12 +410,16 @@ export function LoginPage() {
             ) : null}
 
             <footer className="login-panel__foot">
-              <img src={dataHubIcon} alt="" data-icon-source="login-image2" />
+              <Database size={15} />
               <span>由 data-hub 权限体系提供认证</span>
             </footer>
-          </section>
-        </section>
-      </div>
+          </div>
+        </div>
+
+        <p className="login-access__caption login-enter" style={{ animationDelay: "460ms" }}>
+          数据可追溯 · 权限可管控 · 结果可验证
+        </p>
+      </section>
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import { clearDataHubSession, readDataHubSession } from "@/services/dataHubSession";
+import { expireDataHubSession, readDataHubSession } from "@/services/dataHubSession";
 import type { DataHubApiResponse } from "@/types/dataHub";
 
 export const dataHubApiBaseUrl = import.meta.env.VITE_DATAHUB_API_BASE_URL ?? "";
@@ -73,7 +73,7 @@ function applySessionHeaders(
   explicitAuthToken?: string
 ) {
   if (!includeAuth) {
-    return;
+    return null;
   }
 
   const session = readDataHubSession();
@@ -86,6 +86,8 @@ function applySessionHeaders(
   if (spaceId !== null && spaceId !== undefined) {
     headers.set("X-Space-Id", String(spaceId));
   }
+
+  return authToken ?? null;
 }
 
 export async function requestDataHub<T>(path: string, options: DataHubRequestOptions = {}): Promise<T> {
@@ -113,7 +115,7 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
     headers.set("Content-Type", "application/json");
   }
 
-  applySessionHeaders(headers, includeAuth, spaceId, authToken);
+  const requestAuthToken = applySessionHeaders(headers, includeAuth, spaceId, authToken);
 
   if (inputSignal?.aborted) {
     abortFromInput();
@@ -161,7 +163,7 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
 
   if (!response.ok) {
     if (response.status === 401) {
-      clearDataHubSession();
+      expireDataHubSession(requestAuthToken);
     }
 
     const message =
@@ -178,7 +180,7 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
   if (isDataHubEnvelope<T>(payload)) {
     if (payload.code !== 200) {
       if (payload.code === 401) {
-        clearDataHubSession();
+        expireDataHubSession(requestAuthToken);
       }
 
       throw new DataHubServiceError(payload.message || "请求失败", {

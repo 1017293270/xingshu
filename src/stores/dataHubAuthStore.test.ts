@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDataHubAuthStore } from "./dataHubAuthStore";
 import {
+  DATA_HUB_SESSION_EXPIRED_NOTICE_KEY,
   DATA_HUB_SPACE_ID_KEY,
   readDataHubSession,
   writeDataHubAuth,
@@ -10,6 +11,7 @@ import {
 describe("useDataHubAuthStore", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     useDataHubAuthStore.getState().refreshFromStorage();
   });
 
@@ -96,5 +98,26 @@ describe("useDataHubAuthStore", () => {
       currentSpaceId: null
     });
     expect(readDataHubSession()).toEqual({ token: null, user: null, spaceId: null });
+  });
+
+  it("marks an expired session while clearing auth state and storage", () => {
+    useDataHubAuthStore.getState().setAuth({
+      token: "expired-token",
+      userId: 1,
+      username: "demo",
+      isAdmin: false
+    });
+    useDataHubAuthStore.getState().setCurrentSpaceId(3);
+
+    useDataHubAuthStore.getState().expireAuthState();
+
+    expect(useDataHubAuthStore.getState()).toMatchObject({
+      token: null,
+      user: null,
+      currentSpaceId: null,
+      sessionExpired: true
+    });
+    expect(readDataHubSession()).toEqual({ token: null, user: null, spaceId: null });
+    expect(sessionStorage.getItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY)).toBe("1");
   });
 });

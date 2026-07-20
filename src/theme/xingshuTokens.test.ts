@@ -10,6 +10,9 @@ describe("xingshuTokens", () => {
     expect(css).toContain(`--xs-text-3: ${xingshuTokens.colorTextTertiary};`);
     expect(css).toContain(`--xs-motion-base: ${xingshuTokens.motionBase}ms;`);
     expect(css).toContain(`--xs-focus-ring: ${xingshuTokens.focusRing};`);
+    expect(css).toContain(`--xs-sidebar-expanded-width: ${xingshuTokens.sidebarWidth}px;`);
+    expect(css).toContain(`--xs-sidebar-collapsed-width: ${xingshuTokens.sidebarCollapsedWidth}px;`);
+    expect(css).toContain("--xs-sidebar-width: var(--xs-sidebar-expanded-width);");
   });
 
   it("uses accessible tertiary and interactive text colors", () => {

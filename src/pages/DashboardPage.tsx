@@ -1,312 +1,393 @@
-import { Button } from "antd";
-import { Plus, WarningCircle, CheckCircle, SquaresFour } from "@phosphor-icons/react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { XsChartCard, XsStatusBar } from "@/components/xs";
-import { getDashboardChartInsights, getDashboardChartOptions } from "@/services/dashboardService";
-import { PageFrame } from "./PageFrame";
-import "./styles/dashboard.css";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { createBlankDashboard } from "@/services/dashboardGenerationService";
+import { getBrowserDashboardRepository } from "@/services/dashboardRepositoryService";
+import type { DashboardRecord, DashboardVersion } from "@/types/dashboardStudio";
+import "./styles/dashboard-list.css";
 
-const activeDashboardName = "经营分析看板";
-const alertItems = [
-  { title: "销售额环比下降 12.3%", time: "5分钟前", tone: "warning" as const },
-  { title: "服务器响应延迟升高", time: "23分钟前", tone: "warning" as const },
-  { title: "数据同步已完成", time: "1小时前", tone: "success" as const }
-];
+type ListState = "loading" | "success" | "error";
+type RowAction = "copy" | "archive" | "share" | "versions" | "rollback";
+type VersionState =
+  | { status: "loading"; versions: []; error: "" }
+  | { status: "success"; versions: DashboardVersion[]; error: "" }
+  | { status: "error"; versions: []; error: string };
+
+function formatDate(value?: string) {
+  if (!value) return "未发布";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "大屏库暂不可用";
+}
+
+function dashboardEditorPath(id: string) {
+  return `/dashboard-editor?draft=${encodeURIComponent(id)}`;
+}
+
+function dashboardRuntimePath(id: string) {
+  return `/dashboard-view?dashboard=${encodeURIComponent(id)}`;
+}
+
+function sortVersions(versions: DashboardVersion[]) {
+  return [...versions].sort((left, right) => right.version - left.version);
+}
+
+function DashboardVersionPanel({
+  state,
+  busy,
+  onRollback
+}: {
+  state: VersionState;
+  busy: boolean;
+  onRollback: (version: DashboardVersion) => void;
+}) {
+  return (
+    <div className="dashboard-list__versions" aria-busy={state.status === "loading"}>
+      <p className="dashboard-list__versions-title">版本</p>
+      {state.status === "loading" ? (
+        <p className="dashboard-list__versions-state">正在加载版本</p>
+      ) : state.status === "error" ? (
+        <p className="dashboard-list__versions-state is-error">{state.error}</p>
+      ) : state.versions.length === 0 ? (
+        <p className="dashboard-list__versions-state">暂无已发布版本</p>
+      ) : (
+        <ul className="dashboard-list__version-list">
+          {state.versions.map((version) => (
+            <li key={version.id}>
+              <span>
+                v{version.version}
+                <small>无发布说明 - {formatDate(version.publishedAt)}</small>
+              </span>
+              <button type="button" disabled={busy} onClick={() => onRollback(version)}>
+                {busy ? "回滚中" : "回滚"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function DashboardPage() {
-  const options = getDashboardChartOptions();
-  const chartInsights = getDashboardChartInsights();
   const navigate = useNavigate();
-  const [workflowStatus, setWorkflowStatus] = useState("");
-  const [handledAlerts, setHandledAlerts] = useState<Set<string>>(() => new Set());
-  const unhandledAlertCount = alertItems.filter(
-    (alert) => alert.tone === "warning" && !handledAlerts.has(alert.title)
-  ).length;
+  const repository = useMemo(() => getBrowserDashboardRepository(), []);
+  const [records, setRecords] = useState<DashboardRecord[]>([]);
+  const [listState, setListState] = useState<ListState>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [activeRowActions, setActiveRowActions] = useState<Partial<Record<string, RowAction>>>({});
+  const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
+  const [versionStates, setVersionStates] = useState<Record<string, VersionState>>({});
 
-  const handleEditDashboard = () => {
-    navigate("/dashboard-editor");
+  const setRowAction = (id: string, action?: RowAction) => {
+    setActiveRowActions((current) => {
+      if (action) return { ...current, [id]: action };
+      return Object.fromEntries(Object.entries(current).filter(([recordId]) => recordId !== id));
+    });
   };
 
-  const handleAlert = (title: string) => {
-    setHandledAlerts((current) => new Set(current).add(title));
-    setWorkflowStatus(`已处理预警：${title}`);
+  const isRowBusy = (id: string, action?: RowAction) => {
+    const activeAction = activeRowActions[id];
+    return action ? activeAction === action : Boolean(activeAction);
   };
 
-  const cardAction = (title: string) => (
-    <Button
-      type="link"
-      className="xs-card-action"
-      aria-label={`查看 ${title}`}
-      aria-describedby="dashboard-card-details-availability"
-      disabled
-    >
-      查看
-    </Button>
-  );
+  const loadDashboards = () => {
+    setListState("loading");
+    setErrorMessage("");
+
+    try {
+      setRecords(repository.list());
+      setListState("success");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      setListState("error");
+    }
+  };
+
+  useEffect(() => {
+    loadDashboards();
+    // The repository instance is stable for the lifetime of this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const createDashboard = () => {
+    setIsCreating(true);
+    setErrorMessage("");
+
+    try {
+      const record = repository.saveDraft(createBlankDashboard({ title: "未命名大屏" }));
+      navigate(dashboardEditorPath(record.id));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      setListState(records.length > 0 ? "success" : "error");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const copyDashboard = (record: DashboardRecord) => {
+    setRowAction(record.id, "copy");
+    setErrorMessage("");
+
+    try {
+      const copyIdentity = createBlankDashboard({ title: `${record.schema.title} 副本` });
+      const copiedRecord = repository.copy(record.id, copyIdentity);
+      navigate(dashboardEditorPath(copiedRecord.id));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setRowAction(record.id);
+    }
+  };
+
+  const archiveDashboard = (record: DashboardRecord) => {
+    const confirmed = window.confirm(`归档“${record.schema.title}”？它会从大屏库中移除。`);
+    if (!confirmed) return;
+
+    setRowAction(record.id, "archive");
+    setErrorMessage("");
+
+    try {
+      repository.archive(record.id);
+      setRecords((current) => current.filter((item) => item.id !== record.id));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setRowAction(record.id);
+    }
+  };
+
+  const createShareLink = (record: DashboardRecord) => {
+    if (record.status !== "published") return;
+
+    setRowAction(record.id, "share");
+    setErrorMessage("");
+
+    try {
+      const shareToken = repository.createShareToken(record.id);
+      const shareUrl = new URL(`/dashboard-view?share=${encodeURIComponent(shareToken)}`, window.location.origin).toString();
+      setShareLinks((current) => ({ ...current, [record.id]: shareUrl }));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setRowAction(record.id);
+    }
+  };
+
+  const loadVersions = (record: DashboardRecord) => {
+    setRowAction(record.id, "versions");
+    setVersionStates((current) => ({
+      ...current,
+      [record.id]: { status: "loading", versions: [], error: "" }
+    }));
+
+    try {
+      const freshRecord = repository.get(record.id);
+      if (!freshRecord) throw new Error("大屏不存在或已归档");
+      setVersionStates((current) => ({
+        ...current,
+        [record.id]: { status: "success", versions: sortVersions(freshRecord.versions ?? []), error: "" }
+      }));
+    } catch (error) {
+      setVersionStates((current) => ({
+        ...current,
+        [record.id]: { status: "error", versions: [], error: getErrorMessage(error) }
+      }));
+    } finally {
+      setRowAction(record.id);
+    }
+  };
+
+  const rollbackVersion = (record: DashboardRecord, version: DashboardVersion) => {
+    if (!window.confirm(`将“${record.schema.title}”回滚到版本 ${version.version}？`)) return;
+
+    setRowAction(record.id, "rollback");
+    setErrorMessage("");
+
+    try {
+      const rolledBack = repository.rollback(record.id, version.version, record.revision);
+      setRecords((current) => current.map((item) => item.id === record.id ? rolledBack : item));
+      setVersionStates((current) => ({
+        ...current,
+        [record.id]: { status: "success", versions: sortVersions(rolledBack.versions ?? []), error: "" }
+      }));
+    } catch (error) {
+      setVersionStates((current) => ({
+        ...current,
+        [record.id]: { status: "error", versions: [], error: getErrorMessage(error) }
+      }));
+    } finally {
+      setRowAction(record.id);
+    }
+  };
 
   return (
-    <PageFrame
-      title="我的看板"
-      subtitle="经营分析全景看板"
-      className="dashboard-page"
-      actions={
-        <div className="dashboard-upcoming-actions">
-          <Button
-            icon={<SquaresFour size={18} />}
-            disabled
-            aria-describedby="dashboard-actions-availability"
-          >
-            看板市场
-          </Button>
-          <Button
-            type="primary"
-            icon={<Plus size={18} />}
-            disabled
-            aria-describedby="dashboard-actions-availability"
-          >
-            新建看板
-          </Button>
-          <span id="dashboard-actions-availability" className="dashboard-upcoming-actions__label">
-            即将开放
-          </span>
+    <main className="dashboard-list">
+      <header className="dashboard-list__header">
+        <div className="dashboard-list__title-group">
+          <h1>大屏库</h1>
         </div>
-      }
-    >
-      <XsStatusBar className="dashboard-page__status" tone="success" label="操作" message={workflowStatus} />
-      <section className="dashboard-control-bar" aria-label="看板状态">
-        <div className="dashboard-control-bar__meta">
-          <span className="dashboard-active-name">{activeDashboardName}</span>
-          <span className="dashboard-control-bar__summary">
-            近 12 个月 · 12 个指标 · 8 个组件 · 更新于今日 14:30
-          </span>
-          <span
-            id="dashboard-card-details-availability"
-            className="dashboard-upcoming-actions__label"
-          >
-            组件详情即将开放，可通过“查看数据”展开当前图表来源。
-          </span>
-        </div>
-        <div className="dashboard-control-bar__actions">
-          <Button disabled aria-describedby="dashboard-switch-availability">
-            切换看板
-          </Button>
-          <span id="dashboard-switch-availability" className="dashboard-upcoming-actions__label">
-            即将开放
-          </span>
-          <Button autoInsertSpace={false} onClick={handleEditDashboard}>
-            编辑
-          </Button>
-        </div>
-      </section>
+        <button
+          className="dashboard-list__primary-action"
+          type="button"
+          disabled={isCreating}
+          data-testid="create-dashboard-button"
+          onClick={createDashboard}
+        >
+          {isCreating ? "创建中" : "新建大屏"}
+        </button>
+      </header>
 
-      <section className="board-grid" aria-label={activeDashboardName}>
-        <XsChartCard
-          title="月度营收趋势"
-          summary={chartInsights.revenue.summary}
-          option={options.revenue}
-          table={chartInsights.revenue.table}
-          headingLevel={2}
-          ariaLabel="看板组件：月度营收趋势"
-          className="board-card board-card--revenue"
-          chartClassName="chart-panel chart-panel--hero"
-          action={cardAction("月度营收趋势")}
-          beforeChart={
-            <div className="revenue-value">
-              <strong>
-                ￥2.84<span className="revenue-unit">亿</span>
-              </strong>
-              <div className="revenue-delta">
-                <span className="revenue-delta__change">↑ 8.3% 环比</span>
-                <small>vs 同期 +15.2%</small>
-              </div>
+      {listState === "loading" ? (
+        <section className="dashboard-list__panel" aria-busy="true">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="dashboard-list__skeleton-row">
+              <span className="dashboard-list__skeleton dashboard-list__skeleton--title" />
+              <span className="dashboard-list__skeleton" />
+              <span className="dashboard-list__skeleton dashboard-list__skeleton--short" />
             </div>
-          }
-          afterChart={
-            <div className="metric-row">
-              <span>
-                完成率 <b>94%</b>
-              </span>
-              <span>
-                上月 <b>￥2.62亿</b>
-              </span>
-            </div>
-          }
-        />
+          ))}
+        </section>
+      ) : listState === "error" ? (
+        <section className="dashboard-list__state dashboard-list__state--error">
+          <p className="dashboard-list__eyebrow">加载失败</p>
+          <h2>大屏库暂不可用</h2>
+          <p>{errorMessage}</p>
+          <button type="button" onClick={loadDashboards}>重试</button>
+        </section>
+      ) : records.length === 0 ? (
+        <section className="dashboard-list__state" aria-label="大屏库空状态">
+          <p className="dashboard-list__eyebrow">暂无大屏</p>
+          <h2>创建第一个大屏</h2>
+          <p>已发布的大屏和草稿会显示在这里。</p>
+          <button type="button" disabled={isCreating} onClick={createDashboard}>
+            {isCreating ? "创建中" : "新建大屏"}
+          </button>
+        </section>
+      ) : (
+        <section className="dashboard-list__panel" aria-label="大屏库">
+          {errorMessage ? (
+            <p className="dashboard-list__inline-error" role="status">{errorMessage}</p>
+          ) : null}
+          <table className="dashboard-list__table">
+            <thead>
+              <tr>
+                <th scope="col">名称</th>
+                <th scope="col">状态</th>
+                <th scope="col">更新时间</th>
+                <th scope="col">发布时间</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => {
+                const editPath = dashboardEditorPath(record.id);
+                const runtimePath = dashboardRuntimePath(record.id);
+                const isPublished = record.status === "published";
+                const versionState = versionStates[record.id];
 
-        <XsChartCard
-          title="销售预测"
-          summary={chartInsights.salesLine.summary}
-          option={options.salesLine}
-          table={chartInsights.salesLine.table}
-          headingLevel={2}
-          ariaLabel="看板组件：销售预测"
-          className="board-card board-card--forecast"
-          chartClassName="chart-panel"
-          action={cardAction("销售预测")}
-          afterChart={
-            <div className="metric-row">
-              <span>
-                Q3预测 <b>1.86亿</b>
-              </span>
-              <span>
-                Q4目标 <b>2.15亿</b>
-              </span>
-            </div>
-          }
-        />
-
-        <article className="xs-card board-card board-card--ops" aria-label="看板组件：实时运营概览">
-          <div className="board-card__head">
-            <h2>实时运营概览</h2>
-            {cardAction("实时运营概览")}
-          </div>
-          <div className="ops-grid">
-            <div>
-              <strong>847</strong>
-              <span>在线用户</span>
-            </div>
-            <div>
-              <strong>94</strong>
-              <span>API QPS</span>
-            </div>
-            <div>
-              <strong>99.97%</strong>
-              <span>可用率</span>
-            </div>
-            <div>
-              <strong>236ms</strong>
-              <span>平均响应</span>
-            </div>
-          </div>
-        </article>
-
-        <XsChartCard
-          title="渠道转化分析"
-          summary={chartInsights.channel.summary}
-          option={options.channel}
-          table={chartInsights.channel.table}
-          headingLevel={2}
-          ariaLabel="看板组件：渠道转化分析"
-          className="board-card board-card--channel"
-          chartClassName="chart-panel"
-          action={cardAction("渠道转化分析")}
-          afterChart={
-            <p className="board-card__footnote">
-              综合转化率 <strong>3.2%</strong> <span className="success-text">↑ 0.4pp</span>
-            </p>
-          }
-        />
-
-        <XsChartCard
-          title="客户画像分布"
-          summary={chartInsights.customer.summary}
-          option={options.customer}
-          table={chartInsights.customer.table}
-          headingLevel={2}
-          ariaLabel="看板组件：客户画像分布"
-          className="board-card board-card--customer"
-          chartClassName="chart-panel chart-panel--donut"
-          action={cardAction("客户画像分布")}
-          chartAside={
-            <div className="legend-grid">
-              <span>
-                <i className="legend-dot legend-dot--enterprise" />
-                企业客户 75%
-              </span>
-              <span>
-                <i className="legend-dot legend-dot--sme" />
-                中小客户 15%
-              </span>
-              <span>
-                <i className="legend-dot legend-dot--personal" />
-                个人用户 10%
-              </span>
-            </div>
-          }
-        />
-
-        <XsChartCard
-          title="区域业绩排行"
-          summary={chartInsights.region.summary}
-          option={options.region}
-          table={chartInsights.region.table}
-          headingLevel={2}
-          ariaLabel="看板组件：区域业绩排行"
-          className="board-card board-card--region"
-          chartClassName="chart-panel"
-          action={cardAction("区域业绩排行")}
-        />
-
-        <XsChartCard
-          title="TOP 产品营收"
-          summary={chartInsights.productRank.summary}
-          option={options.productRank}
-          table={chartInsights.productRank.table}
-          headingLevel={2}
-          ariaLabel="看板组件：TOP 产品营收"
-          className="board-card board-card--top"
-          chartClassName="chart-panel"
-          action={cardAction("TOP 产品营收")}
-        />
-
-        <article className="xs-card board-card board-card--alert" aria-label="看板组件：智能预警">
-          <div className="board-card__head">
-            <h2 className="board-card__alert-title">
-              智能预警{" "}
-              <span className="board-card__alert-pill">
-                {unhandledAlertCount > 0 ? `${unhandledAlertCount}条未处理` : "全部已处理"}
-              </span>
-            </h2>
-          </div>
-          <div className="alert-list">
-            {alertItems.map((alert) => {
-              if (alert.tone === "success") {
                 return (
-                  <div
-                    className="alert-list__item alert-list__item--success is-handled"
-                    key={alert.title}
-                    aria-label={`已完成 ${alert.title}`}
-                  >
-                    <span className="alert-list__icon">
-                      <CheckCircle size={18} />
-                    </span>
-                    <span className="alert-list__body">
-                      <span className="alert-list__title">{alert.title}</span>
-                      <small>{alert.time} · 已完成</small>
-                    </span>
-                  </div>
+                  <Fragment key={record.id}>
+                    <tr>
+                      <td className="dashboard-list__name-cell">
+                        <Link className="dashboard-list__name-link" to={editPath}>
+                          {record.schema.title}
+                        </Link>
+                        {shareLinks[record.id] ? (
+                          <a
+                            className="dashboard-list__share-link"
+                            href={shareLinks[record.id]}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {shareLinks[record.id]}
+                          </a>
+                        ) : null}
+                      </td>
+                      <td>
+                        <span className={`dashboard-list__status is-${record.status}`}>
+                          {isPublished ? "已发布" : "草稿"}
+                        </span>
+                      </td>
+                      <td>{formatDate(record.updatedAt)}</td>
+                      <td>{formatDate(record.publishedAt)}</td>
+                      <td>
+                        <div className="dashboard-list__actions">
+                          <Link className="dashboard-list__action" to={editPath}>编辑</Link>
+                          <a
+                            className={`dashboard-list__action${isPublished ? "" : " is-disabled"}`}
+                            href={isPublished ? runtimePath : undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-disabled={!isPublished}
+                            tabIndex={isPublished ? 0 : -1}
+                            onClick={(event) => {
+                              if (!isPublished) event.preventDefault();
+                            }}
+                          >
+                            运行态
+                          </a>
+                          <button
+                            type="button"
+                            disabled={isRowBusy(record.id)}
+                            onClick={() => copyDashboard(record)}
+                          >
+                            {isRowBusy(record.id, "copy") ? "复制中" : "复制"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isRowBusy(record.id)}
+                            onClick={() => loadVersions(record)}
+                          >
+                            {isRowBusy(record.id, "versions") ? "加载中" : "版本"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!isPublished || isRowBusy(record.id)}
+                            onClick={() => createShareLink(record)}
+                          >
+                            {isRowBusy(record.id, "share") ? "生成分享中" : "分享"}
+                          </button>
+                          <button
+                            className="dashboard-list__danger"
+                            type="button"
+                            disabled={isRowBusy(record.id)}
+                            onClick={() => archiveDashboard(record)}
+                          >
+                            {isRowBusy(record.id, "archive") ? "归档中" : "归档"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {versionState ? (
+                      <tr className="dashboard-list__version-row">
+                        <td colSpan={5}>
+                          <DashboardVersionPanel
+                            state={versionState}
+                            busy={isRowBusy(record.id, "rollback")}
+                            onRollback={(version) => rollbackVersion(record, version)}
+                          />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
-              }
-
-              const isHandled = handledAlerts.has(alert.title);
-
-              return (
-                <button
-                  type="button"
-                  className={`alert-list__item alert-list__item--${isHandled ? "success" : "warning"}${isHandled ? " is-handled" : ""}`}
-                  key={alert.title}
-                  aria-label={`${isHandled ? "已处理" : "处理"} ${alert.title}`}
-                  disabled={isHandled}
-                  onClick={() => handleAlert(alert.title)}
-                >
-                  <span className="alert-list__icon">
-                    {isHandled ? (
-                      <CheckCircle size={18} />
-                    ) : (
-                      <WarningCircle size={18} />
-                    )}
-                  </span>
-                  <span className="alert-list__body">
-                    <span className="alert-list__title">{alert.title}</span>
-                    <small>{alert.time} · {isHandled ? "已处理" : "待处理"}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </article>
-      </section>
-    </PageFrame>
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
+    </main>
   );
 }

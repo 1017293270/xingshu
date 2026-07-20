@@ -1,14 +1,14 @@
 import { Suspense, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import { XsShell } from "@/components/xs";
+import { XsRouteFallback, XsShell } from "@/components/xs";
 import { useUiStore } from "@/stores/uiStore";
 
 export function AppLayout() {
   const mainRef = useRef<HTMLElement>(null);
   const lastFocusedHeadingRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
-  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
-  const toggleMore = useUiStore((state) => state.toggleMore);
+  const isSidebarCollapsed = useUiStore((state) => state.isSidebarCollapsed);
+  const toggleSidebarCollapsed = useUiStore((state) => state.toggleSidebarCollapsed);
   const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
 
   useEffect(() => {
@@ -44,12 +44,14 @@ export function AppLayout() {
   return (
     <XsShell
       mainRef={mainRef}
-      isMoreOpen={isMoreOpen}
-      onToggleMore={toggleMore}
+      isSidebarCollapsed={isSidebarCollapsed}
+      onToggleSidebarCollapsed={toggleSidebarCollapsed}
       onNewChat={clearHomeConversation}
     >
-      <Suspense fallback={<div className="route-loading" role="status">页面加载中</div>}>
-        <Outlet />
+      <Suspense fallback={<XsRouteFallback />}>
+        <div className="xs-route-view" key={location.pathname}>
+          <Outlet />
+        </div>
       </Suspense>
     </XsShell>
   );

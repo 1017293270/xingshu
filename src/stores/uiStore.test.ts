@@ -24,12 +24,12 @@ describe("useUiStore", () => {
     expect(useUiStore.getState().sentStatus).toBe("");
   });
 
-  it("toggles the more navigation group", () => {
-    expect(useUiStore.getState().isMoreOpen).toBe(true);
+  it("toggles the sidebar collapsed state", () => {
+    expect(useUiStore.getState().isSidebarCollapsed).toBe(false);
 
-    useUiStore.getState().toggleMore();
+    useUiStore.getState().toggleSidebarCollapsed();
 
-    expect(useUiStore.getState().isMoreOpen).toBe(false);
+    expect(useUiStore.getState().isSidebarCollapsed).toBe(true);
   });
 
   it("keeps a removable local attachment queue across the home and analysis command boxes", () => {

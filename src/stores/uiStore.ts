@@ -14,7 +14,7 @@ export type AnalysisTurnState = {
 };
 
 type UiStoreState = {
-  isMoreOpen: boolean;
+  isSidebarCollapsed: boolean;
   selectedAppId: string | null;
   homeDraft: string;
   sentStatus: string;
@@ -29,7 +29,7 @@ type UiStoreState = {
 };
 
 type UiStoreActions = {
-  toggleMore: () => void;
+  toggleSidebarCollapsed: () => void;
   setHomeDraft: (draft: string) => void;
   selectApp: (appId: string, prompt: string) => void;
   setActiveAnalysisQuestion: (question: string) => void;
@@ -55,7 +55,7 @@ type UiStoreActions = {
 };
 
 const initialState: UiStoreState = {
-  isMoreOpen: true,
+  isSidebarCollapsed: false,
   selectedAppId: null,
   homeDraft: "",
   sentStatus: "",
@@ -106,7 +106,7 @@ function abortAllAskDataControllers() {
 
 export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
   ...initialState,
-  toggleMore: () => set((state) => ({ isMoreOpen: !state.isMoreOpen })),
+  toggleSidebarCollapsed: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
   setHomeDraft: (draft) => set({ homeDraft: draft }),
   selectApp: (appId, prompt) =>
     set({

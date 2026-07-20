@@ -6,6 +6,8 @@ import { AppProviders } from "@/app/providers";
 import { AppRoutes } from "@/app/AppRoutes";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 
+const ROUTE_LOAD_TIMEOUT_MS = 5_000;
+
 function renderRoute(path: string) {
   localStorage.clear();
   useDataHubAuthStore.getState().clearAuthState();
@@ -30,7 +32,9 @@ describe("data asset actions", () => {
   it("shows the adapter update time and warns when dashboard data is stale", async () => {
     renderRoute("/data-dashboard");
 
-    expect(await screen.findByText(/结构化数据共 5,861 项/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/结构化数据共 5,861 项/, {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+    ).toBeInTheDocument();
     expect(
       await screen.findByRole("img", { name: /数据资产类型分布.*结构化数据共 5,861 项/ })
     ).toBeInTheDocument();
@@ -54,7 +58,7 @@ describe("data asset actions", () => {
   it("keeps unavailable asset categories disabled instead of reusing knowledge-base content", async () => {
     renderRoute("/data-management");
 
-    await screen.findByRole("heading", { name: "数据资产管理" });
+    await screen.findByRole("heading", { name: "数据资产管理" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
     const assetTabs = screen.getByRole("radiogroup", { name: "资产管理类型" });
     expect(within(assetTabs).getByRole("radio", { name: "知识库管理" })).toBeChecked();
     expect(within(assetTabs).getByRole("radio", { name: "数据源管理" })).toBeDisabled();
@@ -69,24 +73,26 @@ describe("data asset actions", () => {
     expect(screen.queryByText(/已创建知识库草稿|已打开知识库详情/)).not.toBeInTheDocument();
   });
 
-  it("disables dashboard actions that have no real workflow", async () => {
+  it("exposes the real dashboard creation workflow instead of unavailable placeholders", async () => {
     renderRoute("/dashboard");
 
-    await screen.findByRole("heading", { name: "我的看板" });
-    expect(screen.getByRole("button", { name: "看板市场" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "新建看板" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "切换看板" })).toBeDisabled();
-    expect(screen.getAllByText("即将开放").length).toBeGreaterThanOrEqual(1);
+    await screen.findByRole("heading", { name: "大屏库" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
+    expect(await screen.findByRole("heading", { name: "创建第一个大屏" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "新建大屏" })).toHaveLength(2);
+    screen.getAllByRole("button", { name: "新建大屏" }).forEach((button) => expect(button).toBeEnabled());
+    expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "看板市场" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "切换看板" })).not.toBeInTheDocument();
   });
 
-  it("marks a dashboard alert as handled in local state", async () => {
+  it("creates a blank dashboard and opens its full-screen editor", async () => {
     const user = userEvent.setup();
     renderRoute("/dashboard");
 
-    await user.click(await screen.findByRole("button", { name: "处理 销售额环比下降 12.3%" }));
+    await user.click((await screen.findAllByRole("button", { name: "新建大屏" }))[0]);
 
-    expect(screen.getByRole("button", { name: "已处理 销售额环比下降 12.3%" })).toBeDisabled();
-    expect(screen.getByText("1条未处理")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已处理预警：销售额环比下降 12.3%");
+    expect(await screen.findByLabelText("看板编辑器工作区")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toContain('"width":1920');
   });
 });

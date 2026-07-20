@@ -19,7 +19,9 @@
   --xs-radius-card: 14px;
   --xs-control-height: 44px;
   --xs-control-height-lg: 52px;
-  --xs-sidebar-width: 320px;
+  --xs-sidebar-expanded-width: 260px;
+  --xs-sidebar-collapsed-width: 80px;
+  --xs-sidebar-width: var(--xs-sidebar-expanded-width);
   --xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1440px);
   --xs-data-track: clamp(1220px, calc((100vw - var(--xs-sidebar-width)) * 0.84), 1480px);
   --xs-dashboard-track: clamp(1080px, calc((100vw - var(--xs-sidebar-width)) * 0.87), 1960px);
@@ -29,7 +31,11 @@
   --xs-motion-fast: 120ms;
   --xs-motion-base: 180ms;
   --xs-motion-slow: 260ms;
+  --xs-motion-thinking: 800ms;
+  --xs-motion-skeleton: 1200ms;
+  --xs-motion-ambient: 2400ms;
   --xs-motion-ease-out: cubic-bezier(.2, 0, 0, 1);
+  --xs-motion-ease-ambient: cubic-bezier(.37, 0, .63, 1);
   --xs-font-family: Source Han Sans SC, Noto Sans SC, Microsoft YaHei, Arial, sans-serif;
 }
 

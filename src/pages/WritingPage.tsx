@@ -246,7 +246,9 @@ export function WritingPage() {
             ))}
           </ul>
         ) : null}
-        <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
+        <div className="workflow-status-slot writing-panel__status-slot">
+          <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
+        </div>
       </section>
 
       <h2 className="subsection-title">推荐写作场景</h2>

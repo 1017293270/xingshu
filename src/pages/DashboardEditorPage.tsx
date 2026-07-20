@@ -1,137 +1,111 @@
-import { Button } from "antd";
-import { ArrowSquareOut, ArrowsClockwise } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
-import { XsAsyncPanel } from "@/components/xs";
-import { normalizeDashboardEditorUrl, probeDashboardEditor } from "@/services/dashboardEditorService";
-import { PageFrame } from "./PageFrame";
-import "./styles/dashboard.css";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { DashboardDesignerIsland } from "@/features/dashboardStudio/DashboardDesignerIsland";
+import {
+  createBlankDashboard,
+  replanLegacyDashboardDraft
+} from "@/services/dashboardGenerationService";
+import { getBrowserDashboardRepository } from "@/services/dashboardRepositoryService";
+import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
 
-const DEFAULT_DASHBOARD_EDITOR_URL = "http://127.0.0.1:5174/workbenches";
+function resolveEditorReturnPath(value: string | null) {
+  return value === "/analysis" ? value : "/dashboard";
+}
 
-function getDashboardEditorUrl() {
-  return import.meta.env.VITE_DASHBOARD_EDITOR_URL || DEFAULT_DASHBOARD_EDITOR_URL;
+function createStarterRecord() {
+  const repository = getBrowserDashboardRepository();
+  const schema = createBlankDashboard();
+  return repository.saveDraft(schema);
 }
 
 export function DashboardEditorPage() {
-  const configuredEditorUrl = useMemo(() => getDashboardEditorUrl(), []);
-  const dashboardEditorUrl = useMemo(
-    () => normalizeDashboardEditorUrl(configuredEditorUrl),
-    [configuredEditorUrl]
-  );
-  const [attempt, setAttempt] = useState(0);
-  const [connectionState, setConnectionState] = useState<"probing" | "frame-loading" | "ready" | "error">(
-    "probing"
-  );
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const draftId = searchParams.get("draft");
+  const returnPath = resolveEditorReturnPath(searchParams.get("returnTo"));
+  const repository = useMemo(() => getBrowserDashboardRepository(), []);
+  const starterRecordRef = useRef<DashboardRecord | null>(null);
+  const [record, setRecord] = useState<DashboardRecord | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    const controller = new AbortController();
-    setConnectionState("probing");
-
-    void probeDashboardEditor(configuredEditorUrl, { signal: controller.signal }).then((result) => {
-      if (controller.signal.aborted) {
+    setLoadError("");
+    if (draftId) {
+      let savedRecord = repository.get(draftId);
+      if (!savedRecord) {
+        setRecord(null);
+        setLoadError("找不到这份看板草稿，它可能已被删除或来自其他浏览器。");
         return;
       }
-      setConnectionState(result.ok && dashboardEditorUrl ? "frame-loading" : "error");
-    });
-
-    return () => controller.abort();
-  }, [attempt, configuredEditorUrl, dashboardEditorUrl]);
-
-  useEffect(() => {
-    if (connectionState !== "frame-loading") {
-      return undefined;
+      const replannedSchema = replanLegacyDashboardDraft(savedRecord);
+      if (replannedSchema) {
+        savedRecord = repository.saveDraft(replannedSchema, savedRecord.revision);
+      }
+      setRecord(savedRecord);
+      return;
     }
 
-    const timeoutId = window.setTimeout(() => setConnectionState("error"), 10_000);
-    return () => window.clearTimeout(timeoutId);
-  }, [connectionState]);
+    const starter = starterRecordRef.current ?? createStarterRecord();
+    starterRecordRef.current = starter;
+    setRecord(starter);
+    navigate(`/dashboard-editor?draft=${encodeURIComponent(starter.id)}`, { replace: true });
+  }, [draftId, navigate, repository]);
 
-  const reconnect = () => {
-    setConnectionState("probing");
-    setAttempt((current) => current + 1);
-  };
-  const connectionLabel =
-    connectionState === "probing"
-      ? "正在检查连接"
-      : connectionState === "frame-loading"
-        ? "正在加载编辑器"
-        : connectionState === "ready"
-          ? "已连接"
-          : "暂不可用";
+  const saveDraft = useCallback(
+    async (schema: DashboardSchema, expectedRevision: number) => {
+      const nextRecord = repository.saveDraft(schema, expectedRevision);
+      setRecord(nextRecord);
+      return nextRecord;
+    },
+    [repository]
+  );
 
-  return (
-    <PageFrame
-      title="看板编辑器"
-      subtitle="自由画布、组件编排、预览发布"
-      className="dashboard-editor-page"
-      actions={
-        <>
-          <Button
-            icon={<ArrowsClockwise size={18} />}
-            disabled={connectionState === "probing"}
-            onClick={reconnect}
-          >
-            刷新
-          </Button>
-          <Button
-            type="primary"
-            icon={<ArrowSquareOut size={18} />}
-            href={dashboardEditorUrl ?? undefined}
-            disabled={!dashboardEditorUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            新窗口打开
-          </Button>
-        </>
-      }
-    >
-      <section className="dashboard-editor-shell" aria-label="看板编辑器工作区">
-        <div className="dashboard-editor-shell__status" data-state={connectionState}>
-          <span>analytics-dashboard</span>
-          <strong>{connectionLabel}</strong>
-        </div>
-        <div className="dashboard-editor-shell__frame">
-          {connectionState === "probing" ? (
-            <div className="dashboard-editor-shell__state">
-              <XsAsyncPanel status="pending" empty={false} />
-            </div>
-          ) : null}
-          {connectionState === "error" ? (
-            <div className="dashboard-editor-shell__state">
-              <XsAsyncPanel
-                status="error"
-                empty={false}
-                errorTitle="暂时无法连接看板编辑器"
-                error="请确认看板编辑器服务已启动，或联系管理员检查编辑器地址配置。"
-                onRetry={reconnect}
-              />
-            </div>
-          ) : null}
-          {dashboardEditorUrl && (connectionState === "frame-loading" || connectionState === "ready") ? (
-            <iframe
-              key={attempt}
-              className={connectionState === "frame-loading" ? "dashboard-editor-shell__iframe--loading" : undefined}
-              title="看板编辑器子应用"
-              src={dashboardEditorUrl}
-              allow="fullscreen; clipboard-read; clipboard-write"
-              referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-              onLoad={() =>
-                setConnectionState((current) => (current === "frame-loading" ? "ready" : current))
-              }
-              onError={() =>
-                setConnectionState((current) => (current === "frame-loading" ? "error" : current))
-              }
-            />
-          ) : null}
-          {connectionState === "frame-loading" ? (
-            <div className="dashboard-editor-shell__state dashboard-editor-shell__state--overlay">
-              <XsAsyncPanel status="pending" empty={false} />
-            </div>
-          ) : null}
+  const publishDashboard = useCallback(
+    async (schema: DashboardSchema, expectedRevision: number) => {
+      const savedRecord = repository.saveDraft(schema, expectedRevision);
+      const publishedRecord = repository.publish(savedRecord.id, savedRecord.revision);
+      setRecord(publishedRecord);
+      return publishedRecord;
+    },
+    [repository]
+  );
+
+  if (loadError) {
+    return (
+      <section className="dashboard-studio-page" aria-label="看板编辑器工作区">
+        <h1>看板编辑器</h1>
+        <div className="dashboard-studio-page__error" role="alert">
+          <strong>看板草稿不可用</strong>
+          <p>{loadError}</p>
+          <button type="button" onClick={() => navigate("/dashboard-editor", { replace: true })}>
+            新建大屏
+          </button>
         </div>
       </section>
-    </PageFrame>
+    );
+  }
+
+  if (!record) {
+    return (
+      <section className="dashboard-studio-page" aria-label="看板编辑器工作区">
+        <h1 className="sr-only">看板编辑器</h1>
+        <div className="dashboard-studio-page__loading" role="status">
+          正在读取大屏草稿…
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="dashboard-studio-page" aria-label="看板编辑器工作区">
+      <h1 className="sr-only">看板编辑器</h1>
+      <DashboardDesignerIsland
+        key={record.id}
+        record={record}
+        saveDraft={saveDraft}
+        publishDashboard={publishDashboard}
+        onExit={() => navigate(returnPath)}
+      />
+    </section>
   );
 }

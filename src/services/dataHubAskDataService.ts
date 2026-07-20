@@ -1,5 +1,9 @@
 import { joinDataHubUrl } from "@/services/dataHubClient";
-import { readDataHubSession } from "@/services/dataHubSession";
+import {
+  DATA_HUB_SESSION_EXPIRED_MESSAGE,
+  expireDataHubSession,
+  readDataHubSession
+} from "@/services/dataHubSession";
 import type {
   DataHubAskStrategy,
   DataHubChatMode,
@@ -145,6 +149,17 @@ export function streamDataHubAskData(
 
   xhr.onloadend = () => {
     drain(true);
+
+    if (xhr.status === 401) {
+      expireDataHubSession(session.token);
+      handlers.onEvent({
+        type: "error",
+        data: { code: xhr.status, message: DATA_HUB_SESSION_EXPIRED_MESSAGE }
+      });
+      handlers.onError?.(new Error(DATA_HUB_SESSION_EXPIRED_MESSAGE));
+      isDone = true;
+      return;
+    }
 
     if (xhr.status < 200 || xhr.status >= 300) {
       const message = xhr.responseText?.slice(0, 200) || `HTTP ${xhr.status}`;

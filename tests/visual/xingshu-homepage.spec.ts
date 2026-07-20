@@ -59,7 +59,7 @@ const pages: SmokePage[] = [
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "智能写作", charts: 0 },
-  { slug: "dashboard", path: "/dashboard", heading: "我的看板", charts: 6 },
+  { slug: "dashboard", path: "/dashboard", heading: "我的看板", readyText: "还没有大屏", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
   {
@@ -182,26 +182,162 @@ test.describe("xingshu page visual smoke", () => {
   }
 });
 
-test.describe("dashboard editor unavailable state", () => {
+test.describe("login desktop viewport lock", () => {
+  for (const viewport of [
+    { name: "1366x768", width: 1366, height: 768 },
+    { name: "1440x900", width: 1440, height: 900 },
+    { name: "1920x1080", width: 1920, height: 1080 }
+  ]) {
+    test(`keeps login within ${viewport.name} without scrollbars`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto("/login");
+      await expect(page.getByRole("heading", { name: "登录星数" })).toBeVisible();
+      await settleResponsiveLayout(page);
+
+      const dimensions = await page.evaluate(() => ({
+        clientHeight: document.documentElement.clientHeight,
+        clientWidth: document.documentElement.clientWidth,
+        scrollHeight: document.documentElement.scrollHeight,
+        scrollWidth: document.documentElement.scrollWidth
+      }));
+
+      expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.clientHeight);
+      expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+    });
+  }
+});
+
+test.describe("dashboard editor Vue island", () => {
   for (const viewport of viewports) {
-    test(`renders an honest editor error at ${viewport.name}`, async ({ page }) => {
-      await page.route(/\/workbenches(?:[/?#]|$)/, (route) => route.abort("connectionrefused"));
+    test(`renders the internal designer at ${viewport.name}`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/dashboard-editor");
 
       await expect(page.getByRole("heading", { name: "看板编辑器" })).toBeVisible();
-      await expect(page.getByText("暂时无法连接看板编辑器", { exact: true })).toBeVisible();
-      await expect(page.getByRole("button", { name: "重试" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "看板名称" })).toHaveValue("未命名大屏");
+      await expect(page.getByRole("combobox", { name: "大屏分辨率" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "放大画布" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /适应/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: "保存" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "发布" })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
+      await expect(page.locator("iframe")).toHaveCount(0);
+      await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(0);
       await settleResponsiveLayout(page);
       await expectNoHorizontalOverflow(page);
 
       await page.screenshot({
-        path: `outputs/xingshu-homepage-system/qa/react/dashboard-editor-error-react-${viewport.name}.png`,
+        path: `outputs/xingshu-homepage-system/qa/react/dashboard-editor-vue-react-${viewport.name}.png`,
         animations: "disabled",
         fullPage: true
       });
     });
   }
+});
+
+test("dashboard widgets follow pointer drag and snap to the grid", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/dashboard-editor");
+  await page.getByRole("button", { name: "添加指标卡" }).click();
+
+  const card = page.getByRole("article", { name: "大屏组件：指标卡" });
+  const bounds = await card.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  const startX = bounds!.x + bounds!.width / 2;
+  const startY = bounds!.y + bounds!.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 360, startY, { steps: 8 });
+  await expect(card).toHaveClass(/is-dragging/);
+  await page.mouse.up();
+
+  await expect(page.getByRole("spinbutton", { name: "X" })).not.toHaveValue("0");
+  await expect(card).not.toHaveClass(/is-dragging/);
+});
+
+test("dashboard widgets resize from the selected lower-right handle", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/dashboard-editor");
+  await page.getByRole("button", { name: "添加指标卡" }).click();
+
+  const resizeHandle = page.getByRole("button", { name: "调整当前组件大小" });
+  const bounds = await resizeHandle.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + 260, bounds!.y + 170, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(page.getByRole("spinbutton", { name: "宽" })).not.toHaveValue("3");
+  await expect(page.getByRole("spinbutton", { name: "高" })).not.toHaveValue("2");
+});
+
+test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
+  await page.addInitScript(() => {
+    const timestamp = "2026-07-10T08:00:00.000Z";
+    const schema = {
+      schemaVersion: 1,
+      id: "dashboard-visual-fullscreen",
+      title: "经营全景大屏",
+      description: "全屏浏览视觉用例",
+      canvas: { width: 1920, height: 1080, columns: 12, rows: 10, background: "#F5F9FF" },
+      source: { kind: "blank", generatedAt: timestamp, plannerVersion: 1 },
+      dataBindings: {},
+      widgets: [
+        {
+          id: "widget-title",
+          type: "text",
+          title: "可信经营洞察",
+          content: "关键经营指标保持稳定。",
+          mapping: {},
+          position: { x: 0, y: 0, w: 12, h: 1 },
+          style: { accent: "#00C2FF", background: "#F8FBFF" }
+        },
+        {
+          id: "widget-metric",
+          type: "metric",
+          title: "营收指标",
+          mapping: {},
+          position: { x: 0, y: 1, w: 3, h: 2 },
+          style: { accent: "#1677FF", background: "#FFFFFF" }
+        }
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    window.localStorage.setItem(
+      "xingshu.dashboard.records.v1",
+      JSON.stringify([
+        {
+          id: schema.id,
+          status: "draft",
+          revision: 1,
+          schema,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+      ])
+    );
+  });
+
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/dashboard-view?dashboard=dashboard-visual-fullscreen");
+
+  await expect(page.getByRole("main", { name: "大屏全屏浏览" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "返回大屏列表" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
+  await expect(page.locator(".runtime-header")).toHaveCount(0);
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expectNoHorizontalOverflow(page);
+  await expect(page.locator("html")).toHaveJSProperty("scrollHeight", 768);
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/dashboard-view-fullscreen-1366x768.png",
+    animations: "disabled"
+  });
 });
 
 test("sidebar logo is readable at desktop size", async ({ page }) => {
@@ -239,8 +375,11 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const apps = document.querySelector(".home-page__apps");
     const firstCard = document.querySelector(".home-page .xs-app-card");
     const firstDescription = document.querySelector(".home-page .xs-app-card__desc");
-    const firstIcon = document.querySelector(".home-page .xs-app-card .xs-icon-tile svg");
-    const firstIconNode = document.querySelector(".home-page .xs-app-card .xs-icon-tile__node");
+    const firstIcon = document.querySelector<HTMLImageElement>(".home-page .xs-app-card .xs-icon-tile__image");
+    const input = document.querySelector<HTMLElement>(".home-page .xs-command-box__input");
+    const toolbar = document.querySelector<HTMLElement>(".home-page .xs-command-box__toolbar");
+    const voiceButton = document.querySelector<HTMLElement>('.home-page .xs-command-box__tool[aria-label="语音"]');
+    const sendButton = document.querySelector<HTMLElement>(".home-page .xs-command-box__send");
 
     if (
       !hero ||
@@ -250,7 +389,10 @@ test("home page matches the reference welcome workbench composition", async ({ p
       !firstCard ||
       !firstDescription ||
       !firstIcon ||
-      !firstIconNode
+      !input ||
+      !toolbar ||
+      !voiceButton ||
+      !sendButton
     ) {
       return null;
     }
@@ -260,6 +402,12 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const appsRect = apps.getBoundingClientRect();
     const cardRect = firstCard.getBoundingClientRect();
     const descriptionStyles = window.getComputedStyle(firstDescription);
+    const inputStyles = window.getComputedStyle(input);
+    const toolbarStyles = window.getComputedStyle(toolbar);
+    const voiceRect = voiceButton.getBoundingClientRect();
+    const sendRect = sendButton.getBoundingClientRect();
+    const voiceStyles = window.getComputedStyle(voiceButton);
+    const sendStyles = window.getComputedStyle(sendButton);
 
     return {
       heroTop: heroRect.top,
@@ -269,8 +417,16 @@ test("home page matches the reference welcome workbench composition", async ({ p
       cardHeight: cardRect.height,
       cardWidth: cardRect.width,
       descriptionDisplay: descriptionStyles.display,
+      inputFocusShadow: inputStyles.boxShadow,
+      toolbarBorderTopWidth: Number.parseFloat(toolbarStyles.borderTopWidth),
+      attachmentButtonCount: document.querySelectorAll('.home-page [aria-label="附件"]').length,
+      voiceButtonSize: [voiceRect.width, voiceRect.height],
+      sendButtonSize: [sendRect.width, sendRect.height],
+      voiceButtonRadius: Number.parseFloat(voiceStyles.borderRadius),
+      sendButtonRadius: Number.parseFloat(sendStyles.borderRadius),
+      quickPromptCount: document.querySelectorAll(".xs-command-box__suggestions button").length,
       generatedIconCount: document.querySelectorAll(".home-page .xs-icon-tile__image").length,
-      iconTagName: firstIcon.tagName.toLowerCase(),
+      iconSource: firstIcon.dataset.iconSource ?? "",
       backgroundLoaded: background.complete && background.naturalWidth > 0
     };
   });
@@ -290,8 +446,16 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.cardWidth).toBeGreaterThanOrEqual(130);
   expect(metrics!.cardWidth).toBeLessThanOrEqual(170);
   expect(metrics!.descriptionDisplay).toBe("none");
-  expect(metrics!.generatedIconCount).toBe(0);
-  expect(metrics!.iconTagName).toBe("svg");
+  expect(metrics!.inputFocusShadow).toBe("none");
+  expect(metrics!.toolbarBorderTopWidth).toBe(0);
+  expect(metrics!.attachmentButtonCount).toBe(0);
+  expect(metrics!.voiceButtonSize).toEqual([56, 56]);
+  expect(metrics!.sendButtonSize).toEqual([56, 56]);
+  expect(metrics!.voiceButtonRadius).toBe(16);
+  expect(metrics!.sendButtonRadius).toBe(16);
+  expect(metrics!.quickPromptCount).toBe(0);
+  expect(metrics!.generatedIconCount).toBe(7);
+  expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
 });
 
 test("sidebar active item has a stronger selected state", async ({ page }) => {
@@ -315,63 +479,27 @@ test("sidebar active item has a stronger selected state", async ({ page }) => {
   expect(activeState.borderLeftColor).toMatch(/rgb\(22, 119, 255\)|rgb\(37, 99, 235\)/);
 });
 
-test("dashboard revenue card keeps KPI text inside the card", async ({ page }) => {
+test("dashboard library hides the fixed business demo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: "我的看板" })).toBeVisible();
-
-  const revenueBounds = await page.evaluate(() => {
-    const card = Array.from(document.querySelectorAll(".board-card")).find((element) =>
-      element.getAttribute("aria-label")?.includes("月度营收趋势")
-    );
-    const value = card?.querySelector(".revenue-value");
-    const delta = card?.querySelector(".revenue-delta");
-
-    if (!card || !value || !delta) {
-      return null;
-    }
-
-    const cardRect = card.getBoundingClientRect();
-    const valueRect = value.getBoundingClientRect();
-    const deltaRect = delta.getBoundingClientRect();
-
-    return {
-      cardRight: cardRect.right,
-      valueRight: valueRect.right,
-      deltaRight: deltaRect.right
-    };
-  });
-
-  expect(revenueBounds).not.toBeNull();
-  expect(revenueBounds!.valueRight).toBeLessThanOrEqual(revenueBounds!.cardRight - 18);
-  expect(revenueBounds!.deltaRight).toBeLessThanOrEqual(revenueBounds!.cardRight - 18);
+  await expect(page.getByRole("region", { name: "大屏列表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "还没有大屏" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建空白大屏" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "去问数生成" }).first()).toBeVisible();
+  await expect(page.locator(".board-card")).toHaveCount(0);
+  await expect(page.getByText("月度营收趋势")).toHaveCount(0);
 });
 
-test("dashboard alert title keeps the pending count readable", async ({ page }) => {
+test("dashboard editor opens as a fullscreen zoomable workspace", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "我的看板" })).toBeVisible();
-
-  const titleMetrics = await page.evaluate(() => {
-    const card = Array.from(document.querySelectorAll(".board-card")).find((element) =>
-      element.getAttribute("aria-label")?.includes("智能预警")
-    );
-    const title = card?.querySelector("h2");
-
-    if (!title) {
-      return null;
-    }
-
-    return {
-      clientWidth: title.clientWidth,
-      scrollWidth: title.scrollWidth,
-      text: title.textContent?.trim() ?? ""
-    };
-  });
-
-  expect(titleMetrics).not.toBeNull();
-  expect(titleMetrics!.text).toContain("2条未处理");
-  expect(titleMetrics!.scrollWidth).toBeLessThanOrEqual(titleMetrics!.clientWidth + 1);
+  await page.goto("/dashboard-editor");
+  await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "适应画布" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "放大画布" }).click();
+  await expect(page.getByRole("combobox", { name: "画布缩放" })).not.toHaveValue("fit");
+  await expectNoHorizontalOverflow(page);
 });
 
 test.describe("xingshu welcome page visual smoke", () => {
@@ -475,7 +603,7 @@ test("mobile navigation reaches every product destination and account route", as
     { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
     { label: "智能制表", path: "/table", heading: "智能制表" },
     { label: "智能写作", path: "/writing", heading: "智能写作" },
-    { label: "我的看板", path: "/dashboard", heading: "我的看板", charts: 6 },
+    { label: "我的看板", path: "/dashboard", heading: "我的看板", readyText: "还没有大屏" },
     { label: "我的云盘", path: "/cloud", heading: "我的云盘" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
     {
@@ -545,7 +673,7 @@ test.describe("desktop content density", () => {
     { path: "/table", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
     { path: "/writing", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
     { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
-    { path: "/dashboard", selector: ".xs-page", minWidth: 1634, maxWidth: 1638 },
+    { path: "/dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/data-management", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 }
   ];

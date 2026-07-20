@@ -48,13 +48,14 @@ describe("XsAsyncPanel", () => {
   });
 
   it("keeps stale content visible while announcing a background refresh", () => {
-    render(
+    const { container } = render(
       <XsAsyncPanel status="refreshing" empty={false}>
         <p>已缓存内容</p>
       </XsAsyncPanel>
     );
 
     expect(screen.getByText("已缓存内容")).toBeVisible();
+    expect(container.querySelector(".xs-async-panel__content")).toContainElement(screen.getByText("已缓存内容"));
     expect(screen.getByRole("status", { name: "正在刷新" })).toBeVisible();
   });
 

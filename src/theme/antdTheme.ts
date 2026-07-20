@@ -33,10 +33,26 @@ export const antdTheme: ThemeConfig = {
       activeBorderColor: xingshuTokens.colorBorderStrong,
       hoverBorderColor: xingshuTokens.colorBorderStrong
     },
+    Layout: {
+      siderBg: xingshuTokens.colorSurface,
+      lightSiderBg: xingshuTokens.colorSurface,
+      triggerBg: xingshuTokens.colorSurface,
+      triggerColor: xingshuTokens.colorTextSecondary
+    },
     Menu: {
       itemBorderRadius: xingshuTokens.radiusControl,
+      itemBg: "transparent",
+      itemColor: xingshuTokens.colorTextSecondary,
+      itemHoverBg: "#F5F9FF",
+      itemHoverColor: xingshuTokens.colorPrimaryStrong,
       itemSelectedBg: "#EAF3FF",
-      itemSelectedColor: xingshuTokens.colorPrimaryStrong
+      itemSelectedColor: xingshuTokens.colorPrimaryStrong,
+      subMenuItemBg: "transparent",
+      iconSize: 20,
+      collapsedIconSize: 20,
+      itemHeight: 48,
+      itemMarginInline: 0,
+      itemMarginBlock: 4
     },
     Segmented: {
       borderRadius: xingshuTokens.radiusControl,

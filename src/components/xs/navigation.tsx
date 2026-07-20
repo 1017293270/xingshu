@@ -42,6 +42,7 @@ export const routeTitles: Record<string, string> = {
   "/writing": "智能写作",
   "/dashboard": "我的看板",
   "/dashboard-editor": "看板编辑器",
+  "/dashboard-view": "大屏浏览",
   "/cloud": "我的云盘",
   "/data-dashboard": "数据资产看板",
   "/data-management": "数据资产管理",

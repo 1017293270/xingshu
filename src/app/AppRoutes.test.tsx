@@ -1,11 +1,16 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes } from "./AppRoutes";
+import { expireDataHubSession } from "@/services/dataHubSession";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
+
+vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
+  DashboardDesignerIsland: () => <div aria-label="星数大屏设计器">Vue 大屏工作区</div>
+}));
 
 function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
   const authenticated = options.authenticated ?? true;
@@ -38,19 +43,21 @@ describe("AppRoutes", () => {
     vi.unstubAllGlobals();
   });
 
-  it.each([
-    ["/", "您好，张三", "推荐应用"],
+  const routeCases: Array<[string, string | RegExp, string]> = [
+    ["/", "您好，zhangsan", "推荐应用"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
     ["/writing", "智能写作", "推荐写作场景"],
-    ["/dashboard", "我的看板", "经营分析看板"],
+    ["/dashboard", "大屏库", "大屏库空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
-    ["/login", "可信数据智能入口", "星数登录页"],
+    ["/login", /让每一次问数.*都有据可依/, "星数登录页"],
     ["/cloud", "我的云盘", "我的云盘内容"],
     ["/data-dashboard", "数据资产看板", "数据资产指标"],
     ["/data-management", "数据资产管理", "知识库列表"]
-  ])("renders %s", async (path, heading, landmark) => {
+  ];
+
+  it.each(routeCases)("renders %s", async (path, heading, landmark) => {
     renderRoute(path, { authenticated: !["/welcome", "/login"].includes(path) });
 
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
@@ -78,11 +85,29 @@ describe("AppRoutes", () => {
   it("redirects protected app routes to login when no data-hub session exists", async () => {
     renderRoute("/", { authenticated: false });
 
-    expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /您好，张三/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /让每一次问数.*都有据可依/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /您好，zhangsan/ })).not.toBeInTheDocument();
+  });
+
+  it("redirects to login and explains when the active session expires", async () => {
+    renderRoute("/analysis");
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+
+    act(() => {
+      expireDataHubSession("test-token");
+    });
+
+    expect(await screen.findByRole("heading", { name: "登录星数" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("登录状态已过期，请重新登录");
+    expect(useDataHubAuthStore.getState()).toMatchObject({
+      token: null,
+      user: null,
+      currentSpaceId: null
+    });
   });
 
   it("keeps the shared sidebar on routed pages", async () => {
+    const user = userEvent.setup();
     const { container } = renderRoute("/dashboard");
 
     expect(await screen.findByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
@@ -91,8 +116,13 @@ describe("AppRoutes", () => {
       expect.stringContaining("xingshu-logo-transparent.png")
     );
     expect(screen.getByRole("link", { name: /数据资产管理/ })).toHaveAttribute("href", "/data-management");
-    expect(container.querySelectorAll(".xs-sidebar__nav .xs-icon-tile svg")).toHaveLength(8);
+    expect(container.querySelectorAll(".xs-sidebar__menu > .ant-menu-item")).toHaveLength(5);
+    expect(container.querySelectorAll(".xs-sidebar__menu > .ant-menu-submenu")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "新建对话" }).querySelector("svg")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "收起侧边栏" }));
+    expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
   });
 
   it("exposes every product destination from the mobile navigation drawer", async () => {
@@ -114,12 +144,16 @@ describe("AppRoutes", () => {
 
   it("announces and focuses the new page after navigation", async () => {
     const user = userEvent.setup();
-    renderRoute("/");
+    const { container } = renderRoute("/");
+    const initialRouteView = container.querySelector(".xs-route-view");
+
+    expect(initialRouteView).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "我的看板" }));
 
-    const heading = await screen.findByRole("heading", { name: "我的看板", level: 1 });
+    const heading = await screen.findByRole("heading", { name: "大屏库", level: 1 });
     expect(heading).toHaveFocus();
+    expect(container.querySelector(".xs-route-view")).not.toBe(initialRouteView);
     expect(document.title).toBe("我的看板 · 星数");
   });
 
@@ -184,7 +218,7 @@ describe("AppRoutes", () => {
     await user.click(screen.getByRole("button", { name: /账户菜单/ }));
     await user.click(await screen.findByText("退出登录"));
 
-    expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /让每一次问数.*都有据可依/ })).toBeInTheDocument();
     expect(document.title).toBe("登录 · 星数");
   });
 
@@ -223,21 +257,45 @@ describe("AppRoutes", () => {
     expect(await screen.findByRole("heading", { name: "数据资产管理" })).toBeInTheDocument();
   });
 
-  it("opens the embedded dashboard editor from the dashboard page", async () => {
+  it("opens the internal dashboard designer from the dashboard page", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ type: "opaque" }));
     renderRoute("/dashboard");
 
-    await user.click(await screen.findByRole("button", { name: "编辑" }));
+    await user.click((await screen.findAllByRole("button", { name: "新建大屏" }))[0]);
 
     expect(await screen.findByRole("heading", { name: "看板编辑器" })).toBeInTheDocument();
-    const editorFrame = await screen.findByTitle("看板编辑器子应用");
-    expect(editorFrame).toHaveAttribute(
-      "src",
-      expect.stringContaining("/workbenches")
-    );
-    fireEvent.load(editorFrame);
-    expect(await screen.findByText("已连接")).toBeInTheDocument();
+    expect(await screen.findByLabelText("星数大屏设计器")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
+    expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
+  });
+
+  it("creates a dashboard draft from a completed ask-data result", async () => {
+    const user = userEvent.setup();
+    renderRoute("/analysis");
+
+    act(() => {
+      const store = useUiStore.getState();
+      const runId = store.startAskDataRun("分析本月经营数据");
+      store.appendAskDataEvent(runId, {
+        type: "table",
+        data: {
+          columns: ["月份", "营收"],
+          rows: [["1月", 48], ["2月", 56]],
+          totalRows: 2
+        }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "done",
+        data: { summary: "本月营收保持增长。" }
+      });
+      store.completeAskDataRun(runId);
+    });
+
+    await user.click(await screen.findByRole("button", { name: "生成大屏" }));
+
+    expect(await screen.findByLabelText("星数大屏设计器")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toContain('"kind":"ask-data"');
   });
 
   it("filters knowledge bases in data asset management", async () => {

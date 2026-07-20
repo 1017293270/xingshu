@@ -1,5 +1,5 @@
 import { requestDataHub } from "@/services/dataHubClient";
-import { clearDataHubSession } from "@/services/dataHubSession";
+import { clearDataHubSession, clearDataHubSessionExpiredNotice } from "@/services/dataHubSession";
 import type { DataHubLoginRequest, DataHubLoginResponse } from "@/types/dataHub";
 
 type DataHubRequestControl = {
@@ -22,4 +22,5 @@ export async function loginToDataHub(
 
 export function logoutDataHub() {
   clearDataHubSession();
+  clearDataHubSessionExpiredNotice();
 }

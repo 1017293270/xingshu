@@ -5,23 +5,34 @@ import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import { XsShell } from "@/components/xs";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import { HomePage } from "./HomePage";
 
 function HomeWorkspaceFixture() {
-  const isMoreOpen = useUiStore((state) => state.isMoreOpen);
-  const toggleMore = useUiStore((state) => state.toggleMore);
+  const isSidebarCollapsed = useUiStore((state) => state.isSidebarCollapsed);
+  const toggleSidebarCollapsed = useUiStore((state) => state.toggleSidebarCollapsed);
   const clearHomeConversation = useUiStore((state) => state.clearHomeConversation);
 
   return (
-    <XsShell isMoreOpen={isMoreOpen} onToggleMore={toggleMore} onNewChat={clearHomeConversation}>
+    <XsShell
+      isSidebarCollapsed={isSidebarCollapsed}
+      onToggleSidebarCollapsed={toggleSidebarCollapsed}
+      onNewChat={clearHomeConversation}
+    >
       <HomePage />
     </XsShell>
   );
 }
 
-function renderHomePage() {
+function renderHomePage(username = "张三") {
   useUiStore.getState().resetUiState();
+  useDataHubAuthStore.getState().setAuth({
+    token: "home-test-token",
+    userId: 1,
+    username,
+    isAdmin: false
+  });
 
   return render(
     <AppProviders>
@@ -55,6 +66,14 @@ describe("HomePage", () => {
     expect(xsCss).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.xs-app-card[\s\S]*?transform: none;/);
   });
 
+  it("keeps programmatic route focus from drawing a full-width frame around page headings", () => {
+    const xsCss = readFileSync("src/components/xs/xs.css", "utf8").replaceAll("\r\n", "\n");
+
+    expect(xsCss).toMatch(
+      /\.xs-shell__main h1\[tabindex="-1"\]:focus \{[\s\S]*?outline: none;[\s\S]*?box-shadow: none;/
+    );
+  });
+
   it("renders the required enterprise agent entry structure", () => {
     renderHomePage();
 
@@ -74,7 +93,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "推荐应用" })).toBeInTheDocument();
   });
 
-  it("uses the linear XingShu icon system and exposes selection state", async () => {
+  it("uses the colorful recommended app icons and exposes selection state", async () => {
     const user = userEvent.setup();
     const { container } = renderHomePage();
 
@@ -89,12 +108,36 @@ describe("HomePage", () => {
     }
 
     expect(screen.queryByText("👋")).not.toBeInTheDocument();
-    expect(container.querySelector('[data-icon-source="xingshu-home-apps-image2-v1"]')).toBeNull();
-    expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(7);
+    expect(container.querySelectorAll('[data-icon-source="xingshu-home-apps-image2-v1"]')).toHaveLength(7);
+    expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(0);
 
     const dataChatButton = screen.getByRole("button", { name: /选择 智能问数/ });
     await user.click(dataChatButton);
     expect(dataChatButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("uses the authenticated username in the greeting", () => {
+    renderHomePage("李四");
+
+    expect(screen.getByRole("heading", { name: "您好，李四" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "您好，张三" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the command toolbar clean without hints or quick-prompt dividers", () => {
+    renderHomePage();
+    const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
+
+    expect(screen.queryByRole("group", { name: "快捷问题" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
+    expect(homeCss).toMatch(
+      /\.home-page \.xs-command-box__input:focus-visible \{[\s\S]*?box-shadow: none;/
+    );
+    expect(homeCss).toMatch(
+      /\.home-page \.xs-command-box__toolbar \{[\s\S]*?border-top: 0 !important;/
+    );
+    expect(homeCss).toMatch(
+      /\.home-page \.xs-command-box__send\.ant-btn \{[\s\S]*?background: #176ff2;/
+    );
   });
 
   it("writes an app prompt into the command box when an app card is selected", async () => {
@@ -119,16 +162,23 @@ describe("HomePage", () => {
     expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("");
   });
 
-  it("expands and collapses the more navigation group", async () => {
+  it("collapses and expands the desktop sidebar rail", async () => {
     const user = userEvent.setup();
-    renderHomePage();
-    const navigation = screen.getByRole("navigation", { name: "星数主导航" });
+    const { container } = renderHomePage();
 
-    await user.click(screen.getByRole("button", { name: "更多" }));
-    expect(within(navigation).queryByText("数据资产看板")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
+    expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeNull();
+    expect(container.querySelector(".xs-sidebar--collapsed")).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "更多" }));
-    expect(within(navigation).getByText("数据资产看板")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "收起侧边栏" }));
+    expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeTruthy();
+    expect(container.querySelector(".xs-sidebar--collapsed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开侧边栏" }));
+    expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeNull();
+    expect(container.querySelector(".xs-sidebar--collapsed")).toBeNull();
+    expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
   });
 
   it("shows a sent status after submitting a command", async () => {
@@ -141,19 +191,13 @@ describe("HomePage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
   });
 
-  it("accepts attachments and reports unsupported voice input", async () => {
+  it("hides upload and reports unsupported voice input", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    expect(screen.getByRole("button", { name: "附件" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "附件" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("添加附件")).not.toBeInTheDocument();
     expect(screen.queryByText("企业数据、文档、看板与 Agent 应用统一入口")).not.toBeInTheDocument();
-
-    await user.upload(
-      screen.getByLabelText("添加附件"),
-      new File(["经营数据"], "经营日报.txt", { type: "text/plain" })
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("1 个附件已加入本地队列，尚未上传");
-    expect(screen.getByRole("list", { name: "附件队列" })).toHaveTextContent("经营日报.txt");
 
     await user.click(screen.getByRole("button", { name: "语音" }));
     expect(screen.getByRole("status")).toHaveTextContent("当前浏览器不支持语音输入");

@@ -2,11 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestDataHub, DataHubServiceError } from "./dataHubClient";
 import { loginToDataHub } from "./dataHubAuthService";
 import { ensureDataHubSpace } from "./dataHubSpaceService";
-import { clearDataHubSession, readDataHubSession, writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
+import {
+  clearDataHubSession,
+  DATA_HUB_SESSION_EXPIRED_EVENT,
+  readDataHubSession,
+  writeDataHubAuth,
+  writeDataHubSpaceId
+} from "./dataHubSession";
 
 describe("dataHubClient", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -14,6 +21,7 @@ describe("dataHubClient", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("unwraps the data-hub R envelope", async () => {
@@ -150,6 +158,8 @@ describe("dataHubClient", () => {
 
   it("throws typed errors and clears session on 401 envelopes", async () => {
     writeDataHubAuth({ token: "stale-token", userId: 1, username: "demo", isAdmin: false });
+    const sessionExpiredListener = vi.fn();
+    window.addEventListener(DATA_HUB_SESSION_EXPIRED_EVENT, sessionExpiredListener, { once: true });
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ code: 401, message: "Token 无效", data: null })))
@@ -159,6 +169,30 @@ describe("dataHubClient", () => {
       DataHubServiceError
     );
     expect(readDataHubSession().token).toBeNull();
+    expect(sessionExpiredListener).toHaveBeenCalledOnce();
+  });
+
+  it("announces session expiry for authenticated HTTP 401 responses", async () => {
+    writeDataHubAuth({ token: "expired-token", userId: 1, username: "demo", isAdmin: false });
+    const sessionExpiredListener = vi.fn();
+    window.addEventListener(DATA_HUB_SESSION_EXPIRED_EVENT, sessionExpiredListener, { once: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Unauthorized" }), {
+            status: 401,
+            statusText: "Unauthorized"
+          })
+      )
+    );
+
+    await expect(requestDataHub("/api/spaces", { baseUrl: "http://127.0.0.1:8090" })).rejects.toMatchObject({
+      status: 401
+    });
+
+    expect(readDataHubSession().token).toBeNull();
+    expect(sessionExpiredListener).toHaveBeenCalledOnce();
   });
 
   it("aborts stalled data-hub requests with a typed timeout error", async () => {

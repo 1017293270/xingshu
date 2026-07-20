@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { XsRouteFallback } from "@/components/xs";
 import { routeTitles } from "@/components/xs/navigation";
 import { HomePage } from "@/features/home/HomePage";
 import { AppLayout } from "./AppLayout";
+import { DataHubSessionExpiryHandler } from "./DataHubSessionExpiryHandler";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const AnalysisPage = lazy(() => import("@/pages/AnalysisPage").then((module) => ({ default: module.AnalysisPage })));
@@ -12,6 +14,9 @@ const WritingPage = lazy(() => import("@/pages/WritingPage").then((module) => ({
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const DashboardEditorPage = lazy(() =>
   import("@/pages/DashboardEditorPage").then((module) => ({ default: module.DashboardEditorPage }))
+);
+const DashboardViewPage = lazy(() =>
+  import("@/pages/DashboardViewPage").then((module) => ({ default: module.DashboardViewPage }))
 );
 const DataDashboardPage = lazy(() =>
   import("@/pages/DataDashboardPage").then((module) => ({ default: module.DataDashboardPage }))
@@ -40,7 +45,8 @@ export function AppRoutes() {
   return (
     <>
       <AppRouteTitle />
-      <Suspense fallback={<div className="route-loading" role="status">页面加载中</div>}>
+      <DataHubSessionExpiryHandler />
+      <Suspense fallback={<XsRouteFallback standalone />}>
         <Routes>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
@@ -49,12 +55,19 @@ export function AppRoutes() {
             <Route path="/table" element={<TablePage />} />
             <Route path="/writing" element={<WritingPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/dashboard-editor" element={<DashboardEditorPage />} />
             <Route path="/settings/ai" element={<AiSettingsPage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />
           </Route>
+          <Route
+            path="/dashboard-editor"
+            element={<ProtectedRoute><DashboardEditorPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/dashboard-view"
+            element={<ProtectedRoute><DashboardViewPage /></ProtectedRoute>}
+          />
           <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

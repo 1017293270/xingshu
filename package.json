@@ -15,12 +15,14 @@
   "dependencies": {
     "@ant-design/x": "^1.6.1",
     "@phosphor-icons/react": "^2.1.10",
+    "@phosphor-icons/vue": "^2.2.1",
     "@tanstack/react-query": "^5.101.2",
     "antd": "^5.29.3",
     "echarts": "^6.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
+    "vue": "^3.5.39",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -33,6 +35,8 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/compiler-sfc": "^3.5.39",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.3",

@@ -102,7 +102,9 @@ export function TablePage() {
           生成
         </Button>
       </section>
-      <XsStatusBar className="table-page__status" tone={submissionTone} label="操作" message={submissionStatus} />
+      <div className="workflow-status-slot table-page__status-slot">
+        <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
+      </div>
       <h2 className="subsection-title">最近制表</h2>
       <XsAsyncPanel
         status={recentTablesStatus}

@@ -1,24 +1,36 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
+import { createBlankDashboard } from "@/services/dashboardGenerationService";
+import { createDashboardRepository } from "@/services/dashboardRepositoryService";
 import { DashboardEditorPage } from "./DashboardEditorPage";
 
-const { probeDashboardEditorMock } = vi.hoisted(() => ({
-  probeDashboardEditorMock: vi.fn()
+vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
+  DashboardDesignerIsland: ({
+    record,
+    onExit
+  }: {
+    record: { schema: { title: string } };
+    onExit: () => void;
+  }) => (
+    <div aria-label="内部 Vue 大屏设计器">
+      {record.schema.title}
+      <button type="button" onClick={onExit}>返回编辑来源</button>
+    </div>
+  )
 }));
 
-vi.mock("@/services/dashboardEditorService", () => ({
-  normalizeDashboardEditorUrl: (url: string) => url,
-  probeDashboardEditor: probeDashboardEditorMock
-}));
-
-function renderEditorPage() {
+function renderEditorPage(path = "/dashboard-editor") {
   return render(
     <AppProviders>
-      <MemoryRouter>
-        <DashboardEditorPage />
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/dashboard-editor" element={<DashboardEditorPage />} />
+          <Route path="/analysis" element={<div>问数目标页</div>} />
+          <Route path="/dashboard" element={<div>大屏库目标页</div>} />
+        </Routes>
       </MemoryRouter>
     </AppProviders>
   );
@@ -26,87 +38,49 @@ function renderEditorPage() {
 
 describe("DashboardEditorPage", () => {
   beforeEach(() => {
-    probeDashboardEditorMock.mockReset();
+    localStorage.clear();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("keeps the iframe unmounted while the reachability probe is pending", async () => {
-    probeDashboardEditorMock.mockReturnValue(new Promise(() => {}));
+  it("creates a blank full-hd dashboard without mounting an iframe", async () => {
     renderEditorPage();
 
-    expect(await screen.findByText("正在检查连接")).toBeInTheDocument();
+    expect(await screen.findByLabelText("内部 Vue 大屏设计器")).toHaveTextContent("未命名大屏");
     expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
-    expect(screen.queryByText("已连接")).not.toBeInTheDocument();
+    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toContain('"width":1920');
+    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toContain('"height":1080');
+    expect(JSON.parse(localStorage.getItem("xingshu.dashboard.records.v1") ?? "[]")).toHaveLength(1);
   });
 
-  it("shows an actionable branded error without mounting a refused iframe", async () => {
+  it("opens a dashboard draft prepared by the ask-data handoff", async () => {
+    const repository = createDashboardRepository(localStorage);
+    const schema = createBlankDashboard({ title: "问数生成的区域大屏", idFactory: (prefix) => `${prefix}-ask` });
+    repository.saveDraft(schema);
+
+    renderEditorPage(`/dashboard-editor?draft=${schema.id}`);
+
+    expect(await screen.findByLabelText("内部 Vue 大屏设计器")).toHaveTextContent("问数生成的区域大屏");
+  });
+
+  it("returns an ask-data dashboard to the analysis page", async () => {
     const user = userEvent.setup();
-    probeDashboardEditorMock.mockResolvedValue({ ok: false, message: "看板编辑器暂时不可用" });
-    renderEditorPage();
+    const repository = createDashboardRepository(localStorage);
+    const schema = createBlankDashboard({ title: "问数返回测试", idFactory: (prefix) => `${prefix}-return` });
+    repository.saveDraft(schema);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("请确认看板编辑器服务已启动");
-    expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
+    renderEditorPage(
+      `/dashboard-editor?draft=${schema.id}&returnTo=${encodeURIComponent("/analysis")}`
+    );
 
-    await user.click(screen.getByRole("button", { name: "重试" }));
-    await waitFor(() => expect(probeDashboardEditorMock).toHaveBeenCalledTimes(2));
+    await user.click(await screen.findByRole("button", { name: "返回编辑来源" }));
+    expect(await screen.findByText("问数目标页")).toBeInTheDocument();
   });
 
-  it("announces a connection only after the probed iframe loads", async () => {
-    probeDashboardEditorMock.mockResolvedValue({ ok: true, message: "看板编辑器已连接" });
-    renderEditorPage();
-
-    const iframe = await screen.findByTitle("看板编辑器子应用");
-    expect(screen.getByText("正在加载编辑器")).toBeInTheDocument();
-    expect(screen.queryByText("已连接")).not.toBeInTheDocument();
-
-    fireEvent.load(iframe);
-
-    expect(await screen.findByText("已连接")).toBeInTheDocument();
-  });
-
-  it("removes the old iframe and ignores its late load event while reconnecting", async () => {
+  it("offers a safe recovery path for a missing draft", async () => {
     const user = userEvent.setup();
-    let resolveReconnect!: (value: { ok: boolean; message: string }) => void;
-    probeDashboardEditorMock
-      .mockResolvedValueOnce({ ok: true, message: "看板编辑器已连接" })
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveReconnect = resolve;
-        })
-      );
-    renderEditorPage();
+    renderEditorPage("/dashboard-editor?draft=missing");
 
-    const oldIframe = await screen.findByTitle("看板编辑器子应用");
-    fireEvent.load(oldIframe);
-    expect(await screen.findByText("已连接")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "刷新" }));
-    fireEvent.load(oldIframe);
-
-    expect(screen.queryByText("已连接")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
-    await act(async () => {
-      resolveReconnect({ ok: true, message: "看板编辑器已连接" });
-      await Promise.resolve();
-    });
-  });
-
-  it("unmounts an iframe that never finishes loading", async () => {
-    vi.useFakeTimers();
-    probeDashboardEditorMock.mockResolvedValue({ ok: true, message: "看板编辑器已连接" });
-    renderEditorPage();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(screen.getByTitle("看板编辑器子应用")).toBeInTheDocument();
-
-    act(() => vi.advanceTimersByTime(10_000));
-
-    expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("暂时无法连接看板编辑器");
+    expect(await screen.findByRole("alert")).toHaveTextContent("找不到这份看板草稿");
+    await user.click(screen.getByRole("button", { name: "新建大屏" }));
+    expect(await screen.findByLabelText("内部 Vue 大屏设计器")).toHaveTextContent("未命名大屏");
   });
 });

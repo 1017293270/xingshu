@@ -101,7 +101,9 @@ describe("workflow refinements", () => {
     ]);
     serviceMocks.createTableFromPrompt.mockReturnValue(request.promise);
 
-    renderPage(<TablePage />);
+    const { container } = renderPage(<TablePage />);
+
+    expect(container.querySelector(".workflow-status-slot.table-page__status-slot")).toBeInTheDocument();
 
     const title = await screen.findByRole("heading", { name: fullTitle });
     expect(title).toHaveAttribute("title", fullTitle);
@@ -155,6 +157,7 @@ describe("workflow refinements", () => {
     const { container } = renderPage(<WritingPage />);
 
     expect(container.querySelector(".writing-panel--compact")).toBeInTheDocument();
+    expect(container.querySelector(".workflow-status-slot.writing-panel__status-slot")).toBeInTheDocument();
     expect(await screen.findByText("2026-07-10 07:25")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("添加写作附件"), {

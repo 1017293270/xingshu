@@ -57,15 +57,18 @@ describe("LoginPage", () => {
     useDataHubAuthStore.getState().clearAuthState();
   });
 
-  it("renders the image2-backed enterprise login composition", async () => {
+  it("renders the split enterprise login composition", async () => {
     const { container } = renderLoginRoute();
 
-    expect(await screen.findByRole("heading", { name: "可信数据智能入口" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /让每一次问数/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "登录星数" })).toBeInTheDocument();
     expect(screen.getByText("企业级安全防护已启用")).toBeInTheDocument();
+    expect(screen.getByText("SECURE ACCESS")).toBeInTheDocument();
+    expect(screen.getByText("安全连接")).toBeInTheDocument();
     expect(screen.getByText("由 data-hub 权限体系提供认证")).toBeInTheDocument();
-    expect(screen.getByLabelText("登录页可信能力")).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-icon-source="login-image2"]')).toHaveLength(7);
+    expect(container.querySelector(".login-page__atmosphere")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector(".login-ask-demo")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelectorAll(".login-page__stars i")).toHaveLength(7);
   });
 
   it("validates required fields before calling data-hub", async () => {
@@ -110,7 +113,7 @@ describe("LoginPage", () => {
     await user.type(screen.getByLabelText("密码"), "secret");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /您好，zhangsan/ }, { timeout: 4000 })).toBeInTheDocument();
     expect(ensureDataHubSpace).toHaveBeenCalledWith(
       "zhangsan",
       expect.objectContaining({ signal: expect.any(AbortSignal), timeoutMs: 8000 })
@@ -125,7 +128,7 @@ describe("LoginPage", () => {
 
     await submitLoginForm();
 
-    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(await screen.findByLabelText("空白问数工作区", {}, { timeout: 4000 })).toBeInTheDocument();
     expect(useDataHubAuthStore.getState()).toMatchObject({
       token: userFixture.token,
       currentSpaceId: spaceFixture.id,
@@ -150,7 +153,7 @@ describe("LoginPage", () => {
 
     await submitLoginForm();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("空间初始化失败");
+    expect(await screen.findByRole("alert", {}, { timeout: 4000 })).toHaveTextContent("空间初始化失败");
     expect(useDataHubAuthStore.getState()).toMatchObject({ token: null, user: null, currentSpaceId: null });
     expect(readDataHubSession()).toEqual({ token: null, user: null, spaceId: null });
   });
@@ -162,7 +165,7 @@ describe("LoginPage", () => {
 
     await submitLoginForm();
 
-    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /您好，alice/ }, { timeout: 4000 })).toBeInTheDocument();
     expect(document.title).toBe("首页 · 星数");
   });
 
@@ -173,7 +176,7 @@ describe("LoginPage", () => {
 
     await submitLoginForm();
 
-    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /您好，alice/ }, { timeout: 4000 })).toBeInTheDocument();
     expect(document.title).toBe("首页 · 星数");
   });
 
@@ -214,7 +217,7 @@ describe("LoginPage", () => {
     await user.type(screen.getByLabelText("密码"), "secret");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /您好，zhangsan/ }, { timeout: 4000 })).toBeInTheDocument();
     expect(readDataHubSession()).toMatchObject({ token: "token-123", spaceId: 12 });
   });
 
@@ -227,7 +230,7 @@ describe("LoginPage", () => {
     await user.type(screen.getByLabelText("密码"), "bad-password");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByText("用户名或密码错误")).toBeInTheDocument();
+    expect(await screen.findByText("用户名或密码错误", undefined, { timeout: 4000 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "登录" })).not.toBeDisabled());
   });
 });

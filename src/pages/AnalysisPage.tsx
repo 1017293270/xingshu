@@ -1,5 +1,6 @@
 import { Button, Progress, Segmented, Tag } from "antd";
 import {
+  ArrowDown,
   Brain,
   CaretDown,
   CaretUp,
@@ -13,11 +14,17 @@ import {
   PresentationChart,
   WarningCircle
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  TouchEvent as ReactTouchEvent,
+  WheelEvent as ReactWheelEvent
+} from "react";
+import { useNavigate } from "react-router-dom";
 import { XsChartCard, XsCommandBox } from "@/components/xs";
+import { XsStreamingText } from "@/components/xs/XsStreamingText";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
-import { createAttachmentQueue } from "@/services/attachmentService";
 import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
@@ -27,6 +34,7 @@ import {
   createDataHubAskTurn
 } from "@/services/dataHubAskDataPresenter";
 import { loadAiProviderConfig } from "@/services/aiProviderConfigService";
+import { prepareDashboardFromAskTurn } from "@/services/dashboardAskDataHandoffService";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import { useUiStore } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
@@ -39,6 +47,7 @@ import type {
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
+import "./styles/analysis-motion.css";
 
 type ThinkingPhaseStatus = "complete" | "active" | "pending" | "error";
 
@@ -58,7 +67,7 @@ type AiChartUiState =
   | { status: "not-chartable"; message: string }
   | { status: "error"; message: string };
 
-const autoScrollBottomThreshold = 96;
+const autoScrollBottomThreshold = 24;
 
 const quickQuestions = [
   "本月销售额与目标完成率怎么样？",
@@ -123,9 +132,12 @@ function isNearScrollBottom(element: HTMLElement) {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= autoScrollBottomThreshold;
 }
 
-function scrollElementToBottom(element: HTMLElement, sentinel?: HTMLElement | null) {
-  sentinel?.scrollIntoView?.({ block: "end" });
-  element.scrollTop = element.scrollHeight;
+function scrollElementToBottom(element: HTMLElement) {
+  const bottom = Math.max(0, element.scrollHeight - element.clientHeight);
+
+  if (Math.abs(element.scrollTop - bottom) > 1) {
+    element.scrollTop = bottom;
+  }
 }
 
 function getStepSummary(step: DataHubReactStepData) {
@@ -137,7 +149,7 @@ function getToolName(tool: DataHubToolResultData) {
 }
 
 function compactMessages(messages: string[]) {
-  return Array.from(new Set(messages.filter(Boolean))).slice(0, 5);
+  return Array.from(new Set(messages.filter(Boolean)));
 }
 
 function hasStep(steps: DataHubReactStepData[], actions: string[], status?: string) {
@@ -170,6 +182,18 @@ function buildThinkingPhases(
   const hasRouting = askTurn.routingEvents.length > 0;
   const hasTable = askTurn.tableResults.length > 0;
   const isDone = askDataStatus === "done";
+  const hasProcessingStarted = hasStep(steps, [
+    "plan_with_datasource_skill",
+    "generate_query",
+    "nl2sql_fallback",
+    "execute_query",
+    "finalize"
+  ]);
+  const hasExecutionStarted =
+    hasStep(steps, ["execute_query", "finalize"]) ||
+    askTurn.toolCalls.some((tool) => getToolName(tool) === "execute_query") ||
+    askTurn.toolResults.some((tool) => getToolName(tool) === "execute_query");
+  const hasResultStarted = hasStep(steps, ["finalize"]) || hasTable || Boolean(askTurn.assistantContent);
 
   const drafts: Omit<ThinkingPhase, "status">[] = [
     {
@@ -225,9 +249,9 @@ function buildThinkingPhases(
 
   const completed = [
     hasRouting || hasDecompose || steps.length > 0 || hasTable || isDone,
-    hasStep(steps, ["locate_datasource", "match_skill", "load_cube_meta"], "success") || hasTable || isDone,
-    hasStep(steps, ["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"], "success") || hasTable || isDone,
-    hasStep(steps, ["execute_query"], "success") || hasTable || isDone,
+    hasProcessingStarted || hasExecutionStarted || hasResultStarted || isDone,
+    hasExecutionStarted || hasResultStarted || isDone,
+    hasResultStarted || isDone,
     isDone
   ];
   const failed = [
@@ -270,23 +294,201 @@ const phaseStatusMeta: Record<ThinkingPhaseStatus, { label: string; color: strin
   error: { label: "异常", color: "error" }
 };
 
-function DataHubThinkingProcess({ phases }: { phases: ThinkingPhase[] }) {
+type DrainedPhase = {
+  id: string;
+  signature: string;
+};
+
+type ThinkingPlaybackState = {
+  activeTitle?: string;
+  isComplete: boolean;
+};
+
+const phasePlaybackSettleMs = 220;
+
+function getPhaseStreamMessages(phase: ThinkingPhase) {
+  return Array.from(new Set([phase.description, ...phase.details].filter(Boolean)));
+}
+
+function getPhaseStreamSignature(phase: ThinkingPhase) {
+  return getPhaseStreamMessages(phase).join("\u001f");
+}
+
+function getInitialPlaybackIndex(phases: ThinkingPhase[]) {
+  return phases.some((phase) => phase.status === "active") ? 0 : phases.length;
+}
+
+function useThinkingPhasePlayback(phases: ThinkingPhase[], isProcessing: boolean) {
+  const playbackEnabledRef = useRef(phases.some((phase) => phase.status === "active"));
+  const [playbackIndex, setPlaybackIndex] = useState(() => getInitialPlaybackIndex(phases));
+  const [drainedPhase, setDrainedPhase] = useState<DrainedPhase | null>(null);
+  const targetPhase = phases[playbackIndex];
+  const targetSignature = targetPhase ? getPhaseStreamSignature(targetPhase) : "";
+  const hasPendingPhase = phases.some((phase) => phase.status === "pending");
+  const shouldAbortPlayback = !isProcessing && hasPendingPhase;
+  const backendHasAdvanced = Boolean(
+    targetPhase &&
+    (targetPhase.status === "complete" ||
+      targetPhase.status === "error" ||
+      phases.slice(playbackIndex + 1).some((phase) => phase.status !== "pending"))
+  );
+
+  useEffect(() => {
+    if (
+      !playbackEnabledRef.current ||
+      shouldAbortPlayback ||
+      !targetPhase ||
+      !backendHasAdvanced ||
+      drainedPhase?.id !== targetPhase.id ||
+      drainedPhase.signature !== targetSignature
+    ) {
+      return undefined;
+    }
+
+    const settleTimer = window.setTimeout(() => {
+      setPlaybackIndex((current) => Math.min(phases.length, current + 1));
+      setDrainedPhase(null);
+    }, phasePlaybackSettleMs);
+
+    return () => window.clearTimeout(settleTimer);
+  }, [
+    backendHasAdvanced,
+    drainedPhase,
+    phases.length,
+    shouldAbortPlayback,
+    targetPhase,
+    targetSignature
+  ]);
+
+  const displayedPhases = useMemo<ThinkingPhase[]>(() => {
+    if (!playbackEnabledRef.current || shouldAbortPlayback || playbackIndex >= phases.length) {
+      return phases;
+    }
+
+    return phases.map((phase, index) => {
+      if (index < playbackIndex) {
+        return { ...phase, status: phase.status === "error" ? "error" : "complete" };
+      }
+
+      if (index === playbackIndex) {
+        return { ...phase, status: phase.status === "error" ? "error" : "active" };
+      }
+
+      return { ...phase, status: "pending" };
+    });
+  }, [phases, playbackIndex, shouldAbortPlayback]);
+
+  return {
+    displayedPhases,
+    markPhaseDrained: (id: string, signature: string) => setDrainedPhase({ id, signature })
+  };
+}
+
+function AiThinkingDots({ label }: { label: string }) {
   return (
-    <div className="datahub-thinking-panel">
+    <span className="datahub-thinking-dots" role="status" aria-label={label}>
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+    </span>
+  );
+}
+
+function PhaseStreamingOutput({
+  phase,
+  onDrained
+}: {
+  phase: ThinkingPhase;
+  onDrained: (id: string, signature: string) => void;
+}) {
+  const messages = getPhaseStreamMessages(phase);
+  const signature = messages.join("\u001f");
+  const [completedCount, setCompletedCount] = useState(0);
+  const lastDrainedSignatureRef = useRef("");
+  const currentMessage = messages[completedCount];
+
+  useEffect(() => {
+    if (completedCount < messages.length || lastDrainedSignatureRef.current === signature) {
+      return;
+    }
+
+    lastDrainedSignatureRef.current = signature;
+    onDrained(phase.id, signature);
+  }, [completedCount, messages.length, onDrained, phase.id, signature]);
+
+  return (
+    <div className="datahub-step__stream">
+      <span className="datahub-step__stream-label" aria-hidden="true">实时输出</span>
+      <div className="datahub-step__stream-lines">
+        {messages.slice(0, completedCount).map((message, index) => (
+          <span className="datahub-step__stream-line datahub-step__stream-line--complete" key={`${index}-${message}`}>
+            {message}
+          </span>
+        ))}
+        {currentMessage ? (
+          <XsStreamingText
+            key={`${completedCount}-${currentMessage}`}
+            ariaLabel={`${phase.title}实时输出`}
+            className="datahub-step__stream-copy"
+            intervalMs={22}
+            isStreaming
+            onComplete={() => setCompletedCount((current) => Math.min(messages.length, current + 1))}
+            text={currentMessage}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DataHubThinkingProcess({
+  phases,
+  isProcessing,
+  turnId,
+  onPlaybackChange
+}: {
+  phases: ThinkingPhase[];
+  isProcessing: boolean;
+  turnId: string;
+  onPlaybackChange: (turnId: string, activeTitle: string | undefined, isComplete: boolean) => void;
+}) {
+  const { displayedPhases, markPhaseDrained } = useThinkingPhasePlayback(phases, isProcessing);
+  const completedCount = displayedPhases.filter((phase) => phase.status === "complete").length;
+  const activePhase = displayedPhases.find((phase) => phase.status === "active");
+  const isPlaybackComplete = displayedPhases.every(
+    (phase) => phase.status === "complete" || phase.status === "error"
+  );
+
+  useEffect(() => {
+    onPlaybackChange(turnId, activePhase?.title, isPlaybackComplete);
+  }, [activePhase?.title, isPlaybackComplete, onPlaybackChange, turnId]);
+
+  return (
+    <div className={`datahub-thinking-panel${activePhase ? " datahub-thinking-panel--active" : ""}`}>
       <div className="datahub-thinking-panel__head">
         <div>
           <strong>Agent 思考进度</strong>
-          <span>{phases.filter((phase) => phase.status === "complete").length} / {phases.length} 已完成</span>
+          <span>
+            {completedCount} / {displayedPhases.length} 已完成
+            {activePhase ? ` · 正在${activePhase.title}` : ""}
+          </span>
         </div>
-        <Progress className="datahub-thinking-progress" percent={getPhasePercent(phases)} size="small" showInfo={false} />
+        <Progress
+          aria-label={`Agent 思考进度 ${getPhasePercent(displayedPhases)}%`}
+          className="datahub-thinking-progress"
+          percent={getPhasePercent(displayedPhases)}
+          size="small"
+          showInfo={false}
+        />
       </div>
 
       <ol className="datahub-step-list datahub-step-list--condensed" aria-label="data-hub 问数步骤">
-        {phases.map((phase, index) => {
+        {displayedPhases.map((phase) => {
           const Icon = phase.icon;
           const meta = phaseStatusMeta[phase.status];
           const visibleDetail = phase.details[0];
           const extraDetails = phase.details.slice(1);
+          const showStaticDetails = phase.status === "complete" || phase.status === "error";
 
           return (
             <li key={phase.id} className={`datahub-step datahub-step--${phase.status}`}>
@@ -300,12 +502,23 @@ function DataHubThinkingProcess({ phases }: { phases: ThinkingPhase[] }) {
               <div className="datahub-step__content">
                 <div className="datahub-step__title">
                   <strong>{phase.title}</strong>
-                  <Tag color={meta.color}>{meta.label}</Tag>
+                  <Tag className={phase.status === "active" ? "datahub-step__tag--thinking" : ""} color={meta.color}>
+                    {meta.label}
+                    {phase.status === "active" ? <AiThinkingDots label={`AI 正在${phase.title}`} /> : null}
+                  </Tag>
                 </div>
-                <p>{phase.description}</p>
-                {visibleDetail ? <span className="datahub-step__hint">{visibleDetail}</span> : null}
-                {extraDetails.length > 0 ? (
-                  <details className="datahub-step-details" open={phase.status !== "pending"}>
+                {phase.status === "active" ? (
+                  <PhaseStreamingOutput phase={phase} onDrained={markPhaseDrained} />
+                ) : (
+                  <>
+                    <p>{phase.description}</p>
+                    {showStaticDetails && visibleDetail ? (
+                      <span className="datahub-step__hint">{visibleDetail}</span>
+                    ) : null}
+                  </>
+                )}
+                {showStaticDetails && extraDetails.length > 0 ? (
+                  <details className="datahub-step-details" open>
                     <summary>
                       <span>过程细节</span>
                       <small>{extraDetails.length} 条</small>
@@ -322,6 +535,33 @@ function DataHubThinkingProcess({ phases }: { phases: ThinkingPhase[] }) {
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+function DataHubResultLoading({ activePhase }: { activePhase?: string }) {
+  return (
+    <div
+      className="datahub-result-loading"
+      role="status"
+      aria-label="AI 正在生成问数结果"
+      aria-live="polite"
+    >
+      <div className="datahub-result-loading__head">
+        <span className="datahub-result-loading__icon" aria-hidden="true">
+          <Brain size={20} weight="bold" />
+        </span>
+        <div>
+          <strong>AI 正在生成问数结果</strong>
+          <span>{activePhase ? `当前步骤：${activePhase}` : "正在连接 data-hub 问数 Agent"}</span>
+        </div>
+      </div>
+      <div className="datahub-result-loading__skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
     </div>
   );
 }
@@ -477,34 +717,35 @@ function AiChartSuggestionCard({
 }
 
 export function AnalysisPage() {
+  const navigate = useNavigate();
   const activeAnalysisQuestion = useUiStore((state) => state.activeAnalysisQuestion);
   const askDataStatus = useUiStore((state) => state.askDataStatus);
   const askDataEvents = useUiStore((state) => state.askDataEvents);
   const askDataError = useUiStore((state) => state.askDataError);
   const analysisTurns = useUiStore((state) => state.analysisTurns);
   const activeAskDataRunId = useUiStore((state) => state.activeAskDataRunId);
-  const pendingAttachments = useUiStore((state) => state.pendingAttachments);
   const startAskDataRun = useUiStore((state) => state.startAskDataRun);
   const appendAskDataEvent = useUiStore((state) => state.appendAskDataEvent);
   const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const cancelAskDataRun = useUiStore((state) => state.cancelAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
-  const queuePendingAttachments = useUiStore((state) => state.queuePendingAttachments);
-  const removePendingAttachment = useUiStore((state) => state.removePendingAttachment);
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
+  const [thinkingPlaybackStates, setThinkingPlaybackStates] = useState<Record<string, ThinkingPlaybackState>>({});
+  const [isScrollToBottomVisible, setIsScrollToBottomVisible] = useState(false);
   const voiceInput = useVoiceInput({
     onAudioReady: () => setWorkflowStatus("语音录入完成；转写服务尚未接入"),
     onError: setWorkflowStatus
   });
   const workspaceRef = useRef<HTMLDivElement | null>(null);
-  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const scrollFrameRef = useRef<number | null>(null);
-  const scrollTimeoutRef = useRef<number | null>(null);
+  const lastWorkspaceScrollTopRef = useRef(0);
+  const isWorkspacePointerDownRef = useRef(false);
+  const lastWorkspaceTouchYRef = useRef<number | null>(null);
   const hasConversation =
     Boolean(activeAnalysisQuestion.trim()) || askDataStatus !== "idle" || askDataEvents.length > 0 || Boolean(askDataError);
   const askTurn = createDataHubAskTurn(activeAnalysisQuestion, askDataEvents, askDataStatus, askDataError);
@@ -527,49 +768,78 @@ export function AnalysisPage() {
   const scrollSignature = visibleTurns
     .map((turn) => `${turn.id}:${turn.status}:${turn.events.length}:${turn.error}`)
     .join("|");
+  const handleThinkingPlaybackChange = useCallback(
+    (turnId: string, activeTitle: string | undefined, isComplete: boolean) => {
+      setThinkingPlaybackStates((current) => {
+        const previous = current[turnId];
+
+        if (previous && previous.activeTitle === activeTitle && previous.isComplete === isComplete) {
+          return current;
+        }
+
+        return { ...current, [turnId]: { activeTitle, isComplete } };
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (!hasConversation) {
       shouldAutoScrollRef.current = true;
+      lastWorkspaceScrollTopRef.current = 0;
+      setIsScrollToBottomVisible(false);
     }
   }, [hasConversation]);
 
-  const scheduleAutoScrollToBottom = () => {
+  useEffect(() => {
+    const releasePointer = () => {
+      isWorkspacePointerDownRef.current = false;
+    };
+
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", releasePointer);
+
+    return () => {
+      window.removeEventListener("pointerup", releasePointer);
+      window.removeEventListener("pointercancel", releasePointer);
+    };
+  }, []);
+
+  const pauseAutoScroll = useCallback(() => {
+    shouldAutoScrollRef.current = false;
     const workspace = workspaceRef.current;
 
-    if (!workspace || !shouldAutoScrollRef.current) {
+    if (workspace && !isNearScrollBottom(workspace)) {
+      setIsScrollToBottomVisible(true);
+    }
+  }, []);
+
+  const scheduleAutoScrollToBottom = useCallback(() => {
+    const workspace = workspaceRef.current;
+
+    if (!workspace || !shouldAutoScrollRef.current || scrollFrameRef.current !== null) {
       return;
     }
 
-    if (scrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(scrollFrameRef.current);
-    }
-
-    if (scrollTimeoutRef.current !== null) {
-      window.clearTimeout(scrollTimeoutRef.current);
-    }
-
-    const scrollNow = () => {
+    let didRunSynchronously = false;
+    const frameId = window.requestAnimationFrame(() => {
+      didRunSynchronously = true;
+      scrollFrameRef.current = null;
       const currentWorkspace = workspaceRef.current;
 
       if (!currentWorkspace || !shouldAutoScrollRef.current) {
         return;
       }
 
-      scrollElementToBottom(currentWorkspace, bottomSentinelRef.current);
-      shouldAutoScrollRef.current = true;
-    };
-
-    scrollNow();
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollNow();
-      scrollFrameRef.current = null;
+      scrollElementToBottom(currentWorkspace);
+      lastWorkspaceScrollTopRef.current = currentWorkspace.scrollTop;
+      setIsScrollToBottomVisible(false);
     });
-    scrollTimeoutRef.current = window.setTimeout(() => {
-      scrollNow();
-      scrollTimeoutRef.current = null;
-    }, 80);
-  };
+
+    if (!didRunSynchronously) {
+      scrollFrameRef.current = frameId;
+    }
+  }, []);
 
   useEffect(() => {
     scheduleAutoScrollToBottom();
@@ -579,12 +849,8 @@ export function AnalysisPage() {
         window.cancelAnimationFrame(scrollFrameRef.current);
         scrollFrameRef.current = null;
       }
-      if (scrollTimeoutRef.current !== null) {
-        window.clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = null;
-      }
     };
-  }, [hasConversation, isReasoningVisible, scrollSignature]);
+  }, [hasConversation, isReasoningVisible, scheduleAutoScrollToBottom, scrollSignature]);
 
   useEffect(() => {
     const workspace = workspaceRef.current;
@@ -594,6 +860,13 @@ export function AnalysisPage() {
     }
 
     const observer = new ResizeObserver(() => {
+      const currentWorkspace = workspaceRef.current;
+
+      if (currentWorkspace && !shouldAutoScrollRef.current && isNearScrollBottom(currentWorkspace)) {
+        shouldAutoScrollRef.current = true;
+        setIsScrollToBottomVisible(false);
+      }
+
       scheduleAutoScrollToBottom();
     });
     const content = workspace.querySelector(".analysis-turn-list");
@@ -604,7 +877,7 @@ export function AnalysisPage() {
     }
 
     return () => observer.disconnect();
-  }, [hasConversation, scrollSignature]);
+  }, [hasConversation, scheduleAutoScrollToBottom, scrollSignature]);
 
   const handleWorkspaceScroll = () => {
     const workspace = workspaceRef.current;
@@ -613,7 +886,61 @@ export function AnalysisPage() {
       return;
     }
 
-    shouldAutoScrollRef.current = isNearScrollBottom(workspace);
+    const isAtBottom = isNearScrollBottom(workspace);
+    const movedUp = workspace.scrollTop < lastWorkspaceScrollTopRef.current - 2;
+
+    if (isAtBottom) {
+      shouldAutoScrollRef.current = true;
+      setIsScrollToBottomVisible(false);
+    } else if (isWorkspacePointerDownRef.current && movedUp) {
+      shouldAutoScrollRef.current = false;
+      setIsScrollToBottomVisible(true);
+    } else if (!shouldAutoScrollRef.current) {
+      setIsScrollToBottomVisible(true);
+    }
+
+    lastWorkspaceScrollTopRef.current = workspace.scrollTop;
+  };
+
+  const handleWorkspaceWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) {
+      pauseAutoScroll();
+    }
+  };
+
+  const handleWorkspaceTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    lastWorkspaceTouchYRef.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleWorkspaceTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touchY = event.touches[0]?.clientY;
+    const previousTouchY = lastWorkspaceTouchYRef.current;
+
+    if (touchY !== undefined && previousTouchY !== null && touchY > previousTouchY + 2) {
+      pauseAutoScroll();
+    }
+
+    lastWorkspaceTouchYRef.current = touchY ?? null;
+  };
+
+  const handleWorkspaceKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
+      pauseAutoScroll();
+    }
+  };
+
+  const handleScrollToBottom = () => {
+    const workspace = workspaceRef.current;
+
+    shouldAutoScrollRef.current = true;
+    setIsScrollToBottomVisible(false);
+
+    if (!workspace) {
+      return;
+    }
+
+    scrollElementToBottom(workspace);
+    lastWorkspaceScrollTopRef.current = workspace.scrollTop;
   };
 
   const handleToggleReasoning = () => {
@@ -638,6 +965,16 @@ export function AnalysisPage() {
       .slice(0, 28);
     downloadCsv(`${safeQuestion || "问数结果"}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv(tables));
     setWorkflowStatus(`已导出 ${rowCount} 行问数结果`);
+  };
+
+  const handleGenerateDashboard = (turn: ReturnType<typeof createDataHubAskTurn>) => {
+    try {
+      const { editorPath } = prepareDashboardFromAskTurn(turn, { dataMode: "snapshot" });
+      setWorkflowStatus("已生成大屏草稿，正在打开全屏编辑器");
+      navigate(editorPath);
+    } catch (error) {
+      setWorkflowStatus(error instanceof Error ? error.message : "生成大屏失败，请稍后重试");
+    }
   };
 
   const handleGenerateAiChart = async (turnId: string, question: string, tables: DataHubTableResult[]) => {
@@ -692,6 +1029,8 @@ export function AnalysisPage() {
   };
 
   const streamDataHubQuestion = (question: string) => {
+    shouldAutoScrollRef.current = true;
+    setIsScrollToBottomVisible(false);
     const sessionId = useUiStore.getState().activeAnalysisSessionId;
     const runId = startAskDataRun(question);
 
@@ -744,24 +1083,7 @@ export function AnalysisPage() {
     setWorkflowStatus("已停止生成，你可以修改问题后重新发送");
   };
 
-  const handleAttachments = (files: File[]) => {
-    const queue = createAttachmentQueue(files);
-    const ready = queue.filter((item) => item.status === "ready");
-    const rejected = queue.filter((item) => item.status === "rejected");
-    queuePendingAttachments(queue);
-    if (rejected.length > 0) {
-      setWorkflowStatus(
-        ready.length > 0
-          ? `${ready.length} 个附件已加入本地队列；${rejected[0].name}：${rejected[0].error}`
-          : `${rejected[0].name}：${rejected[0].error}`
-      );
-      return;
-    }
-
-    setWorkflowStatus(`${queue.length} 个附件已加入本地队列，尚未上传`);
-  };
-
-  const handleFollowUp = async () => {
+  const handleFollowUp = () => {
     const command = followUpDraft.trim();
 
     if (!command) {
@@ -770,25 +1092,39 @@ export function AnalysisPage() {
 
     streamDataHubQuestion(command);
     setFollowUpDraft("");
-    setWorkflowStatus(
-      pendingAttachments.length > 0
-        ? `已继续追问：${command}；附件仍仅保存在本地`
-        : `已继续追问：${command}`
-    );
+    setWorkflowStatus(`已继续追问：${command}`);
   };
 
   return (
     <PageFrame title="新建对话" className="analysis-page" hideHeader>
       {hasConversation ? <h1 className="sr-only">智能问数</h1> : null}
-      <div className="analysis-workspace" ref={workspaceRef} onScroll={handleWorkspaceScroll}>
+      <div
+        className="analysis-workspace"
+        ref={workspaceRef}
+        onKeyDownCapture={handleWorkspaceKeyDown}
+        onPointerDown={() => {
+          isWorkspacePointerDownRef.current = true;
+        }}
+        onScroll={handleWorkspaceScroll}
+        onTouchEnd={() => {
+          lastWorkspaceTouchYRef.current = null;
+        }}
+        onTouchMove={handleWorkspaceTouchMove}
+        onTouchStart={handleWorkspaceTouchStart}
+        onWheel={handleWorkspaceWheel}
+      >
         {hasConversation ? (
           <div className="analysis-turn-list">
             {visibleTurns.map((turn) => {
               const turnAsk = createDataHubAskTurn(turn.question, turn.events, turn.status, turn.error);
               const thinkingPhases = buildThinkingPhases(turnAsk, turn.status);
+              const playbackState = thinkingPlaybackStates[turn.id];
+              const isResultReady = playbackState?.isComplete === true;
+              const isWaitingForPlayback =
+                !isResultReady && (turn.status === "streaming" || turn.status === "done");
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
               const statusTitle =
-                turn.status === "streaming"
+                turn.status === "streaming" || (turn.status === "done" && !isResultReady)
                   ? "正在问数"
                   : turn.status === "done"
                     ? "问数完成"
@@ -800,14 +1136,28 @@ export function AnalysisPage() {
               const statusDescription =
                   turn.status === "idle"
                     ? "请从首页发起智能问数，星数会同步展示 data-hub 的意图路由、语义匹配、查询执行和结果表格。"
+                    : turn.status === "done" && !isResultReady
+                      ? "数据已返回，正在完成问数过程并整理结果。"
                     : turn.status === "cancelled"
                       ? "本次问数已停止，你可以修改问题后重新发送。"
                     : turnAsk.error?.message || turnAsk.assistantContent || "正在连接 data-hub 问数 Agent，请稍候。";
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const isGeneratingAiChart = aiChartState.status === "loading";
+              const resultStageState = isResultReady
+                ? turnAsk.tableResults.length > 0
+                  ? "ready"
+                  : "empty"
+                : isWaitingForPlayback
+                  ? "loading"
+                  : "empty";
 
               return (
-                <div className="analysis-turn" key={turn.id}>
+                <div
+                  className="analysis-turn"
+                  data-status={turn.status}
+                  data-result-ready={isResultReady}
+                  key={turn.id}
+                >
                   <section className="analysis-question" aria-label="用户提问">
                     <div>
                       <strong>{turn.question}</strong>
@@ -819,7 +1169,7 @@ export function AnalysisPage() {
                     <img className="analysis-response__mark" src={assistantMark} alt="" />
                     <article className="xs-card analysis-card">
                       <header className="analysis-card__head">
-                        <div>
+                        <div className="analysis-card__status-copy" key={`${turn.id}:${statusTitle}`}>
                           <h2>{statusTitle}</h2>
                           <p>{statusDescription}</p>
                         </div>
@@ -837,30 +1187,43 @@ export function AnalysisPage() {
                         </div>
                       ) : null}
 
-                      {isReasoningVisible ? (
-                        <section
-                          className="reasoning-block"
-                          id={`analysis-reasoning-${turn.id}`}
-                          aria-label="思考过程"
-                        >
-                          <h2>问数过程（5 步）</h2>
-                          <DataHubThinkingProcess phases={thinkingPhases} />
+                      <section
+                        className="reasoning-block"
+                        id={`analysis-reasoning-${turn.id}`}
+                        aria-label="思考过程"
+                        hidden={!isReasoningVisible}
+                      >
+                        <h2>问数过程（5 步）</h2>
+                        <DataHubThinkingProcess
+                          phases={thinkingPhases}
+                          isProcessing={turn.status === "idle" || turn.status === "streaming"}
+                          turnId={turn.id}
+                          onPlaybackChange={handleThinkingPlaybackChange}
+                        />
 
-                          {turnAsk.infoMessages.length > 0 ? (
-                            <div className="datahub-info-list">
-                              {turnAsk.infoMessages.map((message) => (
-                                <p key={message}>{message}</p>
-                              ))}
-                            </div>
-                          ) : null}
-                        </section>
-                      ) : null}
+                        {turnAsk.infoMessages.length > 0 ? (
+                          <div className="datahub-info-list">
+                            {turnAsk.infoMessages.map((message) => (
+                              <p key={message}>{message}</p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </section>
 
                       <section className="analysis-output" aria-label="分析结果">
                         <div className="section-title-row">
                           <h2>问数结果</h2>
                           <div className="analysis-output__actions">
-                            {turnAsk.tableResults.length > 0 ? (
+                            {isResultReady && turnAsk.status === "done" && turnAsk.tableResults.length > 0 ? (
+                              <Button
+                                type="primary"
+                                icon={<PresentationChart size={18} />}
+                                onClick={() => handleGenerateDashboard(turnAsk)}
+                              >
+                                生成大屏
+                              </Button>
+                            ) : null}
+                            {isResultReady && turnAsk.tableResults.length > 0 ? (
                               <Button
                                 icon={<MagicWand size={18} />}
                                 loading={isGeneratingAiChart}
@@ -869,35 +1232,41 @@ export function AnalysisPage() {
                                 AI 生成图表
                               </Button>
                             ) : null}
-                            {isLatestTurn ? (
+                            {isResultReady && isLatestTurn ? (
                               <Button icon={<DownloadSimple size={18} />} onClick={() => handleExport(turnAsk.tableResults)}>
                                 导出结果
                               </Button>
                             ) : null}
                           </div>
                         </div>
-                        <AiChartSuggestionCard
-                          state={aiChartState}
-                          onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
-                        />
-                        {turnAsk.tableResults.length > 0 ? (
-                          <div className="analysis-output__tables">
-                            {turnAsk.tableResults.map((table) => (
-                              <DataHubResultTable table={table} key={table.tableIndex} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="datahub-empty-state" role="status">
-                            {turn.status === "streaming" ? "正在等待查询结果表格..." : "暂无可展示的问数表格。"}
-                          </div>
-                        )}
+                        <div className="analysis-result-stage" data-state={resultStageState}>
+                          {isResultReady ? (
+                            <AiChartSuggestionCard
+                              state={aiChartState}
+                              onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
+                            />
+                          ) : null}
+                          {isResultReady && turnAsk.tableResults.length > 0 ? (
+                            <div className="analysis-output__tables">
+                              {turnAsk.tableResults.map((table) => (
+                                <DataHubResultTable table={table} key={table.tableIndex} />
+                              ))}
+                            </div>
+                          ) : isWaitingForPlayback ? (
+                            <DataHubResultLoading activePhase={playbackState?.activeTitle} />
+                          ) : (
+                            <div className="datahub-empty-state" role="status">
+                              暂无可展示的问数表格。
+                            </div>
+                          )}
+                        </div>
                       </section>
                     </article>
                   </section>
                 </div>
               );
             })}
-            <div className="analysis-bottom-sentinel" ref={bottomSentinelRef} aria-hidden="true" />
+            <div className="analysis-bottom-sentinel" aria-hidden="true" />
           </div>
         ) : (
           <section
@@ -929,13 +1298,21 @@ export function AnalysisPage() {
       </div>
 
       <div className="analysis-composer">
+        {hasConversation && isScrollToBottomVisible ? (
+          <Button
+            className="analysis-scroll-to-bottom"
+            shape="circle"
+            aria-label="回到底部"
+            icon={<ArrowDown size={18} weight="bold" />}
+            title="回到底部"
+            onClick={handleScrollToBottom}
+          />
+        ) : null}
         <XsCommandBox
           value={followUpDraft}
           onChange={setFollowUpDraft}
           onSubmit={handleFollowUp}
-          onAttach={handleAttachments}
-          attachments={pendingAttachments}
-          onRemoveAttachment={removePendingAttachment}
+          submitOnEnter
           onVoice={() => {
             setWorkflowStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
             voiceInput.toggle();
@@ -948,11 +1325,13 @@ export function AnalysisPage() {
           busy={askDataStatus === "streaming"}
           voiceState={voiceInput.state}
         />
-        {workflowStatus ? (
-          <div className="analysis-composer__status" role="status">
-            {workflowStatus}
-          </div>
-        ) : null}
+        <div className="analysis-composer__status-slot">
+          {workflowStatus ? (
+            <div className="analysis-composer__status" role="status">
+              {workflowStatus}
+            </div>
+          ) : null}
+        </div>
       </div>
     </PageFrame>
   );

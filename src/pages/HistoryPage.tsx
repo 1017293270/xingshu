@@ -51,6 +51,7 @@ export function HistoryPage() {
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState<NonNullable<HistoryFilter["category"]>>("全部");
   const [actionStatus, setActionStatus] = useState("");
+  const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
   const historyQuery = useQuery({
     queryKey: ["historySessions", { keyword, category }],
     queryFn: () => filterHistorySessions({ keyword, category }),
@@ -72,11 +73,16 @@ export function HistoryPage() {
   );
 
   async function handleRestoreSession(session: HistorySession) {
+    if (restoringSessionId) {
+      return;
+    }
+
     if (!session.sessionId || session.source !== "data-hub") {
       setActionStatus(`已恢复历史对话：${session.title}`);
       return;
     }
 
+    setRestoringSessionId(session.id);
     setActionStatus(`正在恢复历史对话：${session.title}`);
 
     try {
@@ -91,6 +97,8 @@ export function HistoryPage() {
       navigate("/analysis");
     } catch (error) {
       setActionStatus(error instanceof Error ? `恢复历史对话失败：${error.message}` : "恢复历史对话失败");
+    } finally {
+      setRestoringSessionId(null);
     }
   }
 
@@ -144,6 +152,8 @@ export function HistoryPage() {
               key={session.id}
               type="button"
               aria-label={`${session.title}：${session.summary}`}
+              aria-busy={restoringSessionId === session.id}
+              disabled={restoringSessionId !== null}
               onClick={() => void handleRestoreSession(session)}
             >
               <span className="topic-icon" aria-hidden="true">
@@ -161,6 +171,20 @@ export function HistoryPage() {
                   <span>{session.updatedAt}</span>
                 </Space>
               </div>
+              <span
+                className="history-card__restore-state"
+                data-active={restoringSessionId === session.id}
+                aria-hidden="true"
+              >
+                {restoringSessionId === session.id ? (
+                  <>
+                    <span className="history-card__restore-spinner" />
+                    恢复中
+                  </>
+                ) : (
+                  "打开"
+                )}
+              </span>
             </button>
           ))}
         </section>
