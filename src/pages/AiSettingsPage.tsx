@@ -141,7 +141,7 @@ export function AiSettingsPage() {
       className="ai-settings-page"
     >
       <div className="ai-settings-layout">
-        <aside className="ai-provider-panel" aria-label="AI 供应商">
+        <aside className="ai-provider-panel xs-page-enter" style={{ animationDelay: "80ms" }} aria-label="AI 供应商">
           {providerOptions.map((item) => (
             <button
               type="button"
@@ -160,7 +160,7 @@ export function AiSettingsPage() {
           ))}
         </aside>
 
-        <section className="xs-card ai-settings-card" aria-label="AI 配置表单">
+        <section className="xs-card xs-page-enter ai-settings-card" style={{ animationDelay: "160ms" }} aria-label="AI 配置表单">
           <div className="ai-settings-card__head">
             <div>
               <h2>{selectedProvider.label}</h2>

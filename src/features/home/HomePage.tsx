@@ -12,6 +12,7 @@ import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
+import { useTypingPlaceholder } from "./useTypingPlaceholder";
 import "./home.css";
 
 const recommendedApps: XsAppCardData[] = [
@@ -105,6 +106,7 @@ export function HomePage() {
     onAudioReady: () => setSentStatus("语音录入完成；转写服务尚未接入"),
     onError: setSentStatus
   });
+  const commandPlaceholder = useTypingPlaceholder(!draft.trim());
 
   function startDataHubAskData(question: string) {
     const runId = startAskDataRun(question, null);
@@ -170,6 +172,7 @@ export function HomePage() {
         value={draft}
         onChange={setDraft}
         onSubmit={handleSubmit}
+        placeholder={commandPlaceholder}
         onVoice={() => {
           setSentStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
           voiceInput.toggle();

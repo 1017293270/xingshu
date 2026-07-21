@@ -90,9 +90,10 @@ export function DataDashboardPage() {
         onRetry={() => void kpiQuery.refetch()}
       >
         <section className="data-kpis data-kpis--mobile-2x2" aria-label="数据资产指标">
-          {kpis.map((kpi) => (
+          {kpis.map((kpi, index) => (
             <article
-              className="xs-card stat-card"
+              className="xs-card xs-page-enter stat-card"
+              style={{ animationDelay: `${100 + index * 60}ms` }}
               key={kpi.id}
               aria-label={`${kpi.label}，指标下钻即将开放`}
               aria-describedby="data-asset-details-availability"
@@ -103,7 +104,7 @@ export function DataDashboardPage() {
           ))}
         </section>
       </XsAsyncPanel>
-      <section className="data-dashboard-grid" aria-label="数据资产图表">
+      <section className="data-dashboard-grid xs-page-enter" style={{ animationDelay: "280ms" }} aria-label="数据资产图表">
         <XsChartCard
           title="数据资产类型分布"
           summary={chartInsights.donut.summary}
@@ -135,7 +136,7 @@ export function DataDashboardPage() {
           action={unavailableDetailAction("数据来源分布")}
         />
       </section>
-      <section className="data-bottom-grid" aria-label="数据资产应用">
+      <section className="data-bottom-grid xs-page-enter" style={{ animationDelay: "360ms" }} aria-label="数据资产应用">
         <XsChartCard
           title="数据应用场景 Top10"
           summary={chartInsights.top.summary}

@@ -237,7 +237,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
         </>
       )}
     >
-      <section className="xs-card cloud-workbench" aria-label="我的云盘内容">
+      <section className="xs-card xs-page-enter cloud-workbench" style={{ animationDelay: "80ms" }} aria-label="我的云盘内容">
         <div className="cloud-workbench__intro">
           <XsIconTile imageSrc={cloudDriveIcon} label="我的云盘" tone="cyan" />
           <div>
@@ -263,8 +263,13 @@ export function CloudPage({ service }: CloudPageProps = {}) {
       </section>
 
       <section className="cloud-lane-grid" aria-label="云盘资料分类">
-        {cloudLanes.map((lane) => (
-          <article className="xs-card cloud-lane" aria-label={`云盘资料：${lane.title}`} key={lane.title}>
+        {cloudLanes.map((lane, index) => (
+          <article
+            className="xs-card xs-card-lift xs-page-enter cloud-lane"
+            style={{ animationDelay: `${160 + index * 60}ms` }}
+            aria-label={`云盘资料：${lane.title}`}
+            key={lane.title}
+          >
             <XsIconTile icon={lane.icon} label={lane.title} tone={lane.tone} />
             <div>
               <h2>{lane.title}</h2>
@@ -279,7 +284,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
         ))}
       </section>
 
-      <section className="xs-card cloud-recent" aria-labelledby="cloud-recent-title">
+      <section className="xs-card xs-page-enter cloud-recent" style={{ animationDelay: "320ms" }} aria-labelledby="cloud-recent-title">
         <div className="section-title-row">
           <h2 id="cloud-recent-title">最近资料</h2>
           <Button

@@ -26,6 +26,7 @@ type UiStoreState = {
   askDataEvents: DataHubStreamEvent[];
   askDataError: string;
   analysisTurns: AnalysisTurnState[];
+  onboardingOpen: boolean;
 };
 
 type UiStoreActions = {
@@ -51,6 +52,7 @@ type UiStoreActions = {
   }) => void;
   clearHomeConversation: () => void;
   setSentStatus: (status: string) => void;
+  setOnboardingOpen: (open: boolean) => void;
   resetUiState: () => void;
 };
 
@@ -66,7 +68,8 @@ const initialState: UiStoreState = {
   askDataStatus: "idle",
   askDataEvents: [],
   askDataError: "",
-  analysisTurns: []
+  analysisTurns: [],
+  onboardingOpen: false
 };
 
 function createTurnId() {
@@ -299,6 +302,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     abortAllAskDataControllers();
   },
   setSentStatus: (status) => set({ sentStatus: status }),
+  setOnboardingOpen: (open) => set({ onboardingOpen: open }),
   resetUiState: () => {
     set(initialState);
     abortAllAskDataControllers();

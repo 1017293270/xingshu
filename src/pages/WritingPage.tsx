@@ -184,7 +184,8 @@ export function WritingPage() {
       }
     >
       <section
-        className="xs-card writing-panel writing-panel--compact"
+        className="xs-card xs-page-enter xs-focus-glow writing-panel writing-panel--compact"
+        style={{ animationDelay: "80ms" }}
         aria-label="写作内容输入"
         aria-busy={isSubmitting}
       >
@@ -251,7 +252,9 @@ export function WritingPage() {
         </div>
       </section>
 
-      <h2 className="subsection-title">推荐写作场景</h2>
+      <h2 className="subsection-title xs-page-enter" style={{ animationDelay: "140ms" }}>
+        推荐写作场景
+      </h2>
       <XsAsyncPanel
         status={scenesStatus}
         empty={scenes.length === 0}
@@ -260,9 +263,10 @@ export function WritingPage() {
         onRetry={() => void scenesQuery.refetch()}
       >
         <section className="scene-row" aria-label="推荐写作场景">
-          {scenes.map((scene) => (
+          {scenes.map((scene, index) => (
             <button
-              className="xs-card scene-card"
+              className="xs-card xs-card-lift xs-page-enter scene-card"
+              style={{ animationDelay: `${200 + index * 60}ms` }}
               key={scene.id}
               type="button"
               aria-label={`${scene.title}：${scene.description}`}
@@ -283,7 +287,7 @@ export function WritingPage() {
         error="文稿列表加载失败，请稍后重试。"
         onRetry={() => void documentsQuery.refetch()}
       >
-        <section className="xs-card doc-table" aria-label="我的文稿">
+        <section className="xs-card xs-page-enter doc-table" style={{ animationDelay: "280ms" }} aria-label="我的文稿">
           <h2>我的文稿</h2>
           <table className="xs-table">
             <thead><tr><th>文稿名称</th><th>类型</th><th>字数</th><th>更新时间</th><th>操作</th></tr></thead>

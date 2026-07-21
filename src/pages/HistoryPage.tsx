@@ -109,6 +109,7 @@ export function HistoryPage() {
           <Input
             aria-label="历史搜索"
             allowClear
+            className="xs-focus-glow"
             prefix={<MagnifyingGlass size={18} />}
             placeholder="搜索历史对话..."
             value={keyword}
@@ -146,9 +147,10 @@ export function HistoryPage() {
         onRetry={() => void historyQuery.refetch()}
       >
         <section className="history-list" aria-label="历史对话列表">
-          {sessions.map((session) => (
+          {sessions.map((session, index) => (
             <button
-              className="xs-card history-card xs-card-button"
+              className="xs-card history-card xs-card-button xs-card-lift xs-page-enter"
+              style={{ animationDelay: `${160 + index * 50}ms` }}
               key={session.id}
               type="button"
               aria-label={`${session.title}：${session.summary}`}

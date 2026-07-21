@@ -1414,21 +1414,99 @@
 
 .xs-empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 180px;
-  padding: 28px 20px;
+  gap: 14px;
+  min-height: 220px;
+  padding: 32px 20px;
   border: 1px dashed var(--xs-border-strong);
   border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.xs-empty-state__visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+}
+
+.xs-empty-state__visual img {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(22, 119, 255, 0.14));
+}
+
+.xs-empty-state__orbit {
+  position: absolute;
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  border-radius: 50%;
+}
+
+.xs-empty-state__orbit::after {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: #3b9ff5;
+  box-shadow: 0 0 8px rgba(59, 159, 245, 0.45);
+  content: "";
+}
+
+.xs-empty-state__orbit--outer {
+  inset: 0;
+  animation: xs-empty-orbit-spin 24s linear infinite;
+}
+
+.xs-empty-state__orbit--inner {
+  inset: 16px;
+  border-color: rgba(0, 194, 255, 0.2);
+  animation: xs-empty-orbit-spin 16s linear infinite reverse;
+}
+
+.xs-empty-state__orbit--inner::after {
+  width: 4px;
+  height: 4px;
+  background: #29b8ed;
+  box-shadow: 0 0 7px rgba(41, 184, 237, 0.45);
+}
+
+@keyframes xs-empty-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-empty-state__orbit {
+    animation: none;
+  }
 }
 
 .xs-empty-state--error {
   display: block;
+  max-width: 560px;
   min-height: 0;
+  margin: 40px auto;
   padding: 0;
   border: 0;
   background: transparent;
+  text-align: left;
+}
+
+.xs-empty-state--error.ant-alert {
+  padding: 16px 20px;
+  border-radius: var(--xs-radius-card);
+  box-shadow: var(--xs-shadow-soft);
 }
 
 .xs-empty-state__copy {
@@ -1596,5 +1674,289 @@
   .xs-app-card__arrow:hover,
   .xs-app-card__arrow:active {
     transform: none;
+  }
+}
+
+/* ---------- 问数演示卡（登录页 / 新手引导共用） ---------- */
+
+.xs-ask-demo {
+  position: relative;
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px solid rgba(203, 222, 248, 0.9);
+  border-radius: var(--xs-radius-card);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 24px 48px rgba(23, 84, 170, 0.1),
+    0 2px 8px rgba(23, 84, 170, 0.05);
+}
+
+/* 图表生成阶段的一次性品牌辉光 */
+.xs-ask-demo--generating::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  animation: xs-ask-demo-glow 1.2s var(--xs-motion-ease-out);
+}
+
+.xs-ask-demo__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf3fc;
+}
+
+.xs-ask-demo__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.xs-ask-demo__live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--xs-primary);
+  animation: xs-ask-pulse 1.8s ease-out infinite;
+}
+
+.xs-ask-demo__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid #dceafd;
+  border-radius: 999px;
+  color: var(--xs-primary-2);
+  background: #eff6ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.xs-ask-demo__thread {
+  display: flex;
+  flex-direction: column;
+  height: 262px;
+  padding-top: 14px;
+}
+
+.xs-ask-demo__question {
+  align-self: flex-end;
+  max-width: 88%;
+  margin: 0 0 12px;
+  padding: 8px 13px;
+  border: 1px solid #d9e8fc;
+  border-radius: 12px 12px 4px;
+  color: var(--xs-text-2);
+  background: #eef4ff;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 图表生成区（共享组件，自带 .xs-echart 定位） */
+.xs-ask-demo__chart {
+  position: relative;
+  height: 156px;
+  min-height: 0;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.xs-ask-demo__chart .xs-echart {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.xs-ask-demo__chart .xs-echart__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* 图表出现前的骨架占位，轮廓预示最终柱状形态 */
+.xs-ask-demo__skeleton {
+  display: flex;
+  align-items: flex-end;
+  gap: 7%;
+  height: 156px;
+  margin-bottom: 12px;
+  padding: 30px 40px 0;
+  border-bottom: 1px solid #e3edfb;
+}
+
+.xs-ask-demo__skeleton i {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, #eaf2fe, #e0ecfd);
+}
+
+.xs-ask-demo__skeleton i::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.75) 50%, transparent 80%);
+  content: "";
+  animation: xs-ask-skeleton-shimmer 1.6s linear infinite;
+}
+
+.xs-ask-demo__skeleton i:nth-child(1) {
+  height: 42%;
+}
+
+.xs-ask-demo__skeleton i:nth-child(2) {
+  height: 55%;
+}
+
+.xs-ask-demo__skeleton i:nth-child(3) {
+  height: 66%;
+}
+
+.xs-ask-demo__skeleton i:nth-child(4) {
+  height: 61%;
+}
+
+.xs-ask-demo__skeleton i:nth-child(5) {
+  height: 78%;
+}
+
+.xs-ask-demo__skeleton i:nth-child(6) {
+  height: 95%;
+}
+
+/* 底部槽位：思考态与结论共用同一高度，循环时卡片不抖动 */
+.xs-ask-demo__slot {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.xs-ask-demo__thinking {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+}
+
+.xs-ask-demo__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.xs-ask-demo__dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #7fa8ec;
+  animation: xs-ask-think 1s ease-in-out infinite;
+}
+
+.xs-ask-demo__dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.xs-ask-demo__dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.xs-ask-demo__answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.xs-ask-demo__answer img {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #e0eafb;
+  border-radius: 9px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.xs-ask-demo__answer p {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 13.5px;
+  line-height: 1.7;
+  font-weight: 550;
+}
+
+.xs-ask-demo__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--xs-primary);
+  vertical-align: -0.15em;
+  animation: xs-ask-caret 0.9s steps(2, start) infinite;
+}
+
+@keyframes xs-ask-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--pulse-color, rgba(22, 119, 255, 0.28));
+  }
+
+  70% {
+    box-shadow: 0 0 0 7px rgba(22, 119, 255, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 119, 255, 0);
+  }
+}
+
+@keyframes xs-ask-think {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes xs-ask-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes xs-ask-skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes xs-ask-demo-glow {
+  from {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(22, 119, 255, 0.3);
+  }
+
+  to {
+    opacity: 0;
+    box-shadow: 0 0 0 16px rgba(22, 119, 255, 0);
   }
 }

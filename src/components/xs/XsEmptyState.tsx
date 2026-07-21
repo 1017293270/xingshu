@@ -1,5 +1,6 @@
-import { Alert, Button, Empty } from "antd";
+import { Alert, Button } from "antd";
 import type { ReactNode } from "react";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 
 type XsEmptyStateProps = {
   description: ReactNode;
@@ -40,21 +41,20 @@ export function XsEmptyState({
 
   return (
     <div className={`xs-empty-state ${className}`.trim()} role="note">
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={
-          <div className="xs-empty-state__copy">
-            {title ? <strong>{title}</strong> : null}
-            <span>{description}</span>
-          </div>
-        }
-      >
-        {actionLabel && onAction ? (
-          <Button type="primary" aria-label={actionLabel} onClick={onAction}>
-            {actionLabel}
-          </Button>
-        ) : null}
-      </Empty>
+      <div className="xs-empty-state__visual" aria-hidden="true">
+        <span className="xs-empty-state__orbit xs-empty-state__orbit--outer" />
+        <span className="xs-empty-state__orbit xs-empty-state__orbit--inner" />
+        <img src={assistantMark} alt="" />
+      </div>
+      <div className="xs-empty-state__copy">
+        {title ? <strong>{title}</strong> : null}
+        <span>{description}</span>
+      </div>
+      {actionLabel && onAction ? (
+        <Button type="primary" aria-label={actionLabel} onClick={onAction}>
+          {actionLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import dashboardEmptyIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { getBrowserDashboardRepository } from "@/services/dashboardRepositoryService";
 import type { DashboardRecord, DashboardVersion } from "@/types/dashboardStudio";
+import "./styles/page-shell.css";
 import "./styles/dashboard-list.css";
 
 type ListState = "loading" | "success" | "error";
@@ -234,7 +236,7 @@ export function DashboardPage() {
 
   return (
     <main className="dashboard-list">
-      <header className="dashboard-list__header">
+      <header className="dashboard-list__header xs-page-enter">
         <div className="dashboard-list__title-group">
           <h1>大屏库</h1>
         </div>
@@ -250,7 +252,7 @@ export function DashboardPage() {
       </header>
 
       {listState === "loading" ? (
-        <section className="dashboard-list__panel" aria-busy="true">
+        <section className="dashboard-list__panel xs-page-enter" style={{ animationDelay: "80ms" }} aria-busy="true">
           {[1, 2, 3, 4].map((item) => (
             <div key={item} className="dashboard-list__skeleton-row">
               <span className="dashboard-list__skeleton dashboard-list__skeleton--title" />
@@ -260,23 +262,35 @@ export function DashboardPage() {
           ))}
         </section>
       ) : listState === "error" ? (
-        <section className="dashboard-list__state dashboard-list__state--error">
+        <section className="dashboard-list__state dashboard-list__state--error xs-page-enter" style={{ animationDelay: "80ms" }}>
           <p className="dashboard-list__eyebrow">加载失败</p>
           <h2>大屏库暂不可用</h2>
           <p>{errorMessage}</p>
           <button type="button" onClick={loadDashboards}>重试</button>
         </section>
       ) : records.length === 0 ? (
-        <section className="dashboard-list__state" aria-label="大屏库空状态">
+        <section className="dashboard-list__state dashboard-list__state--empty" aria-label="大屏库空状态">
+          <div className="dashboard-list__empty-visual" aria-hidden="true">
+            <span className="dashboard-list__empty-orbit dashboard-list__empty-orbit--outer" />
+            <span className="dashboard-list__empty-orbit dashboard-list__empty-orbit--inner" />
+            <span className="dashboard-list__empty-star dashboard-list__empty-star--a" />
+            <span className="dashboard-list__empty-star dashboard-list__empty-star--b" />
+            <img src={dashboardEmptyIcon} alt="" />
+          </div>
           <p className="dashboard-list__eyebrow">暂无大屏</p>
           <h2>创建第一个大屏</h2>
           <p>已发布的大屏和草稿会显示在这里。</p>
-          <button type="button" disabled={isCreating} onClick={createDashboard}>
+          <button
+            className="dashboard-list__primary-action"
+            type="button"
+            disabled={isCreating}
+            onClick={createDashboard}
+          >
             {isCreating ? "创建中" : "新建大屏"}
           </button>
         </section>
       ) : (
-        <section className="dashboard-list__panel" aria-label="大屏库">
+        <section className="dashboard-list__panel xs-page-enter" style={{ animationDelay: "80ms" }} aria-label="大屏库">
           {errorMessage ? (
             <p className="dashboard-list__inline-error" role="status">{errorMessage}</p>
           ) : null}

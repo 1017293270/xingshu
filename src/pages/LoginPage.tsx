@@ -1,9 +1,9 @@
 import { Button, Form, Input } from "antd";
-import { Checks, Database, LockKey, ShieldCheck, User, WarningCircle } from "@phosphor-icons/react";
+import { ChartLineUp, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/brand/xingshu-logo-transparent.png";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
+import { XsAskDataDemo } from "@/components/xs";
 import { loginToDataHub } from "@/services/dataHubAuthService";
 import { DataHubServiceError } from "@/services/dataHubClient";
 import { ensureDataHubSpace } from "@/services/dataHubSpaceService";
@@ -15,13 +15,11 @@ type LoginFormValues = {
   password: string;
 };
 
-const demoScript = {
-  question: "本月华东区销售额同比增长多少？",
-  thinking: "正在校验权限并检索数据",
-  answer: "同比增长 12.6%，主要由新能源产品线贡献，环比提升 3.2 个百分点。"
-};
-
-type DemoPhase = "question" | "thinking" | "answer" | "hold";
+const showcaseCapabilities = [
+  { icon: ChartLineUp, title: "问数分析", description: "把经营问题转成可追踪的数据结论" },
+  { icon: Notebook, title: "知识写作", description: "连接企业知识库，生成可信文档" },
+  { icon: SquaresFour, title: "经营看板", description: "汇聚指标、预警与管理动作" }
+];
 
 const loginStepTimeoutMs = 8_000;
 
@@ -47,103 +45,6 @@ function getSafeReturnPath(value: unknown) {
   }
 }
 
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(() => {
-    if (typeof window.matchMedia !== "function") {
-      return true;
-    }
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  });
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      return undefined;
-    }
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const handleChange = () => setReduced(media.matches);
-    media.addEventListener("change", handleChange);
-    return () => media.removeEventListener("change", handleChange);
-  }, []);
-
-  return reduced;
-}
-
-function useAskDemo(reducedMotion: boolean) {
-  const [state, setState] = useState<{ phase: DemoPhase; questionChars: number; answerChars: number }>(() =>
-    reducedMotion
-      ? { phase: "hold", questionChars: demoScript.question.length, answerChars: demoScript.answer.length }
-      : { phase: "question", questionChars: 0, answerChars: 0 }
-  );
-
-  useEffect(() => {
-    if (reducedMotion) {
-      setState({
-        phase: "hold",
-        questionChars: demoScript.question.length,
-        answerChars: demoScript.answer.length
-      });
-      return undefined;
-    }
-
-    let cancelled = false;
-    let timer = 0;
-    const schedule = (step: () => void, delay: number) => {
-      timer = window.setTimeout(() => {
-        if (!cancelled) {
-          step();
-        }
-      }, delay);
-    };
-
-    const play = () => {
-      setState({ phase: "question", questionChars: 0, answerChars: 0 });
-
-      let typed = 0;
-      const typeQuestion = () => {
-        typed += 1;
-        setState((prev) => ({ ...prev, questionChars: typed }));
-        if (typed < demoScript.question.length) {
-          schedule(typeQuestion, 48);
-          return;
-        }
-        schedule(() => {
-          setState((prev) => ({ ...prev, phase: "thinking" }));
-          schedule(playAnswer, 900);
-        }, 260);
-      };
-
-      const playAnswer = () => {
-        setState((prev) => ({ ...prev, phase: "answer" }));
-        let answerTyped = 0;
-        const typeAnswer = () => {
-          answerTyped += 1;
-          setState((prev) => ({ ...prev, answerChars: answerTyped }));
-          if (answerTyped < demoScript.answer.length) {
-            schedule(typeAnswer, 34);
-            return;
-          }
-          schedule(() => {
-            setState((prev) => ({ ...prev, phase: "hold" }));
-            schedule(play, 3_400);
-          }, 280);
-        };
-        schedule(typeAnswer, 140);
-      };
-
-      schedule(typeQuestion, 520);
-    };
-
-    play();
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [reducedMotion]);
-
-  return state;
-}
-
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -157,8 +58,6 @@ export function LoginPage() {
   const locationState = location.state as { from?: unknown; sessionExpired?: boolean } | null;
   const returnPath = getSafeReturnPath(locationState?.from);
   const isSessionExpired = locationState?.sessionExpired === true || sessionExpired;
-  const reducedMotion = usePrefersReducedMotion();
-  const demo = useAskDemo(reducedMotion);
 
   useEffect(
     () => () => {
@@ -230,18 +129,13 @@ export function LoginPage() {
     setStatusMessage("请联系企业管理员重置密码");
   }
 
-  const isAnswerVisible = demo.phase === "answer" || demo.phase === "hold";
-
   return (
     <main className="login-page" aria-label="星数登录页">
       <div className="login-page__atmosphere" aria-hidden="true">
-        <span className="login-page__orbit login-page__orbit--outer">
-          <i />
-        </span>
-        <span className="login-page__orbit login-page__orbit--inner">
-          <i />
-        </span>
         <span className="login-page__orbit login-page__orbit--faint">
+          <i />
+        </span>
+        <span className="login-page__orbit login-page__orbit--mid">
           <i />
         </span>
         <span className="login-page__stars">
@@ -259,62 +153,36 @@ export function LoginPage() {
         </header>
 
         <div className="login-showcase__body">
-          <p className="login-showcase__eyebrow login-enter" style={{ animationDelay: "70ms" }}>
-            XINGSHU · 企业智能中枢
-          </p>
-          <h1 id="login-page-title" className="login-enter" style={{ animationDelay: "140ms" }}>
-            让每一次问数，
-            <br />
-            都有据可依
-          </h1>
-          <p className="login-showcase__lead login-enter" style={{ animationDelay: "210ms" }}>
-            连接企业数据、知识与 Agent 应用，回答可追溯、可验证、可执行。
-          </p>
-
-          <div className="login-ask-demo login-enter" style={{ animationDelay: "300ms" }} aria-hidden="true">
-            <div className="login-ask-demo__header">
-              <span className="login-ask-demo__live">
-                <i />
-                问数 · 实时演示
-              </span>
-              <span className="login-ask-demo__badge">
-                <Checks size={13} weight="bold" />
-                全程可追溯
-              </span>
+          <div className="login-showcase__stack">
+            <div className="login-showcase__intro">
+              <p className="login-showcase__eyebrow login-enter" style={{ animationDelay: "70ms" }}>
+                XINGSHU · 企业智能中枢
+              </p>
+              <h1 id="login-page-title" className="login-enter" style={{ animationDelay: "140ms" }}>
+                让每一次问数，
+                <br />
+                都有据可依
+              </h1>
+              <p className="login-showcase__lead login-enter" style={{ animationDelay: "210ms" }}>
+                连接企业数据、知识与 Agent 应用，回答可追溯、可验证、可执行。
+              </p>
             </div>
 
-            <div className="login-ask-demo__thread">
-              {demo.questionChars > 0 || demo.phase !== "question" ? (
-                <p className="login-ask-demo__question">
-                  {demoScript.question.slice(0, demo.questionChars)}
-                  {demo.phase === "question" ? <span className="login-ask-demo__caret" /> : null}
-                </p>
-              ) : null}
-
-              {demo.phase === "thinking" ? (
-                <p className="login-ask-demo__thinking">
-                  <span className="login-ask-demo__dots">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                  {demoScript.thinking}
-                </p>
-              ) : null}
-
-              {isAnswerVisible ? (
-                <div className="login-ask-demo__answer">
-                  <img src={assistantMark} alt="" />
-                  <p>
-                    {demoScript.answer.slice(0, demo.answerChars)}
-                    {demo.phase === "answer" ? <span className="login-ask-demo__caret" /> : null}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
+            <XsAskDataDemo className="login-enter" style={{ animationDelay: "300ms" }} />
           </div>
         </div>
+
+        <ul className="login-showcase__capabilities login-enter" style={{ animationDelay: "380ms" }} aria-label="星数核心能力">
+          {showcaseCapabilities.map((item) => (
+            <li key={item.title}>
+              <item.icon size={20} />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.description}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="login-access" aria-label="登录星数">

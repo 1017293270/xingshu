@@ -105,7 +105,7 @@ export function DataManagementPage() {
       )}
       className="data-management-page"
     >
-      <nav className="asset-tabs" aria-label="资产管理类型">
+      <nav className="asset-tabs xs-page-enter" style={{ animationDelay: "60ms" }} aria-label="资产管理类型">
         <Segmented
           aria-label="资产管理类型"
           aria-describedby="asset-tabs-availability"
@@ -116,11 +116,12 @@ export function DataManagementPage() {
           当前仅开放知识库管理；数据源、数据表、数据接口和指标管理即将开放。
         </p>
       </nav>
-      <section className="asset-filter" aria-label="知识库筛选">
+      <section className="asset-filter xs-page-enter" style={{ animationDelay: "120ms" }} aria-label="知识库筛选">
         <Input
           aria-label="知识库搜索"
           allowClear
           type="search"
+          className="xs-focus-glow"
           prefix={<MagnifyingGlass size={18} />}
           placeholder="搜索知识库名称、说明或更新时间"
           value={query}
@@ -140,8 +141,8 @@ export function DataManagementPage() {
         onRetry={() => void statsQuery.refetch()}
       >
         <section className="manage-stats" aria-label="知识库统计">
-          {stats.map((stat) => (
-            <article className="xs-card stat-card" key={stat.id}>
+          {stats.map((stat, index) => (
+            <article className="xs-card xs-card-lift xs-page-enter stat-card" style={{ animationDelay: `${180 + index * 60}ms` }} key={stat.id}>
               <div><span>{stat.label}</span><strong>{stat.value}</strong></div>
               <span className={`asset-image-tile asset-image-tile--${stat.tone}`}><img src={statIconById[stat.iconId]} alt="" /></span>
             </article>
@@ -157,9 +158,10 @@ export function DataManagementPage() {
         onRetry={() => void knowledgeBasesQuery.refetch()}
       >
         <section className="kb-grid" aria-label="知识库列表">
-          {visibleKnowledgeBases.map((knowledgeBase) => (
+          {visibleKnowledgeBases.map((knowledgeBase, index) => (
             <article
-              className="xs-card kb-card"
+              className="xs-card xs-card-lift xs-page-enter kb-card"
+              style={{ animationDelay: `${260 + index * 60}ms` }}
               key={knowledgeBase.id}
               aria-label={`知识库：${knowledgeBase.title}`}
             >

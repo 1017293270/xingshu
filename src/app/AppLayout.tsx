@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { XsRouteFallback, XsShell } from "@/components/xs";
+import { HomeOnboarding } from "@/features/home/HomeOnboarding";
 import { useUiStore } from "@/stores/uiStore";
 
 export function AppLayout() {
@@ -53,6 +54,7 @@ export function AppLayout() {
           <Outlet />
         </div>
       </Suspense>
+      <HomeOnboarding />
     </XsShell>
   );
 }

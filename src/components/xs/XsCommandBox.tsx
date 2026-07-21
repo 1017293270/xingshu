@@ -22,6 +22,7 @@ type XsCommandBoxProps = {
   busy?: boolean;
   voiceState?: VoiceInputState;
   submitOnEnter?: boolean;
+  placeholder?: string;
   suggestions?: XsCommandSuggestion[];
   onSuggestion?: (suggestion: XsCommandSuggestion) => void;
 };
@@ -33,6 +34,8 @@ const voiceStateLabels = {
   processing: "正在处理语音",
   error: "重试语音输入"
 } as const;
+
+const defaultPlaceholder = "请输入您的问题，支持问题、找文件、写文档、做分析、用应用...";
 
 export function XsCommandBox({
   value,
@@ -47,6 +50,7 @@ export function XsCommandBox({
   busy = false,
   voiceState = "idle",
   submitOnEnter = false,
+  placeholder = defaultPlaceholder,
   suggestions = [],
   onSuggestion
 }: XsCommandBoxProps) {
@@ -66,7 +70,7 @@ export function XsCommandBox({
         aria-label="命令输入"
         aria-keyshortcuts={submitOnEnter ? "Enter" : "Control+Enter Meta+Enter"}
         value={value}
-        placeholder="请输入您的问题，支持问题、找文件、写文档、做分析、用应用..."
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           const isComposing = event.nativeEvent.isComposing;

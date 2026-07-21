@@ -80,12 +80,18 @@ export function TablePage() {
 
   return (
     <PageFrame title="智能制表" className="table-page">
-      <section className="sheet-prompt" aria-label="制表需求输入" aria-busy={isGenerating}>
+      <section
+        className="sheet-prompt xs-page-enter"
+        style={{ animationDelay: "80ms" }}
+        aria-label="制表需求输入"
+        aria-busy={isGenerating}
+      >
         <span className="sheet-prompt__addon" aria-hidden="true">
           <Plus size={18} weight="bold" />
         </span>
         <Input
           aria-label="制表需求"
+          className="xs-focus-glow"
           placeholder={tablePromptPlaceholder}
           value={prompt}
           disabled={isGenerating}
@@ -105,7 +111,9 @@ export function TablePage() {
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
       </div>
-      <h2 className="subsection-title">最近制表</h2>
+      <h2 className="subsection-title xs-page-enter" style={{ animationDelay: "140ms" }}>
+        最近制表
+      </h2>
       <XsAsyncPanel
         status={recentTablesStatus}
         empty={recentTables.length === 0}
@@ -114,9 +122,13 @@ export function TablePage() {
         onRetry={() => void recentTablesQuery.refetch()}
       >
         <section className="sheet-list" aria-label="最近制表">
-          {recentTables.map((table) => (
-            <article className="xs-card sheet-row" key={table.id} aria-label={`${table.title} ${table.description}`}>
-              <span className="sheet-icon" aria-hidden="true">
+          {recentTables.map((table, index) => (
+            <article
+              className="xs-card xs-card-lift xs-page-enter sheet-row"
+              style={{ animationDelay: `${200 + index * 60}ms` }}
+              key={table.id}
+              aria-label={`${table.title} ${table.description}`}
+            >              <span className="sheet-icon" aria-hidden="true">
                 <img src={sheetIconById[table.iconId]} alt="" />
               </span>
               <div className="sheet-row__body">

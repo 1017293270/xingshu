@@ -14,7 +14,7 @@ export function PageFrame({ title, subtitle, actions, className = "", hideHeader
   return (
     <div className={`xs-page ${className}`}>
       {hideHeader ? null : (
-        <header className="xs-page__head">
+        <header className="xs-page__head xs-page-enter">
           <div className="xs-page__title">
             <h1>{title}</h1>
             {subtitle ? <p>{subtitle}</p> : null}

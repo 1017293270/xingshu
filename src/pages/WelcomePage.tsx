@@ -6,6 +6,7 @@ import trustIcon from "@/assets/welcome/icons/welcome-icon-trust.png";
 import dashboardIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
 import dataAnalysisIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-data-question-analytics.png";
 import knowledgeWritingIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-intelligent-writing.png";
+import "./styles/page-shell.css";
 import "./welcome.css";
 
 const capabilityItems = [
@@ -42,10 +43,14 @@ export function WelcomePage() {
 
         <section className="welcome-page__content" aria-labelledby="welcome-title">
           <div className="welcome-page__copy">
-            <p className="welcome-page__eyebrow">XINGSHU AGENT HUB</p>
-            <h1 id="welcome-title">欢迎来到星数</h1>
-            <p className="welcome-page__lead">可信数据智能，连接企业知识、经营数据与 Agent 应用。</p>
-            <div className="welcome-page__actions" aria-label="欢迎页操作">
+            <p className="welcome-page__eyebrow xs-page-enter">XINGSHU AGENT HUB</p>
+            <h1 id="welcome-title" className="xs-page-enter" style={{ animationDelay: "70ms" }}>
+              欢迎来到星数
+            </h1>
+            <p className="welcome-page__lead xs-page-enter" style={{ animationDelay: "140ms" }}>
+              可信数据智能，连接企业知识、经营数据与 Agent 应用。
+            </p>
+            <div className="welcome-page__actions xs-page-enter" style={{ animationDelay: "220ms" }} aria-label="欢迎页操作">
               <Link className="welcome-page__button welcome-page__button--primary" to="/">
                 <span>进入星数</span>
                 <img className="welcome-page__button-icon" src={arrowIcon} alt="" data-icon-source="image2" />
@@ -56,9 +61,13 @@ export function WelcomePage() {
             </div>
 
             <div className="welcome-page__capabilities" aria-label="核心能力">
-              {capabilityItems.map((item) => {
+              {capabilityItems.map((item, index) => {
                 return (
-                  <article className="welcome-page__capability" key={item.title}>
+                  <article
+                    className="welcome-page__capability xs-page-enter"
+                    style={{ animationDelay: `${300 + index * 70}ms` }}
+                    key={item.title}
+                  >
                     <span className="welcome-page__capability-icon" aria-hidden="true">
                       <img src={item.iconSrc} alt="" data-icon-source="xingshu-image2-v1" />
                     </span>
@@ -72,7 +81,7 @@ export function WelcomePage() {
             </div>
           </div>
 
-          <div className="welcome-page__visual" aria-label="星数可信数据智能主视觉">
+          <div className="welcome-page__visual xs-page-enter" style={{ animationDelay: "260ms" }} aria-label="星数可信数据智能主视觉">
             <img src={welcomeHero} alt="星数可信数据智能主视觉" />
           </div>
         </section>

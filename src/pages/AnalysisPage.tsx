@@ -4,6 +4,8 @@ import {
   Brain,
   CaretDown,
   CaretUp,
+  ChartLineUp,
+  ChartPieSlice,
   CheckCircle,
   CircleNotch,
   Database,
@@ -11,7 +13,9 @@ import {
   FlowArrow,
   Function,
   MagicWand,
+  MapPin,
   PresentationChart,
+  TrendUp,
   WarningCircle
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -70,10 +74,10 @@ type AiChartUiState =
 const autoScrollBottomThreshold = 24;
 
 const quickQuestions = [
-  "本月销售额与目标完成率怎么样？",
-  "目前咨询量最高的社区是哪个？",
-  "分析最近 30 天客户增长趋势",
-  "对比各区域收入与利润率"
+  { icon: ChartLineUp, question: "本月销售额与目标完成率怎么样？" },
+  { icon: MapPin, question: "目前咨询量最高的社区是哪个？" },
+  { icon: TrendUp, question: "分析最近 30 天客户增长趋势" },
+  { icon: ChartPieSlice, question: "对比各区域收入与利润率" }
 ];
 
 function formatCell(value: unknown): string {
@@ -1274,22 +1278,31 @@ export function AnalysisPage() {
             aria-labelledby="analysis-empty-title"
             aria-label="空白问数工作区"
           >
-            <img src={assistantMark} alt="" aria-hidden="true" />
-            <div className="analysis-empty-state__copy">
+            <div className="analysis-empty-state__brand xs-page-enter">
+              <span className="analysis-empty-state__orbit analysis-empty-state__orbit--outer" aria-hidden="true" />
+              <span className="analysis-empty-state__orbit analysis-empty-state__orbit--inner" aria-hidden="true" />
+              <span className="analysis-empty-state__star analysis-empty-state__star--a" aria-hidden="true" />
+              <span className="analysis-empty-state__star analysis-empty-state__star--b" aria-hidden="true" />
+              <img src={assistantMark} alt="" aria-hidden="true" />
+            </div>
+            <div className="analysis-empty-state__copy xs-page-enter" style={{ animationDelay: "120ms" }}>
               <h1 id="analysis-empty-title">从一个经营问题开始</h1>
               <p>星数只会在当前 data-hub 空间及您有权访问的数据范围内查询和生成结果。</p>
             </div>
             <div className="analysis-empty-state__prompts" aria-label="快捷问题">
-              {quickQuestions.map((question) => (
+              {quickQuestions.map((item, index) => (
                 <button
                   type="button"
-                  key={question}
+                  className="xs-page-enter"
+                  style={{ animationDelay: `${240 + index * 60}ms` }}
+                  key={item.question}
                   onClick={() => {
-                    setFollowUpDraft(question);
+                    setFollowUpDraft(item.question);
                     setWorkflowStatus("已填入快捷问题，确认后即可发送");
                   }}
                 >
-                  {question}
+                  <item.icon size={17} aria-hidden="true" />
+                  <span>{item.question}</span>
                 </button>
               ))}
             </div>

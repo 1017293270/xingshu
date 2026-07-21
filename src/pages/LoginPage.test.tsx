@@ -67,7 +67,7 @@ describe("LoginPage", () => {
     expect(screen.getByText("安全连接")).toBeInTheDocument();
     expect(screen.getByText("由 data-hub 权限体系提供认证")).toBeInTheDocument();
     expect(container.querySelector(".login-page__atmosphere")).toHaveAttribute("aria-hidden", "true");
-    expect(container.querySelector(".login-ask-demo")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector(".xs-ask-demo")).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelectorAll(".login-page__stars i")).toHaveLength(7);
   });
 

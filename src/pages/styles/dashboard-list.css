@@ -153,6 +153,140 @@
   border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
 }
 
+/* ---------- 空态品牌构图：星轨环 + 图标 + 居中 ---------- */
+
+.dashboard-list__state--empty {
+  justify-items: center;
+  padding: 72px 30px 64px;
+  text-align: center;
+  animation: dashboard-list-empty-in 560ms var(--ease-enter) backwards;
+}
+
+.dashboard-list__state--empty p {
+  max-width: 420px;
+}
+
+.dashboard-list__empty-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  margin-bottom: 10px;
+}
+
+.dashboard-list__empty-visual img {
+  position: relative;
+  z-index: 1;
+  width: 64px;
+  height: 64px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-panel);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.14);
+  object-fit: contain;
+}
+
+.dashboard-list__empty-orbit {
+  position: absolute;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 50%;
+}
+
+.dashboard-list__empty-orbit::after {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  content: "";
+}
+
+.dashboard-list__empty-orbit--outer {
+  inset: 0;
+  animation: dashboard-list-orbit-spin 26s linear infinite;
+}
+
+.dashboard-list__empty-orbit--inner {
+  inset: 26px;
+  border-color: rgba(56, 189, 248, 0.22);
+  animation: dashboard-list-orbit-spin 18s linear infinite reverse;
+}
+
+.dashboard-list__empty-orbit--inner::after {
+  width: 5px;
+  height: 5px;
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.dashboard-list__empty-star {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #60a5fa;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  animation: dashboard-list-star-breathe 3.6s ease-in-out infinite;
+}
+
+.dashboard-list__empty-star--a {
+  top: 12px;
+  right: 20px;
+}
+
+.dashboard-list__empty-star--b {
+  bottom: 18px;
+  left: 14px;
+  width: 5px;
+  height: 5px;
+  background: #38bdf8;
+  animation-delay: 1.2s;
+}
+
+@keyframes dashboard-list-empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashboard-list-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dashboard-list-star-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-list__state--empty,
+  .dashboard-list__empty-orbit,
+  .dashboard-list__empty-star {
+    animation: none;
+  }
+}
+
 .dashboard-list__state--error .dashboard-list__eyebrow,
 .dashboard-list__inline-error,
 .dashboard-list__danger {

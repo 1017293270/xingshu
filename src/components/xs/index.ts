@@ -1,5 +1,6 @@
 export { XsAppCard } from "./XsAppCard";
 export type { XsAppCardData } from "./XsAppCard";
+export { XsAskDataDemo } from "./XsAskDataDemo";
 export { resolveXsAsyncStatus, XsAsyncPanel } from "./XsAsyncPanel";
 export type { XsAsyncStatus } from "./XsAsyncPanel";
 export { XsChartCard } from "./XsChartCard";

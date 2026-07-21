@@ -1,4 +1,7 @@
 .login-page {
+  --login-inset: clamp(40px, 4.5vw, 72px);
+  --login-band: 590px;
+
   position: relative;
   isolation: isolate;
   display: grid;
@@ -12,6 +15,13 @@
     radial-gradient(circle at 8% -8%, rgba(0, 194, 255, 0.09), transparent 42%),
     radial-gradient(circle at 96% 108%, rgba(22, 119, 255, 0.1), transparent 46%),
     linear-gradient(168deg, #fafdff 0%, #f2f8ff 52%, #eaf3ff 100%);
+}
+
+/* 超宽屏护栏：构图封顶居中，背景保持全幅 */
+@media (min-width: 1921px) {
+  .login-page {
+    padding-inline: calc((100vw - 1840px) / 2);
+  }
 }
 
 /* ---------- 全页氛围层 ---------- */
@@ -37,7 +47,7 @@
 
 .login-page__orbit {
   position: absolute;
-  border: 1px solid rgba(22, 119, 255, 0.16);
+  border: 1px solid rgba(22, 119, 255, 0.2);
   border-radius: 50%;
 }
 
@@ -54,30 +64,6 @@
   box-shadow: 0 0 14px rgba(59, 159, 245, 0.4);
 }
 
-.login-page__orbit--outer {
-  bottom: -330px;
-  left: -250px;
-  width: 780px;
-  height: 780px;
-  animation: login-orbit-spin 48s linear infinite;
-}
-
-.login-page__orbit--inner {
-  bottom: -210px;
-  left: -130px;
-  width: 540px;
-  height: 540px;
-  border-color: rgba(0, 194, 255, 0.15);
-  animation: login-orbit-spin 36s linear infinite reverse;
-}
-
-.login-page__orbit--inner i {
-  width: 6px;
-  height: 6px;
-  background: #29b8ed;
-  box-shadow: 0 0 12px rgba(41, 184, 237, 0.42);
-}
-
 .login-page__orbit--faint {
   top: -300px;
   right: -190px;
@@ -92,6 +78,23 @@
   height: 6px;
   background: #5ac8ef;
   box-shadow: 0 0 12px rgba(90, 200, 239, 0.4);
+}
+
+/* 两列之间的补白轨道，把中央留白转成品牌留白 */
+.login-page__orbit--mid {
+  top: 9%;
+  left: 55%;
+  width: 520px;
+  height: 520px;
+  border-color: rgba(22, 119, 255, 0.12);
+  animation: login-orbit-spin 72s linear infinite;
+}
+
+.login-page__orbit--mid i {
+  width: 7px;
+  height: 7px;
+  background: #29b8ed;
+  box-shadow: 0 0 12px rgba(41, 184, 237, 0.42);
 }
 
 .login-page__stars {
@@ -180,14 +183,18 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .login-showcase__header {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
   width: 100%;
-  max-width: 660px;
-  margin: 0 auto;
-  padding: clamp(20px, 3.4vh, 30px) clamp(28px, 4.6vw, 72px) 0;
+  padding: clamp(20px, 3.4vh, 30px) clamp(20px, 2.5vw, 40px) 0 var(--login-inset);
 }
 
 .login-showcase__brand {
@@ -207,17 +214,44 @@
   flex-direction: column;
   justify-content: center;
   width: 100%;
-  max-width: 660px;
-  margin: 0 auto;
-  padding: 12px clamp(28px, 4.6vw, 72px) clamp(24px, 4vh, 40px);
+  padding: 12px clamp(20px, 2.5vw, 40px) 12px var(--login-inset);
+}
+
+/* 桌面端 body 横跨两行与能力行叠放，使内容栈按整列高度居中；移动端回退普通流 */
+@media (min-width: 1024px) {
+  .login-showcase__body {
+    grid-row: 1 / -1;
+    grid-column: 1;
+  }
+}
+
+/* 左侧内容栈：锚定左缘，与右侧登录框同高、同垂直中心 */
+.login-showcase__stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 600px;
+  min-height: var(--login-band);
 }
 
 .login-showcase__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0 0 16px;
   color: var(--xs-primary-2);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.16em;
+}
+
+.login-showcase__eyebrow::before {
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(22, 119, 255, 0.85), rgba(0, 194, 255, 0.5));
+  content: "";
 }
 
 .login-showcase__body h1 {
@@ -239,142 +273,66 @@
 
 /* ---------- 问数演示卡 ---------- */
 
-.login-ask-demo {
-  max-width: 520px;
-  margin-top: 34px;
-  padding: 14px 18px;
-  border: 1px solid rgba(203, 222, 248, 0.9);
-  border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow:
-    0 24px 48px rgba(23, 84, 170, 0.1),
-    0 2px 8px rgba(23, 84, 170, 0.05);
+/* 登录页演示卡布局覆盖（组件与样式本体：components/xs/XsAskDataDemo + xs.css） */
+.login-showcase .xs-ask-demo {
+  max-width: 600px;
+  margin-top: 24px;
 }
 
-.login-ask-demo__header {
+.login-showcase .xs-ask-demo__thread {
+  height: 300px;
+}
+
+.login-showcase .xs-ask-demo__chart,
+.login-showcase .xs-ask-demo__skeleton {
+  height: 208px;
+}
+
+/* ---------- 左列底部能力行（quiet 展示，复用欢迎页三项能力表述） ---------- */
+
+.login-showcase__capabilities {
+  display: none;
+  grid-row: 2;
+  grid-column: 1;
+  gap: clamp(20px, 2.6vw, 44px);
+  margin: 0 clamp(20px, 2.5vw, 40px) 0 var(--login-inset);
+  padding: 16px 0 24px;
+  border-top: 1px solid #e3edfb;
+  list-style: none;
+}
+
+@media (min-width: 1024px) and (min-height: 801px) {
+  .login-showcase__capabilities {
+    display: flex;
+  }
+}
+
+.login-showcase__capabilities li {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #edf3fc;
-}
-
-.login-ask-demo__live {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--xs-text-3);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.login-ask-demo__live i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--xs-primary);
-  animation: login-pulse 1.8s ease-out infinite;
-}
-
-.login-ask-demo__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border: 1px solid #dceafd;
-  border-radius: 999px;
-  color: var(--xs-primary-2);
-  background: #eff6ff;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.login-ask-demo__thread {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 118px;
-  padding-top: 14px;
-}
-
-.login-ask-demo__question {
-  align-self: flex-end;
-  max-width: 88%;
-  margin: 0;
-  padding: 8px 13px;
-  border: 1px solid #d9e8fc;
-  border-radius: 12px 12px 4px;
-  color: var(--xs-text-2);
-  background: #eef4ff;
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.login-ask-demo__thinking {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  color: var(--xs-text-3);
-  font-size: 12.5px;
-}
-
-.login-ask-demo__dots {
-  display: inline-flex;
-  gap: 4px;
-}
-
-.login-ask-demo__dots i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #7fa8ec;
-  animation: login-think 1s ease-in-out infinite;
-}
-
-.login-ask-demo__dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.login-ask-demo__dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-.login-ask-demo__answer {
-  display: flex;
-  align-items: flex-start;
   gap: 10px;
+  min-width: 0;
 }
 
-.login-ask-demo__answer img {
+.login-showcase__capabilities svg {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  padding: 2px;
-  border: 1px solid #e0eafb;
-  border-radius: 9px;
-  background: #ffffff;
-  object-fit: contain;
+  color: var(--xs-primary-2);
 }
 
-.login-ask-demo__answer p {
-  margin: 0;
-  color: var(--xs-text);
+.login-showcase__capabilities strong {
+  display: block;
+  color: var(--xs-text-2);
   font-size: 13.5px;
-  line-height: 1.7;
-  font-weight: 550;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-.login-ask-demo__caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  background: var(--xs-primary);
-  vertical-align: -0.15em;
-  animation: login-caret 0.9s steps(2, start) infinite;
+.login-showcase__capabilities span {
+  display: block;
+  margin-top: 2px;
+  color: var(--xs-text-3);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* ---------- 右侧登录区（悬浮卡片） ---------- */
@@ -383,14 +341,15 @@
   position: relative;
   z-index: 1;
   display: grid;
-  place-items: center;
-  padding: clamp(24px, 5vh, 48px) clamp(24px, 4vw, 64px);
+  align-items: center;
+  justify-items: end;
+  padding: clamp(24px, 5vh, 48px) var(--login-inset) clamp(24px, 5vh, 48px) clamp(24px, 4vw, 64px);
 }
 
 .login-access__secure {
   position: absolute;
   top: clamp(20px, 3.4vh, 30px);
-  right: clamp(24px, 3vw, 40px);
+  right: var(--login-inset);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -426,6 +385,9 @@
 
 .login-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--login-band);
   padding: 32px 38px 28px;
   border: 1px solid rgba(199, 217, 246, 0.9);
   border-radius: 20px;
@@ -687,6 +649,11 @@
   font-weight: 500;
 }
 
+/* 等高策略：表单吸收 min-height 余量，底栏自然贴底且保留最小间距 */
+.login-panel__form {
+  flex: 1;
+}
+
 .login-panel__foot svg {
   color: #8aa3c4;
 }
@@ -742,25 +709,6 @@
   }
 }
 
-@keyframes login-think {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-
-  50% {
-    opacity: 1;
-    transform: translateY(-3px);
-  }
-}
-
-@keyframes login-caret {
-  50% {
-    opacity: 0;
-  }
-}
-
 /* ---------- 响应式 ---------- */
 
 @media (min-width: 1600px) {
@@ -776,8 +724,16 @@
 }
 
 @media (min-width: 1024px) and (max-height: 800px) {
+  .login-page {
+    --login-band: 500px;
+  }
+
   .login-showcase__header {
     padding-top: 16px;
+  }
+
+  .login-showcase__stack {
+    min-height: var(--login-band);
   }
 
   .login-showcase__body h1 {
@@ -789,15 +745,19 @@
     font-size: 15px;
   }
 
-  .login-ask-demo {
-    margin-top: 22px;
+  .login-showcase .xs-ask-demo {
+    margin-top: 20px;
     padding-block: 12px;
   }
 
-  .login-ask-demo__thread {
-    gap: 10px;
-    min-height: 132px;
+  .login-showcase .xs-ask-demo__thread {
+    height: 230px;
     padding-top: 12px;
+  }
+
+  .login-showcase .xs-ask-demo__chart,
+  .login-showcase .xs-ask-demo__skeleton {
+    height: 140px;
   }
 
   .login-panel {
@@ -845,8 +805,13 @@
   }
 
   .login-showcase__header {
+    position: static;
     max-width: 600px;
     padding-top: 22px;
+  }
+
+  .login-showcase__stack {
+    min-height: 0;
   }
 
   .login-showcase__body {
@@ -866,26 +831,17 @@
     right: 8%;
   }
 
-  .login-page__orbit--outer {
-    top: -420px;
-    right: -300px;
-    bottom: auto;
-    left: auto;
-  }
-
-  .login-page__orbit--inner {
-    top: -300px;
-    right: -180px;
-    bottom: auto;
-    left: auto;
-  }
-
-  .login-page__orbit--faint {
+  .login-page__orbit--faint,
+  .login-page__orbit--mid {
     display: none;
   }
 
-  .login-ask-demo {
+  .login-showcase .xs-ask-demo {
     max-width: 100%;
+  }
+
+  .login-panel {
+    min-height: 0;
   }
 
   .login-access {
@@ -936,7 +892,7 @@
     display: none;
   }
 
-  .login-ask-demo {
+  .login-showcase .xs-ask-demo {
     display: none;
   }
 

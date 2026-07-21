@@ -355,3 +355,85 @@
     text-align: left;
   }
 }
+
+/* ---------- 入场阶梯动效（与登录页 login-enter 同节奏） ---------- */
+
+@keyframes home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-bg-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0.92;
+  }
+}
+
+.home-page__bg {
+  animation: home-bg-in 900ms var(--xs-motion-ease-out) backwards;
+}
+
+.home-page__hero {
+  animation: home-enter 560ms var(--xs-motion-ease-out) backwards;
+}
+
+.home-page .xs-command-box {
+  animation: home-enter 560ms var(--xs-motion-ease-out) 120ms backwards;
+}
+
+.home-page__apps > h2 {
+  animation: home-enter 560ms var(--xs-motion-ease-out) 200ms backwards;
+}
+
+.home-page__app-grid > .xs-app-card {
+  animation: home-enter 560ms var(--xs-motion-ease-out) backwards;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(1) {
+  animation-delay: 240ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(2) {
+  animation-delay: 295ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(3) {
+  animation-delay: 350ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(4) {
+  animation-delay: 405ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(5) {
+  animation-delay: 460ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(6) {
+  animation-delay: 515ms;
+}
+
+.home-page__app-grid > .xs-app-card:nth-child(7) {
+  animation-delay: 570ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page__bg,
+  .home-page__hero,
+  .home-page .xs-command-box,
+  .home-page__apps > h2,
+  .home-page__app-grid > .xs-app-card {
+    animation: none;
+  }
+}

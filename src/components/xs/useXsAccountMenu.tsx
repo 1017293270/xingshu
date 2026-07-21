@@ -1,4 +1,4 @@
-import { GearSix, SignOut, UserCircle } from "@phosphor-icons/react";
+import { GearSix, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import { logoutDataHub } from "@/services/dataHubAuthService";
@@ -10,6 +10,7 @@ export function useXsAccountMenu(onNavigate?: () => void) {
   const user = useDataHubAuthStore((state) => state.user);
   const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
   const resetUiState = useUiStore((state) => state.resetUiState);
+  const setOnboardingOpen = useUiStore((state) => state.setOnboardingOpen);
   const username = user?.username || "张三";
   const userRole = user?.isAdmin ? "系统管理员" : "企业管理员";
 
@@ -19,6 +20,11 @@ export function useXsAccountMenu(onNavigate?: () => void) {
       icon: <UserCircle size={17} />,
       label: `${username} · ${userRole}`,
       disabled: true
+    },
+    {
+      key: "onboarding",
+      icon: <Sparkle size={17} />,
+      label: "新手引导"
     },
     {
       key: "ai-settings",
@@ -35,6 +41,12 @@ export function useXsAccountMenu(onNavigate?: () => void) {
   ];
 
   function handleAccountMenuClick({ key }: { key: string }) {
+    if (key === "onboarding") {
+      setOnboardingOpen(true);
+      onNavigate?.();
+      return;
+    }
+
     if (key === "ai-settings") {
       onNavigate?.();
       navigate("/settings/ai");

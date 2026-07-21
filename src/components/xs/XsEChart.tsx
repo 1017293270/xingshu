@@ -61,7 +61,9 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
       );
       element.dataset.echartsReady = "true";
       element.dataset.echartsRenderer = "canvas";
-      observer?.observe(element);
+      /* echarts.init 会给画布写死内联宽高，必须观察外层容器而不是画布本身，
+         否则容器收窄时画布保持旧尺寸、监听器收不到通知，图表溢出卡片 */
+      observer?.observe(element.parentElement ?? element);
     });
 
     return () => {
