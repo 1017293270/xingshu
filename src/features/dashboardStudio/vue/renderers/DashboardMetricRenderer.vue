@@ -36,10 +36,13 @@ const trend = computed(() => {
     ? ((current - previous) / Math.abs(previous)) * 100
     : 0;
 });
+/* 非时序数据不展示趋势：生成器可显式关闭，避免把排名差值误读为趋势 */
+const showTrendChip = computed(() => props.widget.style.showTrend !== false);
 const cardStyle = computed(() => ({
   backgroundColor: props.widget.style.background ?? "rgba(15, 23, 42, 0.86)",
   color: props.widget.style.color ?? "#e5f0ff",
   borderColor: `color-mix(in srgb, ${props.widget.style.accent ?? "#38bdf8"} 34%, transparent)`,
+  borderRadius: props.widget.style.borderRadius ? `${props.widget.style.borderRadius}px` : undefined,
   "--metric-accent": props.widget.style.accent ?? "#38bdf8",
   backdropFilter: props.widget.style.backgroundBlur ? `blur(${props.widget.style.backgroundBlur}px)` : undefined
 }));
@@ -59,7 +62,7 @@ const cardStyle = computed(() => ({
     <template v-else-if="binding && rawMetric !== null">
       <p class="metric-card-renderer__label">{{ widget.title }}</p>
       <p class="metric-card-renderer__value">{{ valueText }}</p>
-      <p class="metric-card-renderer__trend" :class="{ 'is-negative': trend < 0 }">
+      <p v-if="showTrendChip" class="metric-card-renderer__trend" :class="{ 'is-negative': trend < 0 }">
         {{ trend > 0 ? '+' : '' }}{{ trend.toFixed(1) }}%
       </p>
     </template>
@@ -73,7 +76,8 @@ const cardStyle = computed(() => ({
 <style scoped>
 .metric-card-renderer { box-sizing:border-box; display:grid; align-content:space-between; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; padding:18px; border:1px solid; border-radius:8px; }
 .metric-card-renderer p { min-width:0; margin:0; overflow-wrap:anywhere; }
-.metric-card-renderer__label { color:color-mix(in srgb,currentColor 72%,transparent); font-size:13px; font-weight:700; text-transform:uppercase; }
+.metric-card-renderer__label { display:flex; align-items:center; gap:7px; color:color-mix(in srgb,currentColor 72%,transparent); font-size:13px; font-weight:700; text-transform:uppercase; }
+.metric-card-renderer__label::before { width:3px; height:12px; flex:0 0 auto; border-radius:2px; background:var(--metric-accent); content:""; }
 .metric-card-renderer__value { font-size:34px; font-weight:800; line-height:1.05; }
 .metric-card-renderer__trend { width:fit-content; max-width:100%; padding:4px 8px; border-radius:6px; background:color-mix(in srgb,var(--metric-accent) 18%,transparent); color:var(--metric-accent); font-size:13px; font-weight:700; }
 .metric-card-renderer__trend.is-negative { color:#f87171; }

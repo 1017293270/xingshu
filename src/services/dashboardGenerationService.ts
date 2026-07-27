@@ -38,6 +38,8 @@ type MetricCandidate = {
   title: string;
   subtitle: string;
   valueMode: MetricValueMode;
+  /** 是否展示环比趋势：仅时序数据有意义，排名/单值场景关闭避免误导 */
+  showTrend: boolean;
 };
 
 const defaultCanvas = {
@@ -45,12 +47,15 @@ const defaultCanvas = {
   height: 1080,
   columns: 12 as const,
   rows: 10,
-  background: "#F5F9FF"
+  background: "#EFF4FB"
 };
 const generatedCanvasRows = 8;
 const maximumSnapshotRows = 200;
 const maximumWidgets = 7;
 const metricAccents = ["#1677FF", "#00A6E8", "#16A37A", "#6C7FF2"];
+const chartSeriesColors = ["#1677FF", "#00A6E8", "#16A37A", "#F59E0B", "#6C7FF2", "#F26D6D"];
+/** 生成大屏统一卡片面：白底、细边框、12px 圆角、深蓝信息层级 */
+const cardSurface = { background: "#FFFFFF", borderColor: "#E3ECF9", borderRadius: 12, color: "#294469" } as const;
 const questionMetricTerms = [
   "销售收入",
   "销售额",
@@ -324,7 +329,8 @@ function scalarMetricCandidates(analyses: BindingAnalysis[]): MetricCandidate[] 
       column,
       title: displayColumnTitle(column),
       subtitle: analysis.binding.label,
-      valueMode: "first" as const
+      valueMode: "first" as const,
+      showTrend: false
     }));
   });
 }
@@ -347,7 +353,8 @@ function primaryMetricCandidates(analysis?: BindingAnalysis): MetricCandidate[] 
       column,
       title: `最新${displayColumnTitle(column)}`,
       subtitle: String(rows.at(-1)?.[analysis.timeColumn?.key ?? ""] ?? "最新周期"),
-      valueMode: "latest" as const
+      valueMode: "latest" as const,
+      showTrend: true
     }));
     return [
       ...latest,
@@ -356,14 +363,16 @@ function primaryMetricCandidates(analysis?: BindingAnalysis): MetricCandidate[] 
         column: primaryMetric,
         title: `峰值${displayColumnTitle(primaryMetric)}`,
         subtitle: dimensionValueForMaximum(analysis, primaryMetric.key) || "周期峰值",
-        valueMode: "max" as const
+        valueMode: "max" as const,
+        showTrend: true
       },
       {
         binding: analysis.binding,
         column: primaryMetric,
         title: `平均${displayColumnTitle(primaryMetric)}`,
         subtitle: `按${dimensionTitle}计算`,
-        valueMode: "average" as const
+        valueMode: "average" as const,
+        showTrend: true
       }
     ];
   }
@@ -375,21 +384,24 @@ function primaryMetricCandidates(analysis?: BindingAnalysis): MetricCandidate[] 
       column: primaryMetric,
       title: `最高${metricTitle}`,
       subtitle: dimensionValueForMaximum(analysis, primaryMetric.key) || "领先项",
-      valueMode: "max"
+      valueMode: "max",
+      showTrend: false
     },
     {
       binding: analysis.binding,
       column: primaryMetric,
       title: `${metricTitle}合计`,
       subtitle: `${rows.length} 个${dimensionTitle}`,
-      valueMode: "sum"
+      valueMode: "sum",
+      showTrend: false
     },
     {
       binding: analysis.binding,
       column: primaryMetric,
       title: `平均${metricTitle}`,
       subtitle: `按${dimensionTitle}计算`,
-      valueMode: "average"
+      valueMode: "average",
+      showTrend: false
     }
   ];
 }
@@ -424,7 +436,7 @@ function createMetricWidgets(
           valueMode: candidate.valueMode,
           displayUnit: displayUnit(candidate.column) || undefined
         },
-        style: { accent: metricAccents[index] ?? "#1677FF", background: "#FFFFFF" }
+        style: { ...cardSurface, accent: metricAccents[index] ?? "#1677FF", showTrend: candidate.showTrend }
       },
       "metric",
       { x: index * width, y: 1, w: index === candidates.length - 1 ? 12 - index * width : width, h: 2 },
@@ -437,6 +449,30 @@ function chartTypeFor(analysis: BindingAnalysis): DashboardWidgetType {
   if (analysis.timeColumn) return "line";
   if (analysis.numericColumns.some(isCompositionMetric) && analysis.binding.table.rows.length <= 8) return "pie";
   return "bar";
+}
+
+/**
+ * 同图多指标量级悬殊时只保留主指标，避免次指标被压成贴地直线。
+ * 被过滤的字段仍完整呈现在明细表中。
+ */
+function scaleCompatibleMetricKeys(analysis: BindingAnalysis, keys: string[]) {
+  if (keys.length <= 1) return keys;
+
+  const rows = analysis.binding.table.rows;
+  const maxima = new Map(
+    keys.map((key) => [
+      key,
+      rows.reduce((maximum, row) => Math.max(maximum, Math.abs(toFiniteNumber(row[key]) ?? 0)), 0)
+    ])
+  );
+  const primaryMax = maxima.get(keys[0] ?? "") ?? 0;
+  if (primaryMax <= 0) return keys;
+
+  return keys.filter((key, index) => {
+    if (index === 0) return true;
+    const ratio = (maxima.get(key) ?? 0) / primaryMax;
+    return ratio >= 0.2 && ratio <= 5;
+  });
 }
 
 function createPrimaryContentWidgets(
@@ -454,33 +490,35 @@ function createPrimaryContentWidgets(
     : dimensionColumn
       ? `${displayColumnTitle(dimensionColumn)}明细`
       : "数据明细";
+  const tableWidget = (position: DashboardWidgetPosition) =>
+    createWidget(
+      {
+        title: tableTitle,
+        subtitle: `共 ${binding.table.totalRows} 行`,
+        bindingId: binding.id,
+        mapping: {},
+        style: { ...cardSurface, accent: "#1677FF" }
+      },
+      "table",
+      position,
+      idFactory
+    );
 
   if (!hasChart || !dimensionColumn) {
-    return [
-      createWidget(
-        {
-          title: tableTitle,
-          subtitle: `共 ${binding.table.totalRows} 行`,
-          bindingId: binding.id,
-          mapping: {},
-          style: { accent: "#2563EB", background: "#FFFFFF" }
-        },
-        "table",
-        { x: 0, y: 3, w: 12, h: 5 },
-        idFactory
-      )
-    ];
+    return [tableWidget({ x: 0, y: 3, w: 12, h: 5 })];
   }
 
   const chartType = chartTypeFor(analysis);
-  const metricKeys = numericColumns.slice(0, chartType === "pie" ? 1 : 2).map((column) => column.key);
+  const metricKeys = scaleCompatibleMetricKeys(
+    analysis,
+    numericColumns.slice(0, chartType === "pie" ? 1 : 2).map((column) => column.key)
+  );
   const chartSubtitle = timeColumn
     ? `趋势变化 · ${binding.table.rows.length} 个周期`
     : chartType === "pie"
       ? `结构占比 · ${binding.table.rows.length} 项`
       : `排名对比 · ${binding.table.rows.length} 项`;
-
-  return [
+  const chartWidget = (position: DashboardWidgetPosition) =>
     createWidget(
       {
         title: binding.label,
@@ -488,29 +526,45 @@ function createPrimaryContentWidgets(
         bindingId: binding.id,
         mapping: { dimensionKey: dimensionColumn.key, metricKeys },
         style: {
+          ...cardSurface,
           accent: chartType === "pie" ? "#00A6E8" : "#1677FF",
-          background: "#FFFFFF",
+          seriesColors: [...chartSeriesColors],
           showLegend: metricKeys.length > 1 || chartType === "pie",
           smooth: chartType === "line"
         }
       },
       chartType,
-      { x: 0, y: 3, w: 8, h: 5 },
+      position,
       idFactory
-    ),
-    createWidget(
-      {
-        title: tableTitle,
-        subtitle: `共 ${binding.table.totalRows} 行`,
-        bindingId: binding.id,
-        mapping: {},
-        style: { accent: "#2563EB", background: "#FFFFFF" }
-      },
-      "table",
-      { x: 8, y: 3, w: 4, h: 5 },
-      idFactory
-    )
-  ];
+    );
+
+  // 类目/排名数据：柱状图看排名对比，饼图看结构占比，双图并排丰富表达
+  const primaryMetric = numericColumns[0];
+  if (chartType === "bar" && primaryMetric && binding.table.rows.length >= 3) {
+    return [
+      chartWidget({ x: 0, y: 3, w: 6, h: 5 }),
+      createWidget(
+        {
+          title: `${displayColumnTitle(primaryMetric)}结构占比`,
+          subtitle: `结构占比 · ${binding.table.rows.length} 项`,
+          bindingId: binding.id,
+          mapping: { dimensionKey: dimensionColumn.key, metricKeys: [primaryMetric.key] },
+          style: {
+            ...cardSurface,
+            accent: "#00A6E8",
+            seriesColors: [...chartSeriesColors],
+            showLegend: true
+          }
+        },
+        "pie",
+        { x: 6, y: 3, w: 3, h: 5 },
+        idFactory
+      ),
+      tableWidget({ x: 9, y: 3, w: 3, h: 5 })
+    ];
+  }
+
+  return [chartWidget({ x: 0, y: 3, w: 8, h: 5 }), tableWidget({ x: 8, y: 3, w: 4, h: 5 })];
 }
 
 function sanitizeSummary(value?: string) {
@@ -587,6 +641,11 @@ export function createDashboardDraftFromTables(
   });
 
   const analyses = orderedBindings.map(analyzeBinding);
+  // 标记绑定数据形态：柱状图按类目着色、组件兼容性判断都依赖它
+  analyses.forEach((analysis) => {
+    const resultKind = analysis.timeColumn ? "time-series" : analysis.dimensionColumn ? "category" : undefined;
+    if (resultKind) analysis.binding.resultKind = resultKind;
+  });
   const primary = analyses.find(
     (analysis) => analysis.binding.table.rows.length > 1 && analysis.dimensionColumn && analysis.numericColumns.length > 0
   ) ?? analyses.find((analysis) => analysis.binding.table.rows.length > 0);
@@ -598,10 +657,15 @@ export function createDashboardDraftFromTables(
     createWidget(
       {
         title: dashboardTitle,
-        subtitle: "智能问数 · 数据简报",
-        content: insight,
+        subtitle: insight,
         mapping: {},
-        style: { accent: "#00A6E8", background: "#F8FBFF" }
+        style: {
+          accent: "#1677FF",
+          color: "#0F2B50",
+          fontSize: 30,
+          fontWeight: 800,
+          textAlign: "center"
+        }
       },
       "text",
       { x: 0, y: 0, w: 12, h: 1 },
@@ -669,7 +733,7 @@ export function replanLegacyDashboardDraft(record: DashboardRecord): DashboardSc
   }
 
   const bindings = Object.values(record.schema.dataBindings).sort(
-    (left, right) => left.tableIndex - right.tableIndex
+    (left, right) => (left.tableIndex ?? 0) - (right.tableIndex ?? 0)
   );
   if (bindings.length === 0) {
     return null;

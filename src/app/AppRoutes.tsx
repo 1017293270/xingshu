@@ -50,6 +50,7 @@ export function AppRoutes() {
         <Routes>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/ask-data" element={<AnalysisPage />} />
             <Route path="/analysis" element={<AnalysisPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/table" element={<TablePage />} />

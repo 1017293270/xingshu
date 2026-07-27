@@ -45,6 +45,7 @@ describe("AppRoutes", () => {
 
   const routeCases: Array<[string, string | RegExp, string]> = [
     ["/", "您好，zhangsan", "推荐应用"],
+    ["/ask-data", "从一个经营问题开始", "空白问数工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
     ["/writing", "智能写作", "推荐写作场景"],
@@ -201,14 +202,14 @@ describe("AppRoutes", () => {
     expect(screen.getByText("分析本月经营数据")).toBeInTheDocument();
   });
 
-  it("opens the target feature from a recommended app arrow", async () => {
+  it("opens the dedicated ask-data page from a recommended app arrow", async () => {
     const user = userEvent.setup();
     renderRoute("/");
 
-    await user.click(screen.getByRole("button", { name: "打开 智能问数" }));
+    await user.click(screen.getByRole("button", { name: "进入 智能问数" }));
 
-    expect(await screen.findByRole("heading", { name: "问数完成" })).toBeInTheDocument();
-    expect(screen.getByText("帮我分析本月经营数据，并生成趋势图表")).toBeInTheDocument();
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
   });
 
   it("logs out from the sidebar account menu", async () => {
@@ -269,9 +270,8 @@ describe("AppRoutes", () => {
     expect(screen.queryByTitle("看板编辑器子应用")).not.toBeInTheDocument();
   });
 
-  it("creates a dashboard draft from a completed ask-data result", async () => {
-    const user = userEvent.setup();
-    renderRoute("/analysis");
+  it("does not expose dashboard generation from a completed ask-data result", async () => {
+    renderRoute("/ask-data");
 
     act(() => {
       const store = useUiStore.getState();
@@ -291,11 +291,20 @@ describe("AppRoutes", () => {
       store.completeAskDataRun(runId);
     });
 
-    await user.click(await screen.findByRole("button", { name: "生成大屏" }));
+    expect(await screen.findByText("本月营收保持增长。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toBeNull();
+  });
 
-    expect(await screen.findByLabelText("星数大屏设计器")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
-    expect(localStorage.getItem("xingshu.dashboard.records.v1")).toContain('"kind":"ask-data"');
+  it("opens the dedicated ask-data page from the recommended app card", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(await screen.findByRole("button", { name: /^打开 智能问数/ }));
+
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
+    expect(document.title).toBe("智能问数 · 星数");
   });
 
   it("filters knowledge bases in data asset management", async () => {

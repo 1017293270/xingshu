@@ -2,12 +2,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import { XsShell } from "@/components/xs";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import { HomePage } from "./HomePage";
+
+function CurrentLocation() {
+  const location = useLocation();
+  return <div aria-label="当前应用路径">{`${location.pathname}${location.search}`}</div>;
+}
 
 function HomeWorkspaceFixture() {
   const isSidebarCollapsed = useUiStore((state) => state.isSidebarCollapsed);
@@ -21,6 +26,7 @@ function HomeWorkspaceFixture() {
       onNewChat={clearHomeConversation}
     >
       <HomePage />
+      <CurrentLocation />
     </XsShell>
   );
 }
@@ -100,20 +106,21 @@ describe("HomePage", () => {
     const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智能写作", "会议纪要", "更多应用"];
 
     for (const appName of expectedApps) {
-      expect(screen.getByRole("button", { name: new RegExp(`选择 ${appName}`) })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: new RegExp(`打开 ${appName}`) })).toHaveAttribute(
         "aria-pressed",
         "false"
       );
-      expect(screen.getByRole("button", { name: `打开 ${appName}` })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `进入 ${appName}` })).toBeInTheDocument();
     }
 
     expect(screen.queryByText("👋")).not.toBeInTheDocument();
     expect(container.querySelectorAll('[data-icon-source="xingshu-home-apps-image2-v1"]')).toHaveLength(7);
     expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(0);
 
-    const dataChatButton = screen.getByRole("button", { name: /选择 智能问数/ });
+    const dataChatButton = screen.getByRole("button", { name: /打开 智能问数/ });
     await user.click(dataChatButton);
     expect(dataChatButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
   });
 
   it("uses the authenticated username in the greeting", () => {
@@ -140,16 +147,34 @@ describe("HomePage", () => {
     );
   });
 
-  it("writes an app prompt into the command box when an app card is selected", async () => {
+  it("opens an app from the full card and keeps its prompt ready on return", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(screen.getByRole("button", { name: /^选择 智能问数/ }));
+    await user.click(screen.getByRole("button", { name: /^打开 智能问数/ }));
 
     expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue(
       "帮我分析本月经营数据，并生成趋势图表"
     );
-    expect(screen.getByRole("status")).toHaveTextContent("已选择：智能问数");
+    expect(screen.getByRole("status")).toHaveTextContent("正在打开：智能问数");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
+  });
+
+  it.each([
+    ["智能问数", "/ask-data"],
+    ["知识问答", "/data-management"],
+    ["文档助手", "/cloud"],
+    ["报表生成", "/dashboard"],
+    ["智能写作", "/writing"],
+    ["会议纪要", "/writing"],
+    ["更多应用", "/data-dashboard"]
+  ])("routes %s to its product workspace", async (appName, expectedPath) => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole("button", { name: new RegExp(`^打开 ${appName}`) }));
+
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent(expectedPath);
   });
 
   it("clears the draft when starting a new chat", async () => {
@@ -181,14 +206,17 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
   });
 
-  it("shows a sent status after submitting a command", async () => {
+  it("submits a command with Enter", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.type(screen.getByRole("textbox", { name: "命令输入" }), "生成经营日报");
-    await user.click(screen.getByRole("button", { name: "发送" }));
+    const commandInput = screen.getByRole("textbox", { name: "命令输入" });
+    expect(commandInput).toHaveAttribute("aria-keyshortcuts", "Enter");
+
+    await user.type(commandInput, "生成经营日报{Enter}");
 
     expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
   });
 
   it("hides upload and reports unsupported voice input", async () => {

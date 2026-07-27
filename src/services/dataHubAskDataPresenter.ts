@@ -1,5 +1,6 @@
 import type {
   DataHubAskDataStatus,
+  AskArtifactRef,
   DataHubAskTurn,
   DataHubDoneData,
   DataHubReactStepData,
@@ -298,6 +299,19 @@ function normalizeDone(data: unknown): DataHubDoneData | undefined {
   return isRecord(record) ? (record as DataHubDoneData) : undefined;
 }
 
+function normalizeArtifact(data: unknown): AskArtifactRef | undefined {
+  const record = unwrapEventData(data);
+  if (!isRecord(record)) return undefined;
+  const askRunId = asString(record.askRunId);
+  const resolvedQuestion = asString(record.resolvedQuestion);
+  if (!askRunId) return undefined;
+  return {
+    askRunId,
+    resolvedQuestion,
+    canFavorite: record.canFavorite === true
+  };
+}
+
 export function createDataHubAskTurn(
   question: string,
   events: DataHubStreamEvent[],
@@ -318,6 +332,13 @@ export function createDataHubAskTurn(
   };
 
   for (const event of events) {
+    if (!turn.sessionId && event.sessionId) {
+      turn.sessionId = event.sessionId;
+    }
+    if (!turn.chatId && event.chatId) {
+      turn.chatId = event.chatId;
+    }
+
     if (event.type.startsWith("routing_") && event.type !== "routing_decompose") {
       turn.routingEvents.push(event);
     }
@@ -362,6 +383,10 @@ export function createDataHubAskTurn(
 
     if (event.type === "done") {
       turn.done = normalizeDone(event.data);
+    }
+
+    if (event.type === "ask_artifact") {
+      turn.artifact = normalizeArtifact(event.data);
     }
 
     if (event.type === "error") {

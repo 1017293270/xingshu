@@ -19,6 +19,7 @@ import {
   PhCopy,
   PhCornersOut,
   PhDotsThree,
+  PhDatabase,
   PhEye,
   PhFloppyDisk,
   PhGridFour,
@@ -32,18 +33,32 @@ import {
   PhSelectionAll,
   PhSidebarSimple,
   PhSlidersHorizontal,
+  PhSparkle,
+  PhStar,
   PhTable,
   PhTextT,
   PhTrash
 } from "@phosphor-icons/vue";
 import type {
+  LayoutPlan,
+  QueryAsset,
+  QueryExecution,
+  QueryParameterDefinition,
+  QueryVersion,
+  RefreshPolicy,
+  RelativeTimePreset
+} from "@/types/analytics";
+import type {
   DashboardDataBinding,
+  DashboardModule,
   DashboardRecord,
   DashboardSchema,
   DashboardWidget,
+  DashboardWidgetMapping,
   DashboardWidgetPosition,
   DashboardWidgetType
 } from "@/types/dashboardStudio";
+import { queryAssetFeatureEnabled } from "@/config/features";
 import {
   dashboardCanvasPresets,
   dashboardZoomLevels,
@@ -63,6 +78,7 @@ import {
   dashboardComponentDefinitions,
   getDashboardComponentDefinition
 } from "../core/dashboardComponentRegistry";
+import { inferDashboardBindingColumns } from "../core/dashboardWidgetData";
 import {
   applyDashboardStudioPreset,
   dashboardStudioPresets
@@ -74,21 +90,26 @@ import {
   getMatchingDashboardChartThemeId
 } from "../core/dashboardChartThemes";
 import {
-  createDashboardMockBinding,
-  dashboardMockDataSources,
-  getDashboardMockMapping,
-  getDashboardMockSource,
-  getFirstDashboardMockDimensionId,
-  getFirstDashboardMockMetricId,
-  isDashboardMockDimensionAllowed,
-  isDashboardMockMetricAllowed
-} from "../core/dashboardMockData";
+  appendQueryAssetChart,
+  removeQueryAssetChart
+} from "@/services/dashboardModuleService";
+import { readDataHubSession } from "@/services/dataHubSession";
+import { createLayoutRequest, solveDashboardLayout, widgetSemanticRole } from "../core/dashboardLayoutSolver";
+import {
+  compressDashboardBackgroundImage,
+  resolveCanvasBackgroundStyle
+} from "../core/dashboardCanvasBackground";
+import type { DashboardDesignerDataActions } from "./mountDashboardDesigner";
 import ColorField from "../original/designer/ColorField.vue";
 import ChartThemePicker from "../original/designer/ChartThemePicker.vue";
 import ChartTypePicker from "../original/designer/ChartTypePicker.vue";
 import DashboardWidgetCard from "./DashboardWidgetCard.vue";
 
-type SaveHandler = (schema: DashboardSchema, expectedRevision: number) => Promise<DashboardRecord>;
+type SaveHandler = (
+  schema: DashboardSchema,
+  expectedRevision: number,
+  visibility: "PRIVATE" | "SPACE"
+) => Promise<DashboardRecord>;
 type DesignerLifecycle = "saved" | "dirty" | "saving" | "published" | "error";
 type DesignerPropertyTab = "basic" | "layout" | "data" | "style";
 type PointerDragState = {
@@ -116,8 +137,12 @@ const props = defineProps<{
   initialSchema: DashboardSchema;
   initialRevision?: number;
   initialStatus?: "draft" | "published";
+  initialVisibility?: "PRIVATE" | "SPACE";
+  initialResourcePanel?: "assets";
+  initialAssetId?: string;
   saveDraft: SaveHandler;
   publishDashboard: SaveHandler;
+  dataActions: DashboardDesignerDataActions;
   exit: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onChange?: (schema: DashboardSchema) => void;
@@ -150,10 +175,14 @@ const selectedWidgetId = ref("");
 const settlingWidgetId = ref("");
 const revision = ref(props.initialRevision ?? 0);
 const recordStatus = ref(props.initialStatus ?? "draft");
+const dashboardVisibility = ref<"PRIVATE" | "SPACE">(props.initialVisibility ?? "PRIVATE");
+const currentUserId = readDataHubSession().userId;
 const lifecycle = ref<DesignerLifecycle>(recordStatus.value === "published" ? "published" : "saved");
 const activeSaveIntent = ref<"draft" | "publish" | null>(null);
 const errorMessage = ref("");
-const activeDrawer = ref<"palette" | "property" | null>(null);
+const shouldOpenInitialAssets = queryAssetFeatureEnabled && props.initialResourcePanel === "assets";
+const activeDrawer = ref<"palette" | "property" | null>(shouldOpenInitialAssets ? "palette" : null);
+const paletteTab = ref<"components" | "assets">(shouldOpenInitialAssets ? "assets" : "components");
 const activePropertyTab = ref<DesignerPropertyTab>("basic");
 const paletteSearch = ref("");
 const showCanvasGrid = ref(true);
@@ -180,6 +209,44 @@ let suspendChanges = false;
 const historyPast = ref<DashboardSchema[]>([]);
 const historyFuture = ref<DashboardSchema[]>([]);
 const hasPendingHistory = ref(false);
+const assetSearch = ref("");
+const assetScope = ref<"ALL" | "PRIVATE" | "SPACE">("ALL");
+const assetState = ref<"idle" | "loading" | "success" | "error">("idle");
+const assetError = ref("");
+const queryAssets = ref<QueryAsset[]>([]);
+const selectedAssetId = ref("");
+const selectedAssetParameters = reactive<Record<string, unknown>>({});
+const selectedOutputKey = ref("");
+const assetPreview = ref<QueryExecution | null>(null);
+const assetAction = ref<"preview" | "add" | "visibility" | null>(null);
+const moduleAction = ref<"refresh" | "reask" | "upgrade" | "schedule" | null>(null);
+const versionAsset = ref<QueryAsset | null>(null);
+const reaskQuestion = ref("");
+const showVersionDialog = ref(false);
+const candidateColumnMappings = reactive<Record<string, Record<string, string>>>({});
+const candidateOutputKeys = reactive<Record<string, string>>({});
+const schedulePolicy = ref<RefreshPolicy>("MANUAL");
+const scheduleTime = ref("08:00");
+const scheduleDayOfWeek = ref(1);
+const showScheduleDialog = ref(false);
+const layoutPlan = ref<LayoutPlan | null>(null);
+const layoutPreviewSchema = ref<DashboardSchema | null>(null);
+const showLayoutDialog = ref(false);
+const layoutPlanning = ref(false);
+const canvasNotice = ref("");
+const canvasBackgroundUploading = ref(false);
+const canvasBackgroundInput = ref<HTMLInputElement | null>(null);
+const relativeTimeOptions: Array<{ value: RelativeTimePreset; label: string }> = [
+  { value: "TODAY", label: "今天" },
+  { value: "YESTERDAY", label: "昨天" },
+  { value: "THIS_WEEK", label: "本周" },
+  { value: "LAST_WEEK", label: "上周" },
+  { value: "THIS_MONTH", label: "本月" },
+  { value: "LAST_MONTH", label: "上月" },
+  { value: "LAST_30_DAYS", label: "近 30 天" },
+  { value: "THIS_YEAR", label: "今年" },
+  { value: "LAST_YEAR", label: "去年" }
+];
 
 const selectedWidget = computed(() => schema.widgets.find((widget) => widget.id === selectedWidgetId.value));
 const isSelectedWidgetLocked = computed(() => selectedWidget.value?.style.locked === true);
@@ -211,41 +278,74 @@ const selectedBinding = computed(() =>
   selectedWidget.value?.bindingId ? schema.dataBindings[selectedWidget.value.bindingId] : undefined
 );
 const dataBindings = computed(() => Object.values(schema.dataBindings));
-const selectedMockSource = computed(() => getDashboardMockSource(selectedBinding.value?.sourceId));
-const selectedMockDimensionId = computed(() => {
-  if (selectedBinding.value?.sourceId) return selectedBinding.value.dimensionId ?? "";
-  const widget = selectedWidget.value;
-  return widget ? getFirstDashboardMockDimensionId(widget.type, selectedMockSource.value) : "";
+type QueryAssetChartEntry = {
+  widget: DashboardWidget;
+  module: DashboardModule;
+};
+const queryAssetCharts = computed<QueryAssetChartEntry[]>(() => {
+  const modules = Object.values(schema.modules ?? {}).filter((module) => module.source.kind === "query-asset");
+  return schema.widgets.flatMap((widget) => {
+    const module = modules.find((item) =>
+      item.id === widget.moduleId || item.widgetIds.includes(widget.id)
+    );
+    return module ? [{ widget, module }] : [];
+  });
 });
-const selectedMockMetricId = computed(() => {
-  if (selectedBinding.value?.sourceId && selectedBinding.value.metricId) return selectedBinding.value.metricId;
-  const widget = selectedWidget.value;
-  return widget
-    ? getFirstDashboardMockMetricId(widget.type, selectedMockSource.value, selectedMockDimensionId.value)
-    : "";
+const selectedAsset = computed(() => queryAssets.value.find((asset) => asset.id === selectedAssetId.value));
+const selectedModuleAsset = computed(() => {
+  const assetId = selectedBinding.value?.sourceRef?.assetId;
+  return assetId ? queryAssets.value.find((asset) => asset.id === assetId) : undefined;
+});
+const candidateVersions = computed(() =>
+  (versionAsset.value?.versions ?? []).filter((version) => version.status === "CANDIDATE")
+);
+const usedModuleColumns = computed(() => {
+  const bindingId = selectedWidget.value?.bindingId;
+  const binding = selectedBinding.value;
+  if (!bindingId || !binding) return [];
+  const ids = new Set<string>();
+  const addKey = (key?: string) => {
+    const id = binding.table.columns.find((column) => column.key === key)?.columnId;
+    if (id) ids.add(id);
+  };
+  schema.widgets.filter((widget) => widget.bindingId === bindingId).forEach((widget) => {
+    const mapping = widget.mapping;
+    if (mapping.dimensionColumnId) ids.add(mapping.dimensionColumnId); else addKey(mapping.dimensionKey);
+    if (mapping.metricColumnIds?.length) mapping.metricColumnIds.forEach((id) => ids.add(id));
+    else mapping.metricKeys?.forEach(addKey);
+  });
+  return Array.from(ids).map((columnId) => {
+    const column = binding.table.columns.find((item) => item.columnId === columnId);
+    return { columnId, key: column?.key ?? columnId, label: column?.title ?? column?.key ?? columnId };
+  });
 });
 const paletteGroups = computed(() => [{ label: "组件", items: paletteItems }]);
 const allColumns = computed(() => selectedBinding.value?.table.columns ?? []);
-const numericColumns = computed(() =>
-  allColumns.value.filter((column) => {
-    const descriptor = `${column.key} ${column.title} ${column.type ?? ""}`;
-    if (/int|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率/i.test(descriptor)) {
-      return true;
-    }
-    const rows = selectedBinding.value?.table.rows.slice(0, 8) ?? [];
-    return rows.length > 0 && rows.every((row) => Number.isFinite(Number(row[column.key])));
-  })
-);
-const dimensionColumns = computed(() =>
-  allColumns.value.filter((column) => !numericColumns.value.some((numeric) => numeric.key === column.key))
-);
+const selectedBindingColumns = computed(() => inferDashboardBindingColumns(selectedBinding.value));
+const numericColumns = computed(() => selectedBindingColumns.value.numericColumns);
+const dimensionColumns = computed(() => selectedBindingColumns.value.dimensionColumns);
+const selectedDimensionColumnId = computed(() => {
+  const mapping = selectedWidget.value?.mapping;
+  if (!mapping) return "";
+  return mapping.dimensionColumnId
+    ?? allColumns.value.find((column) => column.key === mapping.dimensionKey)?.columnId
+    ?? "";
+});
+const selectedMetricColumnIds = computed(() => {
+  const mapping = selectedWidget.value?.mapping;
+  if (!mapping) return [];
+  return mapping.metricColumnIds?.length
+    ? mapping.metricColumnIds
+    : (mapping.metricKeys ?? []).map((key) => allColumns.value.find((column) => column.key === key)?.columnId)
+      .filter((id): id is string => Boolean(id));
+});
 const orderedWidgets = computed(() =>
   [...schema.widgets].sort((left, right) => (left.style.zIndex ?? 0) - (right.style.zIndex ?? 0))
 );
 const canvasStyle = computed(() => ({
   width: `${schema.canvas.width}px`,
   height: `${schema.canvas.height}px`,
-  backgroundColor: schema.canvas.background,
+  ...resolveCanvasBackgroundStyle(schema.canvas),
   transform: `scale(${canvasScale.value})`
 }));
 const canvasStageStyle = computed(() => ({
@@ -292,6 +392,20 @@ async function replaceSchema(nextSchema: DashboardSchema) {
   Object.assign(schema, clone(nextSchema));
   await nextTick();
   suspendChanges = false;
+}
+
+async function applySchemaChange(nextSchema: DashboardSchema) {
+  const current = plainSchema();
+  if (historySignature(current) === historySignature(nextSchema)) return;
+  clearHistoryTimer();
+  historyPast.value = [...historyPast.value, clone(current)].slice(-100);
+  historyFuture.value = [];
+  await replaceSchema(nextSchema);
+  lastCommittedSchema = clone(nextSchema);
+  lifecycle.value = "dirty";
+  errorMessage.value = "";
+  props.onDirtyChange?.(true);
+  props.onChange?.(plainSchema());
 }
 
 function clearHistoryTimer() {
@@ -389,7 +503,7 @@ function setCanvasZoom(value: number) {
 }
 
 function stepCanvasZoom(direction: -1 | 1) {
-  setCanvasZoom(canvasScale.value + direction * 0.1);
+  setCanvasZoom(getNextDashboardZoom(canvasScale.value, direction));
 }
 
 function handleZoomChange(event: Event) {
@@ -399,6 +513,18 @@ function handleZoomChange(event: Event) {
 function fitCanvasToViewport() {
   isFitZoom.value = true;
   updateCanvasScale();
+}
+
+function clampWidgetsToCanvas() {
+  let adjusted = 0;
+  for (const widget of schema.widgets) {
+    const next = clampDashboardWidgetPosition(widget.position, schema.canvas);
+    if (JSON.stringify(next) !== JSON.stringify(widget.position)) {
+      widget.position = next;
+      adjusted += 1;
+    }
+  }
+  canvasNotice.value = adjusted > 0 ? `已将 ${adjusted} 个越界组件移回画布` : "";
 }
 
 function handleResolutionChange(event: Event) {
@@ -411,6 +537,7 @@ function handleResolutionChange(event: Event) {
   schema.canvas.height = preset.height;
   customCanvasWidth.value = preset.width;
   customCanvasHeight.value = preset.height;
+  clampWidgetsToCanvas();
 }
 
 function applyCustomCanvasSize() {
@@ -421,6 +548,7 @@ function applyCustomCanvasSize() {
   customCanvasHeight.value = height;
   schema.canvas.width = width;
   schema.canvas.height = height;
+  clampWidgetsToCanvas();
 }
 
 function handlePresetChange(event: Event) {
@@ -437,7 +565,12 @@ function handlePresetChange(event: Event) {
 
 watch(
   () => [schema.canvas.width, schema.canvas.height],
-  () => void nextTick(updateCanvasScale)
+  () => {
+    customCanvasWidth.value = schema.canvas.width;
+    customCanvasHeight.value = schema.canvas.height;
+    resolutionMode.value = resolveDashboardCanvasPreset(schema.canvas.width, schema.canvas.height)?.id ?? "custom";
+    void nextTick(updateCanvasScale);
+  }
 );
 
 onMounted(() => {
@@ -447,6 +580,14 @@ onMounted(() => {
     canvasResizeObserver.observe(canvasScroll.value);
   }
   void nextTick(updateCanvasScale);
+  if (queryAssetFeatureEnabled) {
+    void loadAssets().then(() => {
+      const initialAsset = props.initialAssetId
+        ? queryAssets.value.find((asset) => asset.id === props.initialAssetId)
+        : undefined;
+      if (initialAsset) void chooseAsset(initialAsset);
+    });
+  }
   emit("ready");
 });
 
@@ -466,27 +607,75 @@ function bindingForWidget(widget: DashboardWidget) {
   return widget.bindingId ? schema.dataBindings[widget.bindingId] : undefined;
 }
 
+function assetChartCount(assetId: string) {
+  return queryAssetCharts.value.filter((entry) => entry.module.source.assetId === assetId).length;
+}
+
+function selectQueryAssetChart(widgetId: string) {
+  if (!schema.widgets.some((widget) => widget.id === widgetId)) return;
+  selectedWidgetId.value = widgetId;
+  settlingWidgetId.value = widgetId;
+}
+
+async function removeDashboardQueryChart(widgetId: string) {
+  const widget = schema.widgets.find((item) => item.id === widgetId);
+  if (!widget || lifecycle.value === "saving") return;
+  if (widget.style.locked) {
+    assetError.value = "该收藏图表已锁定，请先解锁后再移除";
+    return;
+  }
+  if (!window.confirm(`确认从当前看板移除“${widget.title}”吗？此操作可撤销。`)) return;
+  await applySchemaChange(removeQueryAssetChart(plainSchema(), widgetId));
+  if (selectedWidgetId.value === widgetId) selectedWidgetId.value = "";
+}
+
 function availablePosition(widgetId: string, desired: DashboardWidgetPosition) {
   void widgetId;
   return clampDashboardWidgetPosition(desired, schema.canvas);
 }
 
-function defaultMapping(type: DashboardWidgetType, binding?: DashboardDataBinding) {
+function defaultMapping(
+  type: DashboardWidgetType,
+  binding?: DashboardDataBinding,
+  previous: DashboardWidgetMapping = {}
+) {
+  const { numericColumns: metrics, dimensionColumns: dimensions } = inferDashboardBindingColumns(binding);
   const columns = binding?.table.columns ?? [];
-  const metrics = columns.filter((column) =>
-    /int|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率/i.test(
-      `${column.key} ${column.title} ${column.type ?? ""}`
-    )
-  );
-  const dimension = columns.find((column) => !metrics.some((metric) => metric.key === column.key));
+  const resolveColumn = (columnId?: string, key?: string) =>
+    columns.find((column) => (columnId && column.columnId === columnId) || (key && column.key === key));
+  const previousMetrics = (
+    previous.metricColumnIds?.length
+      ? previous.metricColumnIds.map((columnId) => resolveColumn(columnId))
+      : previous.metricKeys?.map((key) => resolveColumn(undefined, key))
+  )?.filter((column): column is (typeof metrics)[number] =>
+    Boolean(column && metrics.some((metric) => metric.key === column.key))
+  ) ?? [];
+  const metricCandidates = [...previousMetrics, ...metrics.filter((metric) =>
+    !previousMetrics.some((previousMetric) => previousMetric.key === metric.key)
+  )];
+  const previousDimension = resolveColumn(previous.dimensionColumnId, previous.dimensionKey);
+  const dimension = previousDimension && dimensions.some((column) => column.key === previousDimension.key)
+    ? previousDimension
+    : dimensions[0];
 
   if (type === "metric") {
-    return { metricKeys: metrics.slice(0, 1).map((column) => column.key), valueMode: "latest" as const };
+    const metric = metricCandidates[0];
+    return {
+      metricColumnIds: metric?.columnId ? [metric.columnId] : [],
+      metricKeys: metric ? [metric.key] : [],
+      valueMode: previous.valueMode ?? "latest" as const,
+      displayUnit: previousMetrics[0]?.key === metric?.key ? previous.displayUnit : undefined
+    };
   }
   if (dashboardChartWidgetTypes.includes(type)) {
+    const metricLimit = ["pie", "radar", "funnel"].includes(type) ? 1 : 2;
+    const selectedMetrics = metricCandidates.slice(0, metricLimit);
     return {
+      dimensionColumnId: dimension?.columnId,
       dimensionKey: dimension?.key,
-      metricKeys: metrics.slice(0, type === "pie" ? 1 : 2).map((column) => column.key)
+      metricColumnIds: selectedMetrics
+        .map((column) => column.columnId).filter((id): id is string => Boolean(id)),
+      metricKeys: selectedMetrics.map((column) => column.key)
     };
   }
   return {};
@@ -550,15 +739,43 @@ function duplicateSelected() {
     zIndex: schema.widgets.reduce((maximum, item) => Math.max(maximum, item.style.zIndex ?? 0), 0) + 1
   };
   schema.widgets = [...schema.widgets, copy];
+  if (copy.moduleId && schema.modules?.[copy.moduleId]) {
+    const module = schema.modules[copy.moduleId];
+    schema.modules = {
+      ...schema.modules,
+      [copy.moduleId]: { ...module, widgetIds: [...module.widgetIds, copy.id] }
+    };
+  }
   selectedWidgetId.value = copy.id;
   settlingWidgetId.value = copy.id;
 }
 
 function deleteSelected() {
   if (!selectedWidget.value || selectedWidget.value.style.locked || lifecycle.value === "saving") return;
-  const deletedWidgetId = selectedWidget.value.id;
+  const deletedWidget = clone(selectedWidget.value);
+  const deletedWidgetId = deletedWidget.id;
   if (!schema.widgets.some((widget) => widget.id === deletedWidgetId)) return;
   schema.widgets = schema.widgets.filter((widget) => widget.id !== deletedWidgetId);
+  if (deletedWidget.moduleId && schema.modules?.[deletedWidget.moduleId]) {
+    const module = schema.modules[deletedWidget.moduleId];
+    const remainingWidgetIds = schema.widgets
+      .filter((widget) => widget.moduleId === deletedWidget.moduleId)
+      .map((widget) => widget.id);
+    const modules = { ...schema.modules };
+    if (remainingWidgetIds.length > 0) {
+      modules[deletedWidget.moduleId] = { ...module, widgetIds: remainingWidgetIds };
+    } else {
+      delete modules[deletedWidget.moduleId];
+      const bindingStillUsed = schema.widgets.some((widget) => widget.bindingId === module.bindingId)
+        || Object.values(modules).some((item) => item.bindingId === module.bindingId);
+      if (!bindingStillUsed) {
+        const dataBindings = { ...schema.dataBindings };
+        delete dataBindings[module.bindingId];
+        schema.dataBindings = dataBindings;
+      }
+    }
+    schema.modules = modules;
+  }
   selectedWidgetId.value = "";
   if (settlingWidgetId.value === deletedWidgetId) settlingWidgetId.value = "";
 }
@@ -587,6 +804,13 @@ function pasteWidget() {
   copy.style.visible = true;
   copy.style.zIndex = schema.widgets.reduce((maximum, item) => Math.max(maximum, item.style.zIndex ?? 0), 0) + 1;
   schema.widgets = [...schema.widgets, copy];
+  if (copy.moduleId && schema.modules?.[copy.moduleId]) {
+    const module = schema.modules[copy.moduleId];
+    schema.modules = {
+      ...schema.modules,
+      [copy.moduleId]: { ...module, widgetIds: [...module.widgetIds, copy.id] }
+    };
+  }
   selectedWidgetId.value = copy.id;
   settlingWidgetId.value = copy.id;
 }
@@ -595,6 +819,8 @@ function clearCanvas() {
   if (schema.widgets.length === 0) return;
   if (!window.confirm("确认清空画布中的全部组件吗？此操作可通过撤销恢复。")) return;
   schema.widgets = [];
+  schema.modules = {};
+  schema.dataBindings = {};
   selectedWidgetId.value = "";
 }
 
@@ -834,82 +1060,511 @@ function previewPositionFor(widgetId: string) {
   return pointerDrag.value.candidate;
 }
 
-function applyMockDataSelection(sourceId: string, dimensionId: string, metricId: string) {
-  const widget = selectedWidget.value;
-  if (!widget || isPropertyEditingDisabled.value) return;
-  const source = getDashboardMockSource(sourceId);
-  const nextDimensionId = isDashboardMockDimensionAllowed(widget.type, source, dimensionId)
-    ? dimensionId
-    : getFirstDashboardMockDimensionId(widget.type, source);
-  const nextMetricId = isDashboardMockMetricAllowed(widget.type, source, nextDimensionId, metricId)
-    ? metricId
-    : getFirstDashboardMockMetricId(widget.type, source, nextDimensionId);
-  if (!nextMetricId) return;
+function synchronizeWidgetModuleBinding(
+  widget: DashboardWidget,
+  previousBindingId: string | undefined,
+  binding: DashboardDataBinding | undefined
+) {
+  const modules = { ...(schema.modules ?? {}) };
+  const currentModule = widget.moduleId
+    ? modules[widget.moduleId]
+    : Object.values(modules).find((module) => module.widgetIds.includes(widget.id));
+  const source = binding?.sourceRef;
 
-  let bindingId = widget.bindingId;
-  if (!bindingId) {
-    const baseId = `${widget.id.slice(0, 64)}-data`;
-    bindingId = baseId;
-    for (let index = 2; Object.prototype.hasOwnProperty.call(schema.dataBindings, bindingId) && index < 100; index += 1) {
-      bindingId = `${baseId}-${index}`;
+  if (currentModule) {
+    const otherWidgetIds = schema.widgets
+      .filter((item) =>
+        item.id !== widget.id
+        && (item.moduleId === currentModule.id || currentModule.widgetIds.includes(item.id))
+      )
+      .map((item) => item.id);
+
+    if (source && binding) {
+      if (otherWidgetIds.length === 0) {
+        modules[currentModule.id] = {
+          ...currentModule,
+          title: binding.label,
+          bindingId: binding.id,
+          widgetIds: [widget.id],
+          source: clone(toRaw(source))
+        };
+        widget.moduleId = currentModule.id;
+      } else {
+        modules[currentModule.id] = { ...currentModule, widgetIds: otherWidgetIds };
+        const moduleId = createId("module");
+        modules[moduleId] = {
+          id: moduleId,
+          title: binding.label,
+          bindingId: binding.id,
+          widgetIds: [widget.id],
+          source: clone(toRaw(source))
+        };
+        widget.moduleId = moduleId;
+      }
+    } else {
+      if (otherWidgetIds.length > 0) {
+        modules[currentModule.id] = { ...currentModule, widgetIds: otherWidgetIds };
+      } else {
+        delete modules[currentModule.id];
+      }
+      widget.moduleId = undefined;
     }
+  } else if (source && binding) {
+    const moduleId = createId("module");
+    modules[moduleId] = {
+      id: moduleId,
+      title: binding.label,
+      bindingId: binding.id,
+      widgetIds: [widget.id],
+      source: clone(toRaw(source))
+    };
+    widget.moduleId = moduleId;
   }
-  const binding = createDashboardMockBinding({
-    id: bindingId,
-    sourceId: source.id,
-    dimensionId: nextDimensionId,
-    metricId: nextMetricId
-  });
-  schema.dataBindings = { ...schema.dataBindings, [bindingId]: binding };
-  widget.bindingId = bindingId;
-  widget.mapping = getDashboardMockMapping(binding);
+
+  schema.modules = modules;
+  if (
+    previousBindingId
+    && previousBindingId !== binding?.id
+    && !schema.widgets.some((item) => item.bindingId === previousBindingId)
+    && !Object.values(modules).some((module) => module.bindingId === previousBindingId)
+  ) {
+    const bindings = { ...schema.dataBindings };
+    delete bindings[previousBindingId];
+    schema.dataBindings = bindings;
+  }
 }
 
 function handleBindingChange(event: Event) {
   const widget = selectedWidget.value;
   if (!widget || isPropertyEditingDisabled.value) return;
+  const previousBindingId = widget.bindingId;
   const bindingId = (event.target as HTMLSelectElement).value;
   widget.bindingId = bindingId || undefined;
   const binding = bindingId ? schema.dataBindings[bindingId] : undefined;
-  widget.mapping = binding ? { ...widget.mapping, ...getDashboardMockMapping(binding) } : {};
+  widget.mapping = binding ? defaultMapping(widget.type, binding, widget.mapping) : {};
+  synchronizeWidgetModuleBinding(widget, previousBindingId, binding);
 }
 
-function handleMockSourceChange(event: Event) {
-  const widget = selectedWidget.value;
-  if (!widget) return;
-  const source = getDashboardMockSource((event.target as HTMLSelectElement).value);
-  const dimensionId = getFirstDashboardMockDimensionId(widget.type, source);
-  const metricId = getFirstDashboardMockMetricId(widget.type, source, dimensionId);
-  applyMockDataSelection(source.id, dimensionId, metricId);
+async function loadAssets() {
+  assetState.value = "loading";
+  assetError.value = "";
+  try {
+    queryAssets.value = await props.dataActions.listAssets({
+      keyword: assetSearch.value,
+      scope: assetScope.value === "ALL" ? undefined : assetScope.value
+    });
+    assetState.value = "success";
+  } catch (error) {
+    assetState.value = "error";
+    assetError.value = error instanceof Error ? error.message : "收藏问数加载失败";
+  }
 }
 
-function handleMockDimensionChange(event: Event) {
-  const widget = selectedWidget.value;
-  if (!widget) return;
-  const dimensionId = (event.target as HTMLSelectElement).value;
-  const metricId = getFirstDashboardMockMetricId(widget.type, selectedMockSource.value, dimensionId);
-  applyMockDataSelection(selectedMockSource.value.id, dimensionId, metricId);
+async function chooseAsset(asset: QueryAsset) {
+  selectedAssetId.value = asset.id;
+  assetPreview.value = null;
+  Object.keys(selectedAssetParameters).forEach((key) => delete selectedAssetParameters[key]);
+  for (const parameter of asset.stableVersion?.parameters ?? []) {
+    selectedAssetParameters[parameter.key] = parameter.defaultMode === "RELATIVE"
+      ? relativeParameter(parameter,
+        (typeof parameter.defaultValue === "string" ? parameter.defaultValue : parameter.relativePreset ?? "THIS_MONTH") as RelativeTimePreset)
+      : parameter.defaultValue ?? "";
+  }
+  selectedOutputKey.value = asset.stableVersion?.outputs[0]?.outputKey ?? "";
+  await previewSelectedAsset(false);
 }
 
-function handleMockMetricChange(event: Event) {
-  applyMockDataSelection(
-    selectedMockSource.value.id,
-    selectedMockDimensionId.value,
-    (event.target as HTMLSelectElement).value
-  );
+function parameterMode(parameter: QueryParameterDefinition) {
+  const value = selectedAssetParameters[parameter.key];
+  if (isRelativeParameter(value)) return value.preset;
+  return "FIXED";
+}
+
+function setParameterMode(parameter: QueryParameterDefinition, event: Event) {
+  const mode = (event.target as HTMLSelectElement).value;
+  selectedAssetParameters[parameter.key] = mode === "FIXED"
+    ? ""
+    : relativeParameter(parameter, mode as RelativeTimePreset);
+}
+
+function fixedParameterValue(parameter: QueryParameterDefinition) {
+  const value = selectedAssetParameters[parameter.key];
+  return isRelativeParameter(value) ? "" : String(value ?? "");
+}
+
+function setFixedParameterValue(parameter: QueryParameterDefinition, event: Event) {
+  selectedAssetParameters[parameter.key] = (event.target as HTMLInputElement).value;
+}
+
+function relativeParameter(parameter: QueryParameterDefinition, preset: RelativeTimePreset) {
+  return {
+    mode: "RELATIVE" as const,
+    preset,
+    boundary: parameter.relativeBoundary ?? inferRelativeBoundary(parameter.key)
+  };
+}
+
+function isRelativeParameter(value: unknown): value is { mode: "RELATIVE"; preset: RelativeTimePreset } {
+  return typeof value === "object" && value !== null
+    && (value as { mode?: string }).mode === "RELATIVE"
+    && typeof (value as { preset?: unknown }).preset === "string";
+}
+
+function inferRelativeBoundary(key: string): "START" | "END" {
+  return /(end|to|until|max|stop|截止|结束)/i.test(key) ? "END" : "START";
+}
+
+function formatModuleUpdatedAt(value?: string) {
+  if (!value) return "尚无成功快照";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
+  }).format(date);
+}
+
+function queryOutputLabel(outputKey: string) {
+  return selectedAsset.value?.stableVersion?.outputs.find((output) => output.outputKey === outputKey)?.label
+    || outputKey;
+}
+
+async function previewSelectedAsset(force = false) {
+  const asset = selectedAsset.value;
+  if (!asset?.stableVersionId) return;
+  assetAction.value = "preview";
+  assetError.value = "";
+  try {
+    assetPreview.value = await props.dataActions.previewAsset(asset.id, {
+      versionId: asset.stableVersionId,
+      parameters: clone(toRaw(selectedAssetParameters)),
+      force
+    });
+    if (!selectedOutputKey.value) selectedOutputKey.value = assetPreview.value.outputs[0]?.outputKey ?? "";
+  } catch (error) {
+    assetError.value = error instanceof Error ? error.message : "查询预览失败";
+  } finally {
+    assetAction.value = null;
+  }
+}
+
+async function addSelectedAsset() {
+  const asset = selectedAsset.value;
+  if (!asset) return;
+  assetAction.value = "add";
+  assetError.value = "";
+  try {
+    const preview = assetPreview.value ?? await props.dataActions.previewAsset(asset.id, {
+      versionId: asset.stableVersionId,
+      parameters: clone(toRaw(selectedAssetParameters))
+    });
+    const outputKey = selectedOutputKey.value || preview.outputs[0]?.outputKey;
+    if (!outputKey) throw new Error("该查询资产没有可用输出");
+    const result = appendQueryAssetChart(plainSchema(), asset, clone(toRaw(preview)), outputKey,
+      clone(toRaw(selectedAssetParameters)));
+    await applySchemaChange(result.schema);
+    selectedWidgetId.value = result.widgetId;
+    settlingWidgetId.value = result.widgetId;
+    paletteTab.value = "assets";
+    activePropertyTab.value = "data";
+    activeDrawer.value = "property";
+  } catch (error) {
+    assetError.value = error instanceof Error ? error.message : "添加收藏图表失败";
+  } finally {
+    assetAction.value = null;
+  }
+}
+
+async function toggleSelectedAssetVisibility() {
+  const asset = selectedAsset.value;
+  if (!asset || asset.ownerUserId !== currentUserId) return;
+  assetAction.value = "visibility";
+  assetError.value = "";
+  try {
+    const visibility = asset.visibility === "SPACE" ? "PRIVATE" : "SPACE";
+    const updated = await props.dataActions.changeAssetVisibility(asset.id, visibility);
+    queryAssets.value = queryAssets.value.map((item) => item.id === updated.id ? updated : item);
+  } catch (error) {
+    assetError.value = error instanceof Error ? error.message : "查询资产可见性修改失败";
+  } finally {
+    assetAction.value = null;
+  }
+}
+
+async function refreshSelectedModule() {
+  const binding = selectedBinding.value;
+  if (!binding?.sourceRef || !selectedWidget.value?.bindingId) return;
+  if (lifecycle.value === "dirty") {
+    errorMessage.value = "请先保存当前布局，再刷新固定查询版本";
+    return;
+  }
+  moduleAction.value = "refresh";
+  try {
+    const record = await props.dataActions.refreshModule(selectedWidget.value.bindingId);
+    await replaceSchema(record.schema);
+    revision.value = record.revision;
+    recordStatus.value = record.status;
+    lastCommittedSchema = clone(record.schema);
+    lifecycle.value = record.status === "published" ? "published" : "saved";
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "刷新模块失败";
+    lifecycle.value = "error";
+  } finally {
+    moduleAction.value = null;
+  }
+}
+
+async function openReaskDialog() {
+  const source = selectedBinding.value?.sourceRef;
+  if (!source || source.kind !== "query-asset") return;
+  if (!queryAssets.value.some((asset) => asset.id === source.assetId)) await loadAssets();
+  const asset = queryAssets.value.find((item) => item.id === source.assetId);
+  if (!asset) {
+    errorMessage.value = "当前账号无法读取该查询资产";
+    return;
+  }
+  versionAsset.value = asset;
+  Object.keys(candidateColumnMappings).forEach((key) => delete candidateColumnMappings[key]);
+  Object.keys(candidateOutputKeys).forEach((key) => delete candidateOutputKeys[key]);
+  reaskQuestion.value = asset.resolvedQuestion;
+  showVersionDialog.value = true;
+}
+
+async function generateCandidateVersion() {
+  const source = selectedBinding.value?.sourceRef;
+  if (!source || !versionAsset.value) return;
+  moduleAction.value = "reask";
+  try {
+    versionAsset.value = await props.dataActions.reaskAsset(versionAsset.value.id, {
+      baseVersionId: source.queryVersionId,
+      resolvedQuestion: reaskQuestion.value,
+      parameters: clone(source.parameterValues)
+    });
+    candidateVersions.value.forEach(ensureCandidateColumnMapping);
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "重新问数失败";
+  } finally {
+    moduleAction.value = null;
+  }
+}
+
+function ensureCandidateOutputKey(candidate: QueryVersion) {
+  if (candidateOutputKeys[candidate.id]) return candidateOutputKeys[candidate.id];
+  const currentOutputKey = selectedBinding.value?.sourceRef?.outputKey;
+  const output = candidate.outputs.find((item) => item.outputKey === currentOutputKey) ?? candidate.outputs[0];
+  candidateOutputKeys[candidate.id] = output?.outputKey ?? "";
+  return candidateOutputKeys[candidate.id];
+}
+
+function candidateOutputColumns(candidate: QueryVersion) {
+  const outputKey = ensureCandidateOutputKey(candidate);
+  return candidate.outputs.find((output) => output.outputKey === outputKey)?.columns ?? [];
+}
+
+function updateCandidateOutput(candidate: QueryVersion, event: Event) {
+  candidateOutputKeys[candidate.id] = (event.target as HTMLSelectElement).value;
+  delete candidateColumnMappings[candidate.id];
+  ensureCandidateColumnMapping(candidate);
+}
+
+function ensureCandidateColumnMapping(candidate: QueryVersion) {
+  if (candidateColumnMappings[candidate.id]) return;
+  const targetColumns = candidateOutputColumns(candidate);
+  candidateColumnMappings[candidate.id] = Object.fromEntries(usedModuleColumns.value.map((source) => {
+    const target = targetColumns.find((column) => column.columnId === source.columnId)
+      ?? targetColumns.find((column) => column.key === source.key);
+    return [source.columnId, target?.columnId ?? ""];
+  }));
+}
+
+function updateCandidateColumnMapping(candidate: QueryVersion, sourceColumnId: string, event: Event) {
+  ensureCandidateColumnMapping(candidate);
+  candidateColumnMappings[candidate.id]![sourceColumnId] = (event.target as HTMLSelectElement).value;
+}
+
+async function promoteAndUpgrade(candidate: QueryVersion) {
+  const bindingId = selectedWidget.value?.bindingId;
+  const source = selectedBinding.value?.sourceRef;
+  if (!bindingId || !source || !versionAsset.value) return;
+  const currentVersion = versionAsset.value.versions?.find((version) => version.id === source.queryVersionId)
+    ?? versionAsset.value.stableVersion;
+  const schemaChanged = currentVersion?.schemaHash !== candidate.schemaHash;
+  ensureCandidateColumnMapping(candidate);
+  const columnMapping = candidateColumnMappings[candidate.id] ?? {};
+  const targetOutputKey = ensureCandidateOutputKey(candidate);
+  if (!targetOutputKey) {
+    errorMessage.value = "候选版本没有可用于当前模块的输出";
+    return;
+  }
+  if (schemaChanged && usedModuleColumns.value.some((column) => !columnMapping[column.columnId])) {
+    errorMessage.value = "请先为所有正在使用的字段选择新版本映射";
+    return;
+  }
+  if (schemaChanged && !window.confirm("新版本字段结构发生变化，确认查看差异并升级当前草稿模块吗？")) return;
+  moduleAction.value = "upgrade";
+  try {
+    await props.dataActions.promoteVersion(versionAsset.value.id, candidate.id);
+    const record = await props.dataActions.upgradeModule(bindingId, {
+      queryVersionId: candidate.id,
+      outputKey: targetOutputKey,
+      confirmedSchemaChange: schemaChanged,
+      columnMapping: schemaChanged ? clone(columnMapping) : undefined
+    });
+    await replaceSchema(record.schema);
+    revision.value = record.revision;
+    recordStatus.value = record.status;
+    lastCommittedSchema = clone(record.schema);
+    lifecycle.value = record.status === "published" ? "published" : "saved";
+    showVersionDialog.value = false;
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "版本升级失败";
+  } finally {
+    moduleAction.value = null;
+  }
+}
+
+function openScheduleDialog() {
+  if (!selectedBinding.value?.sourceRef || !selectedBinding.value.refreshable) return;
+  schedulePolicy.value = "MANUAL";
+  scheduleTime.value = "08:00";
+  scheduleDayOfWeek.value = 1;
+  showScheduleDialog.value = true;
+}
+
+async function saveModuleSchedule() {
+  const bindingId = selectedWidget.value?.bindingId;
+  const source = selectedBinding.value?.sourceRef;
+  if (!bindingId || !source) return;
+  moduleAction.value = "schedule";
+  try {
+    await props.dataActions.saveSchedule(bindingId, {
+      assetId: source.assetId,
+      queryVersionId: source.queryVersionId,
+      policy: schedulePolicy.value,
+      dailyTime: scheduleTime.value,
+      dayOfWeek: schedulePolicy.value === "WEEKLY" ? scheduleDayOfWeek.value : undefined,
+      timezone: "Asia/Shanghai",
+      parameters: clone(source.parameterValues)
+    });
+    selectedBinding.value!.refreshPolicy = {
+      mode: schedulePolicy.value === "MANUAL" ? "manual" : "scheduled",
+      policy: schedulePolicy.value === "MANUAL" ? undefined : schedulePolicy.value,
+      timezone: "Asia/Shanghai"
+    };
+    showScheduleDialog.value = false;
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "刷新计划保存失败";
+  } finally {
+    moduleAction.value = null;
+  }
+}
+
+async function previewAiLayout() {
+  if (layoutPlanning.value || schema.widgets.length === 0) return;
+  layoutPlanning.value = true;
+  try {
+    const request = createLayoutRequest(plainSchema());
+    let plan: LayoutPlan;
+    try {
+      plan = await props.dataActions.planLayout(request);
+      if (plan.intents.length !== schema.widgets.length) throw new Error("AI 排版缺少组件");
+    } catch {
+      plan = {
+        source: "LOCAL",
+        message: "AI 暂不可用，已使用本地整齐排版",
+        intents: request.widgets.map((widget, rank) => ({
+          widgetId: widget.id,
+          section: widget.semanticRole === "kpi" ? "summary" : widget.semanticRole === "detail" ? "detail" : "main",
+          rank,
+          emphasis: widget.semanticRole === "kpi" ? "compact" : widget.semanticRole === "detail" ? "wide" : "normal"
+        }))
+      };
+    }
+    layoutPlan.value = plan;
+    layoutPreviewSchema.value = solveDashboardLayout(plainSchema(), plan.intents);
+    showLayoutDialog.value = true;
+  } finally {
+    layoutPlanning.value = false;
+  }
+}
+
+function layoutPreviewBlockStyle(widget: DashboardWidget, canvas: DashboardSchema["canvas"]) {
+  return {
+    left: `${widget.position.x / canvas.width * 100}%`,
+    top: `${widget.position.y / canvas.height * 100}%`,
+    width: `${widget.position.w / canvas.width * 100}%`,
+    height: `${widget.position.h / canvas.height * 100}%`
+  };
+}
+
+function layoutPreviewBlockClass(widget: DashboardWidget) {
+  return `layout-preview__block--${widgetSemanticRole(widget)}`;
+}
+
+function layoutPreviewAspectRatio(source: DashboardSchema) {
+  return `${source.canvas.width} / ${source.canvas.height}`;
+}
+
+function triggerCanvasBackgroundUpload() {
+  canvasBackgroundInput.value?.click();
+}
+
+async function handleCanvasBackgroundUpload(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file || canvasBackgroundUploading.value) return;
+  canvasBackgroundUploading.value = true;
+  try {
+    const dataUrl = await compressDashboardBackgroundImage(file, schema.canvas.width);
+    schema.canvas.backgroundImage = { dataUrl, fit: schema.canvas.backgroundImage?.fit ?? "cover" };
+    canvasNotice.value = "";
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "背景图上传失败";
+    lifecycle.value = "error";
+  } finally {
+    canvasBackgroundUploading.value = false;
+  }
+}
+
+function updateCanvasBackgroundFit(event: Event) {
+  const fit = (event.target as HTMLSelectElement).value as "cover" | "contain" | "fill";
+  if (schema.canvas.backgroundImage) {
+    schema.canvas.backgroundImage = { ...schema.canvas.backgroundImage, fit };
+  }
+}
+
+function removeCanvasBackground() {
+  delete schema.canvas.backgroundImage;
+}
+
+async function applyLayoutPreview() {
+  if (!layoutPreviewSchema.value) return;
+  await applySchemaChange(layoutPreviewSchema.value);
+  showLayoutDialog.value = false;
 }
 
 function updateMetricSelection(event: Event) {
   if (!selectedWidget.value) return;
   const select = event.target as HTMLSelectElement;
-  selectedWidget.value.mapping.metricKeys = Array.from(select.selectedOptions).map((option) => option.value);
+  const columnIds = Array.from(select.selectedOptions).map((option) => option.value);
+  selectedWidget.value.mapping.metricColumnIds = columnIds;
+  selectedWidget.value.mapping.metricKeys = columnIds
+    .map((columnId) => allColumns.value.find((column) => column.columnId === columnId)?.key)
+    .filter((key): key is string => Boolean(key));
+}
+
+function updateDimensionSelection(event: Event) {
+  if (!selectedWidget.value) return;
+  const columnId = (event.target as HTMLSelectElement).value;
+  const column = allColumns.value.find((item) => item.columnId === columnId);
+  selectedWidget.value.mapping.dimensionColumnId = columnId || undefined;
+  selectedWidget.value.mapping.dimensionKey = column?.key;
 }
 
 function updateWidgetType(event: Event) {
   if (!selectedWidget.value) return;
   const type = (event.target as HTMLSelectElement).value as DashboardWidgetType;
   selectedWidget.value.type = type;
-  selectedWidget.value.mapping = defaultMapping(type, selectedBinding.value);
+  selectedWidget.value.mapping = defaultMapping(type, selectedBinding.value, selectedWidget.value.mapping);
 }
 
 function updateWidgetName(event: Event) {
@@ -955,14 +1610,7 @@ function selectChartVariant(variantId: string) {
     chartVariant: variant.id,
     accent: variant.accent
   };
-  if (selectedBinding.value?.sourceId) {
-    const source = getDashboardMockSource(selectedBinding.value.sourceId);
-    const dimensionId = getFirstDashboardMockDimensionId(variant.type, source);
-    const metricId = getFirstDashboardMockMetricId(variant.type, source, dimensionId);
-    applyMockDataSelection(source.id, dimensionId, metricId);
-  } else {
-    selectedWidget.value.mapping = defaultMapping(variant.type, selectedBinding.value);
-  }
+  selectedWidget.value.mapping = defaultMapping(variant.type, selectedBinding.value, selectedWidget.value.mapping);
 }
 
 function applyChartTheme(themeId: string) {
@@ -1036,15 +1684,23 @@ function updateZIndex(event: Event) {
   selectedWidget.value.style.zIndex = Math.min(10000, Math.max(0, Math.round(Number.isFinite(value) ? value : 1)));
 }
 
+function markDashboardVisibilityDirty() {
+  if (lifecycle.value === "saving") return;
+  lifecycle.value = "dirty";
+  errorMessage.value = "";
+  props.onDirtyChange?.(true);
+}
+
 async function save() {
   activeSaveIntent.value = "draft";
   lifecycle.value = "saving";
   errorMessage.value = "";
   try {
-    const record = await props.saveDraft(plainSchema(), revision.value);
+    const record = await props.saveDraft(plainSchema(), revision.value, dashboardVisibility.value);
     await replaceSchema(record.schema);
     revision.value = record.revision;
     recordStatus.value = record.status;
+    dashboardVisibility.value = record.visibility ?? dashboardVisibility.value;
     lastCommittedSchema = clone(record.schema);
     pendingHistoryOrigin = null;
     hasPendingHistory.value = false;
@@ -1064,10 +1720,11 @@ async function publish() {
   lifecycle.value = "saving";
   errorMessage.value = "";
   try {
-    const record = await props.publishDashboard(plainSchema(), revision.value);
+    const record = await props.publishDashboard(plainSchema(), revision.value, dashboardVisibility.value);
     await replaceSchema(record.schema);
     revision.value = record.revision;
     recordStatus.value = record.status;
+    dashboardVisibility.value = record.visibility ?? dashboardVisibility.value;
     lastCommittedSchema = clone(record.schema);
     pendingHistoryOrigin = null;
     hasPendingHistory.value = false;
@@ -1136,6 +1793,20 @@ function exitDesigner() {
       </div>
 
       <div class="designer-toolbar__actions" aria-label="大屏操作">
+        <select v-model="dashboardVisibility" class="designer-toolbar__preset-select" aria-label="看板访问范围" :disabled="lifecycle === 'saving'" @change="markDashboardVisibilityDirty">
+          <option value="PRIVATE">仅自己</option>
+          <option value="SPACE">空间可用</option>
+        </select>
+        <button
+          v-if="queryAssetFeatureEnabled"
+          type="button"
+          class="designer-toolbar__icon-button designer-toolbar__panel-button"
+          aria-label="打开收藏问数"
+          :aria-pressed="activeDrawer === 'palette' && paletteTab === 'assets'"
+          @click="paletteTab = 'assets'; activeDrawer = activeDrawer === 'palette' ? null : 'palette'"
+        >
+          <PhDatabase :size="19" aria-hidden="true" />
+        </button>
         <button
           type="button"
           class="designer-toolbar__icon-button designer-toolbar__panel-button"
@@ -1153,6 +1824,16 @@ function exitDesigner() {
           @click="activeDrawer = activeDrawer === 'property' ? null : 'property'"
         >
           <PhSlidersHorizontal :size="19" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="designer-toolbar__button designer-toolbar__layout-button"
+          :disabled="layoutPlanning || lifecycle === 'saving' || schema.widgets.length === 0"
+          :title="schema.widgets.length === 0 ? '先向画布添加组件' : '让 AI 将组件重新排列整齐'"
+          @click="previewAiLayout"
+        >
+          <PhSparkle :size="15" aria-hidden="true" />
+          <span>{{ layoutPlanning ? '排版中…' : 'AI 排版' }}</span>
         </button>
         <a
           class="designer-toolbar__button designer-toolbar__link-button"
@@ -1173,10 +1854,14 @@ function exitDesigner() {
     <div class="designer-workspace" @keydown="handleCanvasKeydown">
       <aside class="designer-panel designer-palette" :class="{ 'is-drawer-open': activeDrawer === 'palette' }" aria-label="组件库">
         <header class="designer-palette__header">
-          <p>组件</p>
-          <h2>构建模块</h2>
+          <p>{{ paletteTab === 'assets' ? '查询资产' : '组件' }}</p>
+          <h2>{{ paletteTab === 'assets' ? '收藏问数' : '构建模块' }}</h2>
         </header>
-        <div class="designer-palette__list">
+        <nav class="designer-palette__tabs" aria-label="资源类型">
+          <button type="button" :class="{ 'is-active': paletteTab === 'components' }" @click="paletteTab = 'components'">组件</button>
+          <button v-if="queryAssetFeatureEnabled" type="button" :class="{ 'is-active': paletteTab === 'assets' }" @click="paletteTab = 'assets'; loadAssets()">收藏问数</button>
+        </nav>
+        <div v-if="paletteTab === 'components'" class="designer-palette__list">
           <button
             v-for="item in paletteItems"
             :key="item.type"
@@ -1193,6 +1878,116 @@ function exitDesigner() {
               <small>{{ item.description }}</small>
             </span>
           </button>
+        </div>
+        <div v-else class="query-asset-panel">
+          <div class="query-asset-panel__intro">
+            <span>
+              <strong>添加收藏图表</strong>
+              <small>每次选择一条收藏和一张结果表，只添加一个可编辑图表。</small>
+            </span>
+            <b>{{ queryAssetCharts.length }}</b>
+          </div>
+          <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__current">
+            <header>
+              <strong>当前看板图表</strong>
+              <span>{{ queryAssetCharts.length }} 个</span>
+            </header>
+            <div class="query-asset-panel__module-list">
+              <article v-for="entry in queryAssetCharts" :key="entry.widget.id">
+                <button type="button" class="query-asset-panel__module-main" @click="selectQueryAssetChart(entry.widget.id)">
+                  <strong>{{ entry.widget.title }}</strong>
+                  <small>
+                    {{ getDashboardComponentDefinition(entry.widget.type).title }}
+                    · {{ entry.module.source.outputKey }}
+                    · 固定版本
+                    · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
+                  </small>
+                </button>
+                <button
+                  type="button"
+                  class="query-asset-panel__module-remove"
+                  :aria-label="`移除收藏图表 ${entry.widget.title}`"
+                  :disabled="lifecycle === 'saving'"
+                  @click="removeDashboardQueryChart(entry.widget.id)"
+                >
+                  <PhTrash :size="15" aria-hidden="true" />
+                </button>
+              </article>
+            </div>
+          </section>
+          <div class="query-asset-panel__filters">
+            <label class="query-asset-panel__search-field">
+              <PhMagnifyingGlass :size="14" aria-hidden="true" />
+              <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题或名称" @keyup.enter="loadAssets" />
+            </label>
+            <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
+              <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
+            </select>
+            <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
+          </div>
+          <p v-if="assetError" class="query-asset-panel__error" role="alert">{{ assetError }}</p>
+          <div v-if="assetState === 'success' && queryAssets.length === 0" class="query-asset-panel__empty">暂无收藏问数，请先在问数结果中收藏。</div>
+          <div class="query-asset-panel__list">
+            <button
+              v-for="asset in queryAssets"
+              :key="asset.id"
+              type="button"
+              :class="{ 'is-active': selectedAssetId === asset.id }"
+              @click="chooseAsset(asset)"
+            >
+              <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="15" weight="fill" /></span>
+              <span class="query-asset-panel__asset-body">
+                <strong>{{ asset.name }}</strong>
+                <span>{{ asset.resolvedQuestion }}</span>
+                <small>
+                  <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
+                  <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
+                  <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个图表</b>
+                </small>
+              </span>
+            </button>
+          </div>
+          <section v-if="selectedAsset" class="query-asset-panel__preview">
+            <header><strong>图表配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
+            <label v-for="parameter in selectedAsset.stableVersion?.parameters ?? []" :key="parameter.key">
+              <span>{{ parameter.label }}</span>
+              <template v-if="parameter.type === 'DATE' || parameter.type === 'DATETIME'">
+                <div class="query-asset-panel__time-parameter">
+                  <select :value="parameterMode(parameter)" :aria-label="`${parameter.label}时间模式`" @change="setParameterMode(parameter, $event)">
+                    <option value="FIXED">固定日期</option>
+                    <option v-for="option in relativeTimeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                  <input
+                    v-if="parameterMode(parameter) === 'FIXED'"
+                    :value="fixedParameterValue(parameter)"
+                    :type="parameter.type === 'DATETIME' ? 'datetime-local' : 'date'"
+                    :required="parameter.required"
+                    @input="setFixedParameterValue(parameter, $event)"
+                  />
+                  <small v-else>由服务端按空间时区在每次刷新时重新计算</small>
+                </div>
+              </template>
+              <input v-else v-model="selectedAssetParameters[parameter.key]" type="text" :required="parameter.required" />
+            </label>
+            <label v-if="(assetPreview?.outputs.length ?? 0) > 1">
+              <span>结果表</span>
+              <select v-model="selectedOutputKey">
+                <option v-for="output in assetPreview?.outputs ?? []" :key="output.outputKey" :value="output.outputKey">{{ queryOutputLabel(output.outputKey) }}</option>
+              </select>
+            </label>
+            <div v-if="assetPreview" class="query-asset-panel__summary">
+              <strong>{{ assetPreview.outputs.find(output => output.outputKey === selectedOutputKey)?.totalRows ?? 0 }} 行</strong>
+              <span>{{ assetPreview.durationMs }} ms · {{ assetPreview.status }}</span>
+            </div>
+            <details v-if="selectedAsset.stableVersion?.sqlPreview"><summary>查看只读脱敏 SQL</summary><pre>{{ selectedAsset.stableVersion.sqlPreview }}</pre></details>
+            <div class="query-asset-panel__actions">
+              <button v-if="selectedAsset.ownerUserId === currentUserId" type="button" :disabled="assetAction !== null" @click="toggleSelectedAssetVisibility">{{ assetAction === 'visibility' ? '更新中' : selectedAsset.visibility === 'SPACE' ? '设为仅自己' : '共享到空间' }}</button>
+              <button type="button" :disabled="assetAction !== null" @click="previewSelectedAsset(true)">{{ assetAction === 'preview' ? '刷新中' : '预览数据' }}</button>
+              <button type="button" class="is-primary" :disabled="assetAction !== null || !assetPreview" @click="addSelectedAsset">
+                {{ assetAction === 'add' ? '添加中' : assetChartCount(selectedAsset.id) > 0 ? '再次添加图表' : '添加图表' }}
+              </button>
+            </div>
+          </section>
         </div>
       </aside>
 
@@ -1237,7 +2032,7 @@ function exitDesigner() {
 
                 <div v-if="schema.widgets.length === 0" class="designer-canvas__empty">
                   <strong>还没有组件</strong>
-                  <span>从左侧组件库选择一个模块。</span>
+                  <span>从“收藏问数”连续加入一个或多个问题，或从组件库添加模块。</span>
                 </div>
               </div>
             </div>
@@ -1309,36 +2104,27 @@ function exitDesigner() {
                 <span>绑定</span>
                 <select :value="selectedWidget.bindingId ?? ''" :disabled="isPropertyEditingDisabled" @change="handleBindingChange">
                   <option value="">不绑定</option>
-                  <option v-for="binding in dataBindings" :key="binding.id" :value="binding.id">{{ binding.id }}</option>
+                  <option v-for="binding in dataBindings" :key="binding.id" :value="binding.id">{{ binding.label }}</option>
                 </select>
               </label>
-              <label class="property-field">
-                <span>数据源</span>
-                <select :value="selectedMockSource.id" :disabled="isPropertyEditingDisabled" @change="handleMockSourceChange">
-                  <option v-for="source in dashboardMockDataSources" :key="source.id" :value="source.id">{{ source.name }}</option>
-                </select>
-              </label>
-              <label class="property-field">
+              <div v-if="selectedBinding?.sourceRef" class="property-source-card">
+                <span>来源</span><strong>{{ selectedModuleAsset?.name ?? selectedBinding.label }}</strong>
+                <span>固定版本</span><strong>{{ selectedBinding.sourceRef.queryVersionId.slice(0, 8) }}</strong>
+                <span>输出</span><strong>{{ selectedBinding.sourceRef.outputKey }}</strong>
+                <span>最近更新</span><strong>{{ formatModuleUpdatedAt(selectedBinding.lastUpdatedAt) }}</strong>
+                <span>刷新状态</span><strong :data-status="selectedBinding.status">{{ selectedBinding.error ?? selectedBinding.status ?? '等待刷新' }}</strong>
+              </div>
+              <label v-if="dimensionColumns.length > 0" class="property-field">
                 <span>维度</span>
-                <select :value="selectedMockDimensionId" :disabled="isPropertyEditingDisabled" @change="handleMockDimensionChange">
+                <select :value="selectedDimensionColumnId" :disabled="isPropertyEditingDisabled" @change="updateDimensionSelection">
                   <option value="">无维度</option>
-                  <option
-                    v-for="dimension in selectedMockSource.dimensions"
-                    :key="dimension.id"
-                    :value="dimension.id"
-                    :disabled="!isDashboardMockDimensionAllowed(selectedWidget.type, selectedMockSource, dimension.id)"
-                  >{{ dimension.label }}{{ isDashboardMockDimensionAllowed(selectedWidget.type, selectedMockSource, dimension.id) ? '' : '（不适用）' }}</option>
+                  <option v-for="column in dimensionColumns" :key="column.columnId ?? column.key" :value="column.columnId">{{ column.title }}</option>
                 </select>
               </label>
-              <label class="property-field">
+              <label v-if="numericColumns.length > 0" class="property-field">
                 <span>指标</span>
-                <select :value="selectedMockMetricId" :disabled="isPropertyEditingDisabled" @change="handleMockMetricChange">
-                  <option
-                    v-for="metric in selectedMockSource.metrics"
-                    :key="metric.id"
-                    :value="metric.id"
-                    :disabled="!isDashboardMockMetricAllowed(selectedWidget.type, selectedMockSource, selectedMockDimensionId, metric.id)"
-                  >{{ metric.label }}{{ metric.unit ? ` (${metric.unit})` : '' }}{{ isDashboardMockMetricAllowed(selectedWidget.type, selectedMockSource, selectedMockDimensionId, metric.id) ? '' : '（不适用）' }}</option>
+                <select :value="selectedMetricColumnIds" multiple :disabled="isPropertyEditingDisabled" @change="updateMetricSelection">
+                  <option v-for="column in numericColumns" :key="column.columnId ?? column.key" :value="column.columnId">{{ column.title }}</option>
                 </select>
               </label>
             </template>
@@ -1369,11 +2155,139 @@ function exitDesigner() {
           <button type="button" class="property-danger" :disabled="isPropertyEditingDisabled" @click="deleteSelected">删除组件</button>
         </div>
 
-        <div v-else class="designer-properties__empty">
-          <strong>未选择组件</strong>
-          <span>可以从组件库和工具栏继续编辑画布。</span>
+        <div v-else class="property-form designer-canvas-settings">
+          <section class="property-section">
+            <h3>画布尺寸</h3>
+            <label class="property-field">
+              <span>分辨率</span>
+              <select :value="resolutionMode" :disabled="lifecycle === 'saving'" @change="handleResolutionChange">
+                <option value="custom">自定义（{{ schema.canvas.width }} × {{ schema.canvas.height }}）</option>
+                <option v-for="preset in dashboardCanvasPresets" :key="preset.id" :value="preset.id">{{ preset.label }} · {{ preset.width }}×{{ preset.height }}</option>
+              </select>
+            </label>
+            <div v-if="resolutionMode === 'custom'" class="canvas-size-grid">
+              <label><span>宽</span><input v-model.number="customCanvasWidth" type="number" min="960" max="7680" step="8" :disabled="lifecycle === 'saving'" aria-label="画布宽度" @keydown.enter="applyCustomCanvasSize" /></label>
+              <label><span>高</span><input v-model.number="customCanvasHeight" type="number" min="540" max="4320" step="8" :disabled="lifecycle === 'saving'" aria-label="画布高度" @keydown.enter="applyCustomCanvasSize" /></label>
+              <button type="button" :disabled="lifecycle === 'saving'" @click="applyCustomCanvasSize">应用尺寸</button>
+            </div>
+            <p class="property-hint">范围 960–7680 × 540–4320；缩小画布时越界组件会自动移回。</p>
+          </section>
+
+          <section class="property-section">
+            <h3>背景</h3>
+            <label class="property-field">
+              <span>背景色</span>
+              <input v-model="schema.canvas.background" type="color" :disabled="lifecycle === 'saving'" aria-label="画布背景色" />
+            </label>
+            <div class="property-field">
+              <span>背景图</span>
+              <input ref="canvasBackgroundInput" type="file" accept="image/*" class="sr-only" aria-hidden="true" tabindex="-1" @change="handleCanvasBackgroundUpload" />
+              <div v-if="schema.canvas.backgroundImage" class="canvas-background-preview">
+                <img :src="schema.canvas.backgroundImage.dataUrl" alt="画布背景图预览" />
+                <div class="canvas-background-preview__meta">
+                  <select :value="schema.canvas.backgroundImage.fit" :disabled="lifecycle === 'saving'" aria-label="背景图填充方式" @change="updateCanvasBackgroundFit">
+                    <option value="cover">铺满</option>
+                    <option value="contain">完整显示</option>
+                    <option value="fill">拉伸填满</option>
+                  </select>
+                  <button type="button" :disabled="lifecycle === 'saving'" @click="removeCanvasBackground">移除</button>
+                </div>
+              </div>
+              <button type="button" class="canvas-background-upload" :disabled="lifecycle === 'saving' || canvasBackgroundUploading" @click="triggerCanvasBackgroundUpload">
+                {{ canvasBackgroundUploading ? '压缩上传中…' : (schema.canvas.backgroundImage ? '更换图片' : '上传背景图') }}
+              </button>
+            </div>
+            <p v-if="canvasNotice" class="property-hint" role="status">{{ canvasNotice }}</p>
+          </section>
+
+          <div class="designer-properties__empty">
+            <strong>未选择组件</strong>
+            <span>选中画布中的组件可编辑其属性；此处为画布级设置。</span>
+          </div>
         </div>
       </aside>
+    </div>
+
+    <div v-if="showVersionDialog" class="designer-modal-backdrop" role="presentation" @click.self="showVersionDialog = false">
+      <section class="designer-modal" role="dialog" aria-modal="true" aria-labelledby="version-dialog-title">
+        <header><div><p>查询版本</p><h2 id="version-dialog-title">重新问数并预览差异</h2></div><button type="button" aria-label="关闭" @click="showVersionDialog = false">×</button></header>
+        <label class="designer-modal__field"><span>完整语义问题</span><textarea v-model="reaskQuestion" rows="3" maxlength="1000" /></label>
+        <p class="designer-modal__hint">重新问数只会生成候选版本；当前草稿和已发布看板都不会被静默替换。</p>
+        <button type="button" class="designer-modal__primary" :disabled="moduleAction !== null || !reaskQuestion.trim()" @click="generateCandidateVersion">{{ moduleAction === 'reask' ? '生成中' : '生成候选版本' }}</button>
+        <div v-if="candidateVersions.length > 0" class="version-candidate-list">
+          <article v-for="candidate in candidateVersions" :key="candidate.id">
+            <header><strong>候选 v{{ candidate.versionNo }}</strong><span>{{ candidate.engine }} · {{ candidate.schemaHash === versionAsset?.stableVersion?.schemaHash ? '结构一致' : '结构变化' }}</span></header>
+            <p class="designer-modal__candidate-question">{{ candidate.resolvedQuestion }}</p>
+            <div class="version-candidate-grid">
+              <span>参数</span><strong>{{ candidate.parameters.length }} 个</strong>
+              <span>输出</span><strong>{{ candidate.outputs.length }} 个</strong>
+              <span>字段</span><strong>{{ candidate.outputs.reduce((total, output) => total + output.columns.length, 0) }} 个</strong>
+            </div>
+            <label v-if="candidate.outputs.length > 0" class="designer-modal__field"><span>升级使用的输出</span><select :value="ensureCandidateOutputKey(candidate)" @change="updateCandidateOutput(candidate, $event)"><option v-for="output in candidate.outputs" :key="output.outputKey" :value="output.outputKey">{{ output.label || output.outputKey }} · {{ output.columns.length }} 字段</option></select></label>
+            <details v-if="candidate.sqlPreview"><summary>只读脱敏 SQL</summary><pre>{{ candidate.sqlPreview }}</pre></details>
+            <details><summary>输出字段差异</summary><ul><li v-for="output in candidate.outputs" :key="output.outputKey"><strong>{{ output.outputKey }}</strong>：{{ output.columns.map(column => column.label).join('、') }}</li></ul></details>
+            <div v-if="candidate.schemaHash !== versionAsset?.stableVersion?.schemaHash && usedModuleColumns.length > 0" class="version-column-mapping">
+              <strong>确认组件字段映射</strong>
+              <label v-for="sourceColumn in usedModuleColumns" :key="sourceColumn.columnId">
+                <span>{{ sourceColumn.label }}</span>
+                <select :value="candidateColumnMappings[candidate.id]?.[sourceColumn.columnId] ?? ''" @change="updateCandidateColumnMapping(candidate, sourceColumn.columnId, $event)">
+                  <option value="">请选择新字段</option>
+                  <option v-for="column in candidateOutputColumns(candidate)" :key="column.columnId" :value="column.columnId">{{ column.label }}</option>
+                </select>
+              </label>
+            </div>
+            <button type="button" class="designer-modal__primary" :disabled="moduleAction !== null" @click="promoteAndUpgrade(candidate)">{{ moduleAction === 'upgrade' ? '升级中' : '确认晋升并升级草稿模块' }}</button>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="showScheduleDialog" class="designer-modal-backdrop" role="presentation" @click.self="showScheduleDialog = false">
+      <section class="designer-modal designer-modal--compact" role="dialog" aria-modal="true" aria-labelledby="schedule-dialog-title">
+        <header><div><p>刷新策略</p><h2 id="schedule-dialog-title">设置模块刷新计划</h2></div><button type="button" aria-label="关闭" @click="showScheduleDialog = false">×</button></header>
+        <label class="designer-modal__field"><span>频率</span><select v-model="schedulePolicy"><option value="MANUAL">仅手动</option><option value="INTERVAL_15">每 15 分钟</option><option value="HOURLY">每小时</option><option value="DAILY">每日</option><option value="WEEKLY">每周</option></select></label>
+        <label v-if="schedulePolicy === 'DAILY' || schedulePolicy === 'WEEKLY'" class="designer-modal__field"><span>执行时间</span><input v-model="scheduleTime" type="time" /></label>
+        <label v-if="schedulePolicy === 'WEEKLY'" class="designer-modal__field"><span>星期</span><select v-model.number="scheduleDayOfWeek"><option :value="1">周一</option><option :value="2">周二</option><option :value="3">周三</option><option :value="4">周四</option><option :value="5">周五</option><option :value="6">周六</option><option :value="7">周日</option></select></label>
+        <p class="designer-modal__hint">计划固定当前已验证查询版本，并以创建者身份重新校验权限。</p>
+        <button type="button" class="designer-modal__primary" :disabled="moduleAction !== null" @click="saveModuleSchedule">{{ moduleAction === 'schedule' ? '保存中' : '保存计划' }}</button>
+      </section>
+    </div>
+
+    <div v-if="showLayoutDialog && layoutPreviewSchema" class="designer-modal-backdrop" role="presentation" @click.self="showLayoutDialog = false">
+      <section class="designer-modal designer-modal--layout" role="dialog" aria-modal="true" aria-labelledby="layout-dialog-title">
+        <header><div><p>{{ layoutPlan?.source === 'AI' ? 'AI 语义规划' : '本地规则' }}</p><h2 id="layout-dialog-title">预览整齐排版</h2></div><button type="button" aria-label="关闭" @click="showLayoutDialog = false">×</button></header>
+        <p class="designer-modal__hint">{{ layoutPlan?.message }}。只调整位置、尺寸和阅读顺序；标题、图表类型、字段绑定和锁定组件保持不变。</p>
+        <div class="layout-preview-summary"><strong>{{ layoutPreviewSchema.widgets.length }}</strong><span>个组件参与排版</span><strong>{{ layoutPreviewSchema.widgets.filter(widget => widget.style.locked).length }}</strong><span>个锁定组件原位保留</span></div>
+        <div class="layout-preview-compare">
+          <figure class="layout-preview__pane">
+            <figcaption>当前布局</figcaption>
+            <div class="layout-preview__canvas" :style="{ aspectRatio: layoutPreviewAspectRatio(schema) }">
+              <span
+                v-for="widget in schema.widgets"
+                :key="widget.id"
+                class="layout-preview__block"
+                :class="[layoutPreviewBlockClass(widget), { 'layout-preview__block--locked': widget.style.locked }]"
+                :style="layoutPreviewBlockStyle(widget, schema.canvas)"
+                :title="widget.name || widget.title"
+              ></span>
+            </div>
+          </figure>
+          <figure class="layout-preview__pane">
+            <figcaption>排版后</figcaption>
+            <div class="layout-preview__canvas" :style="{ aspectRatio: layoutPreviewAspectRatio(layoutPreviewSchema) }">
+              <span
+                v-for="widget in layoutPreviewSchema.widgets"
+                :key="widget.id"
+                class="layout-preview__block"
+                :class="[layoutPreviewBlockClass(widget), { 'layout-preview__block--locked': widget.style.locked }]"
+                :style="layoutPreviewBlockStyle(widget, layoutPreviewSchema.canvas)"
+                :title="widget.name || widget.title"
+              ></span>
+            </div>
+          </figure>
+        </div>
+        <div class="designer-modal__actions"><button type="button" @click="showLayoutDialog = false">取消</button><button type="button" class="designer-modal__primary" @click="applyLayoutPreview">应用排版</button></div>
+      </section>
     </div>
   </section>
 </template>
@@ -2042,6 +2956,118 @@ textarea:focus-visible {
   line-height: 1.5;
 }
 
+.designer-canvas-settings .property-hint {
+  margin: 0;
+  color: var(--studio-text-3);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.canvas-size-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.canvas-size-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--studio-text-2);
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.canvas-size-grid input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+}
+
+.canvas-size-grid button,
+.canvas-background-upload {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  color: var(--studio-text-2);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.canvas-size-grid button:hover:not(:disabled),
+.canvas-background-upload:hover:not(:disabled),
+.canvas-background-preview__meta button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--studio-primary) 48%, var(--studio-border));
+}
+
+.canvas-size-grid button:disabled,
+.canvas-background-upload:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.property-field input[type="color"] {
+  height: 36px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.canvas-background-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.canvas-background-preview img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: #f3f7fc;
+}
+
+.canvas-background-preview__meta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.canvas-background-preview__meta select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+}
+
+.canvas-background-preview__meta button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #f3c2c2;
+  border-radius: 10px;
+  color: #c53030;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.canvas-background-upload {
+  width: 100%;
+  border-style: dashed;
+  color: var(--studio-primary);
+}
+
 .property-layout,
 .property-colors {
   display: grid;
@@ -2412,6 +3438,539 @@ textarea:focus-visible {
     padding: 0;
   }
 
+}
+
+.designer-palette__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 0 12px 10px;
+  padding: 3px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: #f5f8fc;
+}
+
+.designer-palette__tabs button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--studio-text-3);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.designer-palette__tabs button.is-active {
+  color: var(--studio-primary);
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, .08);
+}
+
+.query-asset-panel {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 14px;
+  padding: 2px 14px 18px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.query-asset-panel button {
+  cursor: pointer;
+}
+
+.query-asset-panel button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.query-asset-panel__intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  background: var(--studio-surface-soft);
+}
+
+.query-asset-panel__intro > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.query-asset-panel__intro strong {
+  color: var(--studio-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.query-asset-panel__intro small {
+  color: var(--studio-text-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.query-asset-panel__intro > b {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 26px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--studio-primary);
+  background: #eaf3ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.query-asset-panel__current {
+  display: grid;
+  gap: 8px;
+}
+
+.query-asset-panel__current > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--studio-text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.query-asset-panel__current > header span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--studio-primary);
+  background: #eaf3ff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.query-asset-panel__module-list {
+  display: grid;
+  gap: 6px;
+}
+
+.query-asset-panel__module-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color .15s ease;
+}
+
+.query-asset-panel__module-list article:hover {
+  border-color: var(--studio-border-strong);
+}
+
+.query-asset-panel__module-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  color: var(--studio-text-2);
+  background: transparent;
+  text-align: left;
+}
+
+.query-asset-panel__module-main strong,
+.query-asset-panel__module-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.query-asset-panel__module-main strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
+.query-asset-panel__module-main small { color: var(--studio-text-3); font-size: 10px; }
+
+.query-asset-panel__module-remove {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--studio-text-3);
+  background: transparent;
+  transition: color .15s ease, background .15s ease;
+}
+
+.query-asset-panel__module-remove:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.query-asset-panel__filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.query-asset-panel__search-field {
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.query-asset-panel__search-field > svg {
+  position: absolute;
+  left: 10px;
+  color: var(--studio-text-3);
+  pointer-events: none;
+}
+
+.query-asset-panel__filters input,
+.query-asset-panel__filters select,
+.query-asset-panel__preview input,
+.query-asset-panel__preview select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  color: var(--studio-text-2);
+  background: #fff;
+  font-size: 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.query-asset-panel__filters select {
+  width: 100%;
+}
+
+.query-asset-panel__search-field input {
+  padding-left: 30px;
+}
+
+.query-asset-panel__filters input:focus-visible,
+.query-asset-panel__filters select:focus-visible,
+.query-asset-panel__preview input:focus-visible,
+.query-asset-panel__preview select:focus-visible {
+  outline: none;
+  border-color: var(--studio-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+
+.query-asset-panel__filters button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cfe0fb;
+  border-radius: 10px;
+  color: var(--studio-primary);
+  background: #f4f8ff;
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.query-asset-panel__filters button:hover:not(:disabled) {
+  border-color: var(--studio-primary);
+  background: #eaf3ff;
+}
+
+.query-asset-panel__list {
+  display: grid;
+  gap: 8px;
+}
+
+.query-asset-panel__list > button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  color: var(--studio-text-2);
+  background: #fff;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.query-asset-panel__list > button:hover {
+  border-color: var(--studio-border-strong);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .05);
+}
+
+.query-asset-panel__list > button.is-active {
+  border-color: var(--studio-primary);
+  background: #f5f9ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
+}
+
+.query-asset-panel__asset-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--studio-primary);
+  background: #eaf3ff;
+}
+
+.query-asset-panel__asset-body {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.query-asset-panel__asset-body strong,
+.query-asset-panel__asset-body > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.query-asset-panel__asset-body strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
+.query-asset-panel__asset-body > span { color: var(--studio-text-3); font-size: 11px; }
+
+.query-asset-panel__asset-body small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.query-asset-panel__asset-body small i,
+.query-asset-panel__asset-body small b {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--studio-text-3);
+  background: var(--studio-surface-soft);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.query-asset-panel__asset-body small b {
+  color: var(--studio-primary);
+  background: #eaf3ff;
+}
+
+.query-asset-panel__empty,
+.query-asset-panel__error {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--studio-border-strong);
+  border-radius: 10px;
+  color: var(--studio-text-3);
+  background: var(--studio-surface-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.query-asset-panel__error {
+  border: 1px solid #fecaca;
+  color: #b42318;
+  background: #fef2f2;
+}
+
+.query-asset-panel__preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+}
+
+.query-asset-panel__preview > header,
+.query-asset-panel__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.query-asset-panel__preview > header strong {
+  color: var(--studio-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.query-asset-panel__preview > header span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--studio-primary);
+  background: #eaf3ff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.query-asset-panel__preview label {
+  display: grid;
+  gap: 5px;
+}
+
+.query-asset-panel__preview label > span {
+  color: var(--studio-text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.query-asset-panel__time-parameter { display: grid; gap: 6px; min-width: 0; }
+.query-asset-panel__time-parameter small { line-height: 1.5; color: var(--studio-text-3); font-size: 10px; }
+
+.query-asset-panel__summary {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--studio-surface-soft);
+}
+
+.query-asset-panel__summary strong { color: var(--studio-text); font-size: 12px; font-weight: 700; }
+.query-asset-panel__summary span { color: var(--studio-text-3); font-size: 10px; }
+
+.query-asset-panel__preview details { min-width: 0; color: var(--studio-text-3); font-size: 11px; }
+.query-asset-panel__preview summary { cursor: pointer; }
+.query-asset-panel__preview pre, .version-candidate-list pre { max-height: 140px; margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 10px; background: #0f1d32; color: #dbeafe; font-size: 10px; line-height: 1.55; white-space: pre-wrap; }
+
+.query-asset-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.query-asset-panel__actions button {
+  flex: 1 1 40%;
+  min-height: 34px;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  color: var(--studio-text-2);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.query-asset-panel__actions button:hover:not(:disabled) {
+  border-color: var(--studio-border-strong);
+}
+
+.query-asset-panel__actions button.is-primary {
+  flex-basis: 100%;
+  border-color: var(--studio-primary);
+  color: #fff;
+  background: var(--studio-primary);
+}
+
+.query-asset-panel__actions button.is-primary:hover:not(:disabled) {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+.property-module-actions button { flex: 1; min-height: 32px; border: 1px solid var(--studio-border); border-radius: 9px; color: var(--studio-text-2); background: #fff; font-size: 10px; font-weight: 720; }
+
+.property-source-card {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 7px 10px;
+  padding: 10px;
+  border: 1px solid #d8e6f9;
+  border-radius: 10px;
+  background: #f8fbff;
+  font-size: 10px;
+}
+.property-source-card span { color: var(--studio-text-3); }
+.property-source-card strong { overflow: hidden; color: var(--studio-text-2); text-overflow: ellipsis; white-space: nowrap; }
+.property-module-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+.designer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 31, 55, .36);
+  backdrop-filter: blur(4px);
+}
+
+.designer-modal {
+  display: grid;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 48px));
+  gap: 14px;
+  padding: 20px;
+  overflow: auto;
+  border: 1px solid #d5e4f8;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(23, 56, 100, .2);
+}
+.designer-modal--compact { width: min(520px, calc(100vw - 32px)); }
+.designer-modal > header, .version-candidate-list article > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.designer-modal > header p, .designer-modal > header h2 { margin: 0; }
+.designer-modal > header p { color: #2870d6; font-size: 10px; font-weight: 760; letter-spacing: .08em; }
+.designer-modal > header h2 { margin-top: 3px; color: var(--studio-text); font-size: 19px; }
+.designer-modal > header > button { border: 0; color: var(--studio-text-3); background: transparent; font-size: 24px; }
+.designer-modal__field { display: grid; gap: 6px; color: var(--studio-text-2); font-size: 11px; font-weight: 700; }
+.designer-modal__field textarea, .designer-modal__field select, .designer-modal__field input { padding: 9px 10px; border: 1px solid var(--studio-border); border-radius: 10px; color: var(--studio-text); background: #fff; font: inherit; font-weight: 500; }
+.designer-modal__hint { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--studio-text-3); background: #f5f8fc; font-size: 11px; line-height: 1.6; }
+.designer-modal__primary { min-height: 36px; padding: 0 14px; border: 1px solid var(--studio-primary); border-radius: 10px; color: #fff; background: var(--studio-primary); font-weight: 760; }
+.designer-modal__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.designer-modal__actions > button:not(.designer-modal__primary) { min-height: 36px; padding: 0 14px; border: 1px solid var(--studio-border); border-radius: 10px; color: var(--studio-text-2); background: #fff; }
+.version-candidate-list { display: grid; gap: 10px; }
+.version-candidate-list article { display: grid; gap: 10px; padding: 13px; border: 1px solid #d8e6f9; border-radius: 11px; background: #fbfdff; }
+.version-candidate-list article header span { color: var(--studio-text-3); font-size: 10px; }
+.designer-modal__candidate-question { margin: 0; color: var(--studio-text-2); font-size: 11px; line-height: 1.55; }
+.version-candidate-grid, .layout-preview-summary { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 7px; padding: 9px; border-radius: 9px; background: #f3f7fc; font-size: 10px; }
+.version-candidate-grid span, .layout-preview-summary span { color: var(--studio-text-3); }
+.version-candidate-list details { color: var(--studio-text-3); font-size: 10px; }
+.version-candidate-list ul { margin: 7px 0 0; padding-left: 18px; line-height: 1.7; }
+.version-column-mapping { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe7f7; border-radius: 9px; background: #f7faff; }
+.version-column-mapping > strong { color: var(--studio-text-2); font-size: 10px; }
+.version-column-mapping label { display: grid; grid-template-columns: minmax(90px, .8fr) minmax(0, 1.2fr); align-items: center; gap: 8px; color: var(--studio-text-3); font-size: 10px; }
+.version-column-mapping select { min-width: 0; }
+.layout-preview-summary { grid-template-columns: auto 1fr auto 1fr; align-items: baseline; }
+.layout-preview-summary strong { color: var(--studio-primary); font-size: 22px; }
+.designer-modal--layout { width: min(860px, calc(100vw - 32px)); }
+.layout-preview-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.layout-preview__pane { margin: 0; display: grid; gap: 7px; }
+.layout-preview__pane figcaption { color: var(--studio-text-3); font-size: 10px; font-weight: 760; letter-spacing: .06em; }
+.layout-preview__canvas {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: #f3f7fc;
+}
+.layout-preview__block {
+  position: absolute;
+  border-radius: 3px;
+  border: 1px solid rgba(40, 112, 214, .35);
+  background: rgba(40, 112, 214, .28);
+}
+.layout-preview__block--kpi { border-color: rgba(22, 163, 122, .45); background: rgba(22, 163, 122, .3); }
+.layout-preview__block--trend { border-color: rgba(40, 112, 214, .45); background: rgba(40, 112, 214, .3); }
+.layout-preview__block--comparison { border-color: rgba(134, 76, 214, .45); background: rgba(134, 76, 214, .28); }
+.layout-preview__block--detail { border-color: rgba(100, 116, 139, .5); background: rgba(100, 116, 139, .28); }
+.layout-preview__block--narrative { border-color: rgba(217, 145, 26, .5); background: rgba(217, 145, 26, .3); }
+.layout-preview__block--locked {
+  border-style: dashed;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .35) 0 4px, transparent 4px 8px);
+}
+@media (max-width: 720px) {
+  .layout-preview-compare { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

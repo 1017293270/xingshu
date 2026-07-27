@@ -1,16 +1,22 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { Button, Input, Segmented, Space, Tag, Tooltip } from "antd";
+import { Input, Pagination, Segmented, Space, Tag, Tooltip } from "antd";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
 import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
 import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.svg";
 import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar, type XsStatusTone } from "@/components/xs";
-import { filterHistorySessions, loadDataHubHistoryReplay } from "@/services/historyService";
+import {
+  filterHistorySessionList,
+  listHistorySessions,
+  loadDataHubHistoryReplay
+} from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
 import { PageFrame } from "./PageFrame";
+
+const defaultPageSize = 8;
 
 const historyCategoryFilters: NonNullable<HistoryFilter["category"]>[] = [
   "全部",
@@ -49,15 +55,31 @@ export function HistoryPage() {
   const navigate = useNavigate();
   const restoreAskDataHistory = useUiStore((state) => state.restoreAskDataHistory);
   const [keyword, setKeyword] = useState("");
+  const deferredKeyword = useDeferredValue(keyword);
   const [category, setCategory] = useState<NonNullable<HistoryFilter["category"]>>("全部");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
   const [actionStatus, setActionStatus] = useState("");
   const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
   const historyQuery = useQuery({
-    queryKey: ["historySessions", { keyword, category }],
-    queryFn: () => filterHistorySessions({ keyword, category }),
+    queryKey: ["historySessions"],
+    queryFn: listHistorySessions,
     placeholderData: keepPreviousData
   });
-  const sessions = historyQuery.data ?? [];
+  const sessions = useMemo(
+    () =>
+      filterHistorySessionList(historyQuery.data ?? [], {
+        keyword: deferredKeyword,
+        category
+      }),
+    [category, deferredKeyword, historyQuery.data]
+  );
+  const totalPages = Math.max(1, Math.ceil(sessions.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleSessions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sessions.slice(start, start + pageSize);
+  }, [currentPage, pageSize, sessions]);
   const hasActiveFilter = Boolean(keyword.trim()) || category !== "全部";
   const asyncStatus = resolveXsAsyncStatus({
     isPending: historyQuery.isPending,
@@ -115,6 +137,7 @@ export function HistoryPage() {
             value={keyword}
             onChange={(event) => {
               setKeyword(event.target.value);
+              setPage(1);
               setActionStatus("");
             }}
           />
@@ -124,6 +147,7 @@ export function HistoryPage() {
             value={category}
             onChange={(value) => {
               setCategory(value as NonNullable<HistoryFilter["category"]>);
+              setPage(1);
               setActionStatus("");
             }}
           />
@@ -147,7 +171,7 @@ export function HistoryPage() {
         onRetry={() => void historyQuery.refetch()}
       >
         <section className="history-list" aria-label="历史对话列表">
-          {sessions.map((session, index) => (
+          {visibleSessions.map((session, index) => (
             <button
               className="xs-card history-card xs-card-button xs-card-lift xs-page-enter"
               style={{ animationDelay: `${160 + index * 50}ms` }}
@@ -190,6 +214,23 @@ export function HistoryPage() {
             </button>
           ))}
         </section>
+        {sessions.length > defaultPageSize ? (
+          <nav className="history-page__pagination" aria-label="历史对话分页">
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={sessions.length}
+              pageSizeOptions={[8, 16, 32]}
+              showSizeChanger
+              showTotal={(total) => `共 ${total} 条`}
+              onChange={(nextPage, nextPageSize) => {
+                setPage(nextPageSize === pageSize ? nextPage : 1);
+                setPageSize(nextPageSize);
+                setActionStatus("");
+              }}
+            />
+          </nav>
+        ) : null}
       </XsAsyncPanel>
     </PageFrame>
   );

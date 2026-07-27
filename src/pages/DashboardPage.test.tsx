@@ -38,46 +38,58 @@ function createStoredDashboard(title: string, id: string, published = false, des
   return { record: repository.get(schema.id)!, repository };
 }
 
+function cardOf(title: string) {
+  const card = screen.getByRole("link", { name: title }).closest("article");
+  expect(card).not.toBeNull();
+  return card as HTMLElement;
+}
+
+async function openCardMenu(user: ReturnType<typeof userEvent.setup>, title: string) {
+  await user.click(screen.getByRole("button", { name: `${title} 更多操作` }));
+}
+
 describe("DashboardPage", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
   });
 
-  it("restores the original compact dashboard-library empty state", () => {
+  it("shows favorite-question entry points in the dashboard-library empty state", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "大屏库" })).toBeInTheDocument();
     expect(screen.getByText("暂无大屏")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "创建第一个大屏" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建大屏" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "从收藏问数创建" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择收藏问数" })).toBeInTheDocument();
     expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导入为静态看板" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/旧本地看板/)).not.toBeInTheDocument();
   });
 
-  it("renders saved dashboards in the original table-first management surface", () => {
+  it("renders saved dashboards as management cards", async () => {
+    const user = userEvent.setup();
     createStoredDashboard("运营草稿", "draft", false, "不应在大屏库中展示的问数摘要");
     createStoredDashboard("善治测试", "published", true);
 
     renderPage();
 
-    const table = screen.getByRole("table");
-    ["名称", "状态", "更新时间", "发布时间", "操作"].forEach((heading) => {
-      expect(within(table).getByRole("columnheader", { name: heading })).toBeInTheDocument();
-    });
-
-    const draftRow = screen.getByRole("row", { name: /运营草稿/ });
-    expect(within(draftRow).getByText("草稿")).toBeInTheDocument();
-    expect(within(draftRow).getByText("运行态")).toHaveAttribute("aria-disabled", "true");
+    const draftCard = cardOf("运营草稿");
+    expect(within(draftCard).getByText("草稿")).toBeInTheDocument();
+    expect(within(draftCard).getByRole("link", { name: "运行态" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByText("不应在大屏库中展示的问数摘要")).not.toBeInTheDocument();
 
-    const publishedRow = screen.getByRole("row", { name: /善治测试/ });
-    expect(within(publishedRow).getByText("已发布")).toBeInTheDocument();
-    expect(within(publishedRow).getByRole("link", { name: "运行态" })).toHaveAttribute(
+    const publishedCard = cardOf("善治测试");
+    expect(within(publishedCard).getByText("已发布")).toBeInTheDocument();
+    expect(within(publishedCard).getByRole("link", { name: "运行态" })).toHaveAttribute(
       "href",
       "/dashboard-view?dashboard=dashboard-published"
     );
+
+    await openCardMenu(user, "善治测试");
     ["复制", "版本", "分享", "归档"].forEach((action) => {
-      expect(within(publishedRow).getByRole("button", { name: action })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
     });
   });
 
@@ -98,7 +110,8 @@ describe("DashboardPage", () => {
     createStoredDashboard("销售大屏", "sales", true);
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "复制" }));
+    await openCardMenu(user, "销售大屏");
+    await user.click(screen.getByRole("menuitem", { name: "复制" }));
 
     expect(await screen.findByText("编辑器目标页")).toBeInTheDocument();
     const records = createDashboardRepository(localStorage).list();
@@ -112,7 +125,8 @@ describe("DashboardPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "归档" }));
+    await openCardMenu(user, "待归档大屏");
+    await user.click(screen.getByRole("menuitem", { name: "归档" }));
 
     expect(window.confirm).toHaveBeenCalledWith("归档“待归档大屏”？它会从大屏库中移除。");
     expect(screen.queryByText("待归档大屏")).not.toBeInTheDocument();
@@ -124,7 +138,8 @@ describe("DashboardPage", () => {
     createStoredDashboard("版本大屏", "version", true);
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "版本" }));
+    await openCardMenu(user, "版本大屏");
+    await user.click(screen.getByRole("menuitem", { name: "版本" }));
 
     expect(screen.getByText("v1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回滚" })).toBeInTheDocument();

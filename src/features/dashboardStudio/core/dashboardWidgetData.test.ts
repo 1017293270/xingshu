@@ -3,6 +3,7 @@ import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStu
 import {
   buildDashboardChartOption,
   formatDashboardMetric,
+  inferDashboardBindingColumns,
   resolveDashboardMetric
 } from "./dashboardWidgetData";
 
@@ -70,6 +71,54 @@ describe("dashboardWidgetData", () => {
     });
     expect((radar?.series as Array<{ type?: string }>)[0]?.type).toBe("radar");
     expect((funnel?.series as Array<{ type?: string }>)[0]?.type).toBe("funnel");
+  });
+
+  it("keeps chart switching available regardless of the binding's original result kind", () => {
+    const categoryBinding = { ...binding, resultKind: "category" as const };
+    const tableBinding = { ...binding, resultKind: "table" as const };
+    const timeBinding = { ...binding, resultKind: "time-series" as const };
+
+    expect((buildDashboardChartOption(widget("line"), categoryBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("line");
+    expect((buildDashboardChartOption(widget("bar"), tableBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("bar");
+    expect((buildDashboardChartOption(widget("pie"), timeBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("pie");
+    expect((buildDashboardChartOption(widget("radar"), timeBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("radar");
+    expect((buildDashboardChartOption(widget("funnel"), timeBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("funnel");
+  });
+
+  it("resolves immutable column IDs and infers numeric fields from real values", () => {
+    const looselyTypedBinding: DashboardDataBinding = {
+      ...binding,
+      resultKind: "table",
+      table: {
+        columns: [
+          { columnId: "company-id", key: "company", title: "公司名称" },
+          { columnId: "contract-value-id", key: "contractValue", title: "合同值" }
+        ],
+        rows: [
+          { company: "甲公司", contractValue: "50000.00" },
+          { company: "乙公司", contractValue: "80000.00" }
+        ],
+        totalRows: 2
+      }
+    };
+    const roles = inferDashboardBindingColumns(looselyTypedBinding);
+    const idOnlyWidget: DashboardWidget = {
+      ...widget("bar"),
+      mapping: {
+        dimensionColumnId: "company-id",
+        metricColumnIds: ["contract-value-id"]
+      }
+    };
+
+    expect(roles.dimensionColumns.map((column) => column.key)).toEqual(["company"]);
+    expect(roles.numericColumns.map((column) => column.key)).toEqual(["contractValue"]);
+    expect((buildDashboardChartOption(idOnlyWidget, looselyTypedBinding)?.series as Array<{ type?: string }>)[0]?.type)
+      .toBe("bar");
   });
 
   it("formats business values with restrained units", () => {

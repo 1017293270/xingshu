@@ -16,18 +16,17 @@ export type XsAppCardData = {
 type XsAppCardProps = {
   app: XsAppCardData;
   selected?: boolean;
-  onSelect: (app: XsAppCardData) => void;
-  onOpen?: (app: XsAppCardData) => void;
+  onOpen: (app: XsAppCardData) => void;
 };
 
-export function XsAppCard({ app, selected = false, onSelect, onOpen }: XsAppCardProps) {
+export function XsAppCard({ app, selected = false, onOpen }: XsAppCardProps) {
   return (
     <article className={`xs-app-card${selected ? " xs-app-card--selected" : ""}`}>
       <button
         type="button"
         className="xs-app-card__main"
-        onClick={() => onSelect(app)}
-        aria-label={`选择 ${app.title}：${app.description}`}
+        onClick={() => onOpen(app)}
+        aria-label={`打开 ${app.title}：${app.description}`}
         aria-pressed={selected}
       >
         <XsIconTile
@@ -45,8 +44,8 @@ export function XsAppCard({ app, selected = false, onSelect, onOpen }: XsAppCard
       <button
         type="button"
         className="xs-app-card__arrow"
-        onClick={() => (onOpen ?? onSelect)(app)}
-        aria-label={`打开 ${app.title}`}
+        onClick={() => onOpen(app)}
+        aria-label={`进入 ${app.title}`}
       >
         <ArrowRight size={18} weight="regular" />
       </button>

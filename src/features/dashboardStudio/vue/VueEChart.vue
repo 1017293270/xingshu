@@ -65,6 +65,8 @@ onBeforeUnmount(() => {
 .vue-echart {
   width: 100%;
   height: 100%;
-  min-height: 120px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

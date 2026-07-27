@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
 import type {
   DashboardDesignerHandle,
+  DashboardDesignerDataActions,
   DashboardDesignerMountOptions
 } from "./vue/mountDashboardDesigner";
 import "./dashboardStudio.css";
@@ -16,8 +17,11 @@ type DashboardDesignerLoader = () => Promise<{
 
 type DashboardDesignerIslandProps = {
   record: DashboardRecord;
-  saveDraft: (schema: DashboardSchema, expectedRevision: number) => Promise<DashboardRecord>;
-  publishDashboard: (schema: DashboardSchema, expectedRevision: number) => Promise<DashboardRecord>;
+  saveDraft: (schema: DashboardSchema, expectedRevision: number, visibility: "PRIVATE" | "SPACE") => Promise<DashboardRecord>;
+  publishDashboard: (schema: DashboardSchema, expectedRevision: number, visibility: "PRIVATE" | "SPACE") => Promise<DashboardRecord>;
+  dataActions?: DashboardDesignerDataActions;
+  initialResourcePanel?: "assets";
+  initialAssetId?: string;
   onExit: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onChange?: (schema: DashboardSchema) => void;
@@ -25,23 +29,38 @@ type DashboardDesignerIslandProps = {
 };
 
 const defaultLoader: DashboardDesignerLoader = () => import("./vue/mountDashboardDesigner");
+const unavailableDataActions: DashboardDesignerDataActions = {
+  listAssets: async () => [],
+  previewAsset: async () => { throw new Error("查询资产服务尚未连接"); },
+  reaskAsset: async () => { throw new Error("查询资产服务尚未连接"); },
+  promoteVersion: async () => { throw new Error("查询资产服务尚未连接"); },
+  changeAssetVisibility: async () => { throw new Error("查询资产服务尚未连接"); },
+  refreshModule: async () => { throw new Error("看板刷新服务尚未连接"); },
+  upgradeModule: async () => { throw new Error("看板版本服务尚未连接"); },
+  saveSchedule: async () => { throw new Error("看板调度服务尚未连接"); },
+  planLayout: async () => ({ source: "LOCAL", intents: [], message: "使用本地排版" })
+};
 
 export function DashboardDesignerIsland({
   record,
   saveDraft,
   publishDashboard,
+  dataActions,
+  initialResourcePanel,
+  initialAssetId,
   onExit,
   onDirtyChange,
   onChange,
   loader = defaultLoader
 }: DashboardDesignerIslandProps) {
+  const effectiveDataActions = dataActions ?? unavailableDataActions;
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const optionsRef = useRef({ saveDraft, publishDashboard, onExit, onDirtyChange, onChange });
+  const optionsRef = useRef({ saveDraft, publishDashboard, dataActions: effectiveDataActions, onExit, onDirtyChange, onChange });
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
-  optionsRef.current = { saveDraft, publishDashboard, onExit, onDirtyChange, onChange };
+  optionsRef.current = { saveDraft, publishDashboard, dataActions: effectiveDataActions, onExit, onDirtyChange, onChange };
 
   useEffect(() => {
     const element = mountRef.current;
@@ -61,8 +80,21 @@ export function DashboardDesignerIsland({
         }
         handle = module.mountDashboardDesigner(element, {
           record,
+          initialResourcePanel,
+          initialAssetId,
           saveDraft: (...args) => optionsRef.current.saveDraft(...args),
           publishDashboard: (...args) => optionsRef.current.publishDashboard(...args),
+          dataActions: {
+            listAssets: (...args) => optionsRef.current.dataActions.listAssets(...args),
+            previewAsset: (...args) => optionsRef.current.dataActions.previewAsset(...args),
+            reaskAsset: (...args) => optionsRef.current.dataActions.reaskAsset(...args),
+            promoteVersion: (...args) => optionsRef.current.dataActions.promoteVersion(...args),
+            changeAssetVisibility: (...args) => optionsRef.current.dataActions.changeAssetVisibility(...args),
+            refreshModule: (...args) => optionsRef.current.dataActions.refreshModule(...args),
+            upgradeModule: (...args) => optionsRef.current.dataActions.upgradeModule(...args),
+            saveSchedule: (...args) => optionsRef.current.dataActions.saveSchedule(...args),
+            planLayout: (...args) => optionsRef.current.dataActions.planLayout(...args)
+          },
           exit: () => optionsRef.current.onExit(),
           onDirtyChange: (dirty) => optionsRef.current.onDirtyChange?.(dirty),
           onChange: (schema) => optionsRef.current.onChange?.(schema),
@@ -88,7 +120,7 @@ export function DashboardDesignerIsland({
       disposed = true;
       handle?.unmount();
     };
-  }, [loadAttempt, loader, record.id]);
+  }, [initialAssetId, initialResourcePanel, loadAttempt, loader, record.id]);
 
   return (
     <div className="dashboard-designer-island" data-state={state}>

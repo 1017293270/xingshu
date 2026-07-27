@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { PhCheckCircle, PhClock, PhDatabase, PhSparkle } from "@phosphor-icons/vue";
 import type { DashboardRecord, DashboardWidget } from "@/types/dashboardStudio";
 import { calculateDashboardRuntimeScale } from "../core/dashboardRuntimeScale";
+import { resolveCanvasBackgroundStyle } from "../core/dashboardCanvasBackground";
 import DashboardWidgetCard from "./DashboardWidgetCard.vue";
 
 const props = defineProps<{
@@ -28,7 +29,9 @@ let canvasResizeObserver: ResizeObserver | null = null;
 const canvasStyle = computed(() => ({
   width: `${runtimeSchema.value?.canvas.width ?? 1}px`,
   height: `${runtimeSchema.value?.canvas.height ?? 1}px`,
-  backgroundColor: runtimeSchema.value?.canvas.background ?? "#F5F9FF",
+  ...(runtimeSchema.value
+    ? resolveCanvasBackgroundStyle(runtimeSchema.value.canvas)
+    : { backgroundColor: "#F5F9FF" }),
   transform: `scale(${canvasScale.value})`
 }));
 const canvasStageStyle = computed(() => ({

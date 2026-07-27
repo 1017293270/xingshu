@@ -82,10 +82,22 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;
-  padding-bottom: 24px;
+  padding-bottom: 16px;
   scrollbar-gutter: stable;
   align-content: start;
   transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.history-page__pagination {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 14px 4px 2px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.history-page__pagination .ant-pagination {
+  margin: 0;
 }
 
 .history-page__async.xs-async-panel--refreshing .history-list {
@@ -1015,6 +1027,10 @@
     width: 100%;
   }
 
+  .history-page {
+    height: calc(100dvh - 88px);
+  }
+
   .analysis-page {
     position: relative;
     display: flex;
@@ -1100,5 +1116,14 @@
   .history-tools {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .history-page .history-tools .ant-input-affix-wrapper {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .history-page__pagination {
+    justify-content: center;
   }
 }

@@ -88,6 +88,48 @@ describe("workflow page actions", () => {
     expect(screen.getByText("演示账号")).toBeInTheDocument();
   });
 
+  it("shows the favorite-question action when the feature is enabled", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("各项目咨询数排名前5名", null);
+
+    store.appendAskDataEvent(runId, {
+      type: "ask_artifact",
+      sessionId: "session-current",
+      chatId: "chat-current",
+      data: {
+        askRunId: "ask-run-stale-sse-ref",
+        resolvedQuestion: "各项目咨询数排名前5名",
+        canFavorite: true
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      sessionId: "session-current",
+      chatId: "chat-current",
+      data: {
+        columns: [
+          { name: "projectName", title: "项目名称" },
+          { name: "count", title: "咨询数", type: "number" }
+        ],
+        rows: [{ projectName: "演示账号", count: 676 }],
+        totalRows: 1,
+        source: "cube"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      sessionId: "session-current",
+      chatId: "chat-current",
+      data: { summary: "已返回咨询数排名前五名。" }
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage />);
+    expect(screen.getByRole("button", { name: "收藏问数" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "已收藏问数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
+  });
+
   it("streams every phase detail before advancing to the next ask-data phase", async () => {
     vi.useFakeTimers();
     const runId = useUiStore.getState().startAskDataRun("分析最近 30 天客户增长趋势");
@@ -261,7 +303,7 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
     expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
     expect(screen.getByText("演示账号")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成大屏" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "AI 生成图表" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
   });

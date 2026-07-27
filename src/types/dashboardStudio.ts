@@ -33,6 +33,9 @@ export type DashboardWidgetPosition = {
 };
 
 export type DashboardWidgetMapping = {
+  /** 持久化绑定使用不可变列 ID；key 仅供当前快照渲染。 */
+  dimensionColumnId?: string;
+  metricColumnIds?: string[];
   dimensionKey?: string;
   metricKeys?: string[];
   valueMode?: "first" | "latest" | "sum" | "max" | "average";
@@ -57,6 +60,7 @@ export type DashboardWidgetStyle = {
   seriesColors?: string[];
   backgroundBlur?: number;
   showLegend?: boolean;
+  showTrend?: boolean;
   smooth?: boolean;
   locked?: boolean;
   visible?: boolean;
@@ -72,9 +76,24 @@ export type DashboardWidget = {
   content?: string;
   props?: Record<string, unknown>;
   bindingId?: string;
+  moduleId?: string;
   mapping: DashboardWidgetMapping;
   position: DashboardWidgetPosition;
   style: DashboardWidgetStyle;
+};
+
+export type DashboardDataSourceRef = {
+  kind: "query-asset" | "legacy-snapshot";
+  assetId: string;
+  queryVersionId: string;
+  outputKey: string;
+  parameterValues: Record<string, unknown>;
+};
+
+export type DashboardRefreshPolicy = {
+  mode: "manual" | "scheduled";
+  policy?: "INTERVAL_15" | "HOURLY" | "DAILY" | "WEEKLY";
+  timezone?: string;
 };
 
 export type DashboardDataBinding = {
@@ -91,8 +110,20 @@ export type DashboardDataBinding = {
   refreshSeconds?: number;
   status?: "idle" | "loading" | "success" | "empty" | "error";
   error?: string;
-  tableIndex: number;
+  sourceRef?: DashboardDataSourceRef;
+  refreshPolicy?: DashboardRefreshPolicy;
+  refreshable?: boolean;
+  lastUpdatedAt?: string;
+  tableIndex?: number;
   table: DataHubTableResult;
+};
+
+export type DashboardModule = {
+  id: string;
+  title: string;
+  bindingId: string;
+  widgetIds: string[];
+  source: DashboardDataSourceRef;
 };
 
 export type DashboardSource = {
@@ -103,6 +134,8 @@ export type DashboardSource = {
   spaceId?: number;
   generatedAt: string;
   plannerVersion: 1 | 2;
+  legacyImported?: boolean;
+  legacySourceId?: string;
 };
 
 export type DashboardSchema = {
@@ -116,10 +149,15 @@ export type DashboardSchema = {
     columns: 12;
     rows: number;
     background: string;
+    backgroundImage?: {
+      dataUrl: string;
+      fit: "cover" | "contain" | "fill";
+    };
     scaleMode?: "fit-screen" | "fit-width" | "fixed" | "original";
   };
   source: DashboardSource;
   dataBindings: Record<string, DashboardDataBinding>;
+  modules?: Record<string, DashboardModule>;
   widgets: DashboardWidget[];
   theme?: {
     name: string;
@@ -138,6 +176,7 @@ export type DashboardRecord = {
   id: string;
   status: DashboardRecordStatus;
   revision: number;
+  visibility?: "PRIVATE" | "SPACE";
   schema: DashboardSchema;
   publishedSchema?: DashboardSchema;
   publishedAt?: string;

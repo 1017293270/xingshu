@@ -95,6 +95,7 @@ export type DataHubSseEventType =
   | "text"
   | "table"
   | "chart"
+  | "ask_artifact"
   | "hallucination"
   | "final_thinking"
   | "done"
@@ -159,6 +160,7 @@ export type DataHubDoneData = {
 };
 
 export type DataHubTableColumn = {
+  columnId?: string;
   key: string;
   title: string;
   type?: string;
@@ -177,6 +179,8 @@ export type DataHubTableResult = {
 export type DataHubAskTurn = {
   question: string;
   status: DataHubAskDataStatus;
+  sessionId?: string;
+  chatId?: string;
   assistantContent: string;
   infoMessages: string[];
   decompose?: DataHubRoutingDecomposeData;
@@ -187,8 +191,15 @@ export type DataHubAskTurn = {
   tableResults: DataHubTableResult[];
   chartResults: unknown[];
   done?: DataHubDoneData;
+  artifact?: AskArtifactRef;
   error?: {
     code?: number;
     message: string;
   };
+};
+
+export type AskArtifactRef = {
+  askRunId: string;
+  resolvedQuestion: string;
+  canFavorite: boolean;
 };

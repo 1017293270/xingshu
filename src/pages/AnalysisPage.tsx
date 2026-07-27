@@ -15,6 +15,7 @@ import {
   MagicWand,
   MapPin,
   PresentationChart,
+  Star,
   TrendUp,
   WarningCircle
 } from "@phosphor-icons/react";
@@ -27,6 +28,7 @@ import type {
 import { useNavigate } from "react-router-dom";
 import { XsChartCard, XsCommandBox } from "@/components/xs";
 import { XsStreamingText } from "@/components/xs/XsStreamingText";
+import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
 import {
@@ -38,16 +40,18 @@ import {
   createDataHubAskTurn
 } from "@/services/dataHubAskDataPresenter";
 import { loadAiProviderConfig } from "@/services/aiProviderConfigService";
-import { prepareDashboardFromAskTurn } from "@/services/dashboardAskDataHandoffService";
+import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import { useUiStore } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
 import type {
   DataHubAskDataStatus,
+  DataHubAskTurn,
   DataHubReactStepData,
   DataHubTableResult,
   DataHubToolResultData
 } from "@/types/dataHub";
+import type { QueryAsset } from "@/types/analytics";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
@@ -70,6 +74,12 @@ type AiChartUiState =
   | { status: "success"; spec: GeneratedChartSpec; activeType: AiChartType }
   | { status: "not-chartable"; message: string }
   | { status: "error"; message: string };
+
+type AskFavoriteUiState = {
+  status: "idle" | "saving" | "saved" | "error";
+  asset?: QueryAsset;
+  message?: string;
+};
 
 const autoScrollBottomThreshold = 24;
 
@@ -738,6 +748,7 @@ export function AnalysisPage() {
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
+  const [favoriteStates, setFavoriteStates] = useState<Record<string, AskFavoriteUiState>>({});
   const [thinkingPlaybackStates, setThinkingPlaybackStates] = useState<Record<string, ThinkingPlaybackState>>({});
   const [isScrollToBottomVisible, setIsScrollToBottomVisible] = useState(false);
   const voiceInput = useVoiceInput({
@@ -971,13 +982,31 @@ export function AnalysisPage() {
     setWorkflowStatus(`已导出 ${rowCount} 行问数结果`);
   };
 
-  const handleGenerateDashboard = (turn: ReturnType<typeof createDataHubAskTurn>) => {
+  const ensureFavoriteAsset = async (turnId: string, turn: DataHubAskTurn) => {
+    const existing = favoriteStates[turnId]?.asset;
+    if (existing) return existing;
+    let artifact = turn.artifact;
+    const sessionId = turn.sessionId;
+    const chatId = turn.chatId;
+    if (turn.status === "done" && sessionId && chatId && turn.tableResults.length > 0) {
+      artifact = await ensureAskArtifact(sessionId, chatId);
+    }
+    if (!artifact?.canFavorite) throw new Error("该问数没有可复用的结构化查询，请重新问数后再收藏");
+    const asset = await favoriteAskArtifact(artifact, artifact.resolvedQuestion || turn.question);
+    setFavoriteStates((current) => ({ ...current, [turnId]: { status: "saved", asset } }));
+    return asset;
+  };
+
+  const handleFavoriteQuestion = async (turnId: string, turn: DataHubAskTurn) => {
+    setFavoriteStates((current) => ({ ...current, [turnId]: { ...current[turnId], status: "saving" } }));
     try {
-      const { editorPath } = prepareDashboardFromAskTurn(turn, { dataMode: "snapshot" });
-      setWorkflowStatus("已生成大屏草稿，正在打开全屏编辑器");
-      navigate(editorPath);
+      const asset = await ensureFavoriteAsset(turnId, turn);
+      setFavoriteStates((current) => ({ ...current, [turnId]: { status: "saved", asset } }));
+      setWorkflowStatus(`已收藏问数「${asset.name}」，可直接加入看板`);
     } catch (error) {
-      setWorkflowStatus(error instanceof Error ? error.message : "生成大屏失败，请稍后重试");
+      const message = error instanceof Error ? error.message : "收藏问数失败，请稍后重试";
+      setFavoriteStates((current) => ({ ...current, [turnId]: { status: "error", message } }));
+      setWorkflowStatus(message);
     }
   };
 
@@ -1146,6 +1175,7 @@ export function AnalysisPage() {
                       ? "本次问数已停止，你可以修改问题后重新发送。"
                     : turnAsk.error?.message || turnAsk.assistantContent || "正在连接 data-hub 问数 Agent，请稍候。";
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
+              const favoriteState = favoriteStates[turn.id] ?? { status: "idle" as const };
               const isGeneratingAiChart = aiChartState.status === "loading";
               const resultStageState = isResultReady
                 ? turnAsk.tableResults.length > 0
@@ -1218,13 +1248,31 @@ export function AnalysisPage() {
                         <div className="section-title-row">
                           <h2>问数结果</h2>
                           <div className="analysis-output__actions">
-                            {isResultReady && turnAsk.status === "done" && turnAsk.tableResults.length > 0 ? (
+                            {queryAssetFeatureEnabled &&
+                            isResultReady &&
+                            (turnAsk.artifact?.canFavorite ||
+                              (turnAsk.status === "done" &&
+                                turnAsk.tableResults.length > 0 &&
+                                Boolean(turnAsk.sessionId && turnAsk.chatId))) ? (
+                              <Button
+                                icon={<Star size={18} weight={favoriteState.status === "saved" ? "fill" : "regular"} />}
+                                loading={favoriteState.status === "saving"}
+                                disabled={favoriteState.status === "saved"}
+                                onClick={() => void handleFavoriteQuestion(turn.id, turnAsk)}
+                              >
+                                {favoriteState.status === "saved" ? "已收藏问数" : "收藏问数"}
+                              </Button>
+                            ) : null}
+                            {queryAssetFeatureEnabled && favoriteState.status === "saved" && favoriteState.asset ? (
                               <Button
                                 type="primary"
                                 icon={<PresentationChart size={18} />}
-                                onClick={() => handleGenerateDashboard(turnAsk)}
+                                onClick={() =>
+                                  navigate(
+                                    `/dashboard-editor?source=favorites&asset=${encodeURIComponent(favoriteState.asset!.id)}&returnTo=${encodeURIComponent("/analysis")}`
+                                  )}
                               >
-                                生成大屏
+                                加入看板
                               </Button>
                             ) : null}
                             {isResultReady && turnAsk.tableResults.length > 0 ? (

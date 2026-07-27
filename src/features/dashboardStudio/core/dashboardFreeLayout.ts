@@ -7,7 +7,7 @@ export const DASHBOARD_MIN_COMPONENT_SIZE = 24;
 export const DASHBOARD_LIGHT_CANVAS_HEADING_COLOR = "#0F2B50";
 export const DASHBOARD_LIGHT_SURFACE_TEXT_COLOR = "#294469";
 
-const LIGHT_SURFACE_BACKGROUNDS = new Set(["#fff", "#ffffff", "#f5f9ff", "#f8fbff"]);
+const LIGHT_SURFACE_BACKGROUNDS = new Set(["#fff", "#ffffff", "#f5f9ff", "#f8fbff", "#eff4fb"]);
 const LEGACY_LIGHT_SURFACE_TEXT_COLORS = new Set(["#dbeafe", "#e2e8f0", "#e5e7eb", "#e5f0ff", "#f8fafc"]);
 const LEGACY_LIGHT_CANVAS_TEXT_COLORS = new Map([
   ["#f8fafc", DASHBOARD_LIGHT_CANVAS_HEADING_COLOR],

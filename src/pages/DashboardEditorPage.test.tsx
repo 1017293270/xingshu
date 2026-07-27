@@ -10,12 +10,20 @@ import { DashboardEditorPage } from "./DashboardEditorPage";
 vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
   DashboardDesignerIsland: ({
     record,
+    initialResourcePanel,
+    initialAssetId,
     onExit
   }: {
     record: { schema: { title: string } };
+    initialResourcePanel?: string;
+    initialAssetId?: string;
     onExit: () => void;
   }) => (
-    <div aria-label="内部 Vue 大屏设计器">
+    <div
+      aria-label="内部 Vue 大屏设计器"
+      data-resource-panel={initialResourcePanel}
+      data-asset-id={initialAssetId}
+    >
       {record.schema.title}
       <button type="button" onClick={onExit}>返回编辑来源</button>
     </div>

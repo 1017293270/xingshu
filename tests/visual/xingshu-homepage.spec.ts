@@ -1,12 +1,105 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
+
+type AnalyticsRecord = {
+  id: string;
+  status: "draft" | "published";
+  revision: number;
+  visibility: "PRIVATE" | "SPACE";
+  schema: Record<string, unknown>;
+  publishedSchema?: Record<string, unknown>;
+  versions: unknown[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AnalyticsFixtureState = {
+  records: Map<string, AnalyticsRecord>;
+};
+
+const analyticsFixtures = new WeakMap<Page, AnalyticsFixtureState>();
+
+function analyticsResponse(data: unknown) {
+  return { code: 200, message: "visual analytics fixture", data };
+}
+
+async function fulfillAnalyticsRoute(page: Page, route: Route) {
+  const state = analyticsFixtures.get(page)!;
+  const request = route.request();
+  const url = new URL(request.url());
+  const path = url.pathname;
+
+  if (path === "/api/analytics/dashboards" && request.method() === "GET") {
+    await route.fulfill({ json: analyticsResponse(Array.from(state.records.values())) });
+    return;
+  }
+
+  if (path === "/api/analytics/dashboards/save" && request.method() === "POST") {
+    const body = request.postDataJSON() as { id: string; schema: Record<string, unknown>; visibility?: "PRIVATE" | "SPACE" };
+    const existing = state.records.get(body.id);
+    const now = new Date().toISOString();
+    const record: AnalyticsRecord = {
+      id: body.id,
+      status: "draft",
+      revision: existing ? existing.revision + 1 : 1,
+      visibility: body.visibility ?? existing?.visibility ?? "PRIVATE",
+      schema: body.schema,
+      publishedSchema: existing?.publishedSchema,
+      versions: existing?.versions ?? [],
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    state.records.set(record.id, record);
+    await route.fulfill({ json: analyticsResponse(record) });
+    return;
+  }
+
+  const detailMatch = path.match(/^\/api\/analytics\/dashboards\/([^/]+)\/(editor-data|runtime|publish)$/);
+  if (detailMatch) {
+    const id = decodeURIComponent(detailMatch[1]);
+    const action = detailMatch[2];
+    const record = state.records.get(id);
+    if (!record) {
+      await route.fulfill({ json: { code: 404, message: "fixture dashboard not found", data: null } });
+      return;
+    }
+    if (action === "publish") {
+      record.status = "published";
+      record.revision += 1;
+      record.publishedSchema = structuredClone(record.schema);
+      record.updatedAt = new Date().toISOString();
+      await route.fulfill({ json: analyticsResponse(record) });
+      return;
+    }
+    await route.fulfill({
+      json: analyticsResponse({
+        record,
+        datasets: {},
+        moduleStatuses: {}
+      })
+    });
+    return;
+  }
+
+  if (path.startsWith("/api/analytics/query-assets")) {
+    await route.fulfill({ json: analyticsResponse([]) });
+    return;
+  }
+
+  await route.fulfill({ json: analyticsResponse([]) });
+}
 
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/**", (route) =>
-    route.fulfill({
+  analyticsFixtures.set(page, { records: new Map() });
+  await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname.startsWith("/api/analytics/")) {
+      await fulfillAnalyticsRoute(page, route);
+      return;
+    }
+    await route.fulfill({
       json: { code: 200, message: "visual test fixture", data: [] },
       status: 200
-    })
-  );
+    });
+  });
 
   await page.addInitScript(() => {
     const publicRoutes = ["/login", "/welcome"];
@@ -215,10 +308,10 @@ test.describe("dashboard editor Vue island", () => {
 
       await expect(page.getByRole("heading", { name: "看板编辑器" })).toBeVisible();
       await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
-      await expect(page.getByRole("textbox", { name: "看板名称" })).toHaveValue("未命名大屏");
-      await expect(page.getByRole("combobox", { name: "大屏分辨率" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "放大画布" })).toBeVisible();
-      await expect(page.getByRole("button", { name: /适应/ })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "大屏名称" })).toHaveValue("未命名大屏");
+      await expect(page.getByText("1920 × 1080", { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "放大" })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "缩放" })).toBeVisible();
       await expect(page.getByRole("button", { name: "保存" })).toBeVisible();
       await expect(page.getByRole("button", { name: "发布" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
@@ -239,9 +332,9 @@ test.describe("dashboard editor Vue island", () => {
 test("dashboard widgets follow pointer drag and snap to the grid", async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/dashboard-editor");
-  await page.getByRole("button", { name: "添加指标卡" }).click();
+  await page.getByRole("button", { name: /指标卡 320 × 180/ }).click();
 
-  const card = page.getByRole("article", { name: "大屏组件：指标卡" });
+  const card = page.locator("article.dashboard-widget-card").filter({ hasText: "核心指标" });
   const bounds = await card.boundingBox();
   expect(bounds).not.toBeNull();
 
@@ -260,9 +353,9 @@ test("dashboard widgets follow pointer drag and snap to the grid", async ({ page
 test("dashboard widgets resize from the selected lower-right handle", async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/dashboard-editor");
-  await page.getByRole("button", { name: "添加指标卡" }).click();
+  await page.getByRole("button", { name: /指标卡 320 × 180/ }).click();
 
-  const resizeHandle = page.getByRole("button", { name: "调整当前组件大小" });
+  const resizeHandle = page.getByRole("button", { name: "调整组件大小" });
   const bounds = await resizeHandle.boundingBox();
   expect(bounds).not.toBeNull();
 
@@ -271,66 +364,62 @@ test("dashboard widgets resize from the selected lower-right handle", async ({ p
   await page.mouse.move(bounds!.x + 260, bounds!.y + 170, { steps: 8 });
   await page.mouse.up();
 
-  await expect(page.getByRole("spinbutton", { name: "宽" })).not.toHaveValue("3");
-  await expect(page.getByRole("spinbutton", { name: "高" })).not.toHaveValue("2");
+  await expect(page.getByRole("spinbutton", { name: "W" })).not.toHaveValue("320");
+  await expect(page.getByRole("spinbutton", { name: "H" })).not.toHaveValue("180");
 });
 
 test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
-  await page.addInitScript(() => {
-    const timestamp = "2026-07-10T08:00:00.000Z";
-    const schema = {
-      schemaVersion: 1,
-      id: "dashboard-visual-fullscreen",
-      title: "经营全景大屏",
-      description: "全屏浏览视觉用例",
-      canvas: { width: 1920, height: 1080, columns: 12, rows: 10, background: "#F5F9FF" },
-      source: { kind: "blank", generatedAt: timestamp, plannerVersion: 1 },
-      dataBindings: {},
-      widgets: [
-        {
-          id: "widget-title",
-          type: "text",
-          title: "可信经营洞察",
-          content: "关键经营指标保持稳定。",
-          mapping: {},
-          position: { x: 0, y: 0, w: 12, h: 1 },
-          style: { accent: "#00C2FF", background: "#F8FBFF" }
-        },
-        {
-          id: "widget-metric",
-          type: "metric",
-          title: "营收指标",
-          mapping: {},
-          position: { x: 0, y: 1, w: 3, h: 2 },
-          style: { accent: "#1677FF", background: "#FFFFFF" }
-        }
-      ],
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    window.localStorage.setItem(
-      "xingshu.dashboard.records.v1",
-      JSON.stringify([
-        {
-          id: schema.id,
-          status: "draft",
-          revision: 1,
-          schema,
-          createdAt: timestamp,
-          updatedAt: timestamp
-        }
-      ])
-    );
+  const timestamp = "2026-07-10T08:00:00.000Z";
+  const schema = {
+    schemaVersion: 1,
+    id: "dashboard-visual-fullscreen",
+    title: "经营全景大屏",
+    description: "全屏浏览视觉用例",
+    canvas: { width: 1920, height: 1080, columns: 12, rows: 10, background: "#F5F9FF" },
+    source: { kind: "blank", generatedAt: timestamp, plannerVersion: 1 },
+    dataBindings: {},
+    widgets: [
+      {
+        id: "widget-title",
+        type: "text",
+        title: "可信经营洞察",
+        content: "关键经营指标保持稳定。",
+        mapping: {},
+        position: { x: 0, y: 0, w: 12, h: 1 },
+        style: { accent: "#00C2FF", background: "#F8FBFF" }
+      },
+      {
+        id: "widget-metric",
+        type: "metric",
+        title: "营收指标",
+        mapping: {},
+        position: { x: 0, y: 1, w: 3, h: 2 },
+        style: { accent: "#1677FF", background: "#FFFFFF" }
+      }
+    ],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+  const state = analyticsFixtures.get(page)!;
+  state.records.set(schema.id, {
+    id: schema.id,
+    status: "published",
+    revision: 1,
+    visibility: "PRIVATE",
+    schema,
+    publishedSchema: structuredClone(schema),
+    versions: [],
+    createdAt: timestamp,
+    updatedAt: timestamp
   });
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/dashboard-view?dashboard=dashboard-visual-fullscreen");
 
-  await expect(page.getByRole("main", { name: "大屏全屏浏览" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "返回大屏列表" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "大屏运行态" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
   await expect(page.locator(".runtime-header")).toHaveCount(0);
-  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
   await expect(page.locator("html")).toHaveJSProperty("scrollHeight", 768);
 
@@ -339,6 +428,131 @@ test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
     animations: "disabled"
   });
 });
+
+for (const viewport of viewports) {
+  test(`dashboard ECharts stays inside its module at ${viewport.name}`, async ({ page }) => {
+    const timestamp = "2026-07-22T08:00:00.000Z";
+    const id = `dashboard-chart-boundary-${viewport.name}`;
+    const schema = {
+      schemaVersion: 2,
+      id,
+      title: "月度销售收入趋势",
+      description: "由收藏问数的真实字段绑定生成。",
+      canvas: {
+        width: 1920,
+        height: 1080,
+        columns: 12,
+        rows: 8,
+        background: "#EFF4FB",
+        scaleMode: "fit-screen"
+      },
+      source: {
+        kind: "ask-data",
+        question: "今年每月销售收入如何变化？",
+        generatedAt: timestamp,
+        plannerVersion: 2
+      },
+      dataBindings: {
+        "binding-sales": {
+          id: "binding-sales",
+          label: "月度销售收入",
+          mode: "live",
+          queryAssetId: "asset-sales",
+          queryVersionId: "version-sales-v1",
+          outputKey: "monthly-sales",
+          status: "success",
+          table: {
+            columns: [
+              { columnId: "month-col", key: "month", title: "月份", type: "date" },
+              { columnId: "revenue-col", key: "revenue", title: "销售收入（万元）", type: "decimal" }
+            ],
+            rows: [
+              { month: "2026-01", revenue: 320 },
+              { month: "2026-02", revenue: 410 },
+              { month: "2026-03", revenue: 480 },
+              { month: "2026-04", revenue: 530 },
+              { month: "2026-05", revenue: 590 },
+              { month: "2026-06", revenue: 680 }
+            ],
+            totalRows: 6
+          }
+        }
+      },
+      widgets: [
+        {
+          id: "widget-sales-line",
+          type: "line",
+          title: "今年每月销售收入趋势",
+          bindingId: "binding-sales",
+          mapping: {
+            dimensionColumnId: "month-col",
+            metricColumnIds: ["revenue-col"],
+            dimensionKey: "month",
+            metricKeys: ["revenue"]
+          },
+          position: { x: 260, y: 240, w: 620, h: 300 },
+          style: {
+            background: "#FFFFFF",
+            borderColor: "#DCE8FB",
+            borderRadius: 12,
+            color: "#294469",
+            accent: "#1677FF",
+            visible: true,
+            locked: false,
+            zIndex: 1,
+            smooth: true
+          }
+        }
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    analyticsFixtures.get(page)!.records.set(id, {
+      id,
+      status: "published",
+      revision: 1,
+      visibility: "PRIVATE",
+      schema,
+      publishedSchema: structuredClone(schema),
+      versions: [],
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto(`/dashboard-view?dashboard=${encodeURIComponent(id)}`);
+    const chart = page.locator('[data-echarts-ready="true"]');
+    await expect(chart).toHaveCount(1);
+
+    const bounds = await chart.evaluate((element) => {
+      const card = element.closest(".dashboard-widget-card");
+      const canvas = element.querySelector("canvas");
+      if (!card || !canvas) return null;
+      const cardRect = card.getBoundingClientRect();
+      const chartRect = element.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      return {
+        card: { left: cardRect.left, top: cardRect.top, right: cardRect.right, bottom: cardRect.bottom },
+        chart: { left: chartRect.left, top: chartRect.top, right: chartRect.right, bottom: chartRect.bottom },
+        canvas: { left: canvasRect.left, top: canvasRect.top, right: canvasRect.right, bottom: canvasRect.bottom }
+      };
+    });
+
+    expect(bounds).not.toBeNull();
+    for (const inner of [bounds!.chart, bounds!.canvas]) {
+      expect(inner.left).toBeGreaterThanOrEqual(bounds!.card.left - 1);
+      expect(inner.top).toBeGreaterThanOrEqual(bounds!.card.top - 1);
+      expect(inner.right).toBeLessThanOrEqual(bounds!.card.right + 1);
+      expect(inner.bottom).toBeLessThanOrEqual(bounds!.card.bottom + 1);
+    }
+    await expectNoHorizontalOverflow(page);
+
+    await page.screenshot({
+      path: `outputs/xingshu-homepage-system/qa/react/dashboard-chart-boundary-${viewport.name}.png`,
+      animations: "disabled"
+    });
+  });
+}
 
 test("sidebar logo is readable at desktop size", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -496,9 +710,9 @@ test("dashboard editor opens as a fullscreen zoomable workspace", async ({ page 
   await page.goto("/dashboard-editor");
   await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "适应画布" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "放大画布" }).click();
-  await expect(page.getByRole("combobox", { name: "画布缩放" })).not.toHaveValue("fit");
+  await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("1");
+  await page.getByRole("button", { name: "放大" }).click();
+  await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("1.25");
   await expectNoHorizontalOverflow(page);
 });
 

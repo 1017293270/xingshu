@@ -21,7 +21,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "智能问数",
     description: "经营指标、趋势变化和数据洞察",
     prompt: "帮我分析本月经营数据，并生成趋势图表",
-    routeTo: "/analysis",
+    routeTo: "/ask-data",
     imageSrc: appDataChatIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue"
@@ -31,7 +31,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "知识问答",
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
-    routeTo: "/analysis",
+    routeTo: "/data-management",
     imageSrc: appKnowledgeQaIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "cyan"
@@ -133,18 +133,9 @@ export function HomePage() {
     bindAskDataController(runId, controller);
   }
 
-  function handleSelectApp(app: XsAppCardData) {
-    selectApp(app.id, app.prompt);
-    setSentStatus(`已选择：${app.title}`);
-  }
-
   function handleOpenApp(app: XsAppCardData) {
     selectApp(app.id, app.prompt);
     setSentStatus(`正在打开：${app.title}`);
-
-    if (app.routeTo === "/analysis") {
-      startDataHubAskData(app.prompt);
-    }
 
     if (app.routeTo) {
       navigate(app.routeTo);
@@ -157,7 +148,7 @@ export function HomePage() {
       return;
     }
     startDataHubAskData(command);
-    navigate("/analysis");
+    navigate("/ask-data");
   }
 
   return (
@@ -172,6 +163,7 @@ export function HomePage() {
         value={draft}
         onChange={setDraft}
         onSubmit={handleSubmit}
+        submitOnEnter
         placeholder={commandPlaceholder}
         onVoice={() => {
           setSentStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
@@ -198,7 +190,6 @@ export function HomePage() {
               app={app}
               key={app.id}
               selected={selectedAppId === app.id}
-              onSelect={handleSelectApp}
               onOpen={handleOpenApp}
             />
           ))}

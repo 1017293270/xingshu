@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadDataHubHistoryReplay } from "./historyService";
+import { filterHistorySessionList, loadDataHubHistoryReplay } from "./historyService";
 import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
 
 describe("historyService data-hub replay", () => {
@@ -127,5 +127,33 @@ describe("historyService data-hub replay", () => {
     expect(replay.question).toBe("客户原始问题");
     expect(replay.turns.map((turn) => turn.question)).toEqual(["客户原始问题", "结合上下文后的追问"]);
     expect(replay.events[0]).toEqual(expect.objectContaining({ chatId: "chat-a" }));
+  });
+});
+
+describe("filterHistorySessionList", () => {
+  it("filters an already-loaded session list without issuing another request", () => {
+    const sessions = [
+      {
+        id: "knowledge",
+        title: "制度查询",
+        summary: "查询企业制度",
+        category: "知识快查" as const,
+        updatedAt: "2026-07-24 10:00"
+      },
+      {
+        id: "insight",
+        title: "经营分析",
+        summary: "查看经营趋势",
+        category: "数据洞察" as const,
+        updatedAt: "2026-07-24 09:00"
+      }
+    ];
+
+    expect(
+      filterHistorySessionList(sessions, {
+        keyword: "经营",
+        category: "数据洞察"
+      }).map((session) => session.id)
+    ).toEqual(["insight"]);
   });
 });

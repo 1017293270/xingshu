@@ -58,7 +58,7 @@ function mapDataHubSession(session: DataHubChatSession): HistorySession {
   };
 }
 
-function filterSessions(sessions: HistorySession[], filter: HistoryFilter) {
+export function filterHistorySessionList(sessions: HistorySession[], filter: HistoryFilter) {
   const keyword = filter.keyword?.trim();
 
   return sessions.filter((session) => {
@@ -118,7 +118,7 @@ export async function listHistorySessions(): Promise<HistorySession[]> {
 }
 
 export async function filterHistorySessions(filter: HistoryFilter) {
-  return filterSessions(await listHistorySessions(), filter);
+  return filterHistorySessionList(await listHistorySessions(), filter);
 }
 
 export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataHubHistoryReplay> {
@@ -225,5 +225,5 @@ export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataH
 }
 
 export function filterMockHistorySessions(filter: HistoryFilter) {
-  return filterSessions(historySessions, filter);
+  return filterHistorySessionList(historySessions, filter);
 }

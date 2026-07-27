@@ -55,7 +55,7 @@ describe("HistoryPage", () => {
 
   it("shows loading without an empty-state flash, then offers a new conversation", async () => {
     let resolveSessions!: (sessions: []) => void;
-    vi.spyOn(historyService, "filterHistorySessions").mockReturnValueOnce(
+    vi.spyOn(historyService, "listHistorySessions").mockReturnValueOnce(
       new Promise((resolve) => {
         resolveSessions = resolve;
       })
@@ -74,7 +74,7 @@ describe("HistoryPage", () => {
   it("retries an initial history loading error", async () => {
     const user = userEvent.setup();
     const filterSpy = vi
-      .spyOn(historyService, "filterHistorySessions")
+      .spyOn(historyService, "listHistorySessions")
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce([]);
     renderHistoryPageWithIsolatedQuery();
@@ -140,7 +140,7 @@ describe("HistoryPage", () => {
     let resolveReplay!: (
       value: Awaited<ReturnType<typeof historyService.loadDataHubHistoryReplay>>
     ) => void;
-    vi.spyOn(historyService, "filterHistorySessions").mockResolvedValue([
+    vi.spyOn(historyService, "listHistorySessions").mockResolvedValue([
       {
         id: "session-42",
         sessionId: "session-42",
@@ -173,5 +173,33 @@ describe("HistoryPage", () => {
     });
 
     await waitFor(() => expect(restoreButton).toHaveAttribute("aria-busy", "false"));
+  });
+
+  it("paginates history sessions and avoids refetching when filters change", async () => {
+    const user = userEvent.setup();
+    const sessions = Array.from({ length: 10 }, (_, index) => ({
+      id: `history-${index + 1}`,
+      title: `历史对话 ${index + 1}`,
+      summary: `第 ${index + 1} 条历史内容`,
+      category: "知识快查" as const,
+      updatedAt: "2026-07-24 10:00"
+    }));
+    const listSpy = vi.spyOn(historyService, "listHistorySessions").mockResolvedValue(sessions);
+    renderHistoryPageWithIsolatedQuery();
+
+    expect(await screen.findByRole("heading", { name: "历史对话 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "历史对话 8" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "历史对话 9" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByTitle("2"));
+
+    expect(await screen.findByRole("heading", { name: "历史对话 9" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "历史对话 1" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "历史搜索" }), "10");
+
+    expect(await screen.findByRole("heading", { name: "历史对话 10" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "历史对话 9" })).not.toBeInTheDocument();
+    expect(listSpy).toHaveBeenCalledTimes(1);
   });
 });

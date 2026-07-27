@@ -8,6 +8,7 @@ const panelStyle = computed(() => ({
   backgroundColor: props.widget.style.background ?? "rgba(15,23,42,.86)",
   color: props.widget.style.color ?? "#e2e8f0",
   borderColor: `color-mix(in srgb, ${props.widget.style.accent ?? "#38bdf8"} 24%, transparent)`,
+  borderRadius: props.widget.style.borderRadius ? `${props.widget.style.borderRadius}px` : undefined,
   backdropFilter: props.widget.style.backgroundBlur ? `blur(${props.widget.style.backgroundBlur}px)` : undefined
 }));
 </script>

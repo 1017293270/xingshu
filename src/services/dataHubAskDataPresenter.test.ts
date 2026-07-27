@@ -62,6 +62,16 @@ describe("dataHubAskDataPresenter", () => {
         }
       },
       {
+        type: "ask_artifact",
+        sessionId: "session-20260722",
+        chatId: "chat-20260722",
+        data: {
+          askRunId: "ask-run-20260722",
+          resolvedQuestion: "统计当前空间各社区的咨询总数",
+          canFavorite: true
+        }
+      },
+      {
         type: "done",
         data: { summary: "目前咨询数最多的社区为演示账号，累计咨询记录 716 条。", loopRounds: 6 }
       }
@@ -73,6 +83,13 @@ describe("dataHubAskDataPresenter", () => {
     expect(turn.decompose?.subQuestions).toEqual(["统计各社区咨询数"]);
     expect(turn.reactSteps).toHaveLength(1);
     expect(turn.tableResults[0].rows[0]).toEqual({ 社区: "演示账号", 咨询数: 716 });
+    expect(turn.artifact).toEqual({
+      askRunId: "ask-run-20260722",
+      resolvedQuestion: "统计当前空间各社区的咨询总数",
+      canFavorite: true
+    });
+    expect(turn.sessionId).toBe("session-20260722");
+    expect(turn.chatId).toBe("chat-20260722");
     expect(getDataHubActionLabel(turn.reactSteps[0].action)).toBe("定位数据源");
   });
 

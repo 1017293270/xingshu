@@ -93,13 +93,44 @@ describe("dashboardGenerationService", () => {
     expect(schema.widgets.map((widget) => widget.type)).toEqual(
       expect.arrayContaining(["text", "metric", "line", "table"])
     );
+    // 订单量与销售收入量级悬殊，只保留主指标，避免次指标被压成贴地直线
     expect(schema.widgets.find((widget) => widget.type === "line")?.mapping).toMatchObject({
       dimensionKey: "month",
-      metricKeys: ["revenue", "orders"]
+      metricKeys: ["revenue"]
     });
+    expect(schema.widgets.find((widget) => widget.type === "line")?.style.showLegend).toBe(false);
     expect(schema.canvas.rows).toBe(8);
     expect(schema.canvas).toMatchObject({ width: 1920, height: 1080 });
     expectNoOverlaps(schema.widgets);
+  });
+
+  it("keeps scale-compatible metrics together in one chart", () => {
+    const schema = createDashboardDraftFromTables(
+      {
+        question: "今年每月销售收入和利润如何？",
+        tables: [
+          table(
+            [
+              { key: "month", title: "月份", type: "date" },
+              { key: "revenue", title: "销售收入（万元）", type: "decimal" },
+              { key: "profit", title: "利润（万元）", type: "decimal" }
+            ],
+            [
+              { month: "2026-01", revenue: 320, profit: 120 },
+              { month: "2026-02", revenue: 410, profit: 160 },
+              { month: "2026-03", revenue: 480, profit: 210 }
+            ],
+            "月度经营趋势"
+          )
+        ]
+      },
+      { idFactory: createIdFactory(), now: new Date("2026-07-10T08:00:00.000Z") }
+    );
+
+    const chart = schema.widgets.find((widget) => widget.type === "line");
+    expect(chart?.mapping).toMatchObject({ dimensionKey: "month", metricKeys: ["revenue", "profit"] });
+    expect(chart?.style.showLegend).toBe(true);
+    expect(chart?.style.seriesColors).toEqual(["#1677FF", "#00A6E8", "#16A37A", "#F59E0B", "#6C7FF2", "#F26D6D"]);
   });
 
   it("uses KPI cards for scalar results and a composition chart for ratio data", () => {
@@ -269,17 +300,22 @@ describe("dashboardGenerationService", () => {
       "平均咨询数"
     ]);
     expect(schema.widgets.find((widget) => widget.type === "bar")?.title).toBe("社区咨询数排行");
+    expect(schema.widgets.find((widget) => widget.type === "pie")?.title).toBe("咨询数结构占比");
+    expect(schema.widgets.find((widget) => widget.type === "pie")?.mapping).toMatchObject({
+      dimensionKey: "project_name",
+      metricKeys: ["consultation_count"]
+    });
     expect(schema.widgets.find((widget) => widget.type === "table")?.title).toBe("社区明细");
     const insight = schema.widgets.find((widget) => widget.type === "text");
-    expect(insight?.content).not.toContain("**");
-    expect(insight?.content?.length).toBeLessThanOrEqual(90);
+    expect(insight?.subtitle).not.toContain("**");
+    expect(insight?.subtitle?.length).toBeLessThanOrEqual(90);
     expect(insight?.style.color).toBe("#0F2B50");
     expect(
       schema.widgets
         .filter((widget) => widget.style.background === "#FFFFFF")
         .every((widget) => widget.style.color === "#294469")
     ).toBe(true);
-    expect(schema.widgets).toHaveLength(6);
+    expect(schema.widgets).toHaveLength(7);
     expect(schema.canvas.rows).toBe(8);
     expectNoOverlaps(schema.widgets);
   });

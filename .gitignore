@@ -3,6 +3,9 @@ node_modules/
 dist/
 outputs/
 .superpowers/
+.claude/
+.env.local
+.run-logs/
 outputs/playwright/
 *.log
 *.err.log

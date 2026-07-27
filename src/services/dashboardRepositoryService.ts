@@ -58,7 +58,14 @@ export function createDashboardRepository(storage: Storage, options: DashboardRe
   const now = options.now ?? (() => new Date());
 
   function persist(records: DashboardRecord[]) {
-    storage.setItem(storageKey, JSON.stringify(records));
+    try {
+      storage.setItem(storageKey, JSON.stringify(records));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+        throw new Error("本地存储空间不足，请移除背景图或清理旧看板");
+      }
+      throw error;
+    }
   }
 
   function list() {

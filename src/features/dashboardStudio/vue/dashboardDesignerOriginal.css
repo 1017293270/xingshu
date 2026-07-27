@@ -157,6 +157,15 @@
   text-decoration: none;
 }
 
+.designer-toolbar__layout-button {
+  gap: 6px;
+  color: var(--studio-primary);
+}
+
+.designer-toolbar__layout-button svg {
+  flex-shrink: 0;
+}
+
 .designer-toolbar__link-button.is-disabled {
   cursor: not-allowed;
   opacity: .55;
@@ -248,7 +257,7 @@
 }
 
 .designer-palette {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   border-right: 1px solid var(--studio-border);
 }
 

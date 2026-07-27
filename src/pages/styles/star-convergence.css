@@ -1,0 +1,358 @@
+/* 登录页中央「繁星汇聚成星簇」动效
+   叙事：散落的数据繁星（散 0–22%）→ 被星数汇聚（聚 22–52%）→
+        落位成两圈有序星簇，轨道环与连线显现、核心点亮（序 52–86%）→ 回散（86–100%，首尾帧一致无缝循环） */
+
+.login-star-convergence {
+  --sc-cycle: 12s;
+
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  pointer-events: none;
+  animation: star-convergence-enter 560ms var(--xs-motion-ease-out) 120ms both;
+}
+
+.login-star-convergence__stage {
+  position: relative;
+  width: min(100%, 480px);
+  aspect-ratio: 1;
+  /* 粒子坐标使用 cqi 单位，随舞台宽度等比缩放（与 SVG viewBox 同步） */
+  container-type: inline-size;
+}
+
+/* 星簇成形时的柔和底光，烘托"汇聚"的存在感 */
+.login-star-convergence__stage::before {
+  position: absolute;
+  inset: 6%;
+  content: "";
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(22, 119, 255, 0.09) 0%, rgba(41, 184, 237, 0.045) 42%, transparent 68%);
+  opacity: 0;
+  animation: star-convergence-backdrop var(--sc-cycle) linear infinite;
+}
+
+/* ---------- SVG 结构层：轨道环 / 连线 / 核心（与粒子共用同一中心） ---------- */
+
+.login-star-convergence__map {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+}
+
+.login-star-convergence__rings {
+  opacity: 0;
+  animation: star-convergence-rings var(--sc-cycle) linear infinite;
+}
+
+.login-star-convergence__ring {
+  fill: none;
+  stroke: rgba(22, 119, 255, 0.24);
+  stroke-width: 1.2;
+}
+
+.login-star-convergence__ring--inner {
+  stroke: rgba(41, 184, 237, 0.28);
+}
+
+/* 外环虚线化，慢速旋转时才读得出"轨道"感 */
+.login-star-convergence__ring--outer {
+  stroke-dasharray: 4 8;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-convergence-ring-spin 48s linear infinite;
+}
+
+.login-star-convergence__links line {
+  stroke: rgba(22, 119, 255, 0.26);
+  stroke-width: 1.2;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+  animation: star-convergence-links var(--sc-cycle) linear infinite;
+}
+
+.login-star-convergence__core {
+  opacity: 0.35;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.82);
+  animation: star-convergence-core var(--sc-cycle) var(--xs-motion-ease-ambient) infinite;
+}
+
+.login-star-convergence__core-halo {
+  fill: rgba(22, 119, 255, 0.16);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-convergence-halo var(--xs-motion-ambient) ease-out infinite;
+}
+
+.login-star-convergence__core-glow {
+  fill: rgba(22, 119, 255, 0.16);
+}
+
+.login-star-convergence__core-dot {
+  fill: #1677ff;
+}
+
+.login-star-convergence__core-spark {
+  fill: #ffffff;
+}
+
+/* ---------- 粒子：span 跑汇聚位移，i 跑闪烁微漂移 ---------- */
+
+.login-star-convergence__p {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(var(--sx), var(--sy));
+  animation: star-convergence-orbit var(--sc-cycle) cubic-bezier(0.62, 0.05, 0.28, 1) infinite;
+  animation-delay: var(--d, 0s);
+}
+
+.login-star-convergence__p i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #1677ff;
+  box-shadow: 0 0 10px rgba(22, 119, 255, 0.42);
+  animation: star-convergence-twinkle 3.4s ease-in-out infinite alternate;
+  animation-delay: var(--td, 0s);
+}
+
+.login-star-convergence__p--sm i {
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+}
+
+.login-star-convergence__p--lg i {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+}
+
+.login-star-convergence__p--cyan i {
+  background: #29b8ed;
+  box-shadow: 0 0 10px rgba(41, 184, 237, 0.42);
+}
+
+.login-star-convergence__p--sky i {
+  background: #5ac8ef;
+  box-shadow: 0 0 10px rgba(90, 200, 239, 0.42);
+}
+
+/* 四角星粒子：复用登录页既有星形语言 */
+.login-star-convergence__p--star i {
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 0;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  box-shadow: none;
+}
+
+/* ---------- 关键帧 ---------- */
+
+@keyframes star-convergence-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes star-convergence-orbit {
+  0%,
+  22% {
+    transform: translate(var(--sx), var(--sy));
+  }
+
+  52%,
+  86% {
+    transform: translate(var(--ox), var(--oy));
+  }
+
+  100% {
+    transform: translate(var(--sx), var(--sy));
+  }
+}
+
+@keyframes star-convergence-twinkle {
+  from {
+    opacity: 0.65;
+    transform: translate(0, 0) scale(0.88);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(2px, -3px) scale(1.08);
+  }
+}
+
+@keyframes star-convergence-rings {
+  0%,
+  44% {
+    opacity: 0;
+  }
+
+  56%,
+  86% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes star-convergence-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes star-convergence-links {
+  0%,
+  44% {
+    opacity: 0;
+    stroke-dashoffset: 100;
+  }
+
+  48% {
+    opacity: 1;
+  }
+
+  60%,
+  86% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  92%,
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes star-convergence-core {
+  0%,
+  42% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+
+  56%,
+  86% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes star-convergence-halo {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.7);
+  }
+
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+@keyframes star-convergence-backdrop {
+  0%,
+  44% {
+    opacity: 0;
+  }
+
+  58%,
+  84% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- 响应式与降级 ---------- */
+
+/* 中等宽度回退两列布局，动效让位 */
+@media (max-width: 1280px) {
+  .login-star-convergence {
+    display: none;
+  }
+}
+
+/* reduced-motion：静态呈现"序"态（星簇已成形，连线常显、核心常亮） */
+@media (prefers-reduced-motion: reduce) {
+  .login-star-convergence,
+  .login-star-convergence__stage::before,
+  .login-star-convergence__p,
+  .login-star-convergence__p i,
+  .login-star-convergence__rings,
+  .login-star-convergence__ring--outer,
+  .login-star-convergence__links line,
+  .login-star-convergence__core,
+  .login-star-convergence__core-halo {
+    animation: none;
+  }
+
+  .login-star-convergence {
+    opacity: 1;
+    transform: none;
+  }
+
+  .login-star-convergence__stage::before {
+    opacity: 1;
+  }
+
+  .login-star-convergence__p {
+    transform: translate(var(--ox), var(--oy));
+  }
+
+  .login-star-convergence__p i {
+    opacity: 1;
+    transform: none;
+  }
+
+  .login-star-convergence__rings {
+    opacity: 1;
+  }
+
+  .login-star-convergence__links line {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .login-star-convergence__core {
+    opacity: 1;
+    transform: none;
+  }
+
+  .login-star-convergence__core-halo {
+    opacity: 0.3;
+    transform: none;
+  }
+}

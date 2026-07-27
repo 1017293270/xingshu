@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts";
+import type { DataHubTableColumn } from "@/types/dataHub";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
 
 function toFiniteNumber(value: unknown): number | null {
@@ -14,6 +15,37 @@ function toFiniteNumber(value: unknown): number | null {
   }
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isTimeColumn(column: DataHubTableColumn) {
+  return /date|time|year|month|day|week|quarter|日期|时间|年份|月份|季度|周/i.test(
+    `${column.key} ${column.title} ${column.type ?? ""}`
+  );
+}
+
+function isNumericColumn(column: DataHubTableColumn, rows: Record<string, unknown>[]) {
+  if (isTimeColumn(column)) return false;
+  if (/int|long|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率|记录数/i.test(
+    `${column.key} ${column.title} ${column.type ?? ""}`
+  )) {
+    return true;
+  }
+  const samples = rows
+    .slice(0, 12)
+    .map((row) => row[column.key])
+    .filter((value) => value !== null && value !== undefined && value !== "");
+  return samples.length > 0 && samples.every((value) => toFiniteNumber(value) !== null);
+}
+
+export function inferDashboardBindingColumns(binding?: DashboardDataBinding) {
+  const columns = binding?.table.columns ?? [];
+  const rows = binding?.table.rows ?? [];
+  const numericColumns = columns.filter((column) => isNumericColumn(column, rows));
+  const numericKeys = new Set(numericColumns.map((column) => column.key));
+  return {
+    numericColumns,
+    dimensionColumns: columns.filter((column) => !numericKeys.has(column.key))
+  };
 }
 
 export function resolveDashboardMetric(widget: DashboardWidget, binding?: DashboardDataBinding) {
@@ -86,14 +118,15 @@ function chartPalette(widget: DashboardWidget) {
     : [widget.style.accent ?? "#38bdf8", ...defaultSeriesColors];
 }
 
-function isCompatibleChartBinding(widget: DashboardWidget, binding: DashboardDataBinding) {
-  if (!binding.resultKind) return true;
-  if (widget.type === "line" || widget.type === "area") return binding.resultKind === "time-series";
-  if (widget.type === "bar") return binding.resultKind === "time-series" || binding.resultKind === "category";
-  if (widget.type === "pie" || widget.type === "radar" || widget.type === "funnel") {
-    return binding.resultKind === "category";
-  }
-  return false;
+function mappedColumnKey(
+  binding: DashboardDataBinding,
+  key: string | undefined,
+  columnId: string | undefined
+) {
+  if (key && binding.table.columns.some((column) => column.key === key)) return key;
+  return columnId
+    ? binding.table.columns.find((column) => column.columnId === columnId)?.key
+    : undefined;
 }
 
 export function buildDashboardChartOption(
@@ -101,14 +134,28 @@ export function buildDashboardChartOption(
   binding?: DashboardDataBinding,
   options: { animation?: boolean } = {}
 ): EChartsOption | null {
-  if (!binding || !widget.mapping.dimensionKey || !widget.mapping.metricKeys?.length) {
-    return null;
-  }
-  if (!isCompatibleChartBinding(widget, binding)) return null;
+  if (!binding || binding.table.rows.length === 0) return null;
 
-  const dimensionKey = widget.mapping.dimensionKey;
-  const categories = binding.table.rows.map((row) => String(row[dimensionKey] ?? "—"));
-  const metrics = widget.mapping.metricKeys.map((key) => ({
+  const dimensionKey = mappedColumnKey(
+    binding,
+    widget.mapping.dimensionKey,
+    widget.mapping.dimensionColumnId
+  );
+  const mappedMetricKeys = (
+    widget.mapping.metricKeys?.length
+      ? widget.mapping.metricKeys
+      : widget.mapping.metricColumnIds?.map((columnId) =>
+          binding.table.columns.find((column) => column.columnId === columnId)?.key
+        )
+  )?.filter((key): key is string =>
+    Boolean(key && binding.table.columns.some((column) => column.key === key))
+  ) ?? [];
+  if (mappedMetricKeys.length === 0) return null;
+
+  const categories = dimensionKey
+    ? binding.table.rows.map((row) => String(row[dimensionKey] ?? "—"))
+    : binding.table.rows.map((_, index) => `第 ${index + 1} 项`);
+  const metrics = mappedMetricKeys.map((key) => ({
     key,
     name: metricName(binding, key),
     values: binding.table.rows.map((row) => toFiniteNumber(row[key]))
@@ -129,7 +176,7 @@ export function buildDashboardChartOption(
     textStyle: { color: fontColor }
   };
 
-  if (widget.type === "pie" && binding.resultKind !== "time-series") {
+  if (widget.type === "pie") {
     const metric = metrics[0];
     const isRose = variant === "pie-rose";
     const isSolid = variant === "pie-solid";
@@ -146,7 +193,8 @@ export function buildDashboardChartOption(
           radius: isSolid ? ["0%", "64%"] : isRose ? ["24%", "68%"] : ["42%", "68%"],
           center: isSolid ? ["42%", "48%"] : ["50%", "44%"],
           roseType: isRose ? "radius" : undefined,
-          label: { color: fontColor },
+          // 默认环形图用图例承担类目名，隐藏外侧标签避免窄卡片截断；值走 tooltip
+          label: isSolid || isRose ? { color: fontColor } : { show: false },
           data: categories.flatMap((name, index) => {
             const value = metric.values[index];
             return value === null ? [] : [{ name, value }];
@@ -156,7 +204,7 @@ export function buildDashboardChartOption(
     };
   }
 
-  if (widget.type === "radar" && binding.resultKind !== "time-series") {
+  if (widget.type === "radar") {
     const values = metrics[0]?.values.map((value) => value ?? 0) ?? [];
     const maximum = Math.max(...values, 1);
     const isOutline = variant === "radar-outline";
@@ -186,7 +234,7 @@ export function buildDashboardChartOption(
     } as EChartsOption;
   }
 
-  if (widget.type === "funnel" && binding.resultKind !== "time-series") {
+  if (widget.type === "funnel") {
     const metric = metrics[0];
     const isPipeline = variant === "funnel-pipeline";
     const isMinimal = variant === "funnel-minimal";
@@ -214,7 +262,7 @@ export function buildDashboardChartOption(
   }
 
   const chartType = widget.type === "line" || widget.type === "area" ? "line" : "bar";
-  const isCategory = binding.resultKind === "category";
+  const isCategory = binding.resultKind !== "time-series";
   const horizontal = widget.type === "bar" && isCategory && variant === "bar-horizontal";
 
   if (widget.type === "bar" && isCategory) {
@@ -269,11 +317,14 @@ export function buildDashboardChartOption(
     } as EChartsOption;
   }
 
+  const showLegend = widget.style.showLegend === true && metrics.length > 1;
+
   return {
     ...base,
-    color: [primaryColor],
+    color: metrics.length > 1 ? palette : [primaryColor],
     tooltip: { trigger: "axis" },
-    grid: { left: 44, right: 20, top: 32, bottom: 32 },
+    legend: showLegend ? { top: 0, textStyle: { color: fontColor } } : undefined,
+    grid: { left: 44, right: 20, top: showLegend ? 44 : 32, bottom: 32 },
     xAxis: {
       type: "category",
       data: categories,
@@ -285,8 +336,8 @@ export function buildDashboardChartOption(
       axisLabel: { color: fontColor },
       splitLine: { lineStyle: { color: "rgba(148, 163, 184, 0.16)" } }
     },
-    series: metrics.map((metric, index) => ({
-      name: widget.title,
+    series: metrics.map((metric) => ({
+      name: metric.name,
       type: chartType,
       data: metric.values,
       smooth: chartType === "line" && variant !== "line-stepped",

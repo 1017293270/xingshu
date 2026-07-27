@@ -1,11 +1,11 @@
 .login-page {
-  --login-inset: clamp(40px, 4.5vw, 72px);
+  --login-inset: clamp(32px, 3.6vw, 60px);
   --login-band: 590px;
 
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(0, 1.14fr) minmax(0, 0.86fr);
+  grid-template-columns: minmax(0, auto) minmax(200px, 1fr) minmax(0, auto);
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
@@ -78,103 +78,6 @@
   height: 6px;
   background: #5ac8ef;
   box-shadow: 0 0 12px rgba(90, 200, 239, 0.4);
-}
-
-/* 两列之间的补白轨道，把中央留白转成品牌留白 */
-.login-page__orbit--mid {
-  top: 9%;
-  left: 55%;
-  width: 520px;
-  height: 520px;
-  border-color: rgba(22, 119, 255, 0.12);
-  animation: login-orbit-spin 72s linear infinite;
-}
-
-.login-page__orbit--mid i {
-  width: 7px;
-  height: 7px;
-  background: #29b8ed;
-  box-shadow: 0 0 12px rgba(41, 184, 237, 0.42);
-}
-
-.login-page__stars {
-  position: absolute;
-  top: 14%;
-  left: 44%;
-  width: 128px;
-  height: 84px;
-  animation: login-stars-breathe 7s var(--xs-motion-ease-ambient) infinite;
-}
-
-.login-page__stars i {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #298cf0;
-  box-shadow: 0 0 8px rgba(41, 140, 240, 0.32);
-}
-
-.login-page__stars i:nth-child(1) {
-  top: 8px;
-  left: 42px;
-  width: 3px;
-  height: 3px;
-  opacity: 0.6;
-}
-
-.login-page__stars i:nth-child(2) {
-  top: 23px;
-  left: 80px;
-  width: 9px;
-  height: 9px;
-  border-radius: 0;
-  background: #29b8ed;
-  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
-  box-shadow: none;
-}
-
-.login-page__stars i:nth-child(3) {
-  top: 47px;
-  left: 55px;
-  width: 5px;
-  height: 5px;
-  background: #1677ff;
-}
-
-.login-page__stars i:nth-child(4) {
-  top: 66px;
-  left: 100px;
-  width: 3px;
-  height: 3px;
-  opacity: 0.5;
-}
-
-.login-page__stars i:nth-child(5) {
-  top: 13px;
-  left: 116px;
-  width: 2px;
-  height: 2px;
-  opacity: 0.56;
-}
-
-.login-page__stars i:nth-child(6) {
-  top: 58px;
-  left: 16px;
-  width: 7px;
-  height: 7px;
-  border-radius: 0;
-  background: #5ac8ef;
-  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
-  box-shadow: none;
-}
-
-.login-page__stars i:nth-child(7) {
-  top: 36px;
-  left: 120px;
-  width: 4px;
-  height: 4px;
-  opacity: 0.66;
 }
 
 /* ---------- 左侧品牌叙事区 ---------- */
@@ -341,6 +244,8 @@
   position: relative;
   z-index: 1;
   display: grid;
+  /* 显式单列：让 inner 的 max-width 百分比有确定参照，窄屏可被压缩 */
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   justify-items: end;
   padding: clamp(24px, 5vh, 48px) var(--login-inset) clamp(24px, 5vh, 48px) clamp(24px, 4vw, 64px);
@@ -367,7 +272,9 @@
 }
 
 .login-access__inner {
-  width: min(440px, 100%);
+  /* 固定 440px 设计宽度；min() 百分比在 auto 列轨道内会被内容尺寸取代 */
+  width: 440px;
+  max-width: 100%;
 }
 
 .login-access__caption {
@@ -696,24 +603,12 @@
   }
 }
 
-@keyframes login-stars-breathe {
-  0%,
-  100% {
-    opacity: 0.72;
-    transform: translateY(0);
-  }
-
-  50% {
-    opacity: 0.95;
-    transform: translateY(-2px);
-  }
-}
-
 /* ---------- 响应式 ---------- */
 
-@media (min-width: 1600px) {
+/* 中等宽度：中央动效让位（star-convergence.css 同步隐藏），回退两列 */
+@media (max-width: 1280px) {
   .login-page {
-    grid-template-columns: minmax(0, 1fr) clamp(600px, 38vw, 720px);
+    grid-template-columns: minmax(0, 1.14fr) minmax(0, 0.86fr);
   }
 }
 
@@ -825,14 +720,7 @@
     font-size: clamp(30px, 5vw, 42px);
   }
 
-  .login-page__stars {
-    top: 8%;
-    left: auto;
-    right: 8%;
-  }
-
-  .login-page__orbit--faint,
-  .login-page__orbit--mid {
+  .login-page__orbit--faint {
     display: none;
   }
 
@@ -886,10 +774,6 @@
     margin-top: 12px;
     font-size: 14.5px;
     line-height: 1.7;
-  }
-
-  .login-page__stars {
-    display: none;
   }
 
   .login-showcase .xs-ask-demo {

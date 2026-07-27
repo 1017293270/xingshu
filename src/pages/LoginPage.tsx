@@ -8,6 +8,7 @@ import { loginToDataHub } from "@/services/dataHubAuthService";
 import { DataHubServiceError } from "@/services/dataHubClient";
 import { ensureDataHubSpace } from "@/services/dataHubSpaceService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
+import { LoginStarConvergence } from "./LoginStarConvergence";
 import "./login.css";
 
 type LoginFormValues = {
@@ -135,14 +136,6 @@ export function LoginPage() {
         <span className="login-page__orbit login-page__orbit--faint">
           <i />
         </span>
-        <span className="login-page__orbit login-page__orbit--mid">
-          <i />
-        </span>
-        <span className="login-page__stars">
-          {Array.from({ length: 7 }, (_, index) => (
-            <i key={index} />
-          ))}
-        </span>
       </div>
 
       <section className="login-showcase" aria-labelledby="login-page-title">
@@ -184,6 +177,8 @@ export function LoginPage() {
           ))}
         </ul>
       </section>
+
+      <LoginStarConvergence />
 
       <section className="login-access" aria-label="登录星数">
         <div className="login-access__secure login-enter" style={{ animationDelay: "120ms" }}>

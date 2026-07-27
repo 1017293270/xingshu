@@ -68,7 +68,9 @@ describe("LoginPage", () => {
     expect(screen.getByText("由 data-hub 权限体系提供认证")).toBeInTheDocument();
     expect(container.querySelector(".login-page__atmosphere")).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelector(".xs-ask-demo")).toHaveAttribute("aria-hidden", "true");
-    expect(container.querySelectorAll(".login-page__stars i")).toHaveLength(7);
+    const convergence = container.querySelector(".login-star-convergence");
+    expect(convergence).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelectorAll(".login-star-convergence__p")).toHaveLength(12);
   });
 
   it("validates required fields before calling data-hub", async () => {
