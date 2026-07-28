@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setReducedMotion } from "@/test/setup";
 
-import { XsEChart } from "./XsEChart";
+import { resolveEChartMotionOption, XsEChart } from "./XsEChart";
 
 const chartMocks = vi.hoisted(() => {
   const setOption = vi.fn();
@@ -29,6 +29,24 @@ afterEach(() => {
 });
 
 describe("XsEChart", () => {
+  it("builds subtle chart motion without overwriting explicit business timing", () => {
+    expect(resolveEChartMotionOption({ series: [] }, "subtle", false)).toMatchObject({
+      animation: true,
+      animationDuration: 420,
+      animationEasing: "cubicOut",
+      animationDurationUpdate: 260,
+      animationEasingUpdate: "cubicOut"
+    });
+    expect(
+      resolveEChartMotionOption({ animationDuration: 900, series: [] }, "subtle", false)
+    ).toMatchObject({ animationDuration: 900, animationDurationUpdate: 260 });
+  });
+
+  it("turns motion off for none and reduced-motion modes", () => {
+    expect(resolveEChartMotionOption({ animation: true }, "none", false)).toMatchObject({ animation: false });
+    expect(resolveEChartMotionOption({ animation: true }, "subtle", true)).toMatchObject({ animation: false });
+  });
+
   it("does not initialize a canvas chart in ordinary JSDOM page tests", async () => {
     const { getByRole } = render(<XsEChart option={{ series: [] }} label="营收趋势图" />);
 

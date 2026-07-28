@@ -36,6 +36,22 @@
   padding: 22px;
 }
 
+.data-stat-card--enter {
+  animation: data-stat-card-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes data-stat-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .stat-card span,
 .stat-card small {
   display: block;
@@ -48,6 +64,7 @@
   margin: 8px 0 4px;
   color: var(--xs-text);
   font-size: 28px;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-card {
@@ -156,6 +173,39 @@
 
 .kb-card {
   padding: 24px;
+}
+
+.kb-card--enter {
+  animation: kb-card-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes kb-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.data-dashboard-page time {
+  transition:
+    color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.data-card .xs-mini-link {
+  transition:
+    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.data-card .xs-mini-link:not(:disabled):hover,
+.data-card .xs-mini-link:not(:disabled):focus-visible {
+  transform: translateX(2px);
 }
 
 .kb-card h2 {

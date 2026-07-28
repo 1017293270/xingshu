@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
 import { formatDashboardMetric, resolveDashboardMetric } from "../../core/dashboardWidgetData";
 
@@ -8,9 +8,34 @@ const props = defineProps<{ widget: DashboardWidget; binding?: DashboardDataBind
 const loading = computed(() => props.binding?.status === "loading");
 const error = computed(() => props.binding?.status === "error" ? props.binding.error ?? "数据不可用" : "");
 const rawMetric = computed(() => resolveDashboardMetric(props.widget, props.binding));
-const metric = computed(() => formatDashboardMetric(rawMetric.value, props.widget.mapping.displayUnit));
+const displayedRawMetric = ref<number | null>(null);
+let countFrame: number | null = null;
+const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+watch(rawMetric, (nextValue, previousValue) => {
+  if (countFrame !== null) window.cancelAnimationFrame(countFrame);
+  if (nextValue === null || reducedMotion || import.meta.env.MODE === "test") {
+    displayedRawMetric.value = nextValue;
+    return;
+  }
+  const from = previousValue ?? displayedRawMetric.value ?? 0;
+  const startedAt = performance.now();
+  const tick = (now: number) => {
+    const progress = Math.min(1, (now - startedAt) / 700);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    displayedRawMetric.value = from + (nextValue - from) * eased;
+    if (progress < 1) countFrame = window.requestAnimationFrame(tick);
+  };
+  countFrame = window.requestAnimationFrame(tick);
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (countFrame !== null) window.cancelAnimationFrame(countFrame);
+});
+
+const metric = computed(() => formatDashboardMetric(displayedRawMetric.value, props.widget.mapping.displayUnit));
 const valueText = computed(() => {
-  if (rawMetric.value === null) return "";
+  if (displayedRawMetric.value === null) return "";
   if (props.binding?.resultKind !== "metric") return `${metric.value.value}${metric.value.unit}`;
   const precisionValue = props.widget.props?.precision;
   const precision = typeof precisionValue === "number" && Number.isFinite(precisionValue)
@@ -18,7 +43,7 @@ const valueText = computed(() => {
     : 0;
   const prefix = typeof props.widget.props?.valuePrefix === "string" ? props.widget.props.valuePrefix : "";
   const suffix = typeof props.widget.props?.valueSuffix === "string" ? props.widget.props.valueSuffix : "";
-  return `${prefix}${rawMetric.value.toLocaleString(undefined, {
+  return `${prefix}${displayedRawMetric.value.toLocaleString(undefined, {
     minimumFractionDigits: precision,
     maximumFractionDigits: precision
   })}${suffix}`;

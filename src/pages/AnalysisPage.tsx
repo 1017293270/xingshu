@@ -747,6 +747,7 @@ export function AnalysisPage() {
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState("");
+  const [selectedQuickQuestion, setSelectedQuickQuestion] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
   const [favoriteStates, setFavoriteStates] = useState<Record<string, AskFavoriteUiState>>({});
   const [thinkingPlaybackStates, setThinkingPlaybackStates] = useState<Record<string, ThinkingPlaybackState>>({});
@@ -1341,11 +1342,13 @@ export function AnalysisPage() {
               {quickQuestions.map((item, index) => (
                 <button
                   type="button"
-                  className="xs-page-enter"
+                  className={`xs-page-enter${selectedQuickQuestion === item.question ? " is-selected" : ""}`}
                   style={{ animationDelay: `${240 + index * 60}ms` }}
                   key={item.question}
+                  aria-pressed={selectedQuickQuestion === item.question}
                   onClick={() => {
                     setFollowUpDraft(item.question);
+                    setSelectedQuickQuestion(item.question);
                     setWorkflowStatus("已填入快捷问题，确认后即可发送");
                   }}
                 >

@@ -1,7 +1,7 @@
 import { Button, Input, Tag } from "antd";
 import { Lightning, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
@@ -27,6 +27,8 @@ export function TablePage() {
   const [submissionStatus, setSubmissionStatus] = useState("");
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
   const isGeneratingRef = useRef(false);
   const recentTablesQuery = useQuery({
     queryKey: ["recentTables"],
@@ -39,6 +41,12 @@ export function TablePage() {
     isError: recentTablesQuery.isError,
     hasData: recentTablesQuery.data !== undefined
   });
+
+  useEffect(() => () => {
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
+    }
+  }, []);
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -76,6 +84,11 @@ export function TablePage() {
     setPrompt(nextPrompt);
     setSubmissionTone("success");
     setSubmissionStatus(`已复制制表要求：${table.title}`);
+    setCopiedTemplateId(table.id);
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
+    }
+    copiedTimerRef.current = window.setTimeout(() => setCopiedTemplateId(null), 1200);
   };
 
   return (
@@ -85,6 +98,7 @@ export function TablePage() {
         style={{ animationDelay: "80ms" }}
         aria-label="制表需求输入"
         aria-busy={isGenerating}
+        data-state={isGenerating ? "submitting" : submissionTone}
       >
         <span className="sheet-prompt__addon" aria-hidden="true">
           <Plus size={18} weight="bold" />
@@ -102,14 +116,20 @@ export function TablePage() {
           type="primary"
           icon={<Lightning size={18} />}
           loading={isGenerating}
-          disabled={isGenerating}
+          disabled={isGenerating || !prompt.trim()}
           onClick={handleGenerate}
         >
           生成
         </Button>
       </section>
       <div className="workflow-status-slot table-page__status-slot">
-        <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
+        <XsStatusBar
+          tone={submissionTone}
+          label="操作"
+          message={submissionStatus}
+          transitionKey={`${submissionTone}:${submissionStatus}`}
+          reserveSpace
+        />
       </div>
       <h2 className="subsection-title xs-page-enter" style={{ animationDelay: "140ms" }}>
         最近制表
@@ -120,6 +140,8 @@ export function TablePage() {
         emptyDescription="暂无最近制表记录。"
         error="最近制表加载失败，请稍后重试。"
         onRetry={() => void recentTablesQuery.refetch()}
+        loadingVariant="rows"
+        contentKey={recentTablesQuery.dataUpdatedAt}
       >
         <section className="sheet-list" aria-label="最近制表">
           {recentTables.map((table, index) => (
@@ -142,7 +164,9 @@ export function TablePage() {
                   <span>{table.description}</span>
                 </p>
               </div>
-              <Button disabled={isGenerating} onClick={() => handleCopyTemplate(table)}>复制制表要求</Button>
+              <Button disabled={isGenerating} onClick={() => handleCopyTemplate(table)}>
+                {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
+              </Button>
             </article>
           ))}
         </section>

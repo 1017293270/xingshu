@@ -33,10 +33,36 @@
   padding-inline: 22px;
   border-radius: var(--xs-radius-control);
   font-weight: 650;
+  transition:
+    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.sheet-prompt .ant-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.sheet-prompt[data-state="submitting"] .ant-input {
+  animation: sheet-submit-highlight var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes sheet-submit-highlight {
+  from {
+    border-color: rgba(22, 119, 255, 0.72);
+    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+  }
+
+  to {
+    border-color: var(--xs-border);
+    box-shadow: none;
+  }
 }
 
 .workflow-status-slot {
-  min-height: 40px;
+  min-height: 52px;
 }
 
 .table-page__status-slot {
@@ -150,6 +176,9 @@
   border-radius: var(--xs-radius-control);
   color: var(--xs-text);
   outline: none;
+  transition:
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .writing-panel textarea:focus-visible {
@@ -165,6 +194,16 @@
 
 .writing-panel__controls .ant-btn {
   min-height: 32px;
+  transition:
+    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.writing-panel__controls .ant-btn.is-active {
+  color: var(--xs-primary-2);
+  border-color: #9fc8ff;
+  background: #edf5ff;
 }
 
 .writing-attachment-queue {
@@ -187,6 +226,16 @@
   color: var(--xs-text-2);
   background: #f7fbff;
   font-size: 13px;
+  transition:
+    opacity var(--xs-motion-state) var(--xs-motion-ease-out),
+    transform var(--xs-motion-state) var(--xs-motion-ease-out);
+  animation: writing-attachment-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+.writing-attachment-queue li[data-removing="true"] {
+  opacity: 0;
+  transform: scale(0.98);
+  pointer-events: none;
 }
 
 .writing-attachment-queue li > span {
@@ -232,6 +281,29 @@
   grid-template-columns: 58px 1fr;
   gap: 16px;
   padding: 22px;
+  transition:
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.scene-card.is-active {
+  border-color: #9fc8ff;
+  background: #f7fbff;
+  box-shadow: 0 12px 28px rgba(22, 119, 255, 0.1);
+}
+
+@keyframes writing-attachment-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .scene-card div > span {

@@ -126,12 +126,19 @@
   font-size: 16px;
   font-weight: 760;
   text-decoration: none;
+  transition:
+    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .welcome-page__button-icon {
   width: 28px;
   height: 28px;
   object-fit: contain;
+  transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .welcome-page__button--primary {
@@ -151,6 +158,19 @@
 .welcome-page__button:focus-visible {
   transform: translateY(-1px);
   outline: none;
+}
+
+.welcome-page__button--primary:hover .welcome-page__button-icon,
+.welcome-page__button--primary:focus-visible .welcome-page__button-icon {
+  transform: translateX(2px);
+}
+
+.welcome-page__button:active {
+  transform: translateY(0);
+}
+
+.welcome-page__button:active .welcome-page__button-icon {
+  transform: translateX(0);
 }
 
 .welcome-page__capabilities {

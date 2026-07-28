@@ -73,7 +73,10 @@ export function DashboardCard({
   const versions = [...(record.versions ?? [])].sort((a, b) => b.version - a.version);
 
   return (
-    <article className="dashboard-card">
+    <article
+      className={`dashboard-card${archiving ? " is-archiving" : ""}${copying ? " is-copying" : ""}`}
+      aria-busy={archiving || copying}
+    >
       <div className="dashboard-card__preview">
         <svg className="dashboard-card__orbit" viewBox="0 0 320 180" aria-hidden="true" focusable="false">
           <path d="M -20 150 Q 160 20 340 130" />

@@ -463,6 +463,7 @@
   color: var(--xs-danger);
   font-size: 13px;
   font-weight: 600;
+  animation: login-feedback-enter 160ms var(--xs-motion-ease-out) backwards;
 }
 
 .login-panel__submit {
@@ -523,6 +524,12 @@
   background: #eef6ff;
   font-size: 13.5px;
   font-weight: 600;
+  animation: login-feedback-enter 160ms var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes login-feedback-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .login-panel__status button {

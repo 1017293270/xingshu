@@ -1,7 +1,7 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { Input, Pagination, Segmented, Space, Tag, Tooltip } from "antd";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
 import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
@@ -14,6 +14,7 @@ import {
 } from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { PageFrame } from "./PageFrame";
 
 const defaultPageSize = 8;
@@ -61,6 +62,8 @@ export function HistoryPage() {
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [actionStatus, setActionStatus] = useState("");
   const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
+  const historyListRef = useRef<HTMLElement | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
   const historyQuery = useQuery({
     queryKey: ["historySessions"],
     queryFn: listHistorySessions,
@@ -93,6 +96,13 @@ export function HistoryPage() {
     () => resolveStatusTone(statusText, false),
     [statusText]
   );
+
+  useEffect(() => {
+    historyListRef.current?.scrollTo?.({
+      top: 0,
+      behavior: reducedMotion ? "auto" : "smooth"
+    });
+  }, [category, currentPage, deferredKeyword, pageSize, reducedMotion]);
 
   async function handleRestoreSession(session: HistorySession) {
     if (restoringSessionId) {
@@ -157,6 +167,8 @@ export function HistoryPage() {
           tone={statusTone}
           label={statusTone === "info" ? "筛选结果" : undefined}
           message={statusText}
+          transitionKey={`${statusTone}:${statusText}`}
+          reserveSpace
         />
       </div>
       <XsAsyncPanel
@@ -169,12 +181,16 @@ export function HistoryPage() {
         onEmptyAction={() => navigate("/")}
         error="历史记录同步失败，请确认 data-hub 会话服务可用后重试。"
         onRetry={() => void historyQuery.refetch()}
+        loadingVariant="rows"
+        contentKey={`${category}:${deferredKeyword}:${currentPage}:${pageSize}`}
+        preserveContentWhileRefreshing
+        staggerLimit={8}
       >
-        <section className="history-list" aria-label="历史对话列表">
+        <section ref={historyListRef} className="history-list" aria-label="历史对话列表">
           {visibleSessions.map((session, index) => (
             <button
-              className="xs-card history-card xs-card-button xs-card-lift xs-page-enter"
-              style={{ animationDelay: `${160 + index * 50}ms` }}
+              className={`xs-card history-card xs-card-button xs-card-lift${index < 8 ? " history-card--enter" : ""}`}
+              style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
               key={session.id}
               type="button"
               aria-label={`${session.title}：${session.summary}`}

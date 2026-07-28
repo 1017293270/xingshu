@@ -159,8 +159,8 @@ export function DashboardPage() {
               runtimePath={runtimePath(record.id)}
               shareLink={shareLinks[record.id]}
               versionsExpanded={Boolean(expandedVersions[record.id])}
-              copying={copyMutation.isPending}
-              archiving={archiveMutation.isPending}
+              copying={copyMutation.isPending && copyMutation.variables?.id === record.id}
+              archiving={archiveMutation.isPending && archiveMutation.variables === record.id}
               rollingBack={rollbackMutation.isPending}
               onToggleVersions={() =>
                 setExpandedVersions((current) => ({ ...current, [record.id]: !current[record.id] }))}

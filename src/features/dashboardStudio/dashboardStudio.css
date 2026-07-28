@@ -22,6 +22,60 @@
   text-align: center;
 }
 
+.dashboard-editor-layout-skeleton {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  width: 100%;
+  height: 100dvh;
+  gap: 1px;
+  padding-top: 68px;
+  background: #dce8fb;
+}
+
+.dashboard-editor-layout-skeleton > i,
+.dashboard-runtime-layout-skeleton > i {
+  display: block;
+  background:
+    linear-gradient(100deg, transparent 24%, rgba(255, 255, 255, .08) 42%, transparent 60%),
+    #f8fbff;
+  background-size: 220% 100%, 100% 100%;
+  animation: dashboard-workspace-shimmer 1200ms linear infinite;
+}
+
+.dashboard-editor-layout-skeleton > i:nth-of-type(2) {
+  background-color: #edf3fb;
+}
+
+.dashboard-fullscreen-view--loading {
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 3vw, 48px);
+}
+
+.dashboard-runtime-layout-skeleton {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: 120px repeat(2, minmax(0, 1fr));
+  width: min(100%, 1800px);
+  height: min(100%, 980px);
+  gap: 16px;
+}
+
+.dashboard-runtime-layout-skeleton > i {
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 10px;
+  background-color: rgba(30, 58, 88, .72);
+}
+
+.dashboard-runtime-layout-skeleton > i:nth-of-type(n + 5) {
+  grid-column: span 2;
+}
+
+@keyframes dashboard-workspace-shimmer {
+  from { background-position: 120% 0, 0 0; }
+  to { background-position: -120% 0, 0 0; }
+}
+
 .dashboard-studio-page__error strong,
 .dashboard-studio-page__error p {
   margin: 0;
@@ -306,6 +360,31 @@
   cursor: pointer;
   font: inherit;
   font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .dashboard-editor-layout-skeleton {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-editor-layout-skeleton > i:not(:nth-of-type(2)) {
+    display: none;
+  }
+
+  .dashboard-runtime-layout-skeleton {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-runtime-layout-skeleton > i:nth-of-type(n + 5) {
+    grid-column: span 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-editor-layout-skeleton > i,
+  .dashboard-runtime-layout-skeleton > i {
+    animation: none;
+  }
 }
 
 .dashboard-runtime-island__error {

@@ -1,7 +1,14 @@
 import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsChartCard, XsIconTile, XsStatusBar } from "@/components/xs";
+import {
+  resolveXsAsyncStatus,
+  XsAsyncPanel,
+  XsChartCard,
+  XsCountUpText,
+  XsIconTile,
+  XsStatusBar
+} from "@/components/xs";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
 import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
 import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png";
@@ -88,23 +95,29 @@ export function DataDashboardPage() {
         emptyDescription="暂无数据资产指标。"
         error="数据资产指标加载失败，请稍后重试。"
         onRetry={() => void kpiQuery.refetch()}
+        loadingVariant="metrics"
+        contentKey={kpiQuery.dataUpdatedAt}
       >
         <section className="data-kpis data-kpis--mobile-2x2" aria-label="数据资产指标">
           {kpis.map((kpi, index) => (
             <article
-              className="xs-card xs-page-enter stat-card"
-              style={{ animationDelay: `${100 + index * 60}ms` }}
+              className="xs-card stat-card data-stat-card--enter"
+              style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
               key={kpi.id}
               aria-label={`${kpi.label}，指标下钻即将开放`}
               aria-describedby="data-asset-details-availability"
             >
               <XsIconTile imageSrc={kpiIconById[kpi.iconId]} label={kpi.label} tone={kpi.tone} />
-              <div><span>{kpi.label}</span><strong>{kpi.value}</strong><small>{kpi.delta}</small></div>
+              <div>
+                <span>{kpi.label}</span>
+                <strong><XsCountUpText value={kpi.value} durationMs={700} /></strong>
+                <small>{kpi.delta}</small>
+              </div>
             </article>
           ))}
         </section>
       </XsAsyncPanel>
-      <section className="data-dashboard-grid xs-page-enter" style={{ animationDelay: "280ms" }} aria-label="数据资产图表">
+      <section className="data-dashboard-grid" aria-label="数据资产图表">
         <XsChartCard
           title="数据资产类型分布"
           summary={chartInsights.donut.summary}
@@ -114,6 +127,7 @@ export function DataDashboardPage() {
           className="data-card"
           chartClassName="chart-large"
           action={unavailableDetailAction("数据资产类型分布")}
+          motionPreset="subtle"
         />
         <XsChartCard
           title="数据资产增长趋势"
@@ -124,6 +138,7 @@ export function DataDashboardPage() {
           className="data-card"
           chartClassName="chart-large"
           action={unavailableDetailAction("数据资产增长趋势")}
+          motionPreset="subtle"
         />
         <XsChartCard
           title="数据来源分布"
@@ -134,9 +149,10 @@ export function DataDashboardPage() {
           className="data-card"
           chartClassName="chart-large"
           action={unavailableDetailAction("数据来源分布")}
+          motionPreset="subtle"
         />
       </section>
-      <section className="data-bottom-grid xs-page-enter" style={{ animationDelay: "360ms" }} aria-label="数据资产应用">
+      <section className="data-bottom-grid" aria-label="数据资产应用">
         <XsChartCard
           title="数据应用场景 Top10"
           summary={chartInsights.top.summary}
@@ -146,6 +162,7 @@ export function DataDashboardPage() {
           className="data-card"
           chartClassName="chart-large"
           action={unavailableDetailAction("数据应用场景 Top10")}
+          motionPreset="subtle"
         />
         <article className="xs-card data-card data-table">
           <h2>热门数据资产</h2>

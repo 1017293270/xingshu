@@ -147,7 +147,12 @@ export function DashboardEditorPage() {
     return (
       <section className="dashboard-studio-page" aria-label="看板编辑器工作区">
         <h1 className="sr-only">看板编辑器</h1>
-        <div className="dashboard-studio-page__loading" role="status">正在读取服务端看板草稿…</div>
+        <div className="dashboard-editor-layout-skeleton" role="status" aria-label="正在读取服务端看板草稿">
+          <span className="sr-only">正在读取服务端看板草稿…</span>
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
+        </div>
       </section>
     );
   }

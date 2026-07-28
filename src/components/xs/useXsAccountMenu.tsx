@@ -1,4 +1,4 @@
-import { GearSix, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
+import { GearSix, MonitorPlay, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import { logoutDataHub } from "@/services/dataHubAuthService";
@@ -11,6 +11,7 @@ export function useXsAccountMenu(onNavigate?: () => void) {
   const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
   const resetUiState = useUiStore((state) => state.resetUiState);
   const setOnboardingOpen = useUiStore((state) => state.setOnboardingOpen);
+  const setDashboardOnboardingOpen = useUiStore((state) => state.setDashboardOnboardingOpen);
   const username = user?.username || "张三";
   const userRole = user?.isAdmin ? "系统管理员" : "企业管理员";
 
@@ -25,6 +26,11 @@ export function useXsAccountMenu(onNavigate?: () => void) {
       key: "onboarding",
       icon: <Sparkle size={17} />,
       label: "新手引导"
+    },
+    {
+      key: "dashboard-onboarding",
+      icon: <MonitorPlay size={17} />,
+      label: "大屏引导"
     },
     {
       key: "ai-settings",
@@ -43,6 +49,12 @@ export function useXsAccountMenu(onNavigate?: () => void) {
   function handleAccountMenuClick({ key }: { key: string }) {
     if (key === "onboarding") {
       setOnboardingOpen(true);
+      onNavigate?.();
+      return;
+    }
+
+    if (key === "dashboard-onboarding") {
+      setDashboardOnboardingOpen(true);
       onNavigate?.();
       return;
     }

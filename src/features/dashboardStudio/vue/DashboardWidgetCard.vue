@@ -17,6 +17,7 @@ const props = defineProps<{
   dragging?: boolean;
   resizing?: boolean;
   previewPosition?: DashboardWidgetPosition;
+  enterIndex?: number;
 }>();
 
 const emit = defineEmits<{
@@ -73,7 +74,8 @@ function handleResizePointerDown(event: PointerEvent) {
       width: `${renderedPosition.w}px`,
       height: `${renderedPosition.h}px`,
       zIndex: widget.style.zIndex,
-      opacity: widget.style.opacity
+      opacity: widget.style.opacity,
+      '--runtime-enter-index': Math.min(enterIndex ?? 0, 5)
     }"
     :tabindex="readonly ? undefined : 0"
     :aria-label="widget.name ?? widget.title"
@@ -133,11 +135,37 @@ function handleResizePointerDown(event: PointerEvent) {
 .dashboard-widget-card.is-hidden { opacity:.38 !important; }
 .dashboard-widget-card.is-locked { cursor:default; }
 .dashboard-widget-card.is-readonly { border:0; cursor:default; }
+.dashboard-widget-card.is-readonly {
+  animation: runtime-widget-enter 260ms cubic-bezier(.2,0,0,1) backwards;
+  animation-delay: calc(var(--runtime-enter-index, 0) * 56ms);
+}
+.dashboard-widget-card.is-settling:not(.is-dragging):not(.is-resizing) {
+  animation: designer-widget-settle 500ms cubic-bezier(.2,0,0,1);
+}
 .dashboard-widget-card.is-locked.is-selected { border-style:dashed; }
-.dashboard-widget-card__corner,.dashboard-widget-card__resize-handle { position:absolute; z-index:2; box-sizing:border-box; width:10px; height:10px; border:2px solid #38bdf8; border-radius:0; background:#f8fafc; box-shadow:0 2px 8px rgba(15,23,42,.22); }
+.dashboard-widget-card__corner,.dashboard-widget-card__resize-handle { position:absolute; z-index:2; box-sizing:border-box; width:10px; height:10px; border:2px solid #38bdf8; border-radius:0; background:#f8fafc; box-shadow:0 2px 8px rgba(15,23,42,.22); animation:designer-control-enter 120ms cubic-bezier(.2,0,0,1) backwards; }
 .dashboard-widget-card__corner--nw { top:-6px; left:-6px; }
 .dashboard-widget-card__corner--ne { top:-6px; right:-6px; }
 .dashboard-widget-card__corner--sw { bottom:-6px; left:-6px; }
 .dashboard-widget-card__resize-handle { right:-6px; bottom:-6px; padding:0; border-radius:2px; cursor:nwse-resize; pointer-events:auto; }
-@media (prefers-reduced-motion:reduce) { .dashboard-widget-card { transition:none; } }
+@keyframes designer-widget-settle {
+  0% { opacity:0; transform:scale(.985); }
+  32% { opacity:1; transform:scale(1); box-shadow:0 0 0 2px rgba(56,189,248,.42),0 0 0 6px rgba(56,189,248,.14); }
+  100% { opacity:1; transform:scale(1); }
+}
+@keyframes designer-control-enter {
+  from { opacity:0; transform:scale(.9); }
+  to { opacity:1; transform:scale(1); }
+}
+@keyframes runtime-widget-enter {
+  from { opacity:0; transform:translateY(4px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .dashboard-widget-card,
+  .dashboard-widget-card.is-readonly,
+  .dashboard-widget-card.is-settling,
+  .dashboard-widget-card__corner,
+  .dashboard-widget-card__resize-handle { animation:none; transition:none; }
+}
 </style>

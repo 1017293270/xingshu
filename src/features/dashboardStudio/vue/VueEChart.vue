@@ -12,6 +12,21 @@ let chart: EChartsType | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let resizeFrame: number | null = null;
 let disposed = false;
+const reducedMotion =
+  import.meta.env.MODE === "test" ||
+  (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+
+function optionWithMotion(option: EChartsOption, updating = false): EChartsOption {
+  if (reducedMotion) return { ...option, animation: false };
+  return {
+    ...option,
+    animation: option.animation ?? true,
+    animationDuration: option.animationDuration ?? (updating ? 260 : 420),
+    animationEasing: option.animationEasing ?? "cubicOut",
+    animationDurationUpdate: option.animationDurationUpdate ?? 260,
+    animationEasingUpdate: option.animationEasingUpdate ?? "cubicOut"
+  };
+}
 
 function resizeChart() {
   if (resizeFrame !== null) {
@@ -32,7 +47,7 @@ onMounted(async () => {
     return;
   }
   chart = echarts.init(chartElement.value, null, { renderer: "canvas" });
-  chart.setOption(props.option, { notMerge: true, lazyUpdate: false });
+  chart.setOption(optionWithMotion(props.option), { notMerge: false, lazyUpdate: false });
   chartElement.value.dataset.echartsReady = "true";
   resizeObserver = new ResizeObserver(resizeChart);
   resizeObserver.observe(chartElement.value);
@@ -41,7 +56,11 @@ onMounted(async () => {
 watch(
   () => props.option,
   (option) => {
-    chart?.setOption(option, { notMerge: true, lazyUpdate: true });
+    chart?.setOption(optionWithMotion(option, true), {
+      notMerge: false,
+      lazyUpdate: true,
+      replaceMerge: ["series", "xAxis", "yAxis"]
+    });
   },
   { deep: true }
 );

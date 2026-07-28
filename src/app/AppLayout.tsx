@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { XsRouteFallback, XsShell } from "@/components/xs";
+import { DashboardOnboarding } from "@/features/dashboard/DashboardOnboarding";
 import { HomeOnboarding } from "@/features/home/HomeOnboarding";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -55,6 +56,7 @@ export function AppLayout() {
         </div>
       </Suspense>
       <HomeOnboarding />
+      <DashboardOnboarding />
     </XsShell>
   );
 }

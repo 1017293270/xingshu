@@ -40,6 +40,10 @@
   margin: 0 0 16px;
 }
 
+.history-page__chrome > .xs-status-bar-slot {
+  min-height: 52px;
+}
+
 .history-page__async {
   display: flex;
   min-height: 0;
@@ -102,6 +106,22 @@
 
 .history-page__async.xs-async-panel--refreshing .history-list {
   opacity: 0.72;
+}
+
+.history-card--enter {
+  animation: history-card-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes history-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .analysis-page .xs-page__head {
@@ -1126,4 +1146,12 @@
   .history-page__pagination {
     justify-content: center;
   }
+}
+
+.analysis-empty-state__prompts button.is-selected {
+  color: var(--xs-primary-2);
+  border-color: #9fc8ff;
+  background: #edf5ff;
+  box-shadow: 0 10px 24px rgba(22, 119, 255, 0.1);
+  transform: translateY(-1px);
 }

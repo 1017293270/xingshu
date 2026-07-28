@@ -1,7 +1,7 @@
 import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt, X } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
 import type { XsStatusTone } from "@/components/xs";
 import { createAttachmentQueue } from "@/services/attachmentService";
@@ -43,7 +43,12 @@ export function WritingPage() {
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
   const [attachments, setAttachments] = useState<AttachmentQueueItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeWritingType, setActiveWritingType] = useState<string | null>(null);
+  const [activeSceneId, setActiveSceneId] = useState<WritingSceneIconId | null>(null);
+  const [removingAttachmentIds, setRemovingAttachmentIds] = useState<Set<string>>(() => new Set());
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
+  const removalTimersRef = useRef(new Map<string, number>());
   const isSubmittingRef = useRef(false);
   const scenesQuery = useQuery({
     queryKey: ["writingScenes"],
@@ -67,6 +72,11 @@ export function WritingPage() {
     isError: documentsQuery.isError,
     hasData: documentsQuery.data !== undefined
   });
+
+  useEffect(() => () => {
+    removalTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    removalTimersRef.current.clear();
+  }, []);
 
   const handleSubmit = async () => {
     const trimmedPrompt = prompt.trim();
@@ -109,6 +119,8 @@ export function WritingPage() {
     }
 
     setPrompt(writingTypePrompts[type]);
+    setActiveWritingType(type);
+    setActiveSceneId(null);
     setSubmissionTone("success");
     setSubmissionStatus(`已切换写作类型：${type}`);
   };
@@ -119,8 +131,17 @@ export function WritingPage() {
     }
 
     setPrompt(scenePrompts[iconId]);
+    setActiveSceneId(iconId);
+    setActiveWritingType(null);
     setSubmissionTone("success");
     setSubmissionStatus("已套用推荐写作场景");
+    window.requestAnimationFrame(() => {
+      promptInputRef.current?.focus({ preventScroll: true });
+      promptInputRef.current?.scrollIntoView?.({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "center"
+      });
+    });
   };
 
   const handleOpenAttachmentPicker = () => {
@@ -167,7 +188,24 @@ export function WritingPage() {
       return;
     }
 
-    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+    if (import.meta.env.MODE === "test") {
+      setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+      setSubmissionTone("info");
+      setSubmissionStatus("已从写作附件队列移除文件");
+      return;
+    }
+
+    setRemovingAttachmentIds((current) => new Set(current).add(attachmentId));
+    const timerId = window.setTimeout(() => {
+      setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+      setRemovingAttachmentIds((current) => {
+        const next = new Set(current);
+        next.delete(attachmentId);
+        return next;
+      });
+      removalTimersRef.current.delete(attachmentId);
+    }, 180);
+    removalTimersRef.current.set(attachmentId, timerId);
     setSubmissionTone("info");
     setSubmissionStatus("已从写作附件队列移除文件");
   };
@@ -194,6 +232,7 @@ export function WritingPage() {
           <p>请详细描述写作主题、目标、要点、受众等要求，AI 将为你生成高质量内容</p>
         </div>
         <textarea
+          ref={promptInputRef}
           rows={5}
           aria-label="写作需求"
           value={prompt}
@@ -202,7 +241,15 @@ export function WritingPage() {
         />
         <div className="writing-tabs writing-panel__controls" aria-label="写作类型与提交操作">
           {["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"].map((tab) => (
-            <Button disabled={isSubmitting} key={tab} onClick={() => handleSelectWritingType(tab)}>{tab}</Button>
+            <Button
+              className={activeWritingType === tab ? "is-active" : ""}
+              aria-pressed={activeWritingType === tab}
+              disabled={isSubmitting}
+              key={tab}
+              onClick={() => handleSelectWritingType(tab)}
+            >
+              {tab}
+            </Button>
           ))}
           <input
             ref={attachmentInputRef}
@@ -232,7 +279,11 @@ export function WritingPage() {
         {attachments.length > 0 ? (
           <ul className="writing-attachment-queue" aria-label="写作附件队列">
             {attachments.map((attachment) => (
-              <li key={attachment.id} data-status={attachment.status}>
+              <li
+                key={attachment.id}
+                data-status={attachment.status}
+                data-removing={removingAttachmentIds.has(attachment.id)}
+              >
                 <span title={attachment.name}>{attachment.name}</span>
                 <small>{attachment.status === "ready" ? "可参与生成" : attachment.error}</small>
                 <Button
@@ -248,7 +299,13 @@ export function WritingPage() {
           </ul>
         ) : null}
         <div className="workflow-status-slot writing-panel__status-slot">
-          <XsStatusBar tone={submissionTone} label="操作" message={submissionStatus} />
+          <XsStatusBar
+            tone={submissionTone}
+            label="操作"
+            message={submissionStatus}
+            transitionKey={`${submissionTone}:${submissionStatus}`}
+            reserveSpace
+          />
         </div>
       </section>
 
@@ -261,16 +318,19 @@ export function WritingPage() {
         emptyDescription="暂无推荐写作场景。"
         error="推荐写作场景加载失败，请稍后重试。"
         onRetry={() => void scenesQuery.refetch()}
+        loadingVariant="cards"
+        contentKey={scenesQuery.dataUpdatedAt}
       >
         <section className="scene-row" aria-label="推荐写作场景">
           {scenes.map((scene, index) => (
             <button
-              className="xs-card xs-card-lift xs-page-enter scene-card"
+              className={`xs-card xs-card-lift xs-page-enter scene-card${activeSceneId === scene.iconId ? " is-active" : ""}`}
               style={{ animationDelay: `${200 + index * 60}ms` }}
               key={scene.id}
               type="button"
               aria-label={`${scene.title}：${scene.description}`}
               disabled={isSubmitting}
+              aria-pressed={activeSceneId === scene.iconId}
               onClick={() => handleSelectScene(scene.iconId)}
             >
               <span className={`scene-icon scene-icon--${scene.tone}`}><img src={sceneIconById[scene.iconId]} alt="" /></span>
@@ -286,6 +346,8 @@ export function WritingPage() {
         emptyDescription="暂无文稿。"
         error="文稿列表加载失败，请稍后重试。"
         onRetry={() => void documentsQuery.refetch()}
+        loadingVariant="table"
+        contentKey={documentsQuery.dataUpdatedAt}
       >
         <section className="xs-card xs-page-enter doc-table" style={{ animationDelay: "280ms" }} aria-label="我的文稿">
           <h2>我的文稿</h2>

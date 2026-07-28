@@ -1,6 +1,7 @@
 import { Alert, Button, Checkbox, Form, Input, InputNumber, Select, Tag } from "antd";
 import { CheckCircle, FloppyDisk, Lightning, Plugs, ShieldWarning } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { XsStatusBar } from "@/components/xs";
 import {
   getDefaultAiProviderConfig,
   loadAiProviderConfig,
@@ -161,7 +162,8 @@ export function AiSettingsPage() {
         </aside>
 
         <section className="xs-card xs-page-enter ai-settings-card" style={{ animationDelay: "160ms" }} aria-label="AI 配置表单">
-          <div className="ai-settings-card__head">
+          <div key={provider} className="ai-settings-card__transition">
+            <div className="ai-settings-card__head">
             <div>
               <h2>{selectedProvider.label}</h2>
               <p>{selectedProvider.description}</p>
@@ -170,17 +172,17 @@ export function AiSettingsPage() {
               <CheckCircle size={17} weight="bold" />
               OpenAI-compatible
             </span>
-          </div>
+            </div>
 
-          <Alert
-            className="ai-settings-warning"
-            type="warning"
-            showIcon
-            icon={<ShieldWarning size={18} weight="bold" />}
-            message="浏览器保存 API Key 只适合本地或受控演示环境；生产环境建议改为服务端代理。"
-          />
+            <Alert
+              className="ai-settings-warning"
+              type="warning"
+              showIcon
+              icon={<ShieldWarning size={18} weight="bold" />}
+              message="浏览器保存 API Key 只适合本地或受控演示环境；生产环境建议改为服务端代理。"
+            />
 
-          <Form form={form} layout="vertical" className="ai-settings-form" disabled={isBusy}>
+            <Form form={form} layout="vertical" className="ai-settings-form" disabled={isBusy}>
             <Form.Item name="provider" label="供应商" rules={[{ required: true }]}>
               <Select
                 options={providerOptions.map((item) => ({ value: item.value, label: item.label }))}
@@ -229,16 +231,16 @@ export function AiSettingsPage() {
                 保存配置
               </Button>
             </div>
-          </Form>
+            </Form>
+          </div>
 
-          {status ? (
-            <div
-              className={`ai-settings-status ai-settings-status--${statusTone}`}
-              role={statusTone === "error" ? "alert" : "status"}
-            >
-              {status}
-            </div>
-          ) : null}
+          <XsStatusBar
+            className={`ai-settings-status ai-settings-status--${statusTone}`}
+            tone={statusTone}
+            message={status}
+            transitionKey={`${statusTone}:${status}`}
+            reserveSpace
+          />
         </section>
       </div>
     </PageFrame>

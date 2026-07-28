@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { XsRouteFallback } from "@/components/xs";
+import { XsRouteFallback, type XsRouteFallbackVariant } from "@/components/xs";
 import { routeTitles } from "@/components/xs/navigation";
 import { HomePage } from "@/features/home/HomePage";
 import { AppLayout } from "./AppLayout";
@@ -41,12 +41,39 @@ function AppRouteTitle() {
   return null;
 }
 
+export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVariant {
+  if (pathname === "/" || pathname === "/welcome" || pathname === "/login") {
+    return "hero";
+  }
+  if (pathname === "/history") {
+    return "rows";
+  }
+  if (pathname === "/data-dashboard" || pathname === "/data-management") {
+    return "metrics";
+  }
+  if (pathname === "/settings/ai") {
+    return "form";
+  }
+  if (pathname === "/ask-data" || pathname === "/analysis" || pathname === "/dashboard-editor") {
+    return "workspace";
+  }
+  if (pathname === "/dashboard-view") {
+    return "fullscreen";
+  }
+  return "cards";
+}
+
+function AppRouteFallback() {
+  const location = useLocation();
+  return <XsRouteFallback standalone variant={resolveRouteFallbackVariant(location.pathname)} />;
+}
+
 export function AppRoutes() {
   return (
     <>
       <AppRouteTitle />
       <DataHubSessionExpiryHandler />
-      <Suspense fallback={<XsRouteFallback standalone />}>
+      <Suspense fallback={<AppRouteFallback />}>
         <Routes>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />

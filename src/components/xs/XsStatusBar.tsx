@@ -4,10 +4,12 @@ import type { ReactNode } from "react";
 export type XsStatusTone = "info" | "success" | "warning" | "error" | "loading";
 
 type XsStatusBarProps = {
-  message: ReactNode;
+  message?: ReactNode;
   tone?: XsStatusTone;
   label?: string;
   className?: string;
+  transitionKey?: string | number;
+  reserveSpace?: boolean;
 };
 
 const toneTagColor: Record<Exclude<XsStatusTone, "loading">, string> = {
@@ -25,25 +27,28 @@ const defaultLabel: Record<XsStatusTone, string> = {
   loading: "处理中"
 };
 
-export function XsStatusBar({ message, tone = "info", label, className = "" }: XsStatusBarProps) {
-  if (!message) {
+export function XsStatusBar({
+  message,
+  tone = "info",
+  label,
+  className = "",
+  transitionKey,
+  reserveSpace = false
+}: XsStatusBarProps) {
+  if (!message && !reserveSpace) {
     return null;
   }
 
-  if (tone === "error") {
-    return (
-      <Alert
-        className={`xs-status-bar xs-status-bar--alert ${className}`.trim()}
-        type="error"
-        showIcon
-        message={message}
-        role="alert"
-      />
-    );
-  }
-
-  return (
-    <div className={`xs-status-bar ${className}`.trim()} role="status">
+  const content = !message ? null : tone === "error" ? (
+    <Alert
+      className={`xs-status-bar xs-status-bar--alert xs-status-bar--error ${className}`.trim()}
+      type="error"
+      showIcon
+      message={message}
+      role="alert"
+    />
+  ) : (
+    <div className={`xs-status-bar xs-status-bar--${tone} ${className}`.trim()} role="status">
       {tone === "loading" ? (
         <span className="xs-status-bar__loading">
           <Spin size="small" />
@@ -54,6 +59,19 @@ export function XsStatusBar({ message, tone = "info", label, className = "" }: X
         </Tag>
       )}
       <span className="xs-status-bar__message">{message}</span>
+    </div>
+  );
+
+  return (
+    <div
+      className={`xs-status-bar-slot${reserveSpace ? " xs-status-bar-slot--reserved" : ""}`}
+      aria-hidden={!message || undefined}
+    >
+      {content ? (
+        <div key={transitionKey ?? `${tone}`} className="xs-status-bar-slot__content">
+          {content}
+        </div>
+      ) : null}
     </div>
   );
 }

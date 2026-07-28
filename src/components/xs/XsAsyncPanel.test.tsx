@@ -101,4 +101,58 @@ describe("XsAsyncPanel", () => {
     await user.click(screen.getByRole("button", { name: "开始新对话" }));
     expect(onEmptyAction).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["rows", 5],
+    ["cards", 3],
+    ["metrics", 4],
+    ["table", 6]
+  ] as const)("renders the %s skeleton variant after the delay", (variant, itemCount) => {
+    vi.useFakeTimers();
+    const { container, unmount } = render(
+      <XsAsyncPanel status="pending" empty={false} loadingVariant={variant} />
+    );
+
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(container.querySelector(`.xs-async-panel__skeleton--${variant}`)).toBeInTheDocument();
+    expect(
+      container.querySelectorAll(`.xs-async-panel__skeleton--${variant} > span:not(.sr-only)`)
+    ).toHaveLength(itemCount);
+    unmount();
+  });
+
+  it("can replace cached content with a refreshing skeleton", () => {
+    render(
+      <XsAsyncPanel
+        status="refreshing"
+        empty={false}
+        preserveContentWhileRefreshing={false}
+        loadingVariant="table"
+      >
+        <p>旧内容</p>
+      </XsAsyncPanel>
+    );
+
+    expect(screen.queryByText("旧内容")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "正在刷新" })).toBeVisible();
+  });
+
+  it("keys content transitions without changing the live content semantics", () => {
+    const { container, rerender } = render(
+      <XsAsyncPanel status="ready" empty={false} contentKey="page-1">
+        <p>第一页</p>
+      </XsAsyncPanel>
+    );
+    const firstContent = container.querySelector(".xs-async-panel__content");
+
+    rerender(
+      <XsAsyncPanel status="ready" empty={false} contentKey="page-2">
+        <p>第二页</p>
+      </XsAsyncPanel>
+    );
+
+    expect(screen.getByText("第二页")).toBeVisible();
+    expect(container.querySelector(".xs-async-panel__content")).not.toBe(firstContent);
+  });
 });

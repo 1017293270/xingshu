@@ -9,7 +9,7 @@ type ParsedCountUp = {
   decimals: number;
 };
 
-function parseCountUpValue(rawValue: string): ParsedCountUp | null {
+export function parseCountUpValue(rawValue: string): ParsedCountUp | null {
   const match = rawValue.match(countUpPattern);
   if (!match) {
     return null;
@@ -26,9 +26,13 @@ function parseCountUpValue(rawValue: string): ParsedCountUp | null {
  * 数字滚动：从 0 缓动到目标值（保留原字符串的小数位、千分位与后缀）。
  * reduced-motion、测试环境或 active=false 时直接返回原字符串。
  */
-export function useCountUp(rawValue: string, active = true, durationMs = 650) {
+export function useCountUp(rawValue: string, active = true, durationMs = 700, previousValue?: string) {
   const reducedMotion = usePrefersReducedMotion();
   const parsed = useMemo(() => parseCountUpValue(rawValue), [rawValue]);
+  const previousParsed = useMemo(
+    () => (previousValue ? parseCountUpValue(previousValue) : null),
+    [previousValue]
+  );
   const enabled = active && parsed !== null && !reducedMotion && import.meta.env.MODE !== "test";
   const [display, setDisplay] = useState(rawValue);
 
@@ -40,6 +44,7 @@ export function useCountUp(rawValue: string, active = true, durationMs = 650) {
 
     let frame = 0;
     const start = performance.now();
+    const startValue = previousParsed?.target ?? 0;
     const format = (value: number) =>
       value.toLocaleString("zh-CN", {
         minimumFractionDigits: parsed.decimals,
@@ -49,7 +54,7 @@ export function useCountUp(rawValue: string, active = true, durationMs = 650) {
     const tick = (now: number) => {
       const progress = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(`${format(parsed.target * eased)}${parsed.suffix}`);
+      setDisplay(`${format(startValue + (parsed.target - startValue) * eased)}${parsed.suffix}`);
       if (progress < 1) {
         frame = window.requestAnimationFrame(tick);
       }
@@ -57,7 +62,7 @@ export function useCountUp(rawValue: string, active = true, durationMs = 650) {
 
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [enabled, parsed, rawValue, durationMs]);
+  }, [durationMs, enabled, parsed, previousParsed, rawValue]);
 
   return display;
 }

@@ -173,6 +173,7 @@ function createId(prefix: string) {
 const schema = reactive<DashboardSchema>(clone(props.initialSchema));
 const selectedWidgetId = ref("");
 const settlingWidgetId = ref("");
+let settlingWidgetTimer: number | null = null;
 const revision = ref(props.initialRevision ?? 0);
 const recordStatus = ref(props.initialStatus ?? "draft");
 const dashboardVisibility = ref<"PRIVATE" | "SPACE">(props.initialVisibility ?? "PRIVATE");
@@ -204,6 +205,15 @@ let canvasResizeObserver: ResizeObserver | null = null;
 let pendingHistoryOrigin: DashboardSchema | null = null;
 let lastCommittedSchema = clone(props.initialSchema);
 let lastInteractionFinishedAt = 0;
+
+function markWidgetSettling(widgetId: string) {
+  settlingWidgetId.value = widgetId;
+  if (settlingWidgetTimer !== null) window.clearTimeout(settlingWidgetTimer);
+  settlingWidgetTimer = window.setTimeout(() => {
+    if (settlingWidgetId.value === widgetId) settlingWidgetId.value = "";
+    settlingWidgetTimer = null;
+  }, 520);
+}
 let suspendChanges = false;
 
 const historyPast = ref<DashboardSchema[]>([]);
@@ -440,6 +450,7 @@ async function undoChange() {
   historyPast.value = historyPast.value.slice(0, -1);
   historyFuture.value = [...historyFuture.value, plainSchema()].slice(-100);
   await restoreHistorySnapshot(previous);
+  if (selectedWidgetId.value) markWidgetSettling(selectedWidgetId.value);
 }
 
 async function redoChange() {
@@ -449,6 +460,7 @@ async function redoChange() {
   historyFuture.value = historyFuture.value.slice(0, -1);
   historyPast.value = [...historyPast.value, plainSchema()].slice(-100);
   await restoreHistorySnapshot(next);
+  if (selectedWidgetId.value) markWidgetSettling(selectedWidgetId.value);
 }
 
 watch(
@@ -594,6 +606,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("beforeunload", beforeUnload);
   clearHistoryTimer();
+  if (settlingWidgetTimer !== null) window.clearTimeout(settlingWidgetTimer);
   canvasResizeObserver?.disconnect();
   window.removeEventListener("pointermove", handleWidgetPointerMove);
   window.removeEventListener("pointerup", finishWidgetPointerDrag);
@@ -614,7 +627,7 @@ function assetChartCount(assetId: string) {
 function selectQueryAssetChart(widgetId: string) {
   if (!schema.widgets.some((widget) => widget.id === widgetId)) return;
   selectedWidgetId.value = widgetId;
-  settlingWidgetId.value = widgetId;
+  markWidgetSettling(widgetId);
 }
 
 async function removeDashboardQueryChart(widgetId: string) {
@@ -717,7 +730,7 @@ function addWidget(type: DashboardWidgetType, desiredPosition?: DashboardWidgetP
   };
   schema.widgets = [...schema.widgets, nextWidget];
   selectedWidgetId.value = nextWidget.id;
-  settlingWidgetId.value = nextWidget.id;
+  markWidgetSettling(nextWidget.id);
   activePropertyTab.value = "layout";
   activeDrawer.value = "property";
 }
@@ -747,7 +760,7 @@ function duplicateSelected() {
     };
   }
   selectedWidgetId.value = copy.id;
-  settlingWidgetId.value = copy.id;
+  markWidgetSettling(copy.id);
 }
 
 function deleteSelected() {
@@ -812,7 +825,7 @@ function pasteWidget() {
     };
   }
   selectedWidgetId.value = copy.id;
-  settlingWidgetId.value = copy.id;
+  markWidgetSettling(copy.id);
 }
 
 function clearCanvas() {
@@ -1262,7 +1275,7 @@ async function addSelectedAsset() {
       clone(toRaw(selectedAssetParameters)));
     await applySchemaChange(result.schema);
     selectedWidgetId.value = result.widgetId;
-    settlingWidgetId.value = result.widgetId;
+    markWidgetSettling(result.widgetId);
     paletteTab.value = "assets";
     activePropertyTab.value = "data";
     activeDrawer.value = "property";
@@ -1770,7 +1783,10 @@ function exitDesigner() {
             aria-atomic="true"
             :aria-busy="lifecycle === 'saving'"
             :title="statusLabel"
-          >{{ statusLabel }}</span>
+          >
+            <i aria-hidden="true" />
+            <span :key="lifecycle" class="designer-toolbar__status-text">{{ statusLabel }}</span>
+          </span>
         </span>
       </div>
 
@@ -2405,13 +2421,15 @@ textarea:focus-visible {
 }
 
 .designer-toolbar__status {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
   gap: 8px;
   min-width: 170px;
   color: var(--studio-text-3);
 }
 
-.designer-toolbar__status > span {
+.designer-toolbar__status > i {
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -2423,19 +2441,32 @@ textarea:focus-visible {
     box-shadow 120ms cubic-bezier(.2, 0, 0, 1);
 }
 
-.designer-toolbar__status[data-state="dirty"] > span,
-.designer-toolbar__status[data-state="saving"] > span {
+.designer-toolbar__status[data-state="dirty"] > i,
+.designer-toolbar__status[data-state="saving"] > i {
   background: #ffb020;
   box-shadow: 0 0 0 4px rgba(255, 176, 32, .12);
 }
 
-.designer-toolbar__status[data-state="saving"] > span {
+.designer-toolbar__status[data-state="saving"] > i {
   animation: studio-pulse 800ms cubic-bezier(.37, 0, .63, 1) infinite alternate;
 }
 
-.designer-toolbar__status[data-state="error"] > span {
+.designer-toolbar__status[data-state="error"] > i {
   background: #ff4d4f;
   box-shadow: 0 0 0 4px rgba(255, 77, 79, .1);
+}
+
+.designer-toolbar__status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: studio-status-text-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+
+@keyframes studio-status-text-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .designer-toolbar__status div {
@@ -2913,6 +2944,12 @@ textarea:focus-visible {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding: 14px;
+  animation: property-form-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+
+@keyframes property-form-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .property-field {
@@ -3903,6 +3940,7 @@ textarea:focus-visible {
   padding: 24px;
   background: rgba(15, 31, 55, .36);
   backdrop-filter: blur(4px);
+  animation: designer-modal-backdrop-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
 }
 
 .designer-modal {
@@ -3916,6 +3954,17 @@ textarea:focus-visible {
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 24px 70px rgba(23, 56, 100, .2);
+  animation: designer-modal-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+
+@keyframes designer-modal-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes designer-modal-enter {
+  from { opacity: 0; transform: translateY(6px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .designer-modal--compact { width: min(520px, calc(100vw - 32px)); }
 .designer-modal > header, .version-candidate-list article > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -3974,7 +4023,7 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .designer-toolbar__status[data-state="saving"] > span {
+  .designer-toolbar__status[data-state="saving"] > i {
     animation: none;
   }
 
@@ -3982,6 +4031,13 @@ textarea:focus-visible {
   .icon-button,
   .studio-button {
     transition: none;
+  }
+
+  .designer-toolbar__status-text,
+  .property-form,
+  .designer-modal-backdrop,
+  .designer-modal {
+    animation: none;
   }
 }
 

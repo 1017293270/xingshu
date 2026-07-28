@@ -7,6 +7,7 @@ type XsEChartProps = {
   option: EChartsOption;
   label: string;
   className?: string;
+  motionPreset?: "inherit" | "subtle" | "none";
 };
 
 const setOptionOptions = {
@@ -15,14 +16,38 @@ const setOptionOptions = {
   replaceMerge: ["series", "xAxis", "yAxis"]
 };
 
-export function XsEChart({ option, label, className = "" }: XsEChartProps) {
+export function resolveEChartMotionOption(
+  option: EChartsOption,
+  motionPreset: "inherit" | "subtle" | "none",
+  reducedMotion: boolean
+) {
+  if (reducedMotion || motionPreset === "none") {
+    return { ...option, animation: false };
+  }
+  if (motionPreset === "inherit") {
+    return option;
+  }
+
+  return {
+    ...option,
+    animation: option.animation ?? true,
+    animationDuration: option.animationDuration ?? 420,
+    animationEasing: option.animationEasing ?? "cubicOut",
+    animationDurationUpdate: option.animationDurationUpdate ?? 260,
+    animationEasingUpdate: option.animationEasingUpdate ?? "cubicOut"
+  };
+}
+
+export function XsEChart({ option, label, className = "", motionPreset = "inherit" }: XsEChartProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
   const chartInstanceRef = useRef<EChartsType | null>(null);
   const latestOptionRef = useRef(option);
+  const latestMotionPresetRef = useRef(motionPreset);
   const reducedMotion = usePrefersReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
 
   latestOptionRef.current = option;
+  latestMotionPresetRef.current = motionPreset;
   reducedMotionRef.current = reducedMotion;
 
   useEffect(() => {
@@ -54,9 +79,11 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
       chart = echarts.init(element, null, { renderer: "canvas" });
       chartInstanceRef.current = chart;
       chart.setOption(
-        reducedMotionRef.current
-          ? { ...latestOptionRef.current, animation: false }
-          : latestOptionRef.current,
+        resolveEChartMotionOption(
+          latestOptionRef.current,
+          latestMotionPresetRef.current,
+          reducedMotionRef.current
+        ),
         setOptionOptions
       );
       element.dataset.echartsReady = "true";
@@ -85,8 +112,8 @@ export function XsEChart({ option, label, className = "" }: XsEChartProps) {
       return;
     }
 
-    chart.setOption(reducedMotion ? { ...option, animation: false } : option, setOptionOptions);
-  }, [option, reducedMotion]);
+    chart.setOption(resolveEChartMotionOption(option, motionPreset, reducedMotion), setOptionOptions);
+  }, [motionPreset, option, reducedMotion]);
 
   return (
     <div className={`xs-echart ${className}`} role="img" aria-label={label}>

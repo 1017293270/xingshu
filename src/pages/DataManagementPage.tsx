@@ -1,7 +1,7 @@
 import { Button, Input, Segmented, Space } from "antd";
 import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import metricKnowledge from "@/assets/data-management-icons/metric-knowledge-total.png";
 import metricDocument from "@/assets/data-management-icons/metric-document-total.png";
 import metricParsed from "@/assets/data-management-icons/metric-parsed-complete.png";
@@ -12,7 +12,7 @@ import kbHr from "@/assets/data-management-icons/kb-human-resources.png";
 import kbMarket from "@/assets/data-management-icons/kb-market-marketing.png";
 import kbTech from "@/assets/data-management-icons/kb-tech-rd.png";
 import kbFinance from "@/assets/data-management-icons/kb-finance-audit.png";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel, XsCountUpText, XsStatusBar } from "@/components/xs";
 import { getKnowledgeBaseStats, listKnowledgeBases } from "@/services/dataAssetService";
 import type { KnowledgeBaseIconId, KnowledgeBaseStatIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
@@ -44,6 +44,7 @@ const assetTabs = [
 
 export function DataManagementPage() {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const statsQuery = useQuery({
     queryKey: ["knowledgeBaseStats"],
     queryFn: getKnowledgeBaseStats
@@ -66,7 +67,8 @@ export function DataManagementPage() {
     isError: knowledgeBasesQuery.isError,
     hasData: knowledgeBasesQuery.data !== undefined
   });
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const isFiltering = query !== deferredQuery;
   const visibleKnowledgeBases = normalizedQuery
     ? knowledgeBases.filter((knowledgeBase) =>
       [knowledgeBase.title, knowledgeBase.description, knowledgeBase.docs, knowledgeBase.updatedAt]
@@ -131,6 +133,8 @@ export function DataManagementPage() {
           tone="info"
           label={normalizedQuery ? "筛选结果" : "汇总"}
           message={statusText}
+          transitionKey={normalizedQuery || "all"}
+          reserveSpace
         />
       </section>
       <XsAsyncPanel
@@ -139,29 +143,39 @@ export function DataManagementPage() {
         emptyDescription="暂无知识库统计。"
         error="知识库统计加载失败，请稍后重试。"
         onRetry={() => void statsQuery.refetch()}
+        loadingVariant="metrics"
+        contentKey={statsQuery.dataUpdatedAt}
       >
         <section className="manage-stats" aria-label="知识库统计">
           {stats.map((stat, index) => (
-            <article className="xs-card xs-card-lift xs-page-enter stat-card" style={{ animationDelay: `${180 + index * 60}ms` }} key={stat.id}>
-              <div><span>{stat.label}</span><strong>{stat.value}</strong></div>
+            <article
+              className="xs-card xs-card-lift stat-card data-stat-card--enter"
+              style={{ animationDelay: `${Math.min(index * 40, 120)}ms` }}
+              key={stat.id}
+            >
+              <div><span>{stat.label}</span><strong><XsCountUpText value={stat.value} durationMs={650} /></strong></div>
               <span className={`asset-image-tile asset-image-tile--${stat.tone}`}><img src={statIconById[stat.iconId]} alt="" /></span>
             </article>
           ))}
         </section>
       </XsAsyncPanel>
       <XsAsyncPanel
-        status={knowledgeBasesStatus}
+        status={isFiltering && knowledgeBasesStatus === "ready" ? "refreshing" : knowledgeBasesStatus}
         empty={visibleKnowledgeBases.length === 0}
         emptyTitle={normalizedQuery ? "未找到匹配的知识库" : undefined}
         emptyDescription={normalizedQuery ? "调整搜索词后再试试。" : "暂无知识库。"}
         error="知识库列表加载失败，请稍后重试。"
         onRetry={() => void knowledgeBasesQuery.refetch()}
+        loadingVariant="cards"
+        contentKey={normalizedQuery || "all"}
+        preserveContentWhileRefreshing
+        staggerLimit={8}
       >
         <section className="kb-grid" aria-label="知识库列表">
           {visibleKnowledgeBases.map((knowledgeBase, index) => (
             <article
-              className="xs-card xs-card-lift xs-page-enter kb-card"
-              style={{ animationDelay: `${260 + index * 60}ms` }}
+              className={`xs-card xs-card-lift kb-card${index < 8 ? " kb-card--enter" : ""}`}
+              style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
               key={knowledgeBase.id}
               aria-label={`知识库：${knowledgeBase.title}`}
             >

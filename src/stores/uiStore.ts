@@ -27,6 +27,7 @@ type UiStoreState = {
   askDataError: string;
   analysisTurns: AnalysisTurnState[];
   onboardingOpen: boolean;
+  dashboardOnboardingOpen: boolean;
 };
 
 type UiStoreActions = {
@@ -53,6 +54,7 @@ type UiStoreActions = {
   clearHomeConversation: () => void;
   setSentStatus: (status: string) => void;
   setOnboardingOpen: (open: boolean) => void;
+  setDashboardOnboardingOpen: (open: boolean) => void;
   resetUiState: () => void;
 };
 
@@ -69,7 +71,8 @@ const initialState: UiStoreState = {
   askDataEvents: [],
   askDataError: "",
   analysisTurns: [],
-  onboardingOpen: false
+  onboardingOpen: false,
+  dashboardOnboardingOpen: false
 };
 
 function createTurnId() {
@@ -303,6 +306,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
   },
   setSentStatus: (status) => set({ sentStatus: status }),
   setOnboardingOpen: (open) => set({ onboardingOpen: open }),
+  setDashboardOnboardingOpen: (open) => set({ dashboardOnboardingOpen: open }),
   resetUiState: () => {
     set(initialState);
     abortAllAskDataControllers();

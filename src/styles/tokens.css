@@ -31,6 +31,13 @@
   --xs-motion-fast: 120ms;
   --xs-motion-base: 180ms;
   --xs-motion-slow: 260ms;
+  --xs-motion-feedback: 120ms;
+  --xs-motion-state: 180ms;
+  --xs-motion-enter: 260ms;
+  --xs-motion-chart: 420ms;
+  --xs-motion-count: 700ms;
+  --xs-motion-stagger: 32ms;
+  --xs-motion-stagger-max: 256ms;
   --xs-motion-thinking: 800ms;
   --xs-motion-skeleton: 1200ms;
   --xs-motion-ambient: 2400ms;

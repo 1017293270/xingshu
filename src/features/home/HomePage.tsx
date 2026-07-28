@@ -177,7 +177,7 @@ export function HomePage() {
       />
 
       {sentStatus ? (
-        <div className="home-page__status" role="status">
+        <div key={sentStatus} className="home-page__status" role="status">
           {sentStatus}
         </div>
       ) : null}

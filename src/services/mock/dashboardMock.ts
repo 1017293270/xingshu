@@ -256,7 +256,6 @@ export const assetSourceValues = [42.3, 24.6, 15.8, 10.2, 7.1] as const;
 
 export const assetOptions: DataAssetChartOptions = {
   donut: {
-    animation: false,
     color: ["#2C75FF", "#75C9F2", "#91DFAD", "#F1DB3D", "#E9A7FF"],
     legend: {
       orient: "vertical",
@@ -274,7 +273,6 @@ export const assetOptions: DataAssetChartOptions = {
     }]
   },
   growth: {
-    animation: false,
     color: ["#1677FF", "#75C6F5"],
     grid: { left: 42, right: 46, top: 36, bottom: 34 },
     legend: { top: 0, left: 70, itemWidth: 18, itemHeight: 4, textStyle: { color: "#294469", fontSize: 12 } },
@@ -307,14 +305,12 @@ export const assetOptions: DataAssetChartOptions = {
     ]
   },
   top: {
-    animation: false,
     grid: { left: 34, right: 42, top: 20, bottom: 34 },
     xAxis: { type: "category", data: [...assetApplicationLabels], axisTick: { show: false }, axisLine: { lineStyle: { color: "#DCE8FB" } }, axisLabel: { color: "#4B5D77", fontSize: 11, align: "right" } },
     yAxis: { type: "value", min: 0, max: 15, interval: 3, splitLine: { lineStyle: { color: "#EDF2FB" } }, axisLabel: { color: "#6B7F9D", align: "right" } },
     series: [{ type: "bar", barWidth: 28, data: [...assetApplicationValues], label: { show: true, position: "right", color: "#081A3A" }, itemStyle: { borderRadius: [4, 4, 0, 0], color: "#2F7CF7" } }]
   },
   source: {
-    animation: false,
     grid: { left: 86, right: 48, top: 10, bottom: 10 },
     xAxis: { type: "value", min: 0, max: 50, show: false },
     yAxis: {

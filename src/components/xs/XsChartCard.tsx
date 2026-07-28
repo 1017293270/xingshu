@@ -20,6 +20,7 @@ export type XsChartCardProps = {
   ariaLabel?: string;
   contained?: boolean;
   maxTableRows?: number;
+  motionPreset?: "inherit" | "subtle" | "none";
 };
 
 function formatCell(value: unknown) {
@@ -52,7 +53,8 @@ export function XsChartCard({
   headingLevel = 3,
   ariaLabel,
   contained = true,
-  maxTableRows = 50
+  maxTableRows = 50,
+  motionPreset = "inherit"
 }: XsChartCardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -122,6 +124,7 @@ export function XsChartCard({
               className={`xs-chart-card__chart ${chartClassName}`.trim()}
               option={option}
               label={chartLabel}
+              motionPreset={motionPreset}
             />
             {chartAside}
           </div>
@@ -130,6 +133,7 @@ export function XsChartCard({
             className={`xs-chart-card__chart ${chartClassName}`.trim()}
             option={option}
             label={chartLabel}
+            motionPreset={motionPreset}
           />
         )}
         {afterChart}
@@ -191,7 +195,12 @@ export function XsChartCard({
                     <X size={20} aria-hidden="true" />
                   </button>
                 </header>
-                <XsEChart className="xs-chart-card__fullscreen-chart" option={option} label={chartLabel} />
+                <XsEChart
+                  className="xs-chart-card__fullscreen-chart"
+                  option={option}
+                  label={chartLabel}
+                  motionPreset={motionPreset}
+                />
               </div>
             </div>,
             document.body

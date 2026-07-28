@@ -26,6 +26,27 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.ai-provider-card::before {
+  position: absolute;
+  inset: 14px auto 14px -3px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--xs-primary);
+  content: "";
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.ai-provider-card.is-active::before {
+  transform: scaleY(1);
 }
 
 .ai-provider-card:not(:disabled):hover,
@@ -68,6 +89,26 @@
 
 .ai-settings-card {
   padding: 28px;
+}
+
+.ai-settings-card > .xs-status-bar-slot {
+  min-height: 60px;
+}
+
+.ai-settings-card__transition {
+  animation: ai-settings-form-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes ai-settings-form-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .ai-settings-card__head {
@@ -141,6 +182,8 @@
 }
 
 .ai-settings-status {
+  width: 100%;
+  min-height: 42px;
   margin-top: 18px;
   padding: 12px 14px;
   border: 1px solid #cfe3ff;

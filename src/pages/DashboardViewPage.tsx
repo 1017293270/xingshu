@@ -23,8 +23,11 @@ export function DashboardViewPage() {
 
   if (runtimeQuery.isLoading) {
     return (
-      <main className="dashboard-fullscreen-view dashboard-fullscreen-view--error">
-        <div className="dashboard-fullscreen-view__error" role="status">正在校验权限并加载实时看板…</div>
+      <main className="dashboard-fullscreen-view dashboard-fullscreen-view--loading">
+        <div className="dashboard-runtime-layout-skeleton" role="status" aria-label="正在校验权限并加载实时看板">
+          <span className="sr-only">正在校验权限并加载实时看板…</span>
+          {Array.from({ length: 7 }, (_, index) => <i key={index} aria-hidden="true" />)}
+        </div>
       </main>
     );
   }

@@ -1,7 +1,7 @@
 import { Button, Tag } from "antd";
 import { ArrowsClockwise, Database, Files, ShieldCheck, UploadSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { XsIconTile, XsStatusBar } from "@/components/xs";
+import { XsCountUpText, XsIconTile, XsStatusBar } from "@/components/xs";
 import cloudDriveIcon from "@/assets/cloud-icons/cloud-drive.png";
 import {
   createMockCloudService,
@@ -37,6 +37,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
   const mountedRef = useRef(false);
   const requestSequenceRef = useRef(0);
   const activeRequestRef = useRef<number | null>(null);
+  const previousOverviewRef = useRef<typeof snapshot.overview | null>(null);
   const isBusy = activeRequestId !== null;
 
   useEffect(() => {
@@ -48,6 +49,10 @@ export function CloudPage({ service }: CloudPageProps = {}) {
       requestSequenceRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    previousOverviewRef.current = snapshot.overview;
+  }, [snapshot.overview]);
 
   const beginRequest = (update: CloudOperationUpdate) => {
     if (activeRequestRef.current !== null) {
@@ -249,15 +254,34 @@ export function CloudPage({ service }: CloudPageProps = {}) {
         <div className="cloud-workbench__metrics" aria-label="云盘概览指标">
           <div>
             <span>本月新增</span>
-            <strong>{snapshot.overview.monthlyAdded}</strong>
+            <strong>
+              <XsCountUpText
+                value={String(snapshot.overview.monthlyAdded)}
+                previousValue={previousOverviewRef.current ? String(previousOverviewRef.current.monthlyAdded) : undefined}
+              />
+            </strong>
           </div>
           <div>
             <span>解析完成率</span>
-            <strong>{snapshot.overview.parsedCompletionRate}%</strong>
+            <strong>
+              <XsCountUpText
+                value={`${snapshot.overview.parsedCompletionRate}%`}
+                previousValue={
+                  previousOverviewRef.current
+                    ? `${previousOverviewRef.current.parsedCompletionRate}%`
+                    : undefined
+                }
+              />
+            </strong>
           </div>
           <div>
             <span>可用空间</span>
-            <strong>{snapshot.overview.availableSpaceLabel}</strong>
+            <strong>
+              <XsCountUpText
+                value={snapshot.overview.availableSpaceLabel}
+                previousValue={previousOverviewRef.current?.availableSpaceLabel}
+              />
+            </strong>
           </div>
         </div>
       </section>
@@ -308,25 +332,29 @@ export function CloudPage({ service }: CloudPageProps = {}) {
           ))}
         </div>
       </section>
-      <XsStatusBar
-        className="cloud-status"
-        tone={statusTone}
-        label={operation?.operation === "upload" ? "上传" : "同步"}
-        message={operation ? (
-          <>
-            {operation.message}
-            {isBusy ? (
-              <progress
-                aria-label={operation.operation === "upload" ? "文件上传进度" : "知识库同步进度"}
-                max={100}
-                value={operation.progress}
-              >
-                {operation.progress}%
-              </progress>
-            ) : null}
-          </>
-        ) : ""}
-      />
+      <div className="cloud-status-slot">
+        <XsStatusBar
+          className="cloud-status"
+          tone={statusTone}
+          label={operation?.operation === "upload" ? "上传" : "同步"}
+          message={operation ? (
+            <>
+              {operation.message}
+              {isBusy ? (
+                <progress
+                  aria-label={operation.operation === "upload" ? "文件上传进度" : "知识库同步进度"}
+                  max={100}
+                  value={operation.progress}
+                >
+                  {operation.progress}%
+                </progress>
+              ) : null}
+            </>
+          ) : ""}
+          transitionKey={operation ? `${operation.operation}:${operation.phase}` : "idle"}
+          reserveSpace
+        />
+      </div>
     </PageFrame>
   );
 }

@@ -221,6 +221,29 @@
     transform var(--xs-motion-base) var(--xs-motion-ease-out),
     box-shadow var(--xs-motion-base) var(--xs-motion-ease-out),
     border-color var(--xs-motion-base) var(--xs-motion-ease-out);
+  animation: dashboard-card-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+.dashboard-card.is-archiving {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.99);
+  pointer-events: none;
+}
+
+.dashboard-card.is-copying {
+  border-color: #aacdff;
+}
+
+@keyframes dashboard-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dashboard-card:hover,
@@ -294,6 +317,10 @@
   color: var(--xs-text-3);
   font-size: 12px;
   font-weight: 600;
+  transition:
+    color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .dashboard-card__status.is-published {
@@ -390,6 +417,20 @@
   background: var(--xs-surface);
   box-shadow: 0 16px 36px rgba(8, 26, 58, 0.14);
   list-style: none;
+  transform-origin: top right;
+  animation: dashboard-menu-enter var(--xs-motion-feedback) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes dashboard-menu-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .dashboard-card__menu button {
@@ -480,6 +521,20 @@
   border-top: 1px dashed var(--xs-border-strong);
   border-radius: 0 0 calc(var(--xs-radius-card) - 1px) calc(var(--xs-radius-card) - 1px);
   background: var(--xs-surface-soft);
+  transform-origin: top;
+  animation: dashboard-versions-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes dashboard-versions-enter {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100%);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+  }
 }
 
 .dashboard-card__versions-title,
@@ -815,10 +870,14 @@
 @media (prefers-reduced-motion: reduce) {
   .dashboard-card,
   .dashboard-card__actions,
-  .dashboard-card__action {
+  .dashboard-card__action,
+  .dashboard-card__status {
     transition: none;
   }
 
+  .dashboard-card,
+  .dashboard-card__menu,
+  .dashboard-card__versions,
   .dashboard-list__skeleton,
   .dashboard-list__state--empty,
   .dashboard-list__empty-orbit {

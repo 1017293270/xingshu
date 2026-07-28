@@ -1,5 +1,5 @@
 import { Button, Form, Input } from "antd";
-import { ChartLineUp, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User, WarningCircle } from "@phosphor-icons/react";
+import { ChartLineUp, Check, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/brand/xingshu-logo-transparent.png";
@@ -55,6 +55,7 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [isLoginComplete, setIsLoginComplete] = useState(false);
   const loginAbortRef = useRef<AbortController | null>(null);
   const locationState = location.state as { from?: unknown; sessionExpired?: boolean } | null;
   const returnPath = getSafeReturnPath(locationState?.from);
@@ -75,6 +76,7 @@ export function LoginPage() {
     loginAbortRef.current = controller;
     setIsSubmitting(true);
     setFormError("");
+    setIsLoginComplete(false);
     setStatusMessage("正在校验企业账号");
 
     try {
@@ -98,6 +100,10 @@ export function LoginPage() {
 
       setSession(user, firstSpace.id);
       setStatusMessage(`已进入 ${firstSpace.spaceName}`);
+      setIsLoginComplete(true);
+      if (import.meta.env.MODE !== "test") {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+      }
       navigate(returnPath, { replace: true });
     } catch (error) {
       if (loginAbortRef.current !== controller) {
@@ -105,6 +111,7 @@ export function LoginPage() {
       }
 
       clearAuthState();
+      setIsLoginComplete(false);
 
       if (error instanceof DataHubServiceError && error.code === "REQUEST_CANCELLED") {
         setStatusMessage("已取消登录");
@@ -251,9 +258,10 @@ export function LoginPage() {
                 className="login-panel__submit"
                 htmlType="submit"
                 loading={isSubmitting}
+                icon={isLoginComplete ? <Check size={18} weight="bold" /> : undefined}
                 type="primary"
               >
-                登录
+                {isLoginComplete ? "登录成功" : "登录"}
               </Button>
 
               <button className="login-panel__link" type="button" onClick={handleForgotPassword}>
@@ -262,7 +270,7 @@ export function LoginPage() {
             </Form>
 
             {statusMessage ? (
-              <div className="login-panel__status" role="status">
+              <div key={statusMessage} className="login-panel__status" role="status">
                 <span>{statusMessage}</span>
                 {isSubmitting ? (
                   <button type="button" onClick={handleCancelLogin}>

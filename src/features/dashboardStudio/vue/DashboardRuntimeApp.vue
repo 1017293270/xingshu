@@ -105,12 +105,13 @@ function bindingForWidget(widget: DashboardWidget) {
       <div class="runtime-canvas-stage" :style="canvasStageStyle">
         <div class="runtime-canvas" :style="canvasStyle">
           <DashboardWidgetCard
-            v-for="widget in visibleWidgets"
+            v-for="(widget, index) in visibleWidgets"
             :key="widget.id"
             :widget="widget"
             :binding="bindingForWidget(widget)"
             :selected="false"
             readonly
+            :enter-index="index"
           />
           <div v-if="visibleWidgets.length === 0" class="runtime-empty">
             <strong>暂无可见组件</strong>
@@ -287,6 +288,12 @@ function bindingForWidget(widget: DashboardWidget) {
   border-radius: 14px;
   box-shadow: 0 16px 32px rgba(24, 77, 145, .08);
   transform-origin: top left;
+  animation: runtime-canvas-enter 180ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+
+@keyframes runtime-canvas-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .is-fullscreen .runtime-canvas {
@@ -334,5 +341,9 @@ function bindingForWidget(widget: DashboardWidget) {
 
 .runtime-unavailable h1 { color: #f8fafc; font-size: 24px; }
 .runtime-unavailable p { color: rgba(219, 234, 254, .74); font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-canvas { animation: none; }
+}
 
 </style>

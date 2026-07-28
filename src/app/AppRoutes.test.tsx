@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
-import { AppRoutes } from "./AppRoutes";
+import { AppRoutes, resolveRouteFallbackVariant } from "./AppRoutes";
 import { expireDataHubSession } from "@/services/dataHubSession";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -41,6 +41,15 @@ function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
 describe("AppRoutes", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("maps routes to layout-matched loading fallbacks", () => {
+    expect(resolveRouteFallbackVariant("/history")).toBe("rows");
+    expect(resolveRouteFallbackVariant("/data-dashboard")).toBe("metrics");
+    expect(resolveRouteFallbackVariant("/settings/ai")).toBe("form");
+    expect(resolveRouteFallbackVariant("/ask-data")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing")).toBe("cards");
   });
 
   const routeCases: Array<[string, string | RegExp, string]> = [
