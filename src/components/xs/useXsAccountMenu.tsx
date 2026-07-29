@@ -1,4 +1,4 @@
-import { GearSix, MonitorPlay, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
+import { MonitorPlay, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import { logoutDataHub } from "@/services/dataHubAuthService";
@@ -32,11 +32,6 @@ export function useXsAccountMenu(onNavigate?: () => void) {
       icon: <MonitorPlay size={17} />,
       label: "大屏引导"
     },
-    {
-      key: "ai-settings",
-      icon: <GearSix size={17} />,
-      label: "AI 配置"
-    },
     { type: "divider" },
     {
       key: "logout",
@@ -56,12 +51,6 @@ export function useXsAccountMenu(onNavigate?: () => void) {
     if (key === "dashboard-onboarding") {
       setDashboardOnboardingOpen(true);
       onNavigate?.();
-      return;
-    }
-
-    if (key === "ai-settings") {
-      onNavigate?.();
-      navigate("/settings/ai");
       return;
     }
 

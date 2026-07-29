@@ -46,7 +46,7 @@ describe("AppRoutes", () => {
   it("maps routes to layout-matched loading fallbacks", () => {
     expect(resolveRouteFallbackVariant("/history")).toBe("rows");
     expect(resolveRouteFallbackVariant("/data-dashboard")).toBe("metrics");
-    expect(resolveRouteFallbackVariant("/settings/ai")).toBe("form");
+    expect(resolveRouteFallbackVariant("/settings/ai")).toBe("cards");
     expect(resolveRouteFallbackVariant("/ask-data")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
     expect(resolveRouteFallbackVariant("/writing")).toBe("cards");
@@ -230,6 +230,20 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByRole("heading", { name: /让每一次问数.*都有据可依/ })).toBeInTheDocument();
     expect(document.title).toBe("登录 · 星数");
+  });
+
+  it("hides the local AI configuration from the account menu and direct routes", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderRoute("/");
+
+    await user.click(screen.getByRole("button", { name: /账户菜单/ }));
+    expect(screen.queryByText("AI 配置")).not.toBeInTheDocument();
+
+    unmount();
+    renderRoute("/settings/ai");
+
+    expect(await screen.findByRole("heading", { name: /您好，zhangsan/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("AI 配置表单")).not.toBeInTheDocument();
   });
 
   it("submits a table generation prompt through the mock service", async () => {

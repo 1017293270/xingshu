@@ -6,17 +6,17 @@ import type {
   AiChartPlanResult,
   AiChartTableSummary,
   AiChartType,
-  AiProviderConfig,
   GeneratedChartSpec
 } from "@/types/aiChart";
 import type { DataHubTableResult } from "@/types/dataHub";
+import {
+  requestDataHubAiChartPlan,
+  type DataHubAiChartPlanner
+} from "@/services/dataHubAiChartService";
 import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
 
-type AiFetch = typeof fetch;
-
 type PlanAiChartOptions = {
-  providerConfig?: AiProviderConfig | null;
-  fetcher?: AiFetch;
+  dataHubPlanner?: DataHubAiChartPlanner;
 };
 
 const supportedChartTypes: AiChartType[] = ["bar", "line", "pie"];
@@ -140,7 +140,9 @@ function isRecoverableAiPlanError(error: unknown) {
     return false;
   }
 
-  return /AI 没有返回可解析|AI 返回格式不正确|AI 没有返回图表判断内容/i.test(error.message);
+  return /AI 没有返回可解析|AI 返回格式不正确|AI 没有返回图表判断内容|DataHub 模型返回的图表规划无效/i.test(
+    error.message
+  );
 }
 
 function getLocalGuardResult(summary: AiChartPlanRequestSummary): AiChartPlanResult | null {
@@ -172,23 +174,9 @@ function getLocalGuardResult(summary: AiChartPlanRequestSummary): AiChartPlanRes
   return null;
 }
 
-function joinProviderUrl(baseUrl: string, path: string) {
-  return `${baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function stripModelText(text: string) {
-  return text
-    .replace(/<think>[\s\S]*?<\/think>/g, "")
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-}
-
-function parseAiPlan(text: string): AiChartPlanResult {
-  const parsed = JSON.parse(stripModelText(text)) as unknown;
-
+function normalizeAiPlan(parsed: unknown): AiChartPlanResult {
   if (!isRecord(parsed)) {
-    throw new Error("AI 没有返回可解析的图表判断");
+    throw new Error("DataHub 模型返回的图表规划无效");
   }
 
   const chartType = typeof parsed.chartType === "string" && supportedChartTypes.includes(parsed.chartType as AiChartType)
@@ -215,77 +203,6 @@ function parseAiPlan(text: string): AiChartPlanResult {
   };
 }
 
-async function requestRemoteAiPlan(
-  summary: AiChartPlanRequestSummary,
-  config: AiProviderConfig,
-  fetcher: AiFetch
-): Promise<AiChartPlanResult> {
-  const response = await fetcher(joinProviderUrl(config.baseUrl, "/chat/completions"), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify({
-      model: config.model,
-      temperature: config.temperature,
-      max_completion_tokens: 800,
-      messages: [
-        {
-          role: "system",
-          content:
-            "你是企业数据产品的图表规划器。只返回严格 JSON，不要 Markdown。判断表格结果能否生成图表，并从 bar、line、pie 中选择。不要编造字段。"
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task:
-              "基于 question、columns、sampleRows、totalRows 判断能否图表化。单个具体数字或只有一行通常不可图表化。字段必须来自 columns.key。",
-            outputSchema: {
-              chartable: "boolean",
-              reason: "string",
-              chartType: "bar | line | pie",
-              allowedTypes: ["bar", "line", "pie"],
-              title: "string",
-              tableIndex: "number, 必须来自 data.tables[].tableIndex",
-              dimensionKey: "string",
-              metricKeys: ["string"]
-            },
-            data: summary
-          })
-        }
-      ]
-    })
-  });
-  const text = await response.text();
-  const payload = text ? (JSON.parse(text) as unknown) : undefined;
-
-  if (!response.ok) {
-    const message =
-      payload && isRecord(payload) && typeof payload.message === "string"
-        ? payload.message
-        : response.statusText || "AI 图表判断失败";
-    throw new Error(message);
-  }
-
-  if (!isRecord(payload) || !Array.isArray(payload.choices)) {
-    throw new Error("AI 返回格式不正确");
-  }
-
-  const firstChoice = payload.choices[0];
-  const content =
-    isRecord(firstChoice) && isRecord(firstChoice.message) && typeof firstChoice.message.content === "string"
-      ? firstChoice.message.content
-      : "";
-
-  if (!content) {
-    throw new Error("AI 没有返回图表判断内容");
-  }
-
-  return parseAiPlan(content);
-}
-
 export async function planAiChart(
   request: AiChartPlanRequest,
   options: PlanAiChartOptions = {}
@@ -297,12 +214,9 @@ export async function planAiChart(
     return localGuard;
   }
 
-  if (!options.providerConfig?.apiKey) {
-    return { chartable: false, reason: "请先配置 AI 供应商和 API Key。" };
-  }
-
   try {
-    return await requestRemoteAiPlan(summary, options.providerConfig, options.fetcher ?? fetch);
+    const plan = await (options.dataHubPlanner ?? requestDataHubAiChartPlan)(summary);
+    return normalizeAiPlan(plan);
   } catch (error) {
     if (isRecoverableAiPlanError(error)) {
       const fallbackPlan = createLocalChartPlan(summary, "AI 返回内容不完整，已使用本地规则生成图表建议。");

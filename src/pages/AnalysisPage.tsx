@@ -39,7 +39,6 @@ import {
 import {
   createDataHubAskTurn
 } from "@/services/dataHubAskDataPresenter";
-import { loadAiProviderConfig } from "@/services/aiProviderConfigService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import { useUiStore } from "@/stores/uiStore";
@@ -1012,20 +1011,11 @@ export function AnalysisPage() {
   };
 
   const handleGenerateAiChart = async (turnId: string, question: string, tables: DataHubTableResult[]) => {
-    const config = loadAiProviderConfig();
-
-    if (!config?.apiKey) {
-      const message = "请先配置 AI 供应商和 API Key";
-      setAiChartStates((current) => ({ ...current, [turnId]: { status: "not-chartable", message } }));
-      setWorkflowStatus(message);
-      return;
-    }
-
     setAiChartStates((current) => ({ ...current, [turnId]: { status: "loading" } }));
-    setWorkflowStatus("AI 正在判断能否生成图表");
+    setWorkflowStatus("DataHub 正在使用编排 Agent 模型规划图表");
 
     try {
-      const plan = await planAiChart({ question, tables }, { providerConfig: config });
+      const plan = await planAiChart({ question, tables });
       const spec = buildGeneratedChartSpec(plan, tables);
 
       if (!plan.chartable || !spec) {

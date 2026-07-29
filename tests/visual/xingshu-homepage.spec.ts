@@ -161,8 +161,7 @@ const pages: SmokePage[] = [
     heading: "数据资产管理",
     readyText: "财务审计知识库",
     charts: 0
-  },
-  { slug: "ai-settings", path: "/settings/ai", heading: "AI 配置", charts: 0 }
+  }
 ];
 
 async function settleResponsiveLayout(page: Page) {
@@ -857,11 +856,12 @@ test("mobile navigation reaches every product destination and account route", as
   await page.getByRole("button", { name: "打开主导航" }).click();
   drawer = page.getByRole("dialog", { name: "星数主导航" });
   await drawer.getByRole("button", { name: "移动端账户菜单" }).click();
-  await expect(page.getByRole("menuitem", { name: /AI 配置/ })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /AI 配置/ })).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: /退出登录/ })).toBeVisible();
-  await page.getByRole("menuitem", { name: /AI 配置/ }).click();
-  await expect(page).toHaveURL(/\/settings\/ai$/);
-  await expect(page.getByRole("heading", { name: "AI 配置", level: 1 })).toBeVisible();
+
+  await page.goto("/settings/ai");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "您好，张三", level: 1 })).toBeVisible();
 });
 
 test("reduced motion keeps feedback visible while suppressing nonessential motion", async ({ page }) => {

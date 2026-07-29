@@ -47,7 +47,6 @@ export const routeTitles: Record<string, string> = {
   "/cloud": "我的云盘",
   "/data-dashboard": "数据资产看板",
   "/data-management": "数据资产管理",
-  "/settings/ai": "AI 配置",
   "/login": "登录",
   "/welcome": "欢迎"
 };

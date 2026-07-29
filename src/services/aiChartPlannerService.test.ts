@@ -19,7 +19,7 @@ function table(columns: DataHubTableResult["columns"], rows: Record<string, unkn
 
 describe("aiChartPlannerService", () => {
   it("rejects single scalar results before calling AI", async () => {
-    const fetcher = vi.fn(async () => new Response());
+    const dataHubPlanner = vi.fn();
     const result = await planAiChart(
       {
         question: "咨询有多少条",
@@ -27,23 +27,14 @@ describe("aiChartPlannerService", () => {
           table([{ key: "count", title: "咨询数", type: "number" }], [{ count: 716 }])
         ]
       },
-      {
-        providerConfig: {
-          provider: "minimax",
-          baseUrl: "https://api.minimaxi.com/v1",
-          apiKey: "key",
-          model: "MiniMax-M3",
-          temperature: 0.2
-        },
-        fetcher: fetcher as unknown as typeof fetch
-      }
+      { dataHubPlanner }
     );
 
     expect(result).toMatchObject({
       chartable: false,
       reason: "结果只有一个具体数值，不适合生成图表。"
     });
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(dataHubPlanner).not.toHaveBeenCalled();
   });
 
   it("summarizes only schema, samples and counts for AI", () => {
@@ -85,41 +76,20 @@ describe("aiChartPlannerService", () => {
         { income_group: "高收入", ratio: 25 }
       ]
     );
-    const fetcher = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  chartable: true,
-                  reason: "包含分类维度和占比指标，适合饼图。",
-                  chartType: "pie",
-                  allowedTypes: ["pie", "bar"],
-                  title: "收入人群占比",
-                  dimensionKey: "income_group",
-                  metricKeys: ["ratio"]
-                })
-              }
-            }
-          ]
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
-    );
+    const dataHubPlanner = vi.fn(async () => ({
+      chartable: true,
+      reason: "包含分类维度和占比指标，适合饼图。",
+      chartType: "pie" as const,
+      allowedTypes: ["pie" as const, "bar" as const],
+      title: "收入人群占比",
+      tableIndex: 0,
+      dimensionKey: "income_group",
+      metricKeys: ["ratio"]
+    }));
 
     const plan = await planAiChart(
       { question: "每个收入人群占比多少", tables: [dataTable] },
-      {
-        providerConfig: {
-          provider: "minimax",
-          baseUrl: "https://api.minimaxi.com/v1",
-          apiKey: "key",
-          model: "MiniMax-M3",
-          temperature: 0.2
-        },
-        fetcher: fetcher as unknown as typeof fetch
-      }
+      { dataHubPlanner }
     );
     const spec = buildGeneratedChartSpec(plan, [dataTable]);
     const option = buildGeneratedChartOption(spec!, "pie");
@@ -290,33 +260,13 @@ describe("aiChartPlannerService", () => {
       ),
       tableIndex: 1
     };
-    const fetcher = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: "{\"chartable\":true,\"reason\":\"包含两张结果表"
-              }
-            }
-          ]
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
-    );
+    const dataHubPlanner = vi.fn(async () => {
+      throw new Error("DataHub 模型返回的图表规划无效");
+    });
 
     const plan = await planAiChart(
       { question: "这里有两个结果表，生成图表", tables: [firstTable, secondTable] },
-      {
-        providerConfig: {
-          provider: "minimax",
-          baseUrl: "https://api.minimaxi.com/v1",
-          apiKey: "key",
-          model: "MiniMax-M3",
-          temperature: 0.2
-        },
-        fetcher: fetcher as unknown as typeof fetch
-      }
+      { dataHubPlanner }
     );
     const spec = buildGeneratedChartSpec(plan, [firstTable, secondTable]);
 

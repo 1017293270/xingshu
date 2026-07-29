@@ -27,10 +27,6 @@ const DataManagementPage = lazy(() =>
 const CloudPage = lazy(() => import("@/pages/CloudPage").then((module) => ({ default: module.CloudPage })));
 const WelcomePage = lazy(() => import("@/pages/WelcomePage").then((module) => ({ default: module.WelcomePage })));
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
-const AiSettingsPage = lazy(() =>
-  import("@/pages/AiSettingsPage").then((module) => ({ default: module.AiSettingsPage }))
-);
-
 function AppRouteTitle() {
   const location = useLocation();
 
@@ -50,9 +46,6 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
   }
   if (pathname === "/data-dashboard" || pathname === "/data-management") {
     return "metrics";
-  }
-  if (pathname === "/settings/ai") {
-    return "form";
   }
   if (pathname === "/ask-data" || pathname === "/analysis" || pathname === "/dashboard-editor") {
     return "workspace";
@@ -83,7 +76,6 @@ export function AppRoutes() {
             <Route path="/table" element={<TablePage />} />
             <Route path="/writing" element={<WritingPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/settings/ai" element={<AiSettingsPage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />
