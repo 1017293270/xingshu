@@ -68,7 +68,7 @@ describe("AI chart actions", () => {
       )
     );
     seedRatioResult();
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.click(screen.getByRole("button", { name: "AI 生成图表" }));
 
@@ -104,7 +104,7 @@ describe("AI chart actions", () => {
       )
     );
     seedRatioResult();
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.click(screen.getByRole("button", { name: "AI 生成图表" }));
 
@@ -177,7 +177,7 @@ describe("AI chart actions", () => {
       }
     });
     store.completeAskDataRun(runId);
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.click(screen.getByRole("button", { name: "AI 生成图表" }));
 

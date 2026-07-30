@@ -53,29 +53,37 @@ describe("useUiStore", () => {
     expect(useUiStore.getState().askDataError).toBe("问数连接失败");
   });
 
-  it("captures the data-hub session id from stream events", () => {
+  it("pre-generates the main session and does not replace it from stream events", () => {
     const runId = useUiStore.getState().startAskDataRun("统计咨询量", null);
+    const mainSessionId = useUiStore.getState().activeAnalysisSessionId;
     useUiStore.getState().appendAskDataEvent(runId, {
       type: "routing_intent",
-      sessionId: "session-123",
+      sessionId: "child-session-123",
+      globalSessionId: mainSessionId || undefined,
+      parentSessionId: mainSessionId || undefined,
       data: { intent: "ASK_DATA" }
     });
 
-    expect(useUiStore.getState().activeAnalysisSessionId).toBe("session-123");
+    expect(mainSessionId).toMatch(/^session-/);
+    expect(useUiStore.getState().activeAnalysisSessionId).toBe(mainSessionId);
   });
 
   it("keeps the current data-hub session when asking a follow-up", () => {
     const firstRunId = useUiStore.getState().startAskDataRun("统计咨询量", null);
+    const firstTurn = useUiStore.getState().analysisTurns.find((turn) => turn.id === firstRunId);
     useUiStore.getState().appendAskDataEvent(firstRunId, {
       type: "done",
-      sessionId: "session-123",
+      sessionId: firstTurn?.sessionId || undefined,
       data: { summary: "完成" }
     });
     useUiStore.getState().completeAskDataRun(firstRunId);
 
-    useUiStore.getState().startAskDataRun("按社区拆分");
+    const secondRunId = useUiStore.getState().startAskDataRun("按社区拆分");
+    const secondTurn = useUiStore.getState().analysisTurns.find((turn) => turn.id === secondRunId);
 
-    expect(useUiStore.getState().activeAnalysisSessionId).toBe("session-123");
+    expect(useUiStore.getState().activeAnalysisSessionId).toBe(firstTurn?.sessionId);
+    expect(secondTurn?.sessionId).toBe(firstTurn?.sessionId);
+    expect(secondTurn?.chatId).not.toBe(firstTurn?.chatId);
     expect(useUiStore.getState().activeAnalysisQuestion).toBe("按社区拆分");
     expect(useUiStore.getState().analysisTurns.map((turn) => turn.question)).toEqual(["统计咨询量", "按社区拆分"]);
   });

@@ -392,6 +392,152 @@ describe("dashboard designer motion states", () => {
     expect(await screen.findByText("固定版本")).toBeInTheDocument();
   });
 
+  it("prefers the richest chartable output when orchestration returns an empty first result", async () => {
+    const schema = createBlankDashboard({ title: "编排收藏输出选择测试" });
+    const record: DashboardRecord = {
+      id: schema.id,
+      schema,
+      status: "draft",
+      revision: 1,
+      createdAt: schema.createdAt,
+      updatedAt: schema.updatedAt
+    };
+    const detailColumns = [
+      { columnId: "count-id", key: "count", label: "记录数", type: "number" },
+      { columnId: "contract-no-id", key: "contractNo", label: "合同编号", type: "string" },
+      { columnId: "contract-name-id", key: "contractName", label: "合同名称", type: "string" },
+      { columnId: "contract-year-id", key: "contractYear", label: "合同年份", type: "string" },
+      { columnId: "contract-amount-id", key: "contractAmount", label: "合同金额(万元)", type: "number" }
+    ];
+    const asset: QueryAsset = {
+      id: "asset-orchestration-contracts",
+      name: "2023年有哪些合同",
+      originalQuestion: "2023年有哪些合同",
+      resolvedQuestion: "查询 2023 年合同明细",
+      datasourceId: 2000001,
+      ownerUserId: 2,
+      visibility: "PRIVATE",
+      stableVersionId: "version-orchestration-contracts",
+      status: "ACTIVE",
+      stableVersion: {
+        id: "version-orchestration-contracts",
+        versionNo: 1,
+        resolvedQuestion: "查询 2023 年合同明细",
+        engine: "CUBE",
+        parameters: [],
+        outputs: [
+          { outputKey: "output_001", label: "空结果", columns: detailColumns },
+          {
+            outputKey: "output_002",
+            label: "年度汇总",
+            columns: [
+              { columnId: "summary-year-id", key: "contractYear", label: "合同年份", type: "string" },
+              { columnId: "summary-count-id", key: "count", label: "记录数", type: "number" }
+            ]
+          },
+          { outputKey: "output_003", label: "合同明细", columns: detailColumns }
+        ],
+        schemaHash: "orchestration-contracts-schema",
+        status: "VALIDATED",
+        createdAt: "2026-07-29T00:00:00.000Z"
+      },
+      createdAt: "2026-07-29T00:00:00.000Z",
+      updatedAt: "2026-07-29T00:00:00.000Z"
+    };
+    const detailRows = Array.from({ length: 24 }, (_, index) => ({
+      count: 1,
+      contractNo: `szsz-2023-${String(index + 1).padStart(4, "0")}`,
+      contractName: `合同 ${index + 1}`,
+      contractYear: "2023年",
+      contractAmount: String(100 + index)
+    }));
+    const preview: QueryExecution = {
+      id: "execution-orchestration-contracts",
+      assetId: asset.id,
+      versionId: asset.stableVersionId,
+      status: "SUCCESS",
+      triggerType: "PREVIEW",
+      durationMs: 8,
+      createdAt: "2026-07-29T08:00:00.000Z",
+      outputs: [
+        {
+          outputKey: "output_001",
+          columns: detailColumns,
+          rows: [],
+          totalRows: 0
+        },
+        {
+          outputKey: "output_002",
+          columns: asset.stableVersion!.outputs[1]!.columns,
+          rows: [
+            { contractYear: "2023年", count: 24 },
+            { contractYear: "2024年", count: 34 },
+            { contractYear: "2025年", count: 18 }
+          ],
+          totalRows: 3
+        },
+        {
+          outputKey: "output_003",
+          columns: detailColumns,
+          rows: detailRows,
+          totalRows: detailRows.length
+        }
+      ]
+    };
+    const unavailable = async () => {
+      throw new Error("not used");
+    };
+    const sameNameAsset = {
+      ...asset,
+      id: "asset-orchestration-contracts-older",
+      stableVersionId: "version-orchestration-contracts-older"
+    };
+    const dataActions: DashboardDesignerDataActions = {
+      listAssets: vi.fn(async () => [sameNameAsset, asset]),
+      previewAsset: vi.fn(async (assetId) => {
+        if (assetId !== asset.id) throw new Error("previewed the wrong same-name asset");
+        return preview;
+      }),
+      reaskAsset: vi.fn(unavailable),
+      promoteVersion: vi.fn(unavailable),
+      changeAssetVisibility: vi.fn(unavailable),
+      refreshModule: vi.fn(unavailable),
+      upgradeModule: vi.fn(unavailable),
+      saveSchedule: vi.fn(unavailable),
+      planLayout: vi.fn(async () => ({ source: "LOCAL" as const, intents: [], message: "本地排版" }))
+    };
+    const onChange = vi.fn<(nextSchema: DashboardSchema) => void>();
+    host = document.createElement("div");
+    document.body.append(host);
+    handle = mountDashboardDesigner(host, {
+      record,
+      initialResourcePanel: "assets",
+      initialAssetId: asset.id,
+      saveDraft: vi.fn(async () => record),
+      publishDashboard: vi.fn(async () => record),
+      dataActions,
+      exit: vi.fn(),
+      onChange
+    });
+
+    const outputSelect = await screen.findByRole("combobox", { name: "结果表" });
+    await waitFor(() => expect(outputSelect).toHaveValue("output_003"));
+    expect(screen.getByText("24 行")).toBeInTheDocument();
+    expect(dataActions.previewAsset).toHaveBeenCalledWith(
+      asset.id,
+      expect.objectContaining({ versionId: asset.stableVersionId })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "添加图表" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const nextSchema = onChange.mock.calls.at(-1)![0];
+    const binding = Object.values(nextSchema.dataBindings)[0];
+    expect(binding?.sourceRef?.outputKey).toBe("output_003");
+    expect(binding?.status).toBe("success");
+    expect(binding?.table.totalRows).toBe(24);
+  });
+
   it("previews and applies a tidy AI layout from the toolbar", async () => {
     const schema = createBlankDashboard({ title: "排版测试大屏" });
     schema.widgets.push(

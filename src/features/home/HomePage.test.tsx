@@ -162,7 +162,7 @@ describe("HomePage", () => {
 
   it.each([
     ["智能问数", "/ask-data"],
-    ["知识问答", "/data-management"],
+    ["知识问答", "/ask-knowledge"],
     ["文档助手", "/cloud"],
     ["报表生成", "/dashboard"],
     ["智能写作", "/writing"],
@@ -215,8 +215,9 @@ describe("HomePage", () => {
 
     await user.type(commandInput, "生成经营日报{Enter}");
 
-    expect(screen.getByRole("status")).toHaveTextContent("已提交问数：生成经营日报");
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
+    expect(screen.getByRole("status")).toHaveTextContent("已提交智能编排：生成经营日报");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-agent");
+    expect(useUiStore.getState().analysisTurns.at(-1)?.chatMode).toBe("agent");
   });
 
   it("hides upload and reports unsupported voice input", async () => {

@@ -37,6 +37,7 @@ function renderEditorPage(path = "/dashboard-editor") {
         <Routes>
           <Route path="/dashboard-editor" element={<DashboardEditorPage />} />
           <Route path="/analysis" element={<div>问数目标页</div>} />
+          <Route path="/ask-agent" element={<div>智能编排目标页</div>} />
           <Route path="/dashboard" element={<div>大屏库目标页</div>} />
         </Routes>
       </MemoryRouter>
@@ -81,6 +82,21 @@ describe("DashboardEditorPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "返回编辑来源" }));
     expect(await screen.findByText("问数目标页")).toBeInTheDocument();
+  });
+
+  it("keeps an orchestration favorite selected and returns to the agent workspace", async () => {
+    const user = userEvent.setup();
+
+    renderEditorPage(
+      `/dashboard-editor?source=favorites&asset=${encodeURIComponent("asset-agent-result")}&returnTo=${encodeURIComponent("/ask-agent")}`
+    );
+
+    const designer = await screen.findByLabelText("内部 Vue 大屏设计器");
+    expect(designer).toHaveAttribute("data-resource-panel", "assets");
+    expect(designer).toHaveAttribute("data-asset-id", "asset-agent-result");
+
+    await user.click(screen.getByRole("button", { name: "返回编辑来源" }));
+    expect(await screen.findByText("智能编排目标页")).toBeInTheDocument();
   });
 
   it("offers a safe recovery path for a missing draft", async () => {

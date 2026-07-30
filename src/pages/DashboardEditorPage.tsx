@@ -24,7 +24,9 @@ import {
 import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
 
 function resolveEditorReturnPath(value: string | null) {
-  return value === "/analysis" ? value : "/dashboard";
+  return value === "/analysis" || value === "/ask-agent" || value === "/ask-data"
+    ? value
+    : "/dashboard";
 }
 
 export function DashboardEditorPage() {
@@ -58,7 +60,7 @@ export function DashboardEditorPage() {
       const nextParams = new URLSearchParams({ draft: record.id });
       if (openFavoriteAssets) nextParams.set("source", "favorites");
       if (favoriteAssetId) nextParams.set("asset", favoriteAssetId);
-      if (returnPath === "/analysis") nextParams.set("returnTo", returnPath);
+      if (returnPath !== "/dashboard") nextParams.set("returnTo", returnPath);
       navigate(`/dashboard-editor?${nextParams.toString()}`, { replace: true });
     }
   });

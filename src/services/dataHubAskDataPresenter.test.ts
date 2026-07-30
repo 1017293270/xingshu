@@ -137,4 +137,222 @@ describe("dataHubAskDataPresenter", () => {
     expect(table?.totalRows).toBe(1);
     expect(table?.rows[0]).toEqual({ 社区: "六角井社区", 咨询数: 128 });
   });
+
+  it("presents new ask events with real thinking, text, table, and artifacts", () => {
+    const events: DataHubStreamEvent[] = [
+      {
+        agentName: "问数智能体",
+        type: "thinking",
+        data: "正在读取经营指标。",
+        isThinking: true,
+        replyId: "reply-1",
+        modelCallIndex: 1
+      },
+      {
+        agentName: "问数智能体",
+        type: "text",
+        data: "本月收入为 **128 万元**。",
+        replyId: "reply-2",
+        modelCallIndex: 2
+      },
+      {
+        type: "data_source_selected",
+        data: { datasourceId: 8, datasourceName: "经营分析库" }
+      },
+      {
+        type: "table",
+        data: {
+          annotation: {},
+          data: [{ month: "7月", revenue: 128 }]
+        }
+      },
+      {
+        type: "ask_artifact",
+        data: {
+          askRunId: "ask-run-new",
+          resolvedQuestion: "统计本月收入",
+          canFavorite: true
+        }
+      },
+      {
+        type: "done",
+        data: {},
+        finished: true
+      }
+    ];
+
+    const turn = createDataHubAskTurn("本月收入是多少？", events, "done", "", {
+      sessionId: "session-main",
+      chatId: "chat-main"
+    });
+
+    expect(turn.sessionId).toBe("session-main");
+    expect(turn.chatId).toBe("chat-main");
+    expect(turn.thinkingContent).toBe("正在读取经营指标。");
+    expect(turn.assistantContent).toBe("本月收入为 **128 万元**。");
+    expect(turn.dataSources).toEqual([{ datasourceId: 8, datasourceName: "经营分析库" }]);
+    expect(turn.tableResults[0].rows).toEqual([{ month: "7月", revenue: 128 }]);
+    expect(turn.artifact).toEqual({
+      askRunId: "ask-run-new",
+      resolvedQuestion: "统计本月收入",
+      canFavorite: true
+    });
+    expect(turn.reactSteps).toHaveLength(0);
+    expect(turn.routingEvents).toHaveLength(0);
+  });
+
+  it("deduplicates verified knowledge citations and preserves model-call boundaries", () => {
+    const events: DataHubStreamEvent[] = [
+      {
+        type: "thinking",
+        data: "检索制度",
+        replyId: "reply-1",
+        modelCallIndex: 1
+      },
+      {
+        type: "thinking",
+        data: "并复核证据",
+        replyId: "reply-1",
+        modelCallIndex: 1
+      },
+      {
+        type: "thinking",
+        data: "形成答案",
+        replyId: "reply-2",
+        modelCallIndex: 2
+      },
+      {
+        type: "text",
+        data: "审批需经过部门和法务审核。",
+        replyId: "reply-2",
+        modelCallIndex: 2
+      },
+      {
+        type: "citation_document",
+        data: {
+          docId: "doc-1",
+          docKey: "contract-policy",
+          kbId: "kb-1",
+          docName: "合同管理办法.pdf",
+          fragments: ["审批需经过部门和法务审核。"]
+        }
+      },
+      {
+        type: "citation_document",
+        data: {
+          docId: "doc-1",
+          docKey: "contract-policy",
+          kbId: "kb-1",
+          docName: "重复引用.pdf"
+        }
+      },
+      {
+        type: "done",
+        data: {
+          mode: "rag",
+          askKnowledge: true,
+          summary: "审批需经过部门和法务审核。",
+          citationDocuments: [
+            {
+              docId: "doc-2",
+              docKey: "authorization-policy",
+              kbId: "kb-1",
+              docName: "授权管理办法.pdf"
+            }
+          ]
+        }
+      }
+    ];
+
+    const turn = createDataHubAskTurn("审批流程？", events, "done");
+
+    expect(turn.thinkingBlocks).toEqual([
+      {
+        content: "检索制度并复核证据",
+        replyId: "reply-1",
+        modelCallIndex: 1
+      },
+      {
+        content: "形成答案",
+        replyId: "reply-2",
+        modelCallIndex: 2
+      }
+    ]);
+    expect(turn.answerBlocks).toHaveLength(1);
+    expect(turn.citationDocuments.map((citation) => citation.docId)).toEqual(["doc-1", "doc-2"]);
+  });
+
+  it("does not let a child-agent session replace the bound user session", () => {
+    const turn = createDataHubAskTurn(
+      "主问题",
+      [
+        {
+          type: "thinking",
+          data: "子智能体思考",
+          sessionId: "child-session",
+          globalSessionId: "main-session",
+          parentSessionId: "main-session",
+          chatId: "child-chat"
+        },
+        {
+          type: "text",
+          data: "不应混入主回答",
+          sessionId: "child-session",
+          globalSessionId: "main-session",
+          parentSessionId: "main-session",
+          chatId: "child-chat"
+        },
+        {
+          type: "done",
+          data: { summary: "子智能体终态" },
+          sessionId: "child-session",
+          globalSessionId: "main-session",
+          parentSessionId: "main-session",
+          chatId: "child-chat",
+          finished: true
+        },
+        {
+          type: "table",
+          data: {
+            columns: ["内部结果"],
+            rows: [["不应进入主表格"]]
+          },
+          sessionId: "child-session",
+          globalSessionId: "main-session",
+          parentSessionId: "main-session",
+          chatId: "child-chat"
+        },
+        {
+          type: "citation_document",
+          data: {
+            docId: "child-doc",
+            docKey: "child.pdf",
+            kbId: "child-kb"
+          },
+          sessionId: "child-session",
+          globalSessionId: "main-session",
+          parentSessionId: "main-session",
+          chatId: "child-chat"
+        },
+        {
+          type: "text",
+          data: "主智能体正式回答",
+          sessionId: "main-session",
+          globalSessionId: "main-session",
+          chatId: "main-chat"
+        }
+      ],
+      "done",
+      "",
+      { sessionId: "main-session", chatId: "main-chat" }
+    );
+
+    expect(turn.sessionId).toBe("main-session");
+    expect(turn.chatId).toBe("main-chat");
+    expect(turn.thinkingContent).toBe("");
+    expect(turn.assistantContent).toBe("主智能体正式回答");
+    expect(turn.tableResults).toEqual([]);
+    expect(turn.citationDocuments).toEqual([]);
+    expect(turn.done).toBeUndefined();
+  });
 });

@@ -2,10 +2,18 @@ import { requestDataHub } from "./dataHubClient";
 import type { AskArtifactRef } from "@/types/dataHub";
 import type { QueryAsset, QueryExecution } from "@/types/analytics";
 
-export function ensureAskArtifact(sessionId: string, chatId: string) {
+export function ensureAskArtifact(
+  sessionId: string,
+  chatId: string,
+  resultSessionId?: string
+) {
   return requestDataHub<AskArtifactRef>("/api/v1/query-artifacts/ensure", {
     method: "POST",
-    body: JSON.stringify({ sessionId, chatId })
+    body: JSON.stringify({
+      sessionId,
+      chatId,
+      ...(resultSessionId ? { resultSessionId } : {})
+    })
   });
 }
 

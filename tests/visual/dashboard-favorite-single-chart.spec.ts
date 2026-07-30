@@ -66,8 +66,8 @@ const preview = {
     {
       outputKey: "summary",
       columns: asset.stableVersion.outputs[0].columns,
-      rows: [{ summary: "收入保持增长" }],
-      totalRows: 1,
+      rows: [],
+      totalRows: 0,
       updatedAt: "2026-07-23T08:00:00.000Z"
     },
     {
@@ -154,7 +154,10 @@ function runtime(record: DashboardRecordFixture) {
   return { record, datasets, moduleStatuses };
 }
 
-async function installApiFixture(page: Page) {
+async function installApiFixture(
+  page: Page,
+  listedAssets: unknown[] = [asset, contractAsset]
+) {
   let record: DashboardRecordFixture | null = null;
 
   await page.route("**/api/**", async (route: Route) => {
@@ -163,7 +166,7 @@ async function installApiFixture(page: Page) {
     const path = url.pathname;
 
     if (path === "/api/analytics/query-assets" && request.method() === "GET") {
-      await route.fulfill({ json: response([asset, contractAsset]) });
+      await route.fulfill({ json: response(listedAssets) });
       return;
     }
     if (path === `/api/analytics/query-assets/${asset.id}/preview` && request.method() === "POST") {
@@ -211,6 +214,67 @@ async function installApiFixture(page: Page) {
   };
 }
 
+test("favorite panel keeps chart actions visible when the asset list overflows", async ({ page }) => {
+  const overflowAssets = Array.from({ length: 12 }, (_, index) => ({
+    ...contractAsset,
+    id: `asset-overflow-${index + 1}`,
+    name: `收藏问数示例 ${String(index + 1).padStart(2, "0")}`,
+    resolvedQuestion: `用于验证侧栏滚动的收藏问题 ${index + 1}`,
+    stableVersionId: `version-overflow-${index + 1}`,
+    stableVersion: {
+      ...contractAsset.stableVersion,
+      id: `version-overflow-${index + 1}`
+    }
+  }));
+  await installApiFixture(page, [asset, ...overflowAssets]);
+  await page.addInitScript(() => {
+    const user = {
+      token: "playwright-favorite-overflow-token",
+      userId: 1,
+      username: "张三",
+      isAdmin: true
+    };
+    window.localStorage.setItem("xingshu_datahub_token", user.token);
+    window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
+    window.localStorage.setItem("xingshu_datahub_space_id", "1");
+  });
+  await page.setViewportSize({ width: 1440, height: 760 });
+
+  await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
+  const addButton = page.getByRole("button", { name: "添加图表", exact: true });
+  await expect(addButton).toBeVisible();
+  await expect(addButton).toBeEnabled();
+
+  const layout = await page.evaluate(() => {
+    const palette = document.querySelector<HTMLElement>(".designer-palette")!;
+    const browser = document.querySelector<HTMLElement>(".query-asset-panel__browser")!;
+    const preview = document.querySelector<HTMLElement>(".query-asset-panel__preview")!;
+    const actions = document.querySelector<HTMLElement>(".query-asset-panel__actions")!;
+    return {
+      palette: palette.getBoundingClientRect().toJSON(),
+      browser: {
+        ...browser.getBoundingClientRect().toJSON(),
+        clientHeight: browser.clientHeight,
+        scrollHeight: browser.scrollHeight
+      },
+      preview: preview.getBoundingClientRect().toJSON(),
+      actions: actions.getBoundingClientRect().toJSON()
+    };
+  });
+
+  expect(layout.browser.scrollHeight).toBeGreaterThan(layout.browser.clientHeight);
+  expect(layout.preview.y).toBeGreaterThanOrEqual(layout.browser.y + layout.browser.height - 1);
+  expect(layout.actions.y + layout.actions.height).toBeLessThanOrEqual(
+    layout.palette.y + layout.palette.height + 1
+  );
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/dashboard-favorite-overflow-actions-1440x760.png",
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
 test("a selected favorite result adds one chart and survives save/reload", async ({ page }) => {
   const fixture = await installApiFixture(page);
   await page.addInitScript(() => {
@@ -227,7 +291,8 @@ test("a selected favorite result adds one chart and survives save/reload", async
   await page.setViewportSize({ width: 1672, height: 941 });
 
   await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
-  await page.getByRole("combobox", { name: "结果表" }).selectOption("revenue");
+  await expect(page.getByRole("combobox", { name: "结果表" })).toHaveValue("revenue");
+  await expect(page.getByText("3 行", { exact: true })).toBeVisible();
   const addButton = page.getByRole("button", { name: "添加图表", exact: true });
   await expect(addButton).toBeEnabled();
   await addButton.click();
@@ -237,6 +302,11 @@ test("a selected favorite result adds one chart and survives save/reload", async
   await expect(cards.first().getByText("今年每月收入趋势", { exact: true })).toBeVisible();
   await expect(page.getByText("固定版本", { exact: true })).toBeVisible();
   await expect(page.locator(".vue-echart[data-echarts-ready='true'] canvas")).toHaveCount(1);
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/dashboard-favorite-empty-first-output-1672x941.png",
+    animations: "disabled",
+    fullPage: true
+  });
 
   const titleField = page.locator(".property-field").filter({ hasText: "标题" }).locator("input");
   await titleField.fill("经营收入月度趋势");

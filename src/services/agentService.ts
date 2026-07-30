@@ -20,11 +20,9 @@ export function streamAgentMessage(input: AgentMessageInput, handlers: DataHubAs
     {
       message: input.content,
       sessionId: input.sessionId,
+      globalSessionId: input.globalSessionId,
       chatId: input.chatId,
-      datasourceId: input.datasourceId,
-      spaceId: input.spaceId,
-      chatMode: "agent",
-      askStrategy: "cube_fallback"
+      chatMode: input.chatMode ?? "ask"
     },
     handlers
   );

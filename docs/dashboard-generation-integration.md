@@ -36,6 +36,18 @@ await favoriteAskArtifact({ askRunId, resolvedQuestion, canFavorite: true }, nam
 6. `/dashboard-view?dashboard=<id>` 只读取当前登录人权限上下文中的实时快照。
 7. 查询资产默认仅自己可用，可在资源面板显式共享到空间；看板也可明确选择“仅自己/空间可用”，空间成员只能读取已发布版本，不能读取创建者草稿。
 
+## 智能编排 Agent 的收藏衔接
+
+新编排事件通过 `sessionId`、`globalSessionId` 和 `parentSessionId` 区分根编排会话与子智能体会话。根会话负责鉴权和读取持久化历史，实际产生结构化表格的问数子会话负责选择要补建的结果：
+
+1. 子会话返回 `ask_artifact` 时，直接使用其中的 `askRunId` 创建查询资产。
+2. 历史编排或兼容事件只有 `table`、没有 `ask_artifact` 时，调用 `ensureAskArtifact(rootSessionId, chatId, resultSessionId)`：`rootSessionId` 是已持久化的根会话，`resultSessionId` 是用户选择的问数子会话。
+3. 后端先用根会话校验用户和空间，再只重建 `resultSessionId` 对应的事件；禁止直接拿 `sub-*` 子会话查询会话表，也禁止把全部并行子结果合并成一个资产。
+4. 一个编排包含多个问数子会话时，每个子会话对应一个独立收藏目标，用户必须明确选择要收藏的数据结果。
+5. 收藏成功后跳转 `/dashboard-editor?source=favorites&asset=<assetId>&returnTo=<来源页>`，大屏编辑器自动打开“收藏问数”面板并选中该资产。
+
+补建请求只提交根会话、当前对话和子结果会话标识；补建完成后的收藏请求只提交权威 `askRunId`。浏览器不会从编排结果中回传 SQL、数据源凭据或真实结果行。
+
 问数结果区的“生成大屏”快捷入口当前已移除。该入口曾跨过资源选择直接组装编辑器草稿，在新旧看板 Schema 混用时可能读取不存在的 `scaleMode`；恢复前必须统一走服务端草稿和模块绑定契约。
 
 React 页面通过 TanStack Query 调用：
@@ -72,7 +84,7 @@ ECharts 容器、渲染器和卡片内容区均强制 `min-width: 0`、`min-heig
 历史会话可能已经有真实表格、Cube Query 和 SQL，但生成时间早于 `askRunId` 契约。对于这类已完成问数：
 
 1. Presenter 保留服务端 SSE/历史事件中的 `sessionId` 与 `chatId`。
-2. 用户点击“收藏问数”时，前端先调用 `ensureAskArtifact(sessionId, chatId)`。
+2. 用户点击“收藏问数”时，普通问数调用 `ensureAskArtifact(sessionId, chatId)`；编排子结果调用 `ensureAskArtifact(rootSessionId, chatId, resultSessionId)`。
 3. ai-service 校验当前用户拥有该会话，并只从服务端持久化消息与事件补建权威产物。
 4. 补建成功后继续走正常的幂等收藏；看板模块随后从编辑器资源面板绑定该资产和固定版本。
 

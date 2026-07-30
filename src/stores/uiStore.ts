@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
-import type { DataHubAskDataStatus, DataHubAskRunId, DataHubStreamEvent } from "@/types/dataHub";
+import { createDataHubClientId } from "@/services/dataHubAskDataService";
+import type {
+  DataHubAskDataStatus,
+  DataHubAskRunId,
+  DataHubChatMode,
+  DataHubStreamEvent
+} from "@/types/dataHub";
 
 export type AskDataStatus = DataHubAskDataStatus;
 
@@ -8,6 +14,8 @@ export type AnalysisTurnState = {
   id: string;
   question: string;
   sessionId: string | null;
+  chatId: string;
+  chatMode: DataHubChatMode;
   status: AskDataStatus;
   events: DataHubStreamEvent[];
   error: string;
@@ -21,6 +29,7 @@ type UiStoreState = {
   pendingAttachments: AttachmentQueueItem[];
   activeAnalysisQuestion: string;
   activeAnalysisSessionId: string | null;
+  activeAnalysisMode: DataHubChatMode;
   activeAskDataRunId: DataHubAskRunId | null;
   askDataStatus: AskDataStatus;
   askDataEvents: DataHubStreamEvent[];
@@ -37,7 +46,11 @@ type UiStoreActions = {
   setActiveAnalysisQuestion: (question: string) => void;
   queuePendingAttachments: (attachments: AttachmentQueueItem[]) => void;
   removePendingAttachment: (attachmentId: string) => void;
-  startAskDataRun: (question: string, sessionId?: string | null) => DataHubAskRunId;
+  startAskDataRun: (
+    question: string,
+    sessionId?: string | null,
+    chatMode?: DataHubChatMode
+  ) => DataHubAskRunId;
   appendAskDataEvent: (runId: DataHubAskRunId, event: DataHubStreamEvent) => void;
   completeAskDataRun: (runId: DataHubAskRunId) => void;
   failAskDataRun: (runId: DataHubAskRunId, message: string) => void;
@@ -48,6 +61,7 @@ type UiStoreActions = {
     question: string;
     events: DataHubStreamEvent[];
     turns?: AnalysisTurnState[];
+    chatMode?: DataHubChatMode;
     status?: AskDataStatus;
     error?: string;
   }) => void;
@@ -66,6 +80,7 @@ const initialState: UiStoreState = {
   pendingAttachments: [],
   activeAnalysisQuestion: "",
   activeAnalysisSessionId: null,
+  activeAnalysisMode: "ask",
   activeAskDataRunId: null,
   askDataStatus: "idle",
   askDataEvents: [],
@@ -77,6 +92,13 @@ const initialState: UiStoreState = {
 
 function createTurnId() {
   return `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function dataHubModeLabel(chatMode: DataHubChatMode) {
+  if (chatMode === "rag") return "问知";
+  if (chatMode === "document_lookup") return "找文档";
+  if (chatMode === "agent") return "智能编排";
+  return "问数";
 }
 
 function updateTurn(
@@ -135,7 +157,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     set((state) => ({
       pendingAttachments: state.pendingAttachments.filter((attachment) => attachment.id !== attachmentId)
     })),
-  startAskDataRun: (question, sessionId) => {
+  startAskDataRun: (question, sessionId, chatMode = "ask") => {
     const previousRunId = get().activeAskDataRunId;
     if (previousRunId) {
       get().cancelAskDataRun(previousRunId);
@@ -143,11 +165,18 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
 
     const runId = createTurnId();
     set((state) => {
-      const nextSessionId = sessionId === undefined ? state.activeAnalysisSessionId : sessionId;
+      const startsNewConversation =
+        sessionId === null || state.activeAnalysisMode !== chatMode || !state.activeAnalysisSessionId;
+      const nextSessionId =
+        (sessionId && sessionId.trim()) ||
+        (!startsNewConversation ? state.activeAnalysisSessionId : null) ||
+        createDataHubClientId("session");
       const nextTurn: AnalysisTurnState = {
         id: runId,
         question,
         sessionId: nextSessionId,
+        chatId: createDataHubClientId("chat"),
+        chatMode,
         status: "streaming",
         events: [],
         error: ""
@@ -156,12 +185,13 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       return {
         activeAnalysisQuestion: question,
         activeAnalysisSessionId: nextSessionId,
+        activeAnalysisMode: chatMode,
         activeAskDataRunId: runId,
         askDataStatus: "streaming",
         askDataEvents: [],
         askDataError: "",
-        analysisTurns: sessionId === null ? [nextTurn] : [...state.analysisTurns, nextTurn],
-        sentStatus: `已提交问数：${question}`
+        analysisTurns: startsNewConversation ? [nextTurn] : [...state.analysisTurns, nextTurn],
+        sentStatus: `已提交${dataHubModeLabel(chatMode)}：${question}`
       };
     });
     return runId;
@@ -173,10 +203,8 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         return {};
       }
 
-      const nextSessionId = event.sessionId ?? state.activeAnalysisSessionId;
       const nextTurns = updateTurn(state.analysisTurns, runId, (turn) => ({
         ...turn,
-        sessionId: event.sessionId ?? turn.sessionId ?? nextSessionId,
         events: [...turn.events, event]
       }));
 
@@ -185,7 +213,6 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       }
 
       return {
-        activeAnalysisSessionId: nextSessionId,
         askDataEvents: [...state.askDataEvents, event],
         analysisTurns: nextTurns
       };
@@ -259,7 +286,15 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     }
     askDataControllers.set(runId, controller);
   },
-  restoreAskDataHistory: ({ sessionId, question, events, turns, status = "done", error = "" }) => {
+  restoreAskDataHistory: ({
+    sessionId,
+    question,
+    events,
+    turns,
+    chatMode = "ask",
+    status = "done",
+    error = ""
+  }) => {
     const restoredTurns =
       turns && turns.length > 0
         ? turns
@@ -268,6 +303,8 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
               id: createTurnId(),
               question,
               sessionId,
+              chatId: events.find((event) => event.chatId)?.chatId || createDataHubClientId("chat"),
+              chatMode,
               status,
               events,
               error
@@ -277,6 +314,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
 
     set({
       activeAnalysisSessionId: sessionId,
+      activeAnalysisMode: activeTurn?.chatMode || chatMode,
       activeAskDataRunId: null,
       activeAnalysisQuestion: activeTurn?.question || question,
       askDataStatus: activeTurn?.status || status,
@@ -296,6 +334,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       pendingAttachments: [],
       activeAnalysisQuestion: initialState.activeAnalysisQuestion,
       activeAnalysisSessionId: initialState.activeAnalysisSessionId,
+      activeAnalysisMode: initialState.activeAnalysisMode,
       activeAskDataRunId: initialState.activeAskDataRunId,
       askDataStatus: "idle",
       askDataEvents: [],

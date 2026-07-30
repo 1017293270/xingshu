@@ -126,7 +126,7 @@ describe("LoginPage", () => {
   it("commits auth only after the data space is ready and returns to the requested route", async () => {
     vi.mocked(loginToDataHub).mockResolvedValue(userFixture);
     vi.mocked(ensureDataHubSpace).mockResolvedValue(spaceFixture);
-    renderLoginRoute("/analysis");
+    renderLoginRoute("/ask-data");
 
     await submitLoginForm();
 

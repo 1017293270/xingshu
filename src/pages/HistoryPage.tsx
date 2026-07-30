@@ -13,6 +13,7 @@ import {
   loadDataHubHistoryReplay
 } from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
+import type { DataHubChatMode } from "@/types/dataHub";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { PageFrame } from "./PageFrame";
@@ -31,6 +32,13 @@ const historyIconByCategory: Record<HistoryCategory, string> = {
   数据洞察: dataInsightIcon,
   文档处理: historyConversationIcon
 };
+
+export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
+  if (chatMode === "rag") return "/ask-knowledge";
+  if (chatMode === "document_lookup") return "/document-lookup";
+  if (chatMode === "agent") return "/ask-agent";
+  return "/ask-data";
+}
 
 function getHistoryIcon(category: HistoryCategory) {
   return historyIconByCategory[category];
@@ -118,15 +126,16 @@ export function HistoryPage() {
     setActionStatus(`正在恢复历史对话：${session.title}`);
 
     try {
-      const replay = await loadDataHubHistoryReplay(session.sessionId);
+      const replay = await loadDataHubHistoryReplay(session.sessionId, session.chatMode);
       restoreAskDataHistory({
         sessionId: replay.sessionId,
         question: replay.question,
         events: replay.events,
         turns: replay.turns,
+        chatMode: replay.chatMode,
         status: replay.turns.length > 0 || replay.events.length > 0 ? "done" : "idle"
       });
-      navigate("/analysis");
+      navigate(getHistoryReplayRoute(replay.chatMode));
     } catch (error) {
       setActionStatus(error instanceof Error ? `恢复历史对话失败：${error.message}` : "恢复历史对话失败");
     } finally {

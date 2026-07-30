@@ -48,6 +48,9 @@ describe("AppRoutes", () => {
     expect(resolveRouteFallbackVariant("/data-dashboard")).toBe("metrics");
     expect(resolveRouteFallbackVariant("/settings/ai")).toBe("cards");
     expect(resolveRouteFallbackVariant("/ask-data")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/ask-knowledge")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/document-lookup")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/ask-agent")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
     expect(resolveRouteFallbackVariant("/writing")).toBe("cards");
   });
@@ -55,6 +58,9 @@ describe("AppRoutes", () => {
   const routeCases: Array<[string, string | RegExp, string]> = [
     ["/", "您好，zhangsan", "推荐应用"],
     ["/ask-data", "从一个经营问题开始", "空白问数工作区"],
+    ["/ask-knowledge", "从一个企业知识问题开始", "空白问知工作区"],
+    ["/document-lookup", "描述您要查找的企业文档", "空白找文档工作区"],
+    ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
     ["/writing", "智能写作", "推荐写作场景"],
@@ -74,19 +80,22 @@ describe("AppRoutes", () => {
     expect(await screen.findByLabelText(landmark)).toBeInTheDocument();
   });
 
-  it("opens analysis as a blank ask-data workspace before the user asks", async () => {
+  it("opens analysis as a blank agent workspace without a mode switcher", async () => {
     const user = userEvent.setup();
     renderRoute("/analysis");
 
-    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /销售额|咨询量|客户增长|收入与利润率/ })).toHaveLength(4);
+    expect(await screen.findByLabelText("空白智能编排工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个跨数据与知识的任务开始" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /销售下滑|客户增长数据|区域经营表现|经营数据与知识库/ })).toHaveLength(4);
     expect(screen.getByRole("textbox", { name: "命令输入" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("DataHub 对话模式")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("用户提问")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "分析最近 30 天客户增长趋势" }));
+    await user.click(screen.getByRole("button", { name: "同时核对客户增长数据和最新销售政策，给出行动建议" }));
 
-    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("分析最近 30 天客户增长趋势");
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue(
+      "同时核对客户增长数据和最新销售政策，给出行动建议"
+    );
     expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
       "已填入快捷问题，确认后即可发送"
     );
@@ -101,7 +110,7 @@ describe("AppRoutes", () => {
 
   it("redirects to login and explains when the active session expires", async () => {
     renderRoute("/analysis");
-    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(await screen.findByLabelText("空白智能编排工作区")).toBeInTheDocument();
 
     act(() => {
       expireDataHubSession("test-token");
@@ -207,7 +216,7 @@ describe("AppRoutes", () => {
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "分析本月经营数据");
     await user.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(await screen.findByRole("heading", { name: "问数完成" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "智能编排完成" })).toBeInTheDocument();
     expect(screen.getByText("分析本月经营数据")).toBeInTheDocument();
   });
 
@@ -328,6 +337,17 @@ describe("AppRoutes", () => {
     expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
     expect(document.title).toBe("智能问数 · 星数");
+  });
+
+  it("opens the shared knowledge workspace from the knowledge card", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(await screen.findByRole("button", { name: /^打开 知识问答/ }));
+
+    expect(await screen.findByLabelText("空白问知工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeInTheDocument();
+    expect(document.title).toBe("知识问答 · 星数");
   });
 
   it("filters knowledge bases in data asset management", async () => {

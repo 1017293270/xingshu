@@ -149,10 +149,12 @@ const pages: SmokePage[] = [
   { slug: "login", path: "/login", heading: "登录星数", shell: false, charts: 0 },
   { slug: "home", path: "/", heading: "您好，张三", charts: 0 },
   { slug: "analysis", path: "/analysis", region: "星数命令输入区", charts: 0 },
+  { slug: "ask-data", path: "/ask-data", heading: "从一个经营问题开始", charts: 0 },
+  { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "智能写作", charts: 0 },
-  { slug: "dashboard", path: "/dashboard", heading: "我的看板", readyText: "还没有大屏", charts: 0 },
+  { slug: "dashboard", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
   {
@@ -816,7 +818,7 @@ test("mobile navigation reaches every product destination and account route", as
     { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
     { label: "智能制表", path: "/table", heading: "智能制表" },
     { label: "智能写作", path: "/writing", heading: "智能写作" },
-    { label: "我的看板", path: "/dashboard", heading: "我的看板", readyText: "还没有大屏" },
+    { label: "我的看板", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏" },
     { label: "我的云盘", path: "/cloud", heading: "我的云盘" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
     {

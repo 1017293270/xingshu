@@ -1,11 +1,22 @@
 import { requestDataHub } from "@/services/dataHubClient";
+import {
+  adaptDataHubStreamEvent,
+  getDataHubEventPayload
+} from "@/services/dataHubEventAdapter";
 import { readDataHubSession } from "@/services/dataHubSession";
-import type { DataHubChatEvent, DataHubChatMessage, DataHubChatSession, DataHubStreamEvent } from "@/types/dataHub";
+import type {
+  DataHubChatEvent,
+  DataHubChatMessage,
+  DataHubChatMode,
+  DataHubChatSession,
+  DataHubStreamEvent
+} from "@/types/dataHub";
 import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
 import { historySessions } from "./mock/historyMock";
 
 type DataHubHistoryReplay = {
   sessionId: string;
+  chatMode: DataHubChatMode;
   question: string;
   events: DataHubStreamEvent[];
   turns: DataHubHistoryReplayTurn[];
@@ -15,6 +26,8 @@ type DataHubHistoryReplayTurn = {
   id: string;
   question: string;
   sessionId: string | null;
+  chatId: string;
+  chatMode: DataHubChatMode;
   status: "done";
   events: DataHubStreamEvent[];
   error: string;
@@ -45,16 +58,17 @@ function formatDateTime(value?: string) {
 }
 
 function mapDataHubSession(session: DataHubChatSession): HistorySession {
-  const title = session.title?.trim() || "未命名问数对话";
+  const title = session.title?.trim() || "未命名对话";
 
   return {
     id: session.sessionId,
     sessionId: session.sessionId,
     title,
-    summary: "来自 data-hub 的历史会话，点击后恢复问数过程与结果。",
+    summary: "来自 data-hub 的历史会话，点击后恢复完整过程与结果。",
     category: inferCategory(title),
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
-    source: "data-hub"
+    source: "data-hub",
+    chatMode: session.chatMode
   };
 }
 
@@ -84,18 +98,89 @@ function sortBySeqOrTime<T extends { seqNum?: number; createdAt?: string }>(item
   });
 }
 
-function hasAssistantTextEvent(events: DataHubStreamEvent[]) {
-  return events.some((event) => ["content", "text", "done"].includes(event.type));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toStreamEvent(event: DataHubChatEvent): DataHubStreamEvent {
-  return {
+function hasAssistantTextEvent(events: DataHubStreamEvent[]) {
+  return events.some((event) => {
+    if (event.parentSessionId) {
+      return false;
+    }
+
+    if (event.type === "content" || event.type === "text") {
+      return true;
+    }
+
+    if (event.type !== "done") {
+      return false;
+    }
+
+    const payload = getDataHubEventPayload(event);
+    return isRecord(payload) && typeof payload.summary === "string" && Boolean(payload.summary.trim());
+  });
+}
+
+function toStreamEvent(event: DataHubChatEvent): DataHubStreamEvent | null {
+  return adaptDataHubStreamEvent(event, {
     type: event.type,
-    data: event.data,
     sessionId: event.sessionId,
     chatId: event.chatId,
     timestamp: event.createdAt ? Date.parse(event.createdAt) : undefined
-  };
+  });
+}
+
+function inferChatMode(
+  events: DataHubStreamEvent[],
+  fallbackMode: DataHubChatMode = "ask"
+): DataHubChatMode {
+  const rootEvents = events.filter(
+    (event) => !event.parentSessionId && event.type !== "subagent_exposed"
+  );
+
+  for (const event of rootEvents) {
+    if (event.type !== "done") continue;
+    const payload = getDataHubEventPayload(event);
+    if (!isRecord(payload)) continue;
+    if (payload.documentLookup === true || payload.mode === "document_lookup") {
+      return "document_lookup";
+    }
+    if (payload.adaptiveTeam === true || payload.mode === "agent") {
+      return "agent";
+    }
+  }
+
+  if (
+    rootEvents.some(
+      (event) =>
+        event.agentName === "编排智能体" ||
+        event.agentName === "编排 Agent" ||
+        event.agentName === "OrchestratorAgent"
+    )
+  ) {
+    return "agent";
+  }
+
+  for (const event of rootEvents) {
+    if (
+      event.type === "citation_document" ||
+      event.agentName === "问知智能体" ||
+      event.agentName === "ask-knowledge"
+    ) {
+      return "rag";
+    }
+
+    if (event.type !== "done") continue;
+    const payload = getDataHubEventPayload(event);
+    if (
+      isRecord(payload) &&
+      (payload.mode === "rag" || payload.askKnowledge === true)
+    ) {
+      return "rag";
+    }
+  }
+
+  return fallbackMode;
 }
 
 export async function listHistorySessions(): Promise<HistorySession[]> {
@@ -121,7 +206,10 @@ export async function filterHistorySessions(filter: HistoryFilter) {
   return filterHistorySessionList(await listHistorySessions(), filter);
 }
 
-export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataHubHistoryReplay> {
+export async function loadDataHubHistoryReplay(
+  sessionId: string,
+  fallbackMode: DataHubChatMode = "ask"
+): Promise<DataHubHistoryReplay> {
   const [messages, rawEvents] = await Promise.all([
     requestDataHub<DataHubChatMessage[]>("/api/v1/chat/messages/list", {
       method: "POST",
@@ -179,9 +267,13 @@ export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataH
   }
 
   for (const event of orderedEvents) {
-    const chatId = event.chatId || `event-${event.id}`;
+    const streamEvent = toStreamEvent(event);
+    if (!streamEvent) {
+      continue;
+    }
+    const chatId = streamEvent.chatId || event.chatId || `event-${event.id}`;
     const entry = touchTurn(chatId, event.seqNum, event.createdAt);
-    entry.events.push(toStreamEvent(event));
+    entry.events.push(streamEvent);
   }
 
   const turns = Array.from(turnMap.entries())
@@ -189,13 +281,27 @@ export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataH
       const assistantContent = entry.assistantMessages.map((message) => message.content).join("");
       const events =
         assistantContent && !hasAssistantTextEvent(entry.events)
-          ? [...entry.events, { type: "done", data: { summary: assistantContent }, sessionId, chatId }]
+          ? [
+              ...entry.events,
+              {
+                type: "text",
+                data: assistantContent,
+                content: assistantContent,
+                sessionId,
+                globalSessionId: sessionId,
+                chatId,
+                finished: false
+              }
+            ]
           : entry.events;
+      const chatMode = inferChatMode(events, fallbackMode);
 
       return {
         id: `${sessionId}-${chatId}-${index}`,
-        question: entry.userMessage?.content || "历史问数对话",
+        question: entry.userMessage?.content || "历史对话",
         sessionId,
+        chatId,
+        chatMode,
         status: "done" as const,
         events,
         error: "",
@@ -203,7 +309,7 @@ export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataH
         firstTime: entry.firstTime
       };
     })
-    .filter((turn) => turn.question !== "历史问数对话" || turn.events.length > 0)
+    .filter((turn) => turn.question !== "历史对话" || turn.events.length > 0)
     .sort((left, right) => {
       if (left.firstSeq !== right.firstSeq) {
         return left.firstSeq - right.firstSeq;
@@ -213,12 +319,14 @@ export async function loadDataHubHistoryReplay(sessionId: string): Promise<DataH
     })
     .map(({ firstSeq: _firstSeq, firstTime: _firstTime, ...turn }) => turn);
 
-  const firstOriginalTurn = turns.find((turn) => turn.question && turn.question !== "历史问数对话");
+  const firstOriginalTurn = turns.find((turn) => turn.question && turn.question !== "历史对话");
   const events = firstOriginalTurn?.events ?? [];
+  const chatMode = turns[0]?.chatMode ?? fallbackMode;
 
   return {
     sessionId,
-    question: firstOriginalTurn?.question || "历史问数对话",
+    chatMode,
+    question: firstOriginalTurn?.question || "历史对话",
     events,
     turns
   };

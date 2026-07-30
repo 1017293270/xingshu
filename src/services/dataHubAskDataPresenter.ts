@@ -2,6 +2,9 @@ import type {
   DataHubAskDataStatus,
   AskArtifactRef,
   DataHubAskTurn,
+  DataHubCitationDocument,
+  DataHubContentBlock,
+  DataHubDataSourceSelected,
   DataHubDoneData,
   DataHubReactStepData,
   DataHubRoutingDecomposeData,
@@ -11,6 +14,7 @@ import type {
   DataHubToolCallData,
   DataHubToolResultData
 } from "@/types/dataHub";
+import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -72,11 +76,11 @@ function unwrapEventData(value: unknown): unknown {
 }
 
 function readText(value: unknown): string {
-  const data = unwrapEventData(value);
-
-  if (typeof data === "string") {
-    return data;
+  if (typeof value === "string") {
+    return value;
   }
+
+  const data = unwrapEventData(value);
 
   if (isRecord(data)) {
     return asString(data.text) || asString(data.content) || asString(data.message) || asString(data.summary);
@@ -312,17 +316,118 @@ function normalizeArtifact(data: unknown): AskArtifactRef | undefined {
   };
 }
 
+function appendContentBlock(
+  blocks: DataHubContentBlock[],
+  content: string,
+  event: DataHubStreamEvent
+) {
+  if (!content) {
+    return;
+  }
+
+  const previous = blocks[blocks.length - 1];
+  const sameModelCall =
+    previous &&
+    previous.replyId === event.replyId &&
+    previous.modelCallIndex === event.modelCallIndex &&
+    (event.modelCallIndex !== undefined ||
+      (event.replyId === undefined && previous.replyId === undefined));
+
+  if (sameModelCall) {
+    previous.content += content;
+    return;
+  }
+
+  blocks.push({
+    content,
+    replyId: event.replyId,
+    modelCallIndex: event.modelCallIndex
+  });
+}
+
+function normalizeDataSource(data: unknown): DataHubDataSourceSelected | undefined {
+  const record = unwrapEventData(data);
+  if (!isRecord(record)) {
+    return undefined;
+  }
+
+  const datasourceId = record.datasourceId;
+  const datasourceName = asString(record.datasourceName);
+  if ((typeof datasourceId !== "string" && typeof datasourceId !== "number") || !datasourceName) {
+    return undefined;
+  }
+
+  return { datasourceId, datasourceName };
+}
+
+function normalizeCitationDocument(data: unknown): DataHubCitationDocument | undefined {
+  const record = unwrapEventData(data);
+  if (!isRecord(record)) {
+    return undefined;
+  }
+
+  const docId = asString(record.docId).trim();
+  const docKey = asString(record.docKey).trim();
+  const kbId = asString(record.kbId).trim();
+  if (!docId || !docKey || !kbId) {
+    return undefined;
+  }
+
+  return {
+    docId,
+    docKey,
+    kbId,
+    docName: asString(record.docName).trim() || undefined,
+    fileName: asString(record.fileName).trim() || undefined,
+    sourceAvailable: record.sourceAvailable !== false,
+    markdownAvailable:
+      typeof record.markdownAvailable === "boolean" ? record.markdownAvailable : undefined,
+    fragments: Array.isArray(record.fragments)
+      ? record.fragments.map(asString).map((fragment) => fragment.trim()).filter(Boolean).slice(0, 3)
+      : []
+  };
+}
+
+function appendCitationDocument(
+  citations: DataHubCitationDocument[],
+  citation: DataHubCitationDocument | undefined
+) {
+  if (!citation) {
+    return;
+  }
+
+  const identity = `${citation.docId}::${citation.docKey}`;
+  if (citations.some((item) => `${item.docId}::${item.docKey}` === identity)) {
+    return;
+  }
+
+  citations.push(citation);
+}
+
+type DataHubTurnContext = {
+  sessionId?: string | null;
+  chatId?: string | null;
+};
+
 export function createDataHubAskTurn(
   question: string,
   events: DataHubStreamEvent[],
   status: DataHubAskDataStatus,
-  errorMessage = ""
+  errorMessage = "",
+  context: DataHubTurnContext = {}
 ): DataHubAskTurn {
   const turn: DataHubAskTurn = {
     question,
     status,
+    sessionId: context.sessionId || undefined,
+    chatId: context.chatId || undefined,
     assistantContent: "",
+    answerBlocks: [],
+    thinkingContent: "",
+    thinkingBlocks: [],
     infoMessages: [],
+    dataSources: [],
+    citationDocuments: [],
     routingEvents: [],
     reactSteps: [],
     toolCalls: [],
@@ -332,11 +437,21 @@ export function createDataHubAskTurn(
   };
 
   for (const event of events) {
-    if (!turn.sessionId && event.sessionId) {
-      turn.sessionId = event.sessionId;
+    const payload = getDataHubEventPayload(event);
+    const isSubagentEvent = Boolean(event.parentSessionId);
+
+    if (!turn.sessionId && !isSubagentEvent && (event.globalSessionId || event.sessionId)) {
+      turn.sessionId = event.globalSessionId || event.sessionId;
     }
-    if (!turn.chatId && event.chatId) {
+    if (!turn.chatId && !isSubagentEvent && event.chatId) {
       turn.chatId = event.chatId;
+    }
+
+    // DataHub keeps every child execution in its own internal session. Child
+    // results are rendered in the sub-agent detail view and never mutate the
+    // root answer/result projection.
+    if (isSubagentEvent) {
+      continue;
     }
 
     if (event.type.startsWith("routing_") && event.type !== "routing_decompose") {
@@ -344,59 +459,85 @@ export function createDataHubAskTurn(
     }
 
     if (event.type === "routing_decompose") {
-      turn.decompose = normalizeDecompose(event.data);
+      turn.decompose = normalizeDecompose(payload);
     }
 
     if (event.type === "react_step") {
-      turn.reactSteps.push(normalizeReactStep(event.data));
+      turn.reactSteps.push(normalizeReactStep(payload));
     }
 
     if (event.type === "tool_call") {
-      turn.toolCalls.push(normalizeToolCall(event.data));
+      turn.toolCalls.push(normalizeToolCall(payload));
     }
 
     if (event.type === "tool_result") {
-      turn.toolResults.push(normalizeToolResult(event.data));
+      turn.toolResults.push(normalizeToolResult(payload));
     }
 
-    if (event.type === "content" || event.type === "text") {
-      turn.assistantContent += readText(event.data);
+    if (event.type === "thinking" || event.type === "final_thinking" || event.isThinking) {
+      appendContentBlock(turn.thinkingBlocks, readText(payload), event);
+    } else if (event.type === "content" || event.type === "text") {
+      appendContentBlock(turn.answerBlocks, readText(payload), event);
     }
 
     if (event.type === "info" || event.type === "hallucination") {
-      const message = readText(event.data);
+      const message = readText(payload);
       if (message) {
         turn.infoMessages.push(message);
       }
     }
 
+    if (event.type === "data_source_selected") {
+      const dataSource = normalizeDataSource(payload);
+      if (
+        dataSource &&
+        !turn.dataSources.some((item) => String(item.datasourceId) === String(dataSource.datasourceId))
+      ) {
+        turn.dataSources.push(dataSource);
+      }
+    }
+
     if (event.type === "table") {
-      const table = normalizeDataHubTableResult(event.data, turn.tableResults.length);
+      const table = normalizeDataHubTableResult(payload, turn.tableResults.length);
       if (table) {
         turn.tableResults.push(table);
       }
     }
 
     if (event.type === "chart") {
-      turn.chartResults.push(event.data);
+      turn.chartResults.push(payload);
     }
 
     if (event.type === "done") {
-      turn.done = normalizeDone(event.data);
+      turn.done = normalizeDone(payload);
     }
 
     if (event.type === "ask_artifact") {
-      turn.artifact = normalizeArtifact(event.data);
+      turn.artifact = normalizeArtifact(payload);
+    }
+
+    if (event.type === "citation_document") {
+      appendCitationDocument(turn.citationDocuments, normalizeCitationDocument(payload));
     }
 
     if (event.type === "error") {
-      turn.error = readError(event.data);
+      turn.error = readError(payload);
     }
   }
 
-  if (!turn.assistantContent && turn.done?.summary) {
-    turn.assistantContent = turn.done.summary;
+  for (const citation of turn.done?.citationDocuments ?? []) {
+    appendCitationDocument(turn.citationDocuments, normalizeCitationDocument(citation));
   }
+
+  if (turn.thinkingBlocks.length === 0 && turn.done?.thinkingContent) {
+    turn.thinkingBlocks.push({ content: turn.done.thinkingContent });
+  }
+  turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("");
+
+  if (turn.answerBlocks.length === 0 && turn.done?.summary) {
+    turn.answerBlocks.push({ content: turn.done.summary });
+  }
+  turn.assistantContent = turn.answerBlocks.map((block) => block.content).join("");
 
   if (errorMessage && !turn.error) {
     turn.error = { message: errorMessage };

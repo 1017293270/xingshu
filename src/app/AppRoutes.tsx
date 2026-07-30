@@ -47,7 +47,14 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
   if (pathname === "/data-dashboard" || pathname === "/data-management") {
     return "metrics";
   }
-  if (pathname === "/ask-data" || pathname === "/analysis" || pathname === "/dashboard-editor") {
+  if (
+    pathname === "/ask-data" ||
+    pathname === "/ask-knowledge" ||
+    pathname === "/document-lookup" ||
+    pathname === "/ask-agent" ||
+    pathname === "/analysis" ||
+    pathname === "/dashboard-editor"
+  ) {
     return "workspace";
   }
   if (pathname === "/dashboard-view") {
@@ -70,8 +77,11 @@ export function AppRoutes() {
         <Routes>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
-            <Route path="/ask-data" element={<AnalysisPage />} />
-            <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/ask-data" element={<AnalysisPage mode="ask" />} />
+            <Route path="/ask-knowledge" element={<AnalysisPage mode="rag" />} />
+            <Route path="/document-lookup" element={<AnalysisPage mode="document_lookup" />} />
+            <Route path="/ask-agent" element={<AnalysisPage mode="agent" />} />
+            <Route path="/analysis" element={<AnalysisPage mode="agent" />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/table" element={<TablePage />} />
             <Route path="/writing" element={<WritingPage />} />

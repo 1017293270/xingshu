@@ -31,7 +31,7 @@ const recommendedApps: XsAppCardData[] = [
     title: "知识问答",
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
-    routeTo: "/data-management",
+    routeTo: "/ask-knowledge",
     imageSrc: appKnowledgeQaIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "cyan"
@@ -108,22 +108,34 @@ export function HomePage() {
   });
   const commandPlaceholder = useTypingPlaceholder(!draft.trim());
 
-  function startDataHubAskData(question: string) {
-    const runId = startAskDataRun(question, null);
+  function startDataHubAgent(question: string) {
+    const runId = startAskDataRun(question, null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId);
 
     if (import.meta.env.MODE === "test") {
       completeAskDataRun(runId);
       return;
     }
 
+    if (!turn?.sessionId || !turn.chatId) {
+      failAskDataRun(runId, "智能编排会话初始化失败");
+      return;
+    }
+
     const controller = streamAgentMessage(
-      { content: question },
+      {
+        content: question,
+        sessionId: turn.sessionId,
+        globalSessionId: turn.sessionId,
+        chatId: turn.chatId,
+        chatMode: "agent"
+      },
       {
         onEvent: (event) => {
           appendAskDataEvent(runId, event);
-          if (event.type === "error") {
+          if (event.type === "error" && !event.parentSessionId) {
             const data = event.data as { message?: string } | string | undefined;
-            failAskDataRun(runId, typeof data === "string" ? data : data?.message || "问数执行失败");
+            failAskDataRun(runId, typeof data === "string" ? data : data?.message || "智能编排执行失败");
           }
         },
         onDone: () => completeAskDataRun(runId),
@@ -147,8 +159,8 @@ export function HomePage() {
     if (!command) {
       return;
     }
-    startDataHubAskData(command);
-    navigate("/ask-data");
+    startDataHubAgent(command);
+    navigate("/ask-agent");
   }
 
   return (

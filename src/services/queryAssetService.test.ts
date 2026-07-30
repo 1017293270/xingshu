@@ -42,4 +42,35 @@ describe("queryAssetService", () => {
       })
     );
   });
+
+  it("selects one orchestration child result through the persisted root session", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          code: 200,
+          message: "success",
+          data: {
+            askRunId: "child-run",
+            resolvedQuestion: "统计合同数量",
+            canFavorite: true
+          }
+        })
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ensureAskArtifact("root-session", "chat-1", "sub-contracts");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/query-artifacts/ensure",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: "root-session",
+          chatId: "chat-1",
+          resultSessionId: "sub-contracts"
+        })
+      })
+    );
+  });
 });

@@ -6,6 +6,7 @@ outputs/
 .claude/
 .env.local
 .run-logs/
+.codex-tmp/
 outputs/playwright/
 *.log
 *.err.log

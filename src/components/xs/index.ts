@@ -15,6 +15,7 @@ export { XsIconTile } from "./XsIconTile";
 export { XsMobileNav } from "./XsMobileNav";
 export { XsRouteFallback } from "./XsRouteFallback";
 export type { XsRouteFallbackVariant } from "./XsRouteFallback";
+export { XsSafeMarkdown } from "./XsSafeMarkdown";
 export { XsShell } from "./XsShell";
 export { XsStatusBar } from "./XsStatusBar";
 export type { XsStatusTone } from "./XsStatusBar";

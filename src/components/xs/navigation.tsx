@@ -37,7 +37,10 @@ export const secondaryNavigation: XsNavigationItem[] = [
 export const routeTitles: Record<string, string> = {
   "/": "首页",
   "/ask-data": "智能问数",
-  "/analysis": "智能问数",
+  "/ask-knowledge": "知识问答",
+  "/document-lookup": "查找文档",
+  "/ask-agent": "智能编排",
+  "/analysis": "智能编排",
   "/history": "历史对话",
   "/table": "智能制表",
   "/writing": "智能写作",

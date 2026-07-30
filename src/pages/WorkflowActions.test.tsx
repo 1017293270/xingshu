@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
+import * as knowledgeService from "@/services/dataHubKnowledgeService";
+import * as queryAssetService from "@/services/queryAssetService";
 import { useUiStore } from "@/stores/uiStore";
 import { AnalysisPage } from "./AnalysisPage";
 import { TablePage } from "./TablePage";
@@ -15,6 +17,22 @@ function renderPage(page: ReactElement) {
   return render(
     <AppProviders>
       <MemoryRouter>{page}</MemoryRouter>
+    </AppProviders>
+  );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="当前测试路由">{`${location.pathname}${location.search}`}</output>;
+}
+
+function renderPageWithLocation(page: ReactElement) {
+  return render(
+    <AppProviders>
+      <MemoryRouter initialEntries={["/ask-agent"]}>
+        {page}
+        <LocationProbe />
+      </MemoryRouter>
     </AppProviders>
   );
 }
@@ -71,7 +89,7 @@ describe("workflow page actions", () => {
     });
     store.completeAskDataRun(runId);
 
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
     expect(screen.getByText("目前咨询数最多的社区为演示账号，累计咨询记录 716 条。")).toBeInTheDocument();
@@ -86,6 +104,91 @@ describe("workflow page actions", () => {
     expect(screen.getByText("已匹配事件域业务 Skill")).toBeInTheDocument();
     expect(screen.getByText("项目名称")).toBeInTheDocument();
     expect(screen.getByText("演示账号")).toBeInTheDocument();
+  });
+
+  it("renders knowledge Markdown and deduplicated citations without ask-data actions", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("合同审批流程是什么？", null, "rag");
+    store.appendAskDataEvent(runId, {
+      type: "thinking",
+      data: "### 已检索并复核制度",
+      isThinking: true,
+      replyId: "reply-1",
+      modelCallIndex: 1
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      data: "审批需经过 **部门审核** 和法务审核。<img src=x onerror=alert(1)>",
+      replyId: "reply-2",
+      modelCallIndex: 2
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      data: { columns: ["不应展示"], rows: [["问知表格"]] }
+    });
+    const citation = {
+      docId: "doc-1",
+      docKey: "contract-policy",
+      kbId: "kb-1",
+      docName: "合同管理办法.pdf",
+      sourceAvailable: true,
+      fragments: ["合同审批需经过部门审核和法务审核。"]
+    };
+    store.appendAskDataEvent(runId, {
+      type: "citation_document",
+      data: citation
+    });
+    store.appendAskDataEvent(runId, {
+      type: "citation_document",
+      data: { ...citation, docName: "重复引用.pdf" }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      data: {
+        mode: "rag",
+        askKnowledge: true,
+        summary: "审批需经过部门审核和法务审核。",
+        citationDocuments: [citation]
+      },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+    const replace = vi.fn();
+    const close = vi.fn();
+    const previewWindow = {
+      location: { replace },
+      close,
+      opener: null
+    } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(previewWindow);
+    vi.spyOn(knowledgeService, "loadDataHubCitationDocument").mockResolvedValue({
+      url: "https://files.example.com/contract-policy.pdf"
+    });
+
+    const { container } = renderPage(<AnalysisPage mode="rag" />);
+
+    expect(screen.getByRole("heading", { name: "问知完成" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "已检索并复核制度" })).toBeInTheDocument();
+    expect(screen.getByText("部门审核")).toBeInTheDocument();
+    expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
+    expect(container.querySelector('img[src="x"]')).not.toBeInTheDocument();
+    expect(screen.getAllByText("合同管理办法.pdf")).toHaveLength(1);
+    expect(screen.queryByText("重复引用.pdf")).not.toBeInTheDocument();
+    expect(screen.queryByText("问知表格")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "收藏问数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "打开原文" }));
+
+    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(knowledgeService.loadDataHubCitationDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ docId: "doc-1", docKey: "contract-policy" })
+    );
+    expect(replace).toHaveBeenCalledWith("https://files.example.com/contract-policy.pdf");
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("shows the favorite-question action when the feature is enabled", () => {
@@ -124,10 +227,342 @@ describe("workflow page actions", () => {
     });
     store.completeAskDataRun(runId);
 
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
     expect(screen.getByRole("button", { name: "收藏问数" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "已收藏问数" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
+  });
+
+  it("favorites the structured ask result emitted by a child agent", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("查询 2023 年合同并汇总", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-contract-data";
+    const artifact = {
+      askRunId: "ask-run-contract-2023",
+      resolvedQuestion: "查询 2023 年合同明细",
+      canFavorite: true
+    };
+    const savedAsset = {
+      id: "asset-contract-2023",
+      name: artifact.resolvedQuestion,
+      originalQuestion: "查询 2023 年合同并汇总",
+      resolvedQuestion: artifact.resolvedQuestion,
+      ownerUserId: 1,
+      visibility: "PRIVATE" as const,
+      stableVersionId: "version-contract-2023",
+      status: "ACTIVE" as const,
+      createdAt: "2026-07-29T00:00:00.000Z",
+      updatedAt: "2026-07-29T00:00:00.000Z"
+    };
+    const ensureSpy = vi.spyOn(queryAssetService, "ensureAskArtifact");
+    const favoriteSpy = vi
+      .spyOn(queryAssetService, "favoriteAskArtifact")
+      .mockResolvedValue(savedAsset);
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        agentId: "ask-data",
+        sessionId: childSessionId,
+        subagentId: "subagent-contract-data",
+        label: "问数智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        columns: ["合同名称", "合同金额"],
+        rows: [["智慧管理平台软件", 550000]],
+        totalRows: 1
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "ask_artifact",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: artifact
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "ask", summary: "已返回合同明细。" }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "已汇总 2023 年合同数据。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "agent", adaptiveTeam: true, summary: "编排完成。" },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPageWithLocation(<AnalysisPage mode="agent" />);
+
+    await user.click(screen.getByRole("button", { name: "收藏问数" }));
+
+    expect(ensureSpy).not.toHaveBeenCalled();
+    expect(favoriteSpy).toHaveBeenCalledWith(artifact, artifact.resolvedQuestion);
+    expect(await screen.findByRole("button", { name: "已收藏问数" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "加入看板" }));
+    expect(screen.getByRole("status", { name: "当前测试路由" })).toHaveTextContent(
+      "/dashboard-editor?source=favorites&asset=asset-contract-2023&returnTo=%2Fask-agent"
+    );
+  });
+
+  it("lets users choose a data result when orchestration returns multiple query assets", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("同时分析合同与回款", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const artifacts = [
+      {
+        sessionId: "child-contracts",
+        label: "合同问数智能体",
+        artifact: {
+          askRunId: "ask-run-contracts",
+          resolvedQuestion: "查询合同明细",
+          canFavorite: true
+        }
+      },
+      {
+        sessionId: "child-payments",
+        label: "回款问数智能体",
+        artifact: {
+          askRunId: "ask-run-payments",
+          resolvedQuestion: "查询回款明细",
+          canFavorite: true
+        }
+      }
+    ];
+    const favoriteSpy = vi
+      .spyOn(queryAssetService, "favoriteAskArtifact")
+      .mockImplementation(async (artifact, name) => ({
+        id: `asset-${artifact.askRunId}`,
+        name: name || artifact.resolvedQuestion,
+        originalQuestion: "同时分析合同与回款",
+        resolvedQuestion: artifact.resolvedQuestion,
+        ownerUserId: 1,
+        visibility: "PRIVATE",
+        stableVersionId: `version-${artifact.askRunId}`,
+        status: "ACTIVE",
+        createdAt: "2026-07-29T00:00:00.000Z",
+        updatedAt: "2026-07-29T00:00:00.000Z"
+      }));
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    for (const item of artifacts) {
+      store.appendAskDataEvent(runId, {
+        type: "subagent_exposed",
+        agentName: item.label,
+        sessionId: item.sessionId,
+        globalSessionId: rootSessionId,
+        parentSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: {
+          sessionId: item.sessionId,
+          subagentId: `subagent-${item.sessionId}`,
+          label: item.label
+        }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "table",
+        agentName: item.label,
+        sessionId: item.sessionId,
+        globalSessionId: rootSessionId,
+        parentSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: {
+          columns: ["名称", "金额"],
+          rows: [[item.artifact.resolvedQuestion, 100]],
+          totalRows: 1
+        }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "ask_artifact",
+        agentName: item.label,
+        sessionId: item.sessionId,
+        globalSessionId: rootSessionId,
+        parentSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: item.artifact
+      });
+      store.appendAskDataEvent(runId, {
+        type: "done",
+        agentName: item.label,
+        sessionId: item.sessionId,
+        globalSessionId: rootSessionId,
+        parentSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: { mode: "ask" }
+      });
+    }
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "合同与回款分析已完成。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "agent", adaptiveTeam: true },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    await user.click(screen.getByRole("button", { name: "收藏数据结果（2）" }));
+    await user.click(screen.getByRole("menuitem", { name: "收藏：查询回款明细" }));
+
+    expect(favoriteSpy).toHaveBeenCalledWith(
+      artifacts[1].artifact,
+      artifacts[1].artifact.resolvedQuestion
+    );
+    expect(screen.getByRole("button", { name: "加入看板" })).toBeEnabled();
+  });
+
+  it("backfills a child result through its persisted root session", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("查询合同数量", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-contract-backfill";
+    const ensuredArtifact = {
+      askRunId: "ask-run-contract-backfill",
+      resolvedQuestion: "统计合同数量",
+      canFavorite: true
+    };
+    const ensureSpy = vi
+      .spyOn(queryAssetService, "ensureAskArtifact")
+      .mockResolvedValue(ensuredArtifact);
+    const favoriteSpy = vi
+      .spyOn(queryAssetService, "favoriteAskArtifact")
+      .mockResolvedValue({
+        id: "asset-contract-backfill",
+        name: ensuredArtifact.resolvedQuestion,
+        originalQuestion: "查询合同数量",
+        resolvedQuestion: ensuredArtifact.resolvedQuestion,
+        ownerUserId: 1,
+        visibility: "PRIVATE",
+        stableVersionId: "version-contract-backfill",
+        status: "ACTIVE",
+        createdAt: "2026-07-29T00:00:00.000Z",
+        updatedAt: "2026-07-29T00:00:00.000Z"
+      });
+
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        sessionId: childSessionId,
+        subagentId: "subagent-contract-backfill",
+        label: "问数智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        columns: ["年份", "合同数"],
+        rows: [[2023, 24]],
+        totalRows: 1
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "ask" }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "2023 年共有 24 份合同。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "agent", adaptiveTeam: true },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="agent" />);
+    await user.click(screen.getByRole("button", { name: "收藏问数" }));
+
+    expect(ensureSpy).toHaveBeenCalledWith(rootSessionId, turn.chatId, childSessionId);
+    expect(favoriteSpy).toHaveBeenCalledWith(
+      ensuredArtifact,
+      ensuredArtifact.resolvedQuestion
+    );
   });
 
   it("streams every phase detail before advancing to the next ask-data phase", async () => {
@@ -176,7 +611,7 @@ describe("workflow page actions", () => {
       }
     });
 
-    const { container } = renderPage(<AnalysisPage />);
+    const { container } = renderPage(<AnalysisPage mode="ask" />);
     const firstStream = screen.getByRole("status", { name: "理解问题实时输出" });
     const firstVisual = firstStream.querySelector(".xs-streaming-text__visual");
 
@@ -240,7 +675,7 @@ describe("workflow page actions", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询咨询数最多的社区");
 
-    const { container } = renderPage(<AnalysisPage />);
+    const { container } = renderPage(<AnalysisPage mode="ask" />);
 
     act(() => {
       store.appendAskDataEvent(runId, {
@@ -286,13 +721,12 @@ describe("workflow page actions", () => {
       store.completeAskDataRun(runId);
     });
 
-    expect(screen.getByRole("heading", { name: "正在问数" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "AI 正在生成问数结果" })).toBeInTheDocument();
-    expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "loading");
-    expect(screen.queryByText("演示账号")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
+    expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
+    expect(screen.getByText("演示账号")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 生成图表" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
 
     for (let playbackTick = 0; playbackTick < 20; playbackTick += 1) {
       await act(async () => {
@@ -308,20 +742,14 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
   });
 
-  it("collapses reasoning and exports analysis results", async () => {
-    const user = userEvent.setup();
+  it("does not fabricate reasoning or export actions without backend events", () => {
     const runId = useUiStore.getState().startAskDataRun("分析销售数据");
     useUiStore.getState().completeAskDataRun(runId);
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
-    await user.click(screen.getByRole("button", { name: "收起分析过程" }));
-
-    expect(screen.getByLabelText("思考过程")).toHaveAttribute("hidden");
-    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("已收起分析过程");
-
-    await user.click(screen.getByRole("button", { name: "导出结果" }));
-
-    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("暂无可导出的问数表格");
+    expect(screen.queryByRole("button", { name: "收起分析过程" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
   });
 
   it("downloads ask-data result tables as csv", async () => {
@@ -355,7 +783,7 @@ describe("workflow page actions", () => {
     });
     useUiStore.getState().completeAskDataRun(runId);
 
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.click(screen.getByRole("button", { name: "导出结果" }));
 
@@ -372,7 +800,7 @@ describe("workflow page actions", () => {
 
   it("submits a follow-up with Enter without exposing upload controls", async () => {
     const user = userEvent.setup();
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "继续分析利润率{Enter}");
 
@@ -395,7 +823,7 @@ describe("workflow page actions", () => {
       question: "历史中的问题",
       events: [{ type: "done", data: { summary: "历史中的答案" } }]
     });
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "继续追问");
     await user.click(screen.getByRole("button", { name: "发送" }));
@@ -410,7 +838,7 @@ describe("workflow page actions", () => {
     const runId = useUiStore.getState().startAskDataRun("停止这次问数", null);
     const abort = vi.fn();
     useUiStore.getState().bindAskDataController(runId, { abort } as unknown as AbortController);
-    renderPage(<AnalysisPage />);
+    renderPage(<AnalysisPage mode="ask" />);
 
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
@@ -431,7 +859,7 @@ describe("workflow page actions", () => {
     let scrollHeight = 500;
     const runId = store.startAskDataRun("连续问数滚动");
 
-    const { container } = renderPage(<AnalysisPage />);
+    const { container } = renderPage(<AnalysisPage mode="ask" />);
     const workspace = container.querySelector(".analysis-workspace") as HTMLDivElement;
 
     Object.defineProperty(workspace, "clientHeight", { configurable: true, get: () => 100 });

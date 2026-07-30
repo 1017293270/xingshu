@@ -43,6 +43,7 @@ import type {
   LayoutPlan,
   QueryAsset,
   QueryExecution,
+  QueryExecutionOutput,
   QueryParameterDefinition,
   QueryVersion,
   RefreshPolicy,
@@ -1183,7 +1184,7 @@ async function chooseAsset(asset: QueryAsset) {
         (typeof parameter.defaultValue === "string" ? parameter.defaultValue : parameter.relativePreset ?? "THIS_MONTH") as RelativeTimePreset)
       : parameter.defaultValue ?? "";
   }
-  selectedOutputKey.value = asset.stableVersion?.outputs[0]?.outputKey ?? "";
+  selectedOutputKey.value = "";
   await previewSelectedAsset(false);
 }
 
@@ -1240,6 +1241,41 @@ function queryOutputLabel(outputKey: string) {
     || outputKey;
 }
 
+function isNumericQueryOutputColumn(type?: string) {
+  return typeof type === "string"
+    && /^(number|numeric|decimal|integer|int|bigint|float|double|real|long|short)$/i.test(type.trim());
+}
+
+function defaultQueryOutputKey(outputs: QueryExecutionOutput[]) {
+  const ranked = outputs.map((output, index) => {
+    const rowCount = Math.max(output.totalRows ?? 0, output.rows.length);
+    const numericColumnCount = output.columns.filter((column) =>
+      isNumericQueryOutputColumn(column.type)
+    ).length;
+    return {
+      output,
+      index,
+      rowCount,
+      numericColumnCount,
+      informationScore: rowCount * Math.max(output.columns.length, 1)
+    };
+  });
+  const byRichness = (left: typeof ranked[number], right: typeof ranked[number]) =>
+    right.informationScore - left.informationScore
+    || right.numericColumnCount - left.numericColumnCount
+    || left.index - right.index;
+
+  return ranked
+    .filter((candidate) => candidate.rowCount > 0 && candidate.numericColumnCount > 0)
+    .sort(byRichness)[0]?.output.outputKey
+    ?? ranked
+      .filter((candidate) => candidate.rowCount > 0)
+      .sort(byRichness)[0]?.output.outputKey
+    ?? ranked.find((candidate) => candidate.output.columns.length > 0)?.output.outputKey
+    ?? outputs[0]?.outputKey
+    ?? "";
+}
+
 async function previewSelectedAsset(force = false) {
   const asset = selectedAsset.value;
   if (!asset?.stableVersionId) return;
@@ -1251,7 +1287,9 @@ async function previewSelectedAsset(force = false) {
       parameters: clone(toRaw(selectedAssetParameters)),
       force
     });
-    if (!selectedOutputKey.value) selectedOutputKey.value = assetPreview.value.outputs[0]?.outputKey ?? "";
+    if (!selectedOutputKey.value) {
+      selectedOutputKey.value = defaultQueryOutputKey(assetPreview.value.outputs);
+    }
   } catch (error) {
     assetError.value = error instanceof Error ? error.message : "查询预览失败";
   } finally {
@@ -1269,7 +1307,7 @@ async function addSelectedAsset() {
       versionId: asset.stableVersionId,
       parameters: clone(toRaw(selectedAssetParameters))
     });
-    const outputKey = selectedOutputKey.value || preview.outputs[0]?.outputKey;
+    const outputKey = selectedOutputKey.value || defaultQueryOutputKey(preview.outputs);
     if (!outputKey) throw new Error("该查询资产没有可用输出");
     const result = appendQueryAssetChart(plainSchema(), asset, clone(toRaw(preview)), outputKey,
       clone(toRaw(selectedAssetParameters)));
@@ -1896,106 +1934,110 @@ function exitDesigner() {
           </button>
         </div>
         <div v-else class="query-asset-panel">
-          <div class="query-asset-panel__intro">
-            <span>
-              <strong>添加收藏图表</strong>
-              <small>每次选择一条收藏和一张结果表，只添加一个可编辑图表。</small>
-            </span>
-            <b>{{ queryAssetCharts.length }}</b>
-          </div>
-          <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__current">
-            <header>
-              <strong>当前看板图表</strong>
-              <span>{{ queryAssetCharts.length }} 个</span>
-            </header>
-            <div class="query-asset-panel__module-list">
-              <article v-for="entry in queryAssetCharts" :key="entry.widget.id">
-                <button type="button" class="query-asset-panel__module-main" @click="selectQueryAssetChart(entry.widget.id)">
-                  <strong>{{ entry.widget.title }}</strong>
-                  <small>
-                    {{ getDashboardComponentDefinition(entry.widget.type).title }}
-                    · {{ entry.module.source.outputKey }}
-                    · 固定版本
-                    · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
-                  </small>
-                </button>
-                <button
-                  type="button"
-                  class="query-asset-panel__module-remove"
-                  :aria-label="`移除收藏图表 ${entry.widget.title}`"
-                  :disabled="lifecycle === 'saving'"
-                  @click="removeDashboardQueryChart(entry.widget.id)"
-                >
-                  <PhTrash :size="15" aria-hidden="true" />
-                </button>
-              </article>
-            </div>
-          </section>
-          <div class="query-asset-panel__filters">
-            <label class="query-asset-panel__search-field">
-              <PhMagnifyingGlass :size="14" aria-hidden="true" />
-              <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题或名称" @keyup.enter="loadAssets" />
-            </label>
-            <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
-              <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
-            </select>
-            <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
-          </div>
-          <p v-if="assetError" class="query-asset-panel__error" role="alert">{{ assetError }}</p>
-          <div v-if="assetState === 'success' && queryAssets.length === 0" class="query-asset-panel__empty">暂无收藏问数，请先在问数结果中收藏。</div>
-          <div class="query-asset-panel__list">
-            <button
-              v-for="asset in queryAssets"
-              :key="asset.id"
-              type="button"
-              :class="{ 'is-active': selectedAssetId === asset.id }"
-              @click="chooseAsset(asset)"
-            >
-              <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="15" weight="fill" /></span>
-              <span class="query-asset-panel__asset-body">
-                <strong>{{ asset.name }}</strong>
-                <span>{{ asset.resolvedQuestion }}</span>
-                <small>
-                  <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
-                  <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
-                  <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个图表</b>
-                </small>
+          <div class="query-asset-panel__browser">
+            <div class="query-asset-panel__intro">
+              <span>
+                <strong>添加收藏图表</strong>
+                <small>每次选择一条收藏和一张结果表，只添加一个可编辑图表。</small>
               </span>
-            </button>
+              <b>{{ queryAssetCharts.length }}</b>
+            </div>
+            <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__current">
+              <header>
+                <strong>当前看板图表</strong>
+                <span>{{ queryAssetCharts.length }} 个</span>
+              </header>
+              <div class="query-asset-panel__module-list">
+                <article v-for="entry in queryAssetCharts" :key="entry.widget.id">
+                  <button type="button" class="query-asset-panel__module-main" @click="selectQueryAssetChart(entry.widget.id)">
+                    <strong>{{ entry.widget.title }}</strong>
+                    <small>
+                      {{ getDashboardComponentDefinition(entry.widget.type).title }}
+                      · {{ entry.module.source.outputKey }}
+                      · 固定版本
+                      · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
+                    </small>
+                  </button>
+                  <button
+                    type="button"
+                    class="query-asset-panel__module-remove"
+                    :aria-label="`移除收藏图表 ${entry.widget.title}`"
+                    :disabled="lifecycle === 'saving'"
+                    @click="removeDashboardQueryChart(entry.widget.id)"
+                  >
+                    <PhTrash :size="15" aria-hidden="true" />
+                  </button>
+                </article>
+              </div>
+            </section>
+            <div class="query-asset-panel__filters">
+              <label class="query-asset-panel__search-field">
+                <PhMagnifyingGlass :size="14" aria-hidden="true" />
+                <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题或名称" @keyup.enter="loadAssets" />
+              </label>
+              <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
+                <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
+              </select>
+              <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
+            </div>
+            <p v-if="assetError" class="query-asset-panel__error" role="alert">{{ assetError }}</p>
+            <div v-if="assetState === 'success' && queryAssets.length === 0" class="query-asset-panel__empty">暂无收藏问数，请先在问数结果中收藏。</div>
+            <div class="query-asset-panel__list">
+              <button
+                v-for="asset in queryAssets"
+                :key="asset.id"
+                type="button"
+                :class="{ 'is-active': selectedAssetId === asset.id }"
+                @click="chooseAsset(asset)"
+              >
+                <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="15" weight="fill" /></span>
+                <span class="query-asset-panel__asset-body">
+                  <strong>{{ asset.name }}</strong>
+                  <span>{{ asset.resolvedQuestion }}</span>
+                  <small>
+                    <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
+                    <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
+                    <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个图表</b>
+                  </small>
+                </span>
+              </button>
+            </div>
           </div>
           <section v-if="selectedAsset" class="query-asset-panel__preview">
             <header><strong>图表配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
-            <label v-for="parameter in selectedAsset.stableVersion?.parameters ?? []" :key="parameter.key">
-              <span>{{ parameter.label }}</span>
-              <template v-if="parameter.type === 'DATE' || parameter.type === 'DATETIME'">
-                <div class="query-asset-panel__time-parameter">
-                  <select :value="parameterMode(parameter)" :aria-label="`${parameter.label}时间模式`" @change="setParameterMode(parameter, $event)">
-                    <option value="FIXED">固定日期</option>
-                    <option v-for="option in relativeTimeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
-                  <input
-                    v-if="parameterMode(parameter) === 'FIXED'"
-                    :value="fixedParameterValue(parameter)"
-                    :type="parameter.type === 'DATETIME' ? 'datetime-local' : 'date'"
-                    :required="parameter.required"
-                    @input="setFixedParameterValue(parameter, $event)"
-                  />
-                  <small v-else>由服务端按空间时区在每次刷新时重新计算</small>
-                </div>
-              </template>
-              <input v-else v-model="selectedAssetParameters[parameter.key]" type="text" :required="parameter.required" />
-            </label>
-            <label v-if="(assetPreview?.outputs.length ?? 0) > 1">
-              <span>结果表</span>
-              <select v-model="selectedOutputKey">
-                <option v-for="output in assetPreview?.outputs ?? []" :key="output.outputKey" :value="output.outputKey">{{ queryOutputLabel(output.outputKey) }}</option>
-              </select>
-            </label>
-            <div v-if="assetPreview" class="query-asset-panel__summary">
-              <strong>{{ assetPreview.outputs.find(output => output.outputKey === selectedOutputKey)?.totalRows ?? 0 }} 行</strong>
-              <span>{{ assetPreview.durationMs }} ms · {{ assetPreview.status }}</span>
+            <div class="query-asset-panel__preview-body">
+              <label v-for="parameter in selectedAsset.stableVersion?.parameters ?? []" :key="parameter.key">
+                <span>{{ parameter.label }}</span>
+                <template v-if="parameter.type === 'DATE' || parameter.type === 'DATETIME'">
+                  <div class="query-asset-panel__time-parameter">
+                    <select :value="parameterMode(parameter)" :aria-label="`${parameter.label}时间模式`" @change="setParameterMode(parameter, $event)">
+                      <option value="FIXED">固定日期</option>
+                      <option v-for="option in relativeTimeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                    </select>
+                    <input
+                      v-if="parameterMode(parameter) === 'FIXED'"
+                      :value="fixedParameterValue(parameter)"
+                      :type="parameter.type === 'DATETIME' ? 'datetime-local' : 'date'"
+                      :required="parameter.required"
+                      @input="setFixedParameterValue(parameter, $event)"
+                    />
+                    <small v-else>由服务端按空间时区在每次刷新时重新计算</small>
+                  </div>
+                </template>
+                <input v-else v-model="selectedAssetParameters[parameter.key]" type="text" :required="parameter.required" />
+              </label>
+              <label v-if="(assetPreview?.outputs.length ?? 0) > 1">
+                <span>结果表</span>
+                <select v-model="selectedOutputKey">
+                  <option v-for="output in assetPreview?.outputs ?? []" :key="output.outputKey" :value="output.outputKey">{{ queryOutputLabel(output.outputKey) }}</option>
+                </select>
+              </label>
+              <div v-if="assetPreview" class="query-asset-panel__summary">
+                <strong>{{ assetPreview.outputs.find(output => output.outputKey === selectedOutputKey)?.totalRows ?? 0 }} 行</strong>
+                <span>{{ assetPreview.durationMs }} ms · {{ assetPreview.status }}</span>
+              </div>
+              <details v-if="selectedAsset.stableVersion?.sqlPreview"><summary>查看只读脱敏 SQL</summary><pre>{{ selectedAsset.stableVersion.sqlPreview }}</pre></details>
             </div>
-            <details v-if="selectedAsset.stableVersion?.sqlPreview"><summary>查看只读脱敏 SQL</summary><pre>{{ selectedAsset.stableVersion.sqlPreview }}</pre></details>
             <div class="query-asset-panel__actions">
               <button v-if="selectedAsset.ownerUserId === currentUserId" type="button" :disabled="assetAction !== null" @click="toggleSelectedAssetVisibility">{{ assetAction === 'visibility' ? '更新中' : selectedAsset.visibility === 'SPACE' ? '设为仅自己' : '共享到空间' }}</button>
               <button type="button" :disabled="assetAction !== null" @click="previewSelectedAsset(true)">{{ assetAction === 'preview' ? '刷新中' : '预览数据' }}</button>
@@ -3506,11 +3548,20 @@ textarea:focus-visible {
 
 .query-asset-panel {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.query-asset-panel__browser {
+  display: grid;
   min-height: 0;
   align-content: start;
   gap: 14px;
-  padding: 2px 14px 18px;
-  overflow: auto;
+  padding: 2px 10px 12px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
@@ -3823,12 +3874,17 @@ textarea:focus-visible {
 
 .query-asset-panel__preview {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  max-height: clamp(180px, 42vh, 420px);
   gap: 10px;
+  margin: 0 14px 14px;
   padding: 14px;
+  overflow: hidden;
   border: 1px solid var(--studio-border);
   border-radius: 12px;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+  box-shadow: 0 -8px 22px rgba(15, 23, 42, .06);
 }
 
 .query-asset-panel__preview > header,
@@ -3852,6 +3908,18 @@ textarea:focus-visible {
   background: #eaf3ff;
   font-size: 10px;
   font-weight: 700;
+}
+
+.query-asset-panel__preview-body {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 10px;
+  padding-right: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .query-asset-panel__preview label {
@@ -3885,6 +3953,9 @@ textarea:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #edf3fb;
+  background: #fff;
 }
 
 .query-asset-panel__actions button {

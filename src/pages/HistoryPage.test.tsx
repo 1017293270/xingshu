@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import * as historyService from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
@@ -43,6 +43,25 @@ function renderHistoryPageWithIsolatedQuery() {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <HistoryPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function renderHistoryRouteFlow() {
+  useUiStore.getState().resetUiState();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0 } }
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/history"]}>
+        <Routes>
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/ask-data" element={<div aria-label="问数历史目标" />} />
+          <Route path="/ask-knowledge" element={<div aria-label="问知历史目标" />} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -167,12 +186,60 @@ describe("HistoryPage", () => {
 
     resolveReplay({
       sessionId: "session-42",
+      chatMode: "ask",
       question: "分析经营数据",
       events: [],
       turns: []
     });
 
     await waitFor(() => expect(restoreButton).toHaveAttribute("aria-busy", "false"));
+  });
+
+  it("routes restored knowledge history back to the shared rag workspace", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(historyService, "listHistorySessions").mockResolvedValue([
+      {
+        id: "session-rag",
+        sessionId: "session-rag",
+        title: "合同制度问答",
+        summary: "来自 data-hub 的历史会话",
+        category: "知识快查",
+        updatedAt: "2026-07-28 10:00",
+        source: "data-hub"
+      }
+    ]);
+    vi.spyOn(historyService, "loadDataHubHistoryReplay").mockResolvedValue({
+      sessionId: "session-rag",
+      chatMode: "rag",
+      question: "合同审批流程？",
+      events: [
+        {
+          type: "done",
+          data: { mode: "rag", askKnowledge: true, summary: "需经过部门审核。" },
+          sessionId: "session-rag",
+          chatId: "chat-rag"
+        }
+      ],
+      turns: [
+        {
+          id: "session-rag-chat-rag-0",
+          question: "合同审批流程？",
+          sessionId: "session-rag",
+          chatId: "chat-rag",
+          chatMode: "rag",
+          status: "done",
+          events: [],
+          error: ""
+        }
+      ]
+    });
+    renderHistoryRouteFlow();
+
+    await user.click(await screen.findByRole("button", { name: /合同制度问答/ }));
+
+    expect(await screen.findByLabelText("问知历史目标")).toBeInTheDocument();
+    expect(useUiStore.getState().activeAnalysisMode).toBe("rag");
+    expect(useUiStore.getState().activeAnalysisSessionId).toBe("session-rag");
   });
 
   it("paginates history sessions and avoids refetching when filters change", async () => {
