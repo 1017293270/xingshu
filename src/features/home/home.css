@@ -76,7 +76,7 @@
 }
 
 .home-page .xs-command-box__toolbar {
-  min-height: 72px;
+  min-height: 60px;
   padding: 0 24px 0 38px;
   border-top: 0 !important;
   box-shadow: none;
@@ -90,31 +90,37 @@
 }
 
 .home-page .xs-command-box__actions {
-  gap: 12px;
+  gap: 8px;
+}
+
+.home-page .xs-command-model-select {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
 }
 
 .home-page .xs-command-box__actions .ant-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  min-width: 56px;
-  height: 56px;
-  color: var(--xs-primary);
-  border-color: #e0eaff;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 8px 18px rgba(21, 88, 184, 0.08);
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  color: #54729c;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .home-page .xs-command-box__send.ant-btn {
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
   color: #ffffff;
   border: 0;
-  border-radius: 16px;
+  border-radius: 10px;
   background: #176ff2;
-  box-shadow: 0 13px 24px rgba(23, 111, 242, 0.24);
+  box-shadow: none;
 }
 
 .home-page .xs-command-box__send.ant-btn:not(:disabled):hover,
@@ -124,9 +130,9 @@
 }
 
 .home-page .xs-command-box__send.ant-btn:disabled {
-  color: #91add5;
-  border: 1px solid #d8e5f7;
-  background: #edf3fb;
+  color: #9db4d4;
+  border: 0;
+  background: #eef3fa;
   box-shadow: none;
 }
 
@@ -317,8 +323,16 @@
   }
 
   .home-page .xs-command-box__toolbar {
-    min-height: 72px;
+    min-height: 60px;
     padding: 14px 16px;
+  }
+
+  .home-page .xs-command-box__actions {
+    width: 100%;
+  }
+
+  .home-page .xs-command-model-select {
+    margin-right: auto;
   }
 
   .home-page__app-grid {

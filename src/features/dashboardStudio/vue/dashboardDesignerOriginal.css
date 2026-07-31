@@ -441,9 +441,17 @@
 
 .designer-canvas::before {
   display: none;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  content: "";
+  pointer-events: none;
 }
 
-.designer-canvas.is-grid-visible {
+.designer-canvas.is-grid-visible::before {
+  display: block;
   background-image:
     linear-gradient(rgba(111, 151, 205, .1) 1px, transparent 1px),
     linear-gradient(90deg, rgba(111, 151, 205, .1) 1px, transparent 1px);

@@ -87,8 +87,7 @@
 
 .xs-datahub-execution__heading-icon,
 .xs-datahub-overview__icon,
-.xs-datahub-subagent-drawer__icon,
-.xs-datahub-subagent-drawer__agent-icon {
+.xs-datahub-subagent-drawer__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -104,55 +103,228 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
 }
 
-.xs-datahub-execution__subagent-trigger {
+.xs-datahub-agent-avatar {
+  --xs-agent-avatar-size: 36px;
+  --xs-agent-avatar-icon-size: 18px;
+  --xs-agent-avatar-color: #245fa9;
+  --xs-agent-avatar-border: #bdd4ef;
+  --xs-agent-avatar-surface: #eaf3ff;
+  --xs-agent-avatar-surface-end: #f8fbff;
+  --xs-agent-avatar-node: #4d8cd2;
+  --xs-agent-avatar-highlight-x: 24%;
+  --xs-agent-avatar-highlight-y: 18%;
+  --xs-agent-role-color: #326ca7;
+  --xs-agent-role-border: #bfd8f2;
+  --xs-agent-role-surface: #edf6ff;
+  position: relative;
   display: inline-flex;
   align-items: center;
-  align-self: center;
   justify-content: center;
-  min-height: 40px;
-  gap: 7px;
-  padding: 0 12px;
-  border: 1px solid #bed9ff;
+  width: var(--xs-agent-avatar-size);
+  height: var(--xs-agent-avatar-size);
+  flex: 0 0 var(--xs-agent-avatar-size);
+  border: 1px solid var(--xs-agent-avatar-border);
   border-radius: 11px;
-  color: #174c95;
-  background: #f4f9ff;
-  font-size: 12px;
-  font-weight: 720;
-  cursor: pointer;
+  color: var(--xs-agent-avatar-color);
+  background:
+    radial-gradient(
+      circle at var(--xs-agent-avatar-highlight-x) var(--xs-agent-avatar-highlight-y),
+      rgba(255, 255, 255, 0.98),
+      transparent 38%
+    ),
+    linear-gradient(145deg, var(--xs-agent-avatar-surface), var(--xs-agent-avatar-surface-end));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 4px 10px rgba(41, 83, 129, 0.06);
   transition:
-    border-color var(--xs-motion-fast, 120ms) ease,
-    background var(--xs-motion-fast, 120ms) ease,
+    box-shadow var(--xs-motion-fast, 120ms) ease,
     transform var(--xs-motion-fast, 120ms) ease;
 }
 
-.xs-datahub-execution__subagent-trigger strong {
+.xs-datahub-agent-avatar::before {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  content: "";
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  background: var(--xs-agent-avatar-node);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xs-agent-avatar-node), transparent 62%);
+}
+
+.xs-datahub-agent-avatar__persona {
+  width: var(--xs-agent-avatar-icon-size);
+  height: var(--xs-agent-avatar-icon-size);
+}
+
+.xs-datahub-agent-avatar__role {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
   display: inline-grid;
-  min-width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   place-items: center;
-  border-radius: 7px;
-  color: #fff;
-  background: var(--execution-blue-deep);
-  font-size: 11px;
-  animation: xs-datahub-pop-in 240ms var(--xs-motion-ease-out, ease) backwards;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  color: var(--xs-agent-role-color);
+  background: var(--xs-agent-role-surface);
+  box-shadow:
+    0 0 0 1px var(--xs-agent-role-border),
+    0 2px 5px rgba(34, 66, 106, 0.16);
 }
 
-.xs-datahub-execution__subagent-trigger:hover:not(:disabled) {
-  border-color: #7eb6fa;
-  background: #eaf4ff;
+.xs-datahub-agent-avatar__role > svg {
+  width: 9px;
+  height: 9px;
+}
+
+.xs-datahub-agent-avatar--small {
+  --xs-agent-avatar-size: 28px;
+  --xs-agent-avatar-icon-size: 14px;
+  border-radius: 9px;
+}
+
+.xs-datahub-agent-avatar--small .xs-datahub-agent-avatar__role {
+  right: -3px;
+  bottom: -2px;
+  width: 13px;
+  height: 13px;
+  border-width: 1.5px;
+  border-radius: 5px;
+}
+
+.xs-datahub-agent-avatar--small .xs-datahub-agent-avatar__role > svg {
+  width: 7px;
+  height: 7px;
+}
+
+.xs-datahub-agent-avatar--large {
+  --xs-agent-avatar-size: 40px;
+  --xs-agent-avatar-icon-size: 20px;
+  border-radius: 12px;
+}
+
+.xs-datahub-agent-avatar--large .xs-datahub-agent-avatar__role {
+  width: 17px;
+  height: 17px;
+}
+
+.xs-datahub-agent-avatar--tone-2 {
+  --xs-agent-avatar-color: #0e7d94;
+  --xs-agent-avatar-border: #a9dde7;
+  --xs-agent-avatar-surface: #e3f6fa;
+  --xs-agent-avatar-surface-end: #f6fcfd;
+  --xs-agent-avatar-node: #2ba4ba;
+}
+
+.xs-datahub-agent-avatar--tone-3 {
+  --xs-agent-avatar-color: #5e4fbb;
+  --xs-agent-avatar-border: #d2cbf0;
+  --xs-agent-avatar-surface: #efedfb;
+  --xs-agent-avatar-surface-end: #f9f8ff;
+  --xs-agent-avatar-node: #8577d4;
+}
+
+.xs-datahub-agent-avatar--tone-4 {
+  --xs-agent-avatar-color: #1d7a55;
+  --xs-agent-avatar-border: #b5e2cd;
+  --xs-agent-avatar-surface: #e6f6ee;
+  --xs-agent-avatar-surface-end: #f6fcfa;
+  --xs-agent-avatar-node: #3aa97f;
+}
+
+.xs-datahub-agent-avatar--tone-5 {
+  --xs-agent-avatar-color: #a8620a;
+  --xs-agent-avatar-border: #f0d9b0;
+  --xs-agent-avatar-surface: #fdf3e1;
+  --xs-agent-avatar-surface-end: #fffcf6;
+  --xs-agent-avatar-node: #d18f2c;
+}
+
+.xs-datahub-agent-avatar--tone-6 {
+  --xs-agent-avatar-color: #a63c7e;
+  --xs-agent-avatar-border: #eec6dd;
+  --xs-agent-avatar-surface: #fbeaf4;
+  --xs-agent-avatar-surface-end: #fff9fc;
+  --xs-agent-avatar-node: #c767a1;
+}
+
+.xs-datahub-agent-avatar--data {
+  --xs-agent-role-color: #176d99;
+  --xs-agent-role-border: #b8dfea;
+  --xs-agent-role-surface: #e6f7fb;
+}
+
+.xs-datahub-agent-avatar--policy {
+  --xs-agent-role-color: #5d59a2;
+  --xs-agent-role-border: #d3d0ec;
+  --xs-agent-role-surface: #f0effa;
+}
+
+.xs-datahub-agent-avatar--audit {
+  --xs-agent-role-color: #28756d;
+  --xs-agent-role-border: #bfe0da;
+  --xs-agent-role-surface: #e9f7f4;
+}
+
+.xs-datahub-agent-avatar--code {
+  --xs-agent-role-color: #465d78;
+  --xs-agent-role-border: #cbd7e5;
+  --xs-agent-role-surface: #edf2f7;
+}
+
+.xs-datahub-agent-avatar--research {
+  --xs-agent-role-color: #2c68a8;
+  --xs-agent-role-border: #c2d9f2;
+  --xs-agent-role-surface: #eaf3fd;
+}
+
+.xs-datahub-agent-avatar--analysis {
+  --xs-agent-role-color: #347268;
+  --xs-agent-role-border: #c3ded8;
+  --xs-agent-role-surface: #ebf6f3;
+}
+
+.xs-datahub-agent-avatar--variant-2::before {
+  right: auto;
+  left: 3px;
+}
+
+.xs-datahub-agent-avatar--variant-2 {
+  --xs-agent-avatar-highlight-x: 76%;
+}
+
+.xs-datahub-agent-avatar--variant-3::before {
+  top: auto;
+  right: auto;
+  bottom: 3px;
+  left: 3px;
+}
+
+.xs-datahub-agent-avatar--variant-3 {
+  --xs-agent-avatar-highlight-y: 78%;
+}
+
+.xs-datahub-agent-avatar--variant-4::before {
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+}
+
+.xs-datahub-agent-avatar--variant-4 {
+  --xs-agent-avatar-highlight-x: 72%;
+  --xs-agent-avatar-highlight-y: 72%;
+}
+
+.xs-datahub-subagent-tree__item:hover .xs-datahub-agent-avatar,
+.xs-datahub-subagent-dag__node:hover .xs-datahub-agent-avatar {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.78),
+    0 7px 15px rgba(41, 83, 129, 0.11);
   transform: translateY(-1px);
-}
-
-.xs-datahub-execution__subagent-trigger:disabled {
-  border-color: #dbe7f5;
-  color: #8a9ab0;
-  background: #f7f9fc;
-  cursor: not-allowed;
-}
-
-.xs-datahub-execution__subagent-trigger:disabled strong {
-  color: #778aa3;
-  background: #dce6f2;
 }
 
 /* 平滑展开/收起容器：grid-template-rows 过渡，配合 TSX 中的 --open 开关 */
@@ -590,8 +762,7 @@
   font-size: 11px;
 }
 
-.xs-datahub-timeline,
-.xs-datahub-execution__agents {
+.xs-datahub-timeline {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--execution-border);
@@ -760,11 +931,6 @@
 .xs-datahub-timeline--empty p {
   margin: 0;
   font-size: 12px;
-}
-
-.xs-datahub-execution__agent-list {
-  display: grid;
-  gap: 10px;
 }
 
 .xs-datahub-agent-card {
@@ -1235,7 +1401,6 @@
 }
 
 .xs-datahub-agent-card__empty,
-.xs-datahub-execution__waiting,
 .xs-datahub-subagent-drawer__empty-detail {
   display: flex;
   align-items: center;
@@ -1246,7 +1411,6 @@
 }
 
 .xs-datahub-agent-card__empty > span,
-.xs-datahub-execution__waiting > span,
 .xs-datahub-subagent-drawer__empty-detail > span {
   width: 8px;
   height: 8px;
@@ -1257,8 +1421,7 @@
   animation: xs-datahub-soft-pulse 1.4s ease-in-out infinite;
 }
 
-.xs-datahub-agent-card__empty p,
-.xs-datahub-execution__waiting p {
+.xs-datahub-agent-card__empty p {
   margin: 0;
   font-size: 11px;
 }
@@ -1270,22 +1433,6 @@
 
 .xs-datahub-agent-card--compact .xs-datahub-agent-card__header {
   min-height: 50px;
-}
-
-.xs-datahub-execution__waiting {
-  border: 1px dashed #ccdff5;
-  border-radius: 9px;
-  background: #f8fbff;
-}
-
-.xs-datahub-execution__waiting > div {
-  display: grid;
-  gap: 2px;
-}
-
-.xs-datahub-execution__waiting strong {
-  color: #385d88;
-  font-size: 11px;
 }
 
 .xs-datahub-execution__empty {
@@ -1426,7 +1573,7 @@
 .xs-datahub-subagent-tree__item {
   position: relative;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto 14px;
+  grid-template-columns: 28px minmax(0, 1fr) auto 14px;
   width: calc(100% - min(calc(var(--xs-datahub-tree-level) * 12px), 48px));
   min-height: 53px;
   align-items: center;
@@ -1478,13 +1625,6 @@
 
 .xs-datahub-subagent-tree__item--selected::before {
   transform: scaleY(1);
-}
-
-.xs-datahub-subagent-tree__branch {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #417fbf;
 }
 
 .xs-datahub-subagent-tree__identity {
@@ -1847,10 +1987,6 @@
     padding: 0;
   }
 
-  .xs-datahub-execution__subagent-trigger span {
-    display: none;
-  }
-
   .xs-datahub-execution__body {
     padding: 11px;
   }
@@ -1883,7 +2019,7 @@
   }
 
   .xs-datahub-timeline,
-  .xs-datahub-execution__agents {
+  .xs-datahub-subagent-dag {
     padding: 11px;
   }
 
@@ -1985,5 +2121,347 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0s !important;
+  }
+}
+
+/* ===== 派发编排图（子智能体 DAG 画布）===== */
+.xs-datahub-subagent-dag {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--execution-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.xs-datahub-subagent-dag__scroll {
+  overflow-x: auto;
+}
+
+.xs-datahub-subagent-dag__canvas {
+  position: relative;
+  width: 100%;
+  min-width: 680px;
+}
+
+.xs-datahub-subagent-dag__canvas > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.xs-datahub-subagent-dag__edge {
+  fill: none;
+  stroke: #d9e7f8;
+  stroke-width: 1.5;
+  animation: xs-datahub-edge-in var(--xs-motion-enter, 260ms)
+    var(--xs-motion-ease-out, ease) backwards;
+  animation-delay: min(
+    calc(var(--xs-datahub-stagger, 0) * var(--xs-motion-stagger, 32ms)),
+    var(--xs-motion-stagger-max, 256ms)
+  );
+  transition: stroke var(--xs-motion-base, 180ms) ease;
+}
+
+/* 运行中的派发边：虚线流动（参考 434334 edge-flow） */
+.xs-datahub-subagent-dag__edge--running {
+  stroke-dasharray: 6 5;
+  animation:
+    xs-datahub-edge-in var(--xs-motion-enter, 260ms)
+      var(--xs-motion-ease-out, ease) backwards,
+    xs-datahub-edge-flow 0.8s linear infinite;
+  animation-delay:
+    min(
+      calc(var(--xs-datahub-stagger, 0) * var(--xs-motion-stagger, 32ms)),
+      var(--xs-motion-stagger-max, 256ms)
+    ),
+    0s;
+}
+
+.xs-datahub-subagent-dag__edge--done {
+  stroke: #b7d3ec;
+}
+
+.xs-datahub-subagent-dag__edge--error {
+  stroke: #e8a9a5;
+}
+
+.xs-datahub-subagent-dag__node {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  width: 190px;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transform: translateY(-50%);
+  animation: xs-datahub-node-in 300ms cubic-bezier(0.18, 0.89, 0.32, 1.28) backwards;
+  animation-delay: min(
+    calc(var(--xs-datahub-stagger, 0) * 70ms),
+    420ms
+  );
+  transition:
+    left 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color var(--xs-motion-fast, 120ms) ease,
+    background var(--xs-motion-fast, 120ms) ease,
+    box-shadow var(--xs-motion-fast, 120ms) ease;
+}
+
+button.xs-datahub-subagent-dag__node:hover {
+  border-color: #d3e4f8;
+  background: #f4f9ff;
+  box-shadow: 0 6px 16px rgba(35, 92, 157, 0.08);
+}
+
+button.xs-datahub-subagent-dag__node:focus-visible {
+  outline: 3px solid rgba(22, 119, 255, 0.24);
+  outline-offset: 1px;
+}
+
+.xs-datahub-subagent-dag__node--root {
+  cursor: default;
+  border-color: #d9e7f8;
+  background: linear-gradient(180deg, #f7faff, #f2f7fe);
+}
+
+.xs-datahub-subagent-dag__node[data-status="running"] .xs-datahub-agent-avatar {
+  animation: xs-datahub-ring-pulse 1.7s ease-in-out infinite;
+}
+
+.xs-datahub-subagent-dag__node-badge {
+  position: absolute;
+  top: 1px;
+  left: 37px;
+  z-index: 1;
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(34, 66, 106, 0.22);
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="running"] {
+  color: var(--execution-blue);
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="running"] svg {
+  animation: xs-datahub-spin 1.15s linear infinite;
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="done"] {
+  color: #1b8a67;
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="done"] svg {
+  animation: xs-datahub-pop-in 300ms cubic-bezier(0.18, 0.89, 0.32, 1.28) backwards;
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="error"] {
+  color: #ce3a3a;
+}
+
+.xs-datahub-subagent-dag__node-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.xs-datahub-subagent-dag__node-copy strong {
+  overflow: hidden;
+  color: #173e6c;
+  font-size: 13px;
+  font-weight: 740;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xs-datahub-subagent-dag__node-copy small {
+  overflow: hidden;
+  color: #8292a7;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 节点标识色（与头像 tone 对齐），供状态点/寻路高亮使用 */
+.xs-datahub-subagent-dag__node[data-tone="1"] {
+  --xs-subagent-tone: #245fa9;
+}
+
+.xs-datahub-subagent-dag__node[data-tone="2"] {
+  --xs-subagent-tone: #0e7d94;
+}
+
+.xs-datahub-subagent-dag__node[data-tone="3"] {
+  --xs-subagent-tone: #5e4fbb;
+}
+
+.xs-datahub-subagent-dag__node[data-tone="4"] {
+  --xs-subagent-tone: #1d7a55;
+}
+
+.xs-datahub-subagent-dag__node[data-tone="5"] {
+  --xs-subagent-tone: #a8620a;
+}
+
+.xs-datahub-subagent-dag__node[data-tone="6"] {
+  --xs-subagent-tone: #a63c7e;
+}
+
+/* ===== 编排执行轨迹：连接线随事件追加而生长 ===== */
+.xs-datahub-timeline__item:not(:last-child)::before {
+  transform-origin: top center;
+  animation: xs-datahub-line-grow var(--xs-motion-enter, 260ms)
+    var(--xs-motion-ease-out, ease) backwards;
+  animation-delay: min(
+    calc(var(--xs-datahub-stagger, 0) * var(--xs-motion-stagger, 32ms)),
+    var(--xs-motion-stagger-max, 256ms)
+  );
+}
+
+/* ===== 子智能体抽屉：关闭滑出/淡出 ===== */
+.xs-datahub-subagent-drawer[data-closing] {
+  animation: xs-datahub-backdrop-out 190ms ease-in both;
+}
+
+.xs-datahub-subagent-drawer[data-closing] .xs-datahub-subagent-drawer__panel {
+  animation: xs-datahub-drawer-out 190ms cubic-bezier(0.4, 0, 0.6, 1) both;
+}
+
+@keyframes xs-datahub-edge-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes xs-datahub-edge-flow {
+  from {
+    stroke-dashoffset: 11;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes xs-datahub-node-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.55);
+  }
+}
+
+@keyframes xs-datahub-line-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes xs-datahub-drawer-out {
+  to {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+@keyframes xs-datahub-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-datahub-subagent-drawer {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ===== 编排流程：派发光点 / 画布思考态 / 标识色状态点 ===== */
+.xs-datahub-subagent-dag__packet {
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(36, 95, 169, 0.35));
+}
+
+.xs-datahub-subagent-dag__waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #55779e;
+  font-size: 10px;
+  font-weight: 660;
+}
+
+.xs-datahub-subagent-dag__waiting > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5b97e3;
+  animation: xs-datahub-soft-pulse 1.4s ease-in-out infinite;
+}
+
+.xs-datahub-subagent-dag__canvas--ghost {
+  border: 1px dashed #d8e6f7;
+  border-radius: 12px;
+  background-image: radial-gradient(circle, #dbe8f8 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  background-position: 9px 9px;
+}
+
+.xs-datahub-subagent-dag__node--thinking {
+  width: 210px;
+  padding: 10px 14px 10px 10px;
+  border-color: #d4e2f4;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 18px rgba(36, 95, 169, 0.08);
+}
+
+.xs-datahub-subagent-dag__node--thinking .xs-datahub-agent-avatar {
+  animation: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.76);
+}
+
+.xs-datahub-subagent-dag__node--thinking .xs-datahub-agent-avatar::before,
+.xs-datahub-subagent-dag__node--thinking .xs-datahub-agent-avatar__role {
+  display: none;
+}
+
+.xs-datahub-subagent-dag__node--thinking .xs-datahub-subagent-dag__node-copy {
+  gap: 2px;
+}
+
+.xs-datahub-subagent-dag__thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #6680a0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.xs-datahub-subagent-dag__thinking > svg {
+  flex: 0 0 auto;
+  color: #4d83c5;
+  animation: xs-datahub-spin 1.15s linear infinite;
+}
+
+.xs-datahub-subagent-dag__node-badge[data-status="running"] {
+  color: var(--xs-subagent-tone, var(--execution-blue));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-datahub-subagent-dag__packet {
+    display: none;
   }
 }

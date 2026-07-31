@@ -8,10 +8,22 @@ describe("useUiStore", () => {
   });
 
   it("selects a recommended app and writes its prompt", () => {
-    useUiStore.getState().selectApp("data-chat", "帮我分析本月经营数据，并生成趋势图表");
+    useUiStore.getState().selectApp("data-chat", "帮我分析本月经营数据，并生成趋势图表", "ask");
 
     expect(useUiStore.getState().selectedAppId).toBe("data-chat");
     expect(useUiStore.getState().homeDraft).toBe("帮我分析本月经营数据，并生成趋势图表");
+    expect(useUiStore.getState().homeChatMode).toBe("ask");
+  });
+
+  it("uses the orchestration model by default and clears app selection for a manual model choice", () => {
+    expect(useUiStore.getState().homeChatMode).toBe("agent");
+
+    useUiStore.getState().selectApp("knowledge", "查询最新制度", "rag");
+    useUiStore.getState().setHomeChatMode("document_lookup");
+
+    expect(useUiStore.getState().homeChatMode).toBe("document_lookup");
+    expect(useUiStore.getState().selectedAppId).toBeNull();
+    expect(useUiStore.getState().homeDraft).toBe("查询最新制度");
   });
 
   it("clears home conversation state for a new chat", () => {
@@ -22,6 +34,7 @@ describe("useUiStore", () => {
     expect(useUiStore.getState().selectedAppId).toBeNull();
     expect(useUiStore.getState().homeDraft).toBe("");
     expect(useUiStore.getState().sentStatus).toBe("");
+    expect(useUiStore.getState().homeChatMode).toBe("agent");
   });
 
   it("toggles the sidebar collapsed state", () => {

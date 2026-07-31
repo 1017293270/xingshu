@@ -1,18 +1,19 @@
 import {
   ArrowLeft,
   GitBranch,
-  Robot,
   TreeStructure,
   X
 } from "@phosphor-icons/react";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  assignSubagentTones,
   flattenSubagentTree,
   formatExecutionTime,
   sessionDisplayName
 } from "./display";
 import { XsCountUpText } from "../XsCountUpText";
+import { DataHubAgentAvatar } from "./DataHubAgentAvatar";
 import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import { DataHubSubagentTree } from "./DataHubSubagentTree";
@@ -43,11 +44,26 @@ export function DataHubSubagentDrawer({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  // 关闭时保留挂载约 210ms，让滑出/淡出动画播完再卸载
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setMounted(false), 210);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const flattened = useMemo(() => flattenSubagentTree(nodes), [nodes]);
+  const toneMap = useMemo(() => assignSubagentTones(nodes), [nodes]);
   const selected = flattened.find((node) => {
     const key = node.session.sessionId ?? node.session.subagentId;
     return key === selectedSessionId;
   });
+  const selectedName = selected ? sessionDisplayName(selected.session) : "";
+  const selectedIdentity = selected
+    ? (selected.session.sessionId ?? selected.session.subagentId ?? selectedName)
+    : "";
 
   useEffect(() => {
     if (!open) {
@@ -103,13 +119,15 @@ export function DataHubSubagentDrawer({
     };
   }, [open, returnFocusRef]);
 
-  if (!open || typeof document === "undefined") {
+  if ((!open && !mounted) || typeof document === "undefined") {
     return null;
   }
+  const closing = !open;
 
   return createPortal(
     <div
       className="xs-datahub-subagent-drawer"
+      data-closing={closing || undefined}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -186,11 +204,14 @@ export function DataHubSubagentDrawer({
                       返回执行树
                     </button>
                     <div>
-                      <span className="xs-datahub-subagent-drawer__agent-icon" aria-hidden="true">
-                        <Robot size={20} weight="duotone" />
-                      </span>
+                      <DataHubAgentAvatar
+                        name={selectedName}
+                        identity={selectedIdentity}
+                        size="large"
+                        tone={toneMap.get(selectedIdentity)}
+                      />
                       <div>
-                        <h3>{sessionDisplayName(selected.session)}</h3>
+                        <h3>{selectedName}</h3>
                         <p>
                           {selected.session.sessionId || "无会话标识"}
                           {formatExecutionTime(selected.session.startedAt)

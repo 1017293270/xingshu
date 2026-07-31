@@ -25,6 +25,7 @@ type UiStoreState = {
   isSidebarCollapsed: boolean;
   selectedAppId: string | null;
   homeDraft: string;
+  homeChatMode: DataHubChatMode;
   sentStatus: string;
   pendingAttachments: AttachmentQueueItem[];
   activeAnalysisQuestion: string;
@@ -42,7 +43,8 @@ type UiStoreState = {
 type UiStoreActions = {
   toggleSidebarCollapsed: () => void;
   setHomeDraft: (draft: string) => void;
-  selectApp: (appId: string, prompt: string) => void;
+  setHomeChatMode: (chatMode: DataHubChatMode) => void;
+  selectApp: (appId: string, prompt: string, chatMode?: DataHubChatMode) => void;
   setActiveAnalysisQuestion: (question: string) => void;
   queuePendingAttachments: (attachments: AttachmentQueueItem[]) => void;
   removePendingAttachment: (attachmentId: string) => void;
@@ -76,6 +78,7 @@ const initialState: UiStoreState = {
   isSidebarCollapsed: false,
   selectedAppId: null,
   homeDraft: "",
+  homeChatMode: "agent",
   sentStatus: "",
   pendingAttachments: [],
   activeAnalysisQuestion: "",
@@ -136,12 +139,18 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
   ...initialState,
   toggleSidebarCollapsed: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
   setHomeDraft: (draft) => set({ homeDraft: draft }),
-  selectApp: (appId, prompt) =>
+  setHomeChatMode: (homeChatMode) =>
     set({
+      homeChatMode,
+      selectedAppId: null
+    }),
+  selectApp: (appId, prompt, chatMode) =>
+    set((state) => ({
       selectedAppId: appId,
       homeDraft: prompt,
+      homeChatMode: chatMode ?? state.homeChatMode,
       sentStatus: ""
-    }),
+    })),
   setActiveAnalysisQuestion: (question) => set({ activeAnalysisQuestion: question }),
   queuePendingAttachments: (attachments) =>
     set((state) => {
@@ -330,6 +339,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     set({
       selectedAppId: null,
       homeDraft: "",
+      homeChatMode: initialState.homeChatMode,
       sentStatus: "",
       pendingAttachments: [],
       activeAnalysisQuestion: initialState.activeAnalysisQuestion,

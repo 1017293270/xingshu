@@ -18,6 +18,7 @@ export type DataHubExecutionProjectionOptions = {
   globalSessionId?: string;
   chatId?: string;
   fallbackAgentName?: string;
+  terminalStatus?: Extract<DataHubExecutionStatus, "done" | "error">;
 };
 
 export type DataHubSubagentTreeEntry = {
@@ -426,6 +427,8 @@ function projectSessionEvent(
   const status = nextSessionStatus(session, event, done);
   const finished =
     session.finished ||
+    status === "done" ||
+    status === "error" ||
     event.type === "done" ||
     event.finished === true ||
     event.requestFinished === true;
@@ -573,15 +576,44 @@ export function reduceDataHubExecutionEvent(
     chatId: mainSession.chatId ?? identity.chatId
   };
 
+  const nextMainSession = projectSessionEvent(
+    mainSession,
+    event,
+    mainIdentity,
+    projection.fallbackAgentName,
+    false
+  );
+
+  // 主会话到达终态时，本轮编排整体结束：仍未收尾的子会话（如真实流中
+  // 缺少路由到自身的 done 事件）一并级联收尾，避免编排流程永远停在运行中。
+  const mainReachedTerminal =
+    (nextMainSession.status === "done" || nextMainSession.status === "error") &&
+    mainSession.status !== nextMainSession.status;
+
+  const subagentSessions = mainReachedTerminal
+    ? projection.subagentSessions.map((session) => {
+        if (
+          session.finished ||
+          session.status === "done" ||
+          session.status === "error"
+        ) {
+          return session;
+        }
+        const cascadeStatus = nextMainSession.status as "done" | "error";
+        return {
+          ...session,
+          status: cascadeStatus,
+          finished: true,
+          updatedAt: event.timestamp ?? session.updatedAt,
+          cards: completeCards(session.cards, cascadeStatus)
+        };
+      })
+    : projection.subagentSessions;
+
   return {
     ...projection,
-    mainSession: projectSessionEvent(
-      mainSession,
-      event,
-      mainIdentity,
-      projection.fallbackAgentName,
-      false
-    ),
+    mainSession: nextMainSession,
+    subagentSessions,
     eventCount: projection.eventCount + 1
   };
 }
@@ -598,6 +630,38 @@ export function projectDataHubExecutionEvents(
   for (const event of events) {
     projection = reduceDataHubExecutionEvent(projection, event);
   }
+
+  const explicitMainStatus =
+    projection.mainSession.status === "done" ||
+    projection.mainSession.status === "error"
+      ? projection.mainSession.status
+      : undefined;
+  const terminalStatus = explicitMainStatus ?? options.terminalStatus;
+
+  if (terminalStatus) {
+    const settleSession = (
+      session: DataHubExecutionSession
+    ): DataHubExecutionSession => {
+      const sessionTerminalStatus =
+        session.status === "done" || session.status === "error"
+          ? session.status
+          : terminalStatus;
+
+      return {
+        ...session,
+        status: sessionTerminalStatus,
+        finished: true,
+        cards: completeCards(session.cards, sessionTerminalStatus)
+      };
+    };
+
+    projection = {
+      ...projection,
+      mainSession: settleSession(projection.mainSession),
+      subagentSessions: projection.subagentSessions.map(settleSession)
+    };
+  }
+
   return projection;
 }
 

@@ -148,12 +148,92 @@ describe("dashboardModuleService", () => {
       expectedType: "metric"
     },
     {
+      name: "数量问答",
+      question: "2023年有多少合同",
+      result: output(
+        "contract-count",
+        [column("count-id", "count", "合同数量", "number")],
+        [{ count: 24 }]
+      ),
+      expectedType: "metric"
+    },
+    {
       name: "明细表",
       question: "列出合同名称和客户",
       result: output(
         "detail",
         [column("contract-id", "contract", "合同名称"), column("customer-id", "customer", "客户")],
         [{ contract: "A 合同", customer: "甲公司" }, { contract: "B 合同", customer: "乙公司" }]
+      ),
+      expectedType: "table"
+    },
+    {
+      name: "单行明细仍为表格",
+      question: "列出合同金额明细",
+      result: output(
+        "single-detail",
+        [
+          column("contract-id", "contract", "合同名称"),
+          column("amount-id", "amount", "合同金额", "number")
+        ],
+        [{ contract: "A 合同", amount: 120 }]
+      ),
+      expectedType: "table"
+    },
+    {
+      name: "英文明细语义",
+      question: "Contract details",
+      result: output(
+        "details",
+        [
+          column("contract-id", "contract", "Contract"),
+          column("amount-id", "amount", "Amount", "number")
+        ],
+        [{ contract: "Contract A", amount: 120 }]
+      ),
+      expectedType: "table"
+    },
+    {
+      name: "无语义且没有可绘制数值",
+      question: "合同名称与客户",
+      result: output(
+        "contracts",
+        [
+          column("contract-id", "contract", "合同名称"),
+          column("customer-id", "customer", "客户")
+        ],
+        [{ contract: "A 合同", customer: "甲公司" }]
+      ),
+      expectedType: "table"
+    },
+    {
+      name: "包含数值列的合同明细",
+      question: "2023年有哪些合同",
+      result: output(
+        "output_003",
+        [
+          column("count-id", "count", "记录数", "number"),
+          column("contract-no-id", "contractNo", "合同编号"),
+          column("contract-name-id", "contractName", "合同名称"),
+          column("contract-year-id", "contractYear", "合同年份"),
+          column("contract-amount-id", "contractAmount", "合同金额（万元）", "number")
+        ],
+        [
+          {
+            count: 1,
+            contractNo: "XS-2023-001",
+            contractName: "数据平台建设合同",
+            contractYear: "2023年",
+            contractAmount: 120
+          },
+          {
+            count: 1,
+            contractNo: "XS-2023-002",
+            contractName: "智能分析服务合同",
+            contractYear: "2023年",
+            contractAmount: 86
+          }
+        ]
       ),
       expectedType: "table"
     }
@@ -174,6 +254,141 @@ describe("dashboardModuleService", () => {
     expect(Object.values(added.schema.dataBindings)).toHaveLength(1);
     expect(Object.values(added.schema.modules ?? {})).toHaveLength(1);
     expect(added.schema.modules?.[added.moduleId]?.widgetIds).toEqual([added.widgetId]);
+  });
+
+  it("uses the selected aggregate output instead of forcing the parent detail question to a table", () => {
+    const details = output(
+      "contract-details",
+      [
+        column("contract-id", "contract", "合同名称"),
+        column("amount-id", "amount", "合同金额", "number")
+      ],
+      [{ contract: "A 合同", amount: 120 }]
+    );
+    const yearlySummary = output(
+      "yearly-summary",
+      [
+        column("year-id", "year", "年份", "date"),
+        column("count-id", "count", "合同数量", "number")
+      ],
+      [{ year: "2022", count: 18 }, { year: "2023", count: 24 }]
+    );
+    const asset = createAsset(
+      "asset-contract-outputs",
+      "2023年有哪些合同",
+      "查询 2023 年合同明细",
+      [details, yearlySummary]
+    );
+    asset.stableVersion!.outputs[1]!.label = "年度汇总";
+
+    const added = appendQueryAssetChart(
+      blankDashboard(),
+      asset,
+      execution(asset, [details, yearlySummary]),
+      yearlySummary.outputKey
+    );
+
+    expect(added.schema.widgets[0]?.type).toBe("line");
+  });
+
+  it("treats a selected TOP10 output as aggregate even when the parent question is detail-oriented", () => {
+    const ranking = output(
+      "top10",
+      [
+        column("project-id", "project", "项目"),
+        column("count-id", "count", "合同数量", "number")
+      ],
+      [{ project: "甲项目", count: 18 }, { project: "乙项目", count: 12 }]
+    );
+    const asset = createAsset(
+      "asset-contract-top10",
+      "列出各项目合同",
+      "有哪些项目合同",
+      [ranking]
+    );
+    asset.stableVersion!.outputs[0]!.label = "TOP10";
+
+    const added = appendQueryAssetChart(
+      blankDashboard(),
+      asset,
+      execution(asset, [ranking]),
+      ranking.outputKey
+    );
+
+    expect(added.schema.widgets[0]?.type).toBe("bar");
+  });
+
+  it("lets a selected detail output label win and preserves the complete table payload", () => {
+    const rows = [
+      {
+        count: 1,
+        contractNo: "XS-2023-001",
+        contractName: "数据平台建设合同",
+        contractAmount: 120
+      },
+      {
+        count: 1,
+        contractNo: "XS-2023-002",
+        contractName: "智能分析服务合同",
+        contractAmount: 86
+      }
+    ];
+    const details = output(
+      "output_003",
+      [
+        column("count-id", "count", "记录数", "number"),
+        column("contract-no-id", "contractNo", "合同编号"),
+        column("contract-name-id", "contractName", "合同名称"),
+        column("contract-amount-id", "contractAmount", "合同金额（万元）", "number")
+      ],
+      rows
+    );
+    details.totalRows = 24;
+    const asset = createAsset(
+      "asset-contract-details",
+      "合同查询结果",
+      "查看合同结果",
+      [details]
+    );
+    asset.stableVersion!.outputs[0]!.label = "合同明细汇总";
+
+    const added = appendQueryAssetChart(
+      blankDashboard(),
+      asset,
+      execution(asset, [details]),
+      details.outputKey
+    );
+
+    const widget = added.schema.widgets[0];
+    const binding = added.schema.dataBindings[added.bindingId];
+    expect(widget).toMatchObject({
+      type: "table",
+      mapping: {},
+      position: { w: 620, h: 340 }
+    });
+    expect(binding).toMatchObject({
+      resultKind: "table",
+      table: {
+        rows,
+        totalRows: 24
+      },
+      sourceRef: {
+        assetId: asset.id,
+        queryVersionId: asset.stableVersionId,
+        outputKey: details.outputKey
+      }
+    });
+    expect(binding?.table.columns.map((column) => column.title)).toEqual([
+      "记录数",
+      "合同编号",
+      "合同名称",
+      "合同金额（万元）"
+    ]);
+    expect(added.schema.modules?.[added.moduleId]?.source).toMatchObject({
+      assetId: asset.id,
+      queryVersionId: asset.stableVersionId,
+      outputKey: details.outputKey
+    });
   });
 
   it("uses only the selected output and preserves immutable source metadata", () => {

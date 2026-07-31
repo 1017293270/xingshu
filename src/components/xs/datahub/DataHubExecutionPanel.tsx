@@ -1,16 +1,14 @@
 import {
   CaretDown,
-  Robot,
   TreeStructure
 } from "@phosphor-icons/react";
 import { useId, useMemo, useRef, useState } from "react";
 import { buildDataHubSubagentTree } from "@/services/dataHubExecutionProjector";
-import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
 import { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
+import { DataHubSubagentDag, dataHubDagGhostVisible } from "./DataHubSubagentDag";
 import { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
-import { flattenSubagentTree } from "./display";
 import type { DataHubExecutionPanelProps } from "./types";
 import "../../../pages/styles/datahub-execution.css";
 
@@ -62,7 +60,6 @@ export function DataHubExecutionPanel({
 }: DataHubExecutionPanelProps) {
   const titleId = useId();
   const bodyId = useId();
-  const agentsTitleId = useId();
   const [expanded, setExpanded] = useState(defaultExpanded);
   // 首次展开后才挂载内容：折叠初始态下保持 DOM 为空（与条件渲染一致），
   // 之后保持挂载以支持平滑收起动画。
@@ -84,10 +81,6 @@ export function DataHubExecutionPanel({
     () => subagentTree ?? buildDataHubSubagentTree(projection),
     [projection, subagentTree]
   );
-  const flattenedSubagents = useMemo(
-    () => flattenSubagentTree(resolvedSubagentTree),
-    [resolvedSubagentTree]
-  );
   const allAgentNames = new Set([
     ...projection.mainSession.cards.map((card) => card.agentName),
     ...projection.subagentSessions.flatMap((session) =>
@@ -98,8 +91,18 @@ export function DataHubExecutionPanel({
     projection.eventCount > 0 ||
     projection.mainSession.cards.length > 0 ||
     projection.subagentSessions.length > 0;
+  // 提问后的首个事件到达前：用幽灵编排画布填充面板，避免空白空状态框
+  const ghostVisible = dataHubDagGhostVisible(
+    projection.mainSession,
+    resolvedSubagentTree.length > 0
+  );
 
-  const openDrawer = () => {
+  const openDrawer = (
+    sessionId: string,
+    trigger: HTMLButtonElement
+  ) => {
+    drawerTriggerRef.current = trigger;
+    setSelectedSessionId(sessionId);
     setDrawerOpen(true);
   };
   const closeDrawer = () => {
@@ -132,21 +135,6 @@ export function DataHubExecutionPanel({
           <DataHubExecutionStatus status={projection.mainSession.status} compact />
           <CaretDown size={16} aria-hidden="true" />
         </button>
-
-        <button
-          ref={drawerTriggerRef}
-          type="button"
-          className="xs-datahub-execution__subagent-trigger"
-          disabled={!flattenedSubagents.length}
-          aria-haspopup="dialog"
-          aria-expanded={isDrawerOpen}
-          aria-label={`查看子智能体（${flattenedSubagents.length}）`}
-          onClick={openDrawer}
-        >
-          <Robot size={17} weight="duotone" aria-hidden="true" />
-          <span>子智能体</span>
-          <strong key={flattenedSubagents.length}>{flattenedSubagents.length}</strong>
-        </button>
       </header>
 
       <div
@@ -157,52 +145,24 @@ export function DataHubExecutionPanel({
         <div className="xs-datahub-collapse__inner">
           {bodyMountedRef.current ? (
             <div className="xs-datahub-execution__body">
-              {hasContent ? (
+              {hasContent || ghostVisible ? (
                 <>
-                  <DataHubOrchestrationOverview
-                    session={projection.mainSession}
-                    eventCount={projection.eventCount}
-                    agentCount={allAgentNames.size}
-                    subagentCount={projection.subagentSessions.length}
+                  {hasContent ? (
+                    <DataHubOrchestrationOverview
+                      session={projection.mainSession}
+                      eventCount={projection.eventCount}
+                      agentCount={allAgentNames.size}
+                      subagentCount={projection.subagentSessions.length}
+                    />
+                  ) : null}
+                  <DataHubSubagentDag
+                    mainSession={projection.mainSession}
+                    nodes={resolvedSubagentTree}
+                    onSelect={openDrawer}
                   />
-                  <DataHubExecutionTimeline session={projection.mainSession} />
-                  <section
-                    className="xs-datahub-execution__agents"
-                    aria-labelledby={agentsTitleId}
-                  >
-                    <header className="xs-datahub-section-title">
-                      <div>
-                        <span>AGENT RUNS</span>
-                        <h3 id={agentsTitleId}>智能体执行卡</h3>
-                      </div>
-                      <small>{projection.mainSession.cards.length} 个</small>
-                    </header>
-                    {projection.mainSession.cards.length ? (
-                      <div className="xs-datahub-execution__agent-list">
-                        {projection.mainSession.cards.map((card, index) => (
-                          <DataHubAgentExecutionCard
-                            key={card.id}
-                            card={card}
-                            staggerIndex={index}
-                            onCitationOpen={onCitationOpen}
-                            renderBlock={renderBlock}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="xs-datahub-execution__waiting">
-                        <span aria-hidden="true" />
-                        <div>
-                          <strong>
-                            {projection.mainSession.status === "running"
-                              ? "等待智能体执行事件"
-                              : "没有主智能体执行卡"}
-                          </strong>
-                          <p>路由和子智能体事件仍会按原始会话关系展示。</p>
-                        </div>
-                      </div>
-                    )}
-                  </section>
+                  {hasContent ? (
+                    <DataHubExecutionTimeline session={projection.mainSession} />
+                  ) : null}
                 </>
               ) : (
                 <div className="xs-datahub-execution__empty">

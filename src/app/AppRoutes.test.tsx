@@ -220,7 +220,7 @@ describe("AppRoutes", () => {
     expect(screen.getByText("分析本月经营数据")).toBeInTheDocument();
   });
 
-  it("opens the dedicated ask-data page from a recommended app arrow", async () => {
+  it("opens the ask workspace from the recommended app arrow", async () => {
     const user = userEvent.setup();
     renderRoute("/");
 
@@ -228,6 +228,33 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
+    expect(useUiStore.getState().homeChatMode).toBe("ask");
+    expect(document.title).toBe("智能问数 · 星数");
+  });
+
+  it("opens the dedicated ask-data page from the recommended card", async () => {
+    const user = userEvent.setup();
+    renderRoute("/");
+
+    await user.click(await screen.findByRole("button", { name: /^打开 智能问数/ }));
+
+    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
+    expect(document.title).toBe("智能问数 · 星数");
+  });
+
+  it("submits from the workspace with the selected DataHub model", async () => {
+    const user = userEvent.setup();
+    renderRoute("/ask-data");
+
+    await user.type(screen.getByRole("textbox", { name: "命令输入" }), "查询最新销售制度");
+    await user.click(screen.getByRole("button", { name: "选择模型，当前问数模型" }));
+    await user.click(screen.getByRole("menuitem", { name: /问知模型/ }));
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByRole("heading", { name: "问知完成" })).toBeInTheDocument();
+    expect(screen.getByText("查询最新销售制度")).toBeInTheDocument();
+    expect(document.title).toBe("知识问答 · 星数");
   });
 
   it("logs out from the sidebar account menu", async () => {
@@ -328,17 +355,6 @@ describe("AppRoutes", () => {
     expect(localStorage.getItem("xingshu.dashboard.records.v1")).toBeNull();
   });
 
-  it("opens the dedicated ask-data page from the recommended app card", async () => {
-    const user = userEvent.setup();
-    renderRoute("/");
-
-    await user.click(await screen.findByRole("button", { name: /^打开 智能问数/ }));
-
-    expect(await screen.findByLabelText("空白问数工作区")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "从一个经营问题开始" })).toBeInTheDocument();
-    expect(document.title).toBe("智能问数 · 星数");
-  });
-
   it("opens the shared knowledge workspace from the knowledge card", async () => {
     const user = userEvent.setup();
     renderRoute("/");
@@ -347,6 +363,7 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByLabelText("空白问知工作区")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeInTheDocument();
+    expect(useUiStore.getState().homeChatMode).toBe("rag");
     expect(document.title).toBe("知识问答 · 星数");
   });
 

@@ -150,6 +150,10 @@ export type LayoutIntent = {
   section: string;
   rank: number;
   emphasis: "compact" | "normal" | "wide" | "hero";
+  /** 高度意图：slim ≈ 216、short ≈ 280、tall ≈ 416；缺省按组件当前高度收敛。 */
+  heightTier?: "slim" | "short" | "tall";
+  /** 紧跟在某个 hero 组件之后时标记为侧轨；最多两个，垂直堆叠并与 hero 底缘精确对齐。 */
+  placement?: "rail";
 };
 
 export type LayoutPlan = {

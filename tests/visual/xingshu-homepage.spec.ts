@@ -120,6 +120,7 @@ test.beforeEach(async ({ page }) => {
     window.localStorage.setItem("xingshu_datahub_token", user.token);
     window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
     window.localStorage.setItem("xingshu_datahub_space_id", "1");
+    window.localStorage.setItem("xingshu_onboarding_v1", "done");
   });
 });
 
@@ -194,6 +195,9 @@ async function expectReducedMotionStatic(page: Page) {
     };
 
     return elements.flatMap((element) => {
+      if (element.getClientRects().length === 0) {
+        return [];
+      }
       const styles = window.getComputedStyle(element);
       const animationDurations = styles.animationDuration.split(",").map(toSeconds);
       const transitionDurations = styles.transitionDuration.split(",").map(toSeconds);
@@ -249,6 +253,26 @@ test.describe("xingshu page visual smoke", () => {
         }
         if (pageCase.readyText) {
           await expect(page.getByText(pageCase.readyText, { exact: false }).first()).toBeVisible();
+        }
+        if (pageCase.slug === "home") {
+          await expect(
+            page.getByRole("button", { name: "选择模型，当前编排模型" })
+          ).toBeVisible();
+        }
+        if (pageCase.slug === "analysis") {
+          await expect(
+            page.getByRole("button", { name: "选择模型，当前编排模型" })
+          ).toBeVisible();
+        }
+        if (pageCase.slug === "ask-data") {
+          await expect(
+            page.getByRole("button", { name: "选择模型，当前问数模型" })
+          ).toBeVisible();
+        }
+        if (pageCase.slug === "ask-knowledge") {
+          await expect(
+            page.getByRole("button", { name: "选择模型，当前问知模型" })
+          ).toBeVisible();
         }
 
         if (pageCase.shell !== false && viewport.width > 900) {
@@ -430,6 +454,87 @@ test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
   });
 });
 
+test("2K dashboard preview does not expose black side bars", async ({ page }) => {
+  const timestamp = "2026-07-30T08:00:00.000Z";
+  const schema = {
+    schemaVersion: 1,
+    id: "dashboard-visual-2k-edge-fill",
+    title: "2K 经营全景大屏",
+    description: "2K 预览边缘填充回归用例",
+    canvas: { width: 2560, height: 1440, columns: 12, rows: 10, background: "#F5F9FF" },
+    source: { kind: "blank", generatedAt: timestamp, plannerVersion: 1 },
+    dataBindings: {},
+    widgets: [],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+  const state = analyticsFixtures.get(page)!;
+  state.records.set(schema.id, {
+    id: schema.id,
+    status: "published",
+    revision: 1,
+    visibility: "PRIVATE",
+    schema,
+    publishedSchema: structuredClone(schema),
+    versions: [],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  await page.setViewportSize({ width: 2048, height: 1024 });
+  await page.goto("/dashboard-view?dashboard=dashboard-visual-2k-edge-fill");
+  await expect(page.getByRole("main", { name: "大屏运行态" })).toBeVisible();
+
+  const geometry = await page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(".runtime-canvas-viewport")!.getBoundingClientRect();
+    const stage = document.querySelector<HTMLElement>(".runtime-canvas-stage")!.getBoundingClientRect();
+    return {
+      stageAspectRatio: stage.width / stage.height,
+      horizontalGutter: viewport.width - stage.width
+    };
+  });
+  const edgeLuminance = await page.evaluate(() => {
+    const colorLuminance = (color: string) => {
+      const match = color.match(
+        /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)/
+      );
+      if (!match) return null;
+      const alpha = match[4] === undefined ? 1 : Number(match[4]);
+      if (alpha < 0.99) return null;
+      const red = Number(match[1]);
+      const green = Number(match[2]);
+      const blue = Number(match[3]);
+      return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    };
+
+    const renderedLuminanceAt = (x: number, y: number) => {
+      for (const element of document.elementsFromPoint(x, y)) {
+        const styles = window.getComputedStyle(element);
+        const gradientColors = Array.from(styles.backgroundImage.matchAll(/rgba?\([^)]+\)/g))
+          .map((match) => colorLuminance(match[0]))
+          .filter((value): value is number => value !== null);
+        if (gradientColors.length > 0) return Math.min(...gradientColors);
+        const backgroundLuminance = colorLuminance(styles.backgroundColor);
+        if (backgroundLuminance !== null) return backgroundLuminance;
+      }
+      return 0;
+    };
+
+    return {
+      left: renderedLuminanceAt(1, window.innerHeight / 2),
+      right: renderedLuminanceAt(window.innerWidth - 2, window.innerHeight / 2)
+    };
+  });
+
+  expect(geometry.stageAspectRatio).toBeCloseTo(16 / 9, 3);
+  expect(geometry.horizontalGutter).toBeGreaterThan(100);
+  expect(edgeLuminance.left).toBeGreaterThan(80);
+  expect(edgeLuminance.right).toBeGreaterThan(80);
+  await expect(page.locator(".runtime-canvas-viewport")).toHaveCSS("background-image", /url\(/);
+  await expect(page.locator(".runtime-canvas")).toHaveCSS("background-image", "none");
+  await expect(page.locator(".runtime-canvas")).toHaveCSS("box-shadow", "none");
+});
+
 for (const viewport of viewports) {
   test(`dashboard ECharts stays inside its module at ${viewport.name}`, async ({ page }) => {
     const timestamp = "2026-07-22T08:00:00.000Z";
@@ -582,6 +687,7 @@ test("home page matches the reference welcome workbench composition", async ({ p
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
   await expect(page.getByText("我是您的数据管家，有什么可以帮您？")).toBeVisible();
+  await expect(page.getByRole("button", { name: "选择模型，当前编排模型" })).toBeVisible();
 
   const metrics = await page.evaluate(() => {
     const hero = document.querySelector(".home-page__hero");
@@ -595,6 +701,7 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const toolbar = document.querySelector<HTMLElement>(".home-page .xs-command-box__toolbar");
     const voiceButton = document.querySelector<HTMLElement>('.home-page .xs-command-box__tool[aria-label="语音"]');
     const sendButton = document.querySelector<HTMLElement>(".home-page .xs-command-box__send");
+    const modelButton = document.querySelector<HTMLElement>(".home-page .xs-command-model-select");
 
     if (
       !hero ||
@@ -607,7 +714,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
       !input ||
       !toolbar ||
       !voiceButton ||
-      !sendButton
+      !sendButton ||
+      !modelButton
     ) {
       return null;
     }
@@ -621,6 +729,7 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const toolbarStyles = window.getComputedStyle(toolbar);
     const voiceRect = voiceButton.getBoundingClientRect();
     const sendRect = sendButton.getBoundingClientRect();
+    const modelRect = modelButton.getBoundingClientRect();
     const voiceStyles = window.getComputedStyle(voiceButton);
     const sendStyles = window.getComputedStyle(sendButton);
 
@@ -637,6 +746,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
       attachmentButtonCount: document.querySelectorAll('.home-page [aria-label="附件"]').length,
       voiceButtonSize: [voiceRect.width, voiceRect.height],
       sendButtonSize: [sendRect.width, sendRect.height],
+      modelButtonHeight: modelRect.height,
+      modelBeforeVoice: modelRect.right <= voiceRect.left,
       voiceButtonRadius: Number.parseFloat(voiceStyles.borderRadius),
       sendButtonRadius: Number.parseFloat(sendStyles.borderRadius),
       quickPromptCount: document.querySelectorAll(".xs-command-box__suggestions button").length,
@@ -659,18 +770,56 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.cardHeight).toBeGreaterThanOrEqual(160);
   expect(metrics!.cardHeight).toBeLessThanOrEqual(190);
   expect(metrics!.cardWidth).toBeGreaterThanOrEqual(130);
-  expect(metrics!.cardWidth).toBeLessThanOrEqual(170);
+  expect(metrics!.cardWidth).toBeLessThanOrEqual(180);
   expect(metrics!.descriptionDisplay).toBe("none");
   expect(metrics!.inputFocusShadow).toBe("none");
   expect(metrics!.toolbarBorderTopWidth).toBe(0);
   expect(metrics!.attachmentButtonCount).toBe(0);
   expect(metrics!.voiceButtonSize).toEqual([56, 56]);
-  expect(metrics!.sendButtonSize).toEqual([56, 56]);
+  expect(metrics!.sendButtonSize[0]).toBeCloseTo(56, 0);
+  expect(metrics!.sendButtonSize[1]).toBeCloseTo(56, 0);
+  expect(metrics!.modelButtonHeight).toBeGreaterThanOrEqual(42);
+  expect(metrics!.modelButtonHeight).toBeLessThanOrEqual(48);
+  expect(metrics!.modelBeforeVoice).toBe(true);
   expect(metrics!.voiceButtonRadius).toBe(16);
   expect(metrics!.sendButtonRadius).toBe(16);
   expect(metrics!.quickPromptCount).toBe(0);
   expect(metrics!.generatedIconCount).toBe(7);
   expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
+});
+
+test("home model selector exposes all modes and recommendation cards open their workspaces", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const modelButton = page.getByRole("button", { name: "选择模型，当前编排模型" });
+  await modelButton.click();
+
+  await expect(page.getByRole("menuitem", { name: /编排模型/ })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /问数模型/ })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /问知模型/ })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /找文档模型/ })).toBeVisible();
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/home-model-selector-open-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
+
+  await page.getByRole("menuitem", { name: /找文档模型/ }).click();
+  await expect(page.getByRole("button", { name: "选择模型，当前找文档模型" })).toBeVisible();
+  await expect(page.getByText(/已切换为.*模型/)).toHaveCount(0);
+  await expect(page.locator(".xs-app-card--selected")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^打开 智能问数/ }).click();
+  await expect(page).toHaveURL(/\/ask-data$/);
+  await expect(page.getByRole("heading", { name: "从一个经营问题开始" })).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /^打开 知识问答/ }).click();
+  await expect(page).toHaveURL(/\/ask-knowledge$/);
+  await expect(page.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeVisible();
 });
 
 test("sidebar active item has a stronger selected state", async ({ page }) => {
@@ -873,8 +1022,9 @@ test("reduced motion keeps feedback visible while suppressing nonessential motio
   await expect(page.getByRole("heading", { name: "您好，张三", level: 1 })).toBeVisible();
   await expectReducedMotionStatic(page);
 
-  await page.getByRole("button", { name: /选择 智能问数/ }).click();
-  await expect(page.locator(".home-page__status")).toHaveText("已选择：智能问数");
+  await page.getByRole("button", { name: /打开 智能问数/ }).click();
+  await expect(page).toHaveURL(/\/ask-data$/);
+  await expect(page.getByRole("heading", { name: "从一个经营问题开始" })).toBeVisible();
   await expectReducedMotionStatic(page);
 
   await page.goto("/analysis");

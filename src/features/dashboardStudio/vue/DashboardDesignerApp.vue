@@ -635,7 +635,7 @@ async function removeDashboardQueryChart(widgetId: string) {
   const widget = schema.widgets.find((item) => item.id === widgetId);
   if (!widget || lifecycle.value === "saving") return;
   if (widget.style.locked) {
-    assetError.value = "该收藏图表已锁定，请先解锁后再移除";
+    assetError.value = "该收藏组件已锁定，请先解锁后再移除";
     return;
   }
   if (!window.confirm(`确认从当前看板移除“${widget.title}”吗？此操作可撤销。`)) return;
@@ -1318,7 +1318,7 @@ async function addSelectedAsset() {
     activePropertyTab.value = "data";
     activeDrawer.value = "property";
   } catch (error) {
-    assetError.value = error instanceof Error ? error.message : "添加收藏图表失败";
+    assetError.value = error instanceof Error ? error.message : "添加收藏组件失败";
   } finally {
     assetAction.value = null;
   }
@@ -1518,15 +1518,32 @@ async function previewAiLayout() {
       plan = await props.dataActions.planLayout(request);
       if (plan.intents.length !== schema.widgets.length) throw new Error("AI 排版缺少组件");
     } catch {
+      // 本地兜底构图：KPI 总览带 + 首图 hero（其后最多两个组件作侧轨）+ 明细表通栏。
+      let heroAssigned = false;
+      let railCount = 0;
       plan = {
         source: "LOCAL",
         message: "AI 暂不可用，已使用本地整齐排版",
-        intents: request.widgets.map((widget, rank) => ({
-          widgetId: widget.id,
-          section: widget.semanticRole === "kpi" ? "summary" : widget.semanticRole === "detail" ? "detail" : "main",
-          rank,
-          emphasis: widget.semanticRole === "kpi" ? "compact" : widget.semanticRole === "detail" ? "wide" : "normal"
-        }))
+        intents: request.widgets.map((widget, rank) => {
+          if (widget.semanticRole === "kpi") {
+            return { widgetId: widget.id, section: "summary", rank, emphasis: "compact" as const };
+          }
+          if (widget.semanticRole === "detail") {
+            return { widgetId: widget.id, section: "detail", rank, emphasis: "wide" as const };
+          }
+          if (widget.semanticRole === "narrative") {
+            return { widgetId: widget.id, section: "main", rank, emphasis: "wide" as const, heightTier: "slim" as const };
+          }
+          if (!heroAssigned) {
+            heroAssigned = true;
+            return { widgetId: widget.id, section: "main", rank, emphasis: "hero" as const };
+          }
+          if (railCount < 2) {
+            railCount += 1;
+            return { widgetId: widget.id, section: "main", rank, emphasis: "compact" as const, placement: "rail" as const };
+          }
+          return { widgetId: widget.id, section: "main", rank, emphasis: "normal" as const };
+        })
       };
     }
     layoutPlan.value = plan;
@@ -1937,14 +1954,14 @@ function exitDesigner() {
           <div class="query-asset-panel__browser">
             <div class="query-asset-panel__intro">
               <span>
-                <strong>添加收藏图表</strong>
-                <small>每次选择一条收藏和一张结果表，只添加一个可编辑图表。</small>
+                <strong>添加收藏组件</strong>
+                <small>每次选择一条收藏和一张结果表，只添加一个可编辑组件。</small>
               </span>
               <b>{{ queryAssetCharts.length }}</b>
             </div>
             <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__current">
               <header>
-                <strong>当前看板图表</strong>
+                <strong>当前看板组件</strong>
                 <span>{{ queryAssetCharts.length }} 个</span>
               </header>
               <div class="query-asset-panel__module-list">
@@ -1961,7 +1978,7 @@ function exitDesigner() {
                   <button
                     type="button"
                     class="query-asset-panel__module-remove"
-                    :aria-label="`移除收藏图表 ${entry.widget.title}`"
+                    :aria-label="`移除收藏组件 ${entry.widget.title}`"
                     :disabled="lifecycle === 'saving'"
                     @click="removeDashboardQueryChart(entry.widget.id)"
                   >
@@ -1997,14 +2014,14 @@ function exitDesigner() {
                   <small>
                     <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
                     <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
-                    <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个图表</b>
+                    <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个组件</b>
                   </small>
                 </span>
               </button>
             </div>
           </div>
           <section v-if="selectedAsset" class="query-asset-panel__preview">
-            <header><strong>图表配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
+            <header><strong>组件配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
             <div class="query-asset-panel__preview-body">
               <label v-for="parameter in selectedAsset.stableVersion?.parameters ?? []" :key="parameter.key">
                 <span>{{ parameter.label }}</span>
@@ -2042,7 +2059,7 @@ function exitDesigner() {
               <button v-if="selectedAsset.ownerUserId === currentUserId" type="button" :disabled="assetAction !== null" @click="toggleSelectedAssetVisibility">{{ assetAction === 'visibility' ? '更新中' : selectedAsset.visibility === 'SPACE' ? '设为仅自己' : '共享到空间' }}</button>
               <button type="button" :disabled="assetAction !== null" @click="previewSelectedAsset(true)">{{ assetAction === 'preview' ? '刷新中' : '预览数据' }}</button>
               <button type="button" class="is-primary" :disabled="assetAction !== null || !assetPreview" @click="addSelectedAsset">
-                {{ assetAction === 'add' ? '添加中' : assetChartCount(selectedAsset.id) > 0 ? '再次添加图表' : '添加图表' }}
+                {{ assetAction === 'add' ? '添加中' : assetChartCount(selectedAsset.id) > 0 ? '再次添加' : '添加到画布' }}
               </button>
             </div>
           </section>

@@ -28,6 +28,8 @@ const CARD_SURFACE = {
   color: "#294469"
 } as const;
 const CHART_SERIES_COLORS = ["#1677FF", "#00A6E8", "#16A37A", "#F59E0B", "#6C7FF2", "#F26D6D"];
+const DETAIL_INTENT_PATTERN = /哪些|哪几|列出|罗列|列表|明细|清单|详情|逐条|台账|名录|\blist\b|\bdetails?\b/i;
+const AGGREGATE_INTENT_PATTERN = /汇总|统计|趋势|变化|对比|分布|占比|构成|排名|合计|总计|平均|\btop(?:\s*\d+)?\b/i;
 
 type ColumnKind = "number" | "time" | "dimension";
 
@@ -107,7 +109,34 @@ function isCompositionMetric(column: QueryColumnDefinition) {
   );
 }
 
-function inferWidgetType(output: QueryExecutionOutput, analysis: OutputAnalysis): DashboardWidgetType {
+function normalizeIntentText(...values: Array<string | undefined>) {
+  return values
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFKC")
+    .toLowerCase();
+}
+
+function hasDetailIntent(asset: QueryAsset) {
+  return DETAIL_INTENT_PATTERN.test(
+    normalizeIntentText(asset.name, asset.originalQuestion, asset.resolvedQuestion)
+  );
+}
+
+function selectedOutputIntent(asset: QueryAsset, outputKey: string) {
+  const definition = asset.stableVersion?.outputs.find((output) => output.outputKey === outputKey);
+  const label = normalizeIntentText(definition?.label || outputKey);
+  if (DETAIL_INTENT_PATTERN.test(label)) return "detail";
+  if (AGGREGATE_INTENT_PATTERN.test(label)) return "aggregate";
+  return hasDetailIntent(asset) ? "detail" : "neutral";
+}
+
+function inferWidgetType(
+  asset: QueryAsset,
+  output: QueryExecutionOutput,
+  analysis: OutputAnalysis
+): DashboardWidgetType {
+  if (selectedOutputIntent(asset, output.outputKey) === "detail") return "table";
   if (output.rows.length === 1 && analysis.numericColumns.length > 0) return "metric";
   if (analysis.timeColumn && analysis.numericColumns.length > 0) return "line";
   if (analysis.dimensionColumn && analysis.numericColumns.length > 0) {
@@ -141,7 +170,7 @@ function chartTitle(asset: QueryAsset, analysis: OutputAnalysis) {
   }
   if (analysis.timeColumn && metricTitle) return `${metricTitle}趋势`;
   if (dimensionTitle && metricTitle) return `${dimensionTitle}${metricTitle}`;
-  return asset.name.trim() || metricTitle || dimensionTitle || "收藏问数图表";
+  return asset.name.trim() || metricTitle || dimensionTitle || "收藏问数组件";
 }
 
 function scaleCompatibleMetricColumns(
@@ -286,14 +315,14 @@ export function appendQueryAssetChart(
   parameters: Record<string, unknown> = {}
 ): AppendQueryAssetChartResult {
   if (execution.status !== "SUCCESS") {
-    throw new Error(execution.errorMessage || "查询预览尚未成功，无法生成图表");
+    throw new Error(execution.errorMessage || "查询预览尚未成功，无法生成组件");
   }
   const output = execution.outputs.find((item) => item.outputKey === outputKey);
   if (!output) throw new Error("查询预览中没有选定的结果表");
-  if (output.columns.length === 0) throw new Error("该结果表没有可用字段，无法生成图表");
+  if (output.columns.length === 0) throw new Error("该结果表没有可用字段，无法生成组件");
 
   const analysis = analyzeOutput(output);
-  const type = inferWidgetType(output, analysis);
+  const type = inferWidgetType(asset, output, analysis);
   const definition = getDashboardComponentDefinition(type);
   const bindingId = createId("binding");
   const moduleId = createId("module");

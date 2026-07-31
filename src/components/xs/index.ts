@@ -7,6 +7,12 @@ export { XsChartCard } from "./XsChartCard";
 export type { XsChartCardProps } from "./XsChartCard";
 export { XsCommandBox } from "./XsCommandBox";
 export type { XsCommandSuggestion } from "./XsCommandBox";
+export {
+  getXsCommandModelMeta,
+  XS_COMMAND_MODEL_OPTIONS,
+  XsCommandModelSelect
+} from "./XsCommandModelSelect";
+export type { XsCommandModelOption } from "./XsCommandModelSelect";
 export { XsCountUpText } from "./XsCountUpText";
 export type { XsCountUpTextProps } from "./XsCountUpText";
 export { resolveEChartMotionOption, XsEChart } from "./XsEChart";

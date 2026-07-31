@@ -3,6 +3,8 @@ import { Microphone, Paperclip, PaperPlaneTilt, StopCircle, X } from "@phosphor-
 import { useRef } from "react";
 import type { VoiceInputState } from "@/hooks/useVoiceInput";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
+import type { DataHubChatMode } from "@/types/dataHub";
+import { XsCommandModelSelect } from "./XsCommandModelSelect";
 
 export type XsCommandSuggestion = {
   label: string;
@@ -25,6 +27,8 @@ type XsCommandBoxProps = {
   placeholder?: string;
   suggestions?: XsCommandSuggestion[];
   onSuggestion?: (suggestion: XsCommandSuggestion) => void;
+  modelMode?: DataHubChatMode;
+  onModelModeChange?: (mode: DataHubChatMode) => void;
 };
 
 const voiceStateLabels = {
@@ -52,7 +56,9 @@ export function XsCommandBox({
   submitOnEnter = false,
   placeholder = defaultPlaceholder,
   suggestions = [],
-  onSuggestion
+  onSuggestion,
+  modelMode,
+  onModelModeChange
 }: XsCommandBoxProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canSubmit = Boolean(value.trim());
@@ -125,6 +131,9 @@ export function XsCommandBox({
           </div>
         ) : null}
         <div className="xs-command-box__actions">
+          {modelMode && onModelModeChange ? (
+            <XsCommandModelSelect value={modelMode} onChange={onModelModeChange} />
+          ) : null}
           {onAttach ? (
             <>
               <input
@@ -145,7 +154,7 @@ export function XsCommandBox({
               <Button
                 className="xs-command-box__tool"
                 aria-label="附件"
-                icon={<Paperclip size={22} />}
+                icon={<Paperclip size={18} />}
                 onClick={() => fileInputRef.current?.click()}
               />
             </>
@@ -155,7 +164,7 @@ export function XsCommandBox({
             aria-label={voiceLabel}
             aria-pressed={voiceState === "recording"}
             disabled={voiceState === "permission" || voiceState === "processing"}
-            icon={<Microphone size={22} />}
+            icon={<Microphone size={18} />}
             title={voiceLabel}
             onClick={onVoice}
           />
@@ -174,7 +183,7 @@ export function XsCommandBox({
               danger
               className="xs-command-box__stop xs-command-box__primary-action"
               aria-label="停止生成"
-              icon={<StopCircle size={22} weight="fill" />}
+              icon={<StopCircle size={18} weight="fill" />}
               onClick={onStop}
             />
           ) : (
@@ -184,7 +193,7 @@ export function XsCommandBox({
               className="xs-command-box__send xs-command-box__primary-action"
               aria-label="发送"
               disabled={!canSubmit}
-              icon={<PaperPlaneTilt size={22} weight="fill" />}
+              icon={<PaperPlaneTilt size={18} weight="fill" />}
               onClick={onSubmit}
             />
           )}

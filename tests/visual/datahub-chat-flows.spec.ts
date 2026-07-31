@@ -973,6 +973,43 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 });
 });
 
+test("workspace model selector changes the strict DataHub chatMode request parameter", async ({
+  page
+}) => {
+  const fixture = await installDataHubFixture(page);
+  await page.goto("/ask-data");
+
+  await page.getByRole("textbox", { name: "命令输入" }).fill("查询最新差旅制度");
+  await page.getByRole("button", { name: "选择模型，当前问数模型" }).click();
+  await expect(page.getByRole("menuitem", { name: /问知模型/ })).toBeVisible();
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/analysis-model-selector-open-1672x941.png",
+    animations: "disabled",
+    fullPage: true
+  });
+  await page.getByRole("menuitem", { name: /问知模型/ }).click();
+
+  await expect(page.getByRole("button", { name: "选择模型，当前问知模型" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "命令输入" })).toHaveValue("查询最新差旅制度");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "选择模型，当前问知模型" }).click();
+  await expect(page.getByRole("menuitem", { name: /编排模型/ })).toBeVisible();
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/analysis-model-selector-open-390x844.png",
+    animations: "disabled",
+    fullPage: true
+  });
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  await expect(page).toHaveURL(/\/ask-knowledge$/);
+  await expect(page.getByRole("heading", { name: "问知完成" })).toBeVisible();
+  expect(fixture.streamRequests).toHaveLength(1);
+  expectStrictStreamRequest(fixture.streamRequests[0], "rag");
+  expect(fixture.streamRequests[0].message).toBe("查询最新差旅制度");
+});
+
 test("ask-data sends the strict v2 request and supports table to favorite", async ({ page }) => {
   const fixture = await installDataHubFixture(page);
   await page.goto("/ask-data");
@@ -1136,8 +1173,14 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "编排执行轨迹" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "协作子智能体" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "智能体执行卡" })).toHaveCount(0);
+  await expect(page.getByText("Agent 思考完成")).toHaveCount(0);
   await expect(page.getByText("销售额环比下降", { exact: false }).last()).toBeVisible();
-  await expect(page.getByText("正在查询销售数据。")).toHaveCount(0);
+  const dataAgentSummary = page.getByRole("button", {
+    name: "查看 数据研究员执行详情"
+  });
+  await expect(dataAgentSummary).toContainText("子任务已完成");
 
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "agent");
@@ -1148,7 +1191,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     animations: "disabled",
     fullPage: true
   });
-  await page.getByRole("button", { name: /子智能体/ }).click();
+  await dataAgentSummary.click();
   const drawer = page.getByRole("dialog", { name: "子智能体执行详情" });
   await expect(drawer).toBeVisible();
   const dataAgent = page.getByRole("treeitem", { name: /数据研究员/ });
@@ -1156,7 +1199,6 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await expect(dataAgent).toHaveAttribute("aria-level", "1");
   await expect(policyAgent).toHaveAttribute("aria-level", "2");
 
-  await dataAgent.click();
   await expect(drawer.getByText("正在查询销售数据。")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
@@ -1183,7 +1225,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     animations: "disabled",
     fullPage: true
   });
-  await page.getByRole("button", { name: /子智能体/ }).click();
+  await page.getByRole("button", { name: "查看 数据研究员执行详情" }).click();
   await expect(page.getByRole("dialog", { name: "子智能体执行详情" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/agent-orchestration-v2-flow-390x844.png",

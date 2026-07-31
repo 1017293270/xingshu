@@ -137,6 +137,103 @@ const contractPreview = {
   }]
 };
 
+const contractDetailRows = Array.from({ length: 24 }, (_, index) => ({
+  count: index + 1,
+  contractNo: `HT-2023-${String(index + 1).padStart(3, "0")}`,
+  contractName: `${["数据平台", "智能分析", "业务协同", "运营支持"][index % 4]}服务合同`,
+  contractYear: 2023,
+  contractAmount: 86.5 + index * 13.75
+}));
+
+const contractDetailAsset = {
+  id: "asset-contract-detail",
+  name: "2023 年合同明细",
+  originalQuestion: "2023 年有哪些合同",
+  resolvedQuestion: "列出 2023 年合同明细",
+  datasourceId: 8,
+  ownerUserId: 1,
+  visibility: "PRIVATE",
+  stableVersionId: "version-contract-detail",
+  status: "ACTIVE",
+  stableVersion: {
+    id: "version-contract-detail",
+    versionNo: 3,
+    resolvedQuestion: "列出 2023 年合同明细",
+    engine: "CUBE",
+    parameters: [],
+    outputs: [
+      {
+        outputKey: "output_001",
+        label: "查询说明",
+        columns: [
+          { columnId: "message-id", key: "message", label: "说明", type: "string" }
+        ]
+      },
+      {
+        outputKey: "output_002",
+        label: "年度汇总",
+        columns: [
+          { columnId: "year-id", key: "year", label: "年份", type: "date" },
+          { columnId: "year-count-id", key: "contractCount", label: "合同数量", type: "number" }
+        ]
+      },
+      {
+        outputKey: "output_003",
+        label: "合同明细",
+        columns: [
+          { columnId: "count-id", key: "count", label: "记录数", type: "number" },
+          { columnId: "contract-no-id", key: "contractNo", label: "合同编号", type: "string" },
+          { columnId: "contract-name-id", key: "contractName", label: "合同名称", type: "string" },
+          { columnId: "contract-year-id", key: "contractYear", label: "合同年份", type: "number" },
+          { columnId: "contract-amount-id", key: "contractAmount", label: "合同金额(万元)", type: "number" }
+        ]
+      }
+    ],
+    schemaHash: "contract-detail-schema",
+    status: "VALIDATED",
+    createdAt: "2026-07-30T00:00:00.000Z"
+  },
+  createdAt: "2026-07-30T00:00:00.000Z",
+  updatedAt: "2026-07-30T00:00:00.000Z"
+};
+
+const contractDetailPreview = {
+  id: "execution-contract-detail",
+  assetId: contractDetailAsset.id,
+  versionId: contractDetailAsset.stableVersionId,
+  status: "SUCCESS",
+  triggerType: "PREVIEW",
+  durationMs: 24,
+  createdAt: "2026-07-30T06:47:00.000Z",
+  outputs: [
+    {
+      outputKey: "output_001",
+      columns: contractDetailAsset.stableVersion.outputs[0].columns,
+      rows: [],
+      totalRows: 0,
+      updatedAt: "2026-07-30T06:47:00.000Z"
+    },
+    {
+      outputKey: "output_002",
+      columns: contractDetailAsset.stableVersion.outputs[1].columns,
+      rows: [
+        { year: "2021", contractCount: 18 },
+        { year: "2022", contractCount: 21 },
+        { year: "2023", contractCount: 24 }
+      ],
+      totalRows: 3,
+      updatedAt: "2026-07-30T06:47:00.000Z"
+    },
+    {
+      outputKey: "output_003",
+      columns: contractDetailAsset.stableVersion.outputs[2].columns,
+      rows: contractDetailRows,
+      totalRows: contractDetailRows.length,
+      updatedAt: "2026-07-30T06:47:00.000Z"
+    }
+  ]
+};
+
 function response(data: unknown) {
   return { code: 200, message: "single-chart fixture", data };
 }
@@ -147,6 +244,9 @@ function runtime(record: DashboardRecordFixture) {
   Object.entries(bindings).forEach(([bindingId, binding]) => {
     if (binding.sourceRef?.outputKey === "revenue") datasets[bindingId] = preview.outputs[1];
     if (binding.sourceRef?.outputKey === "contracts") datasets[bindingId] = contractPreview.outputs[0];
+    if (binding.sourceRef?.outputKey === "output_003") {
+      datasets[bindingId] = contractDetailPreview.outputs[2];
+    }
   });
   const moduleStatuses = Object.fromEntries(
     Object.keys(datasets).map((bindingId) => [bindingId, "SUCCESS"])
@@ -156,7 +256,7 @@ function runtime(record: DashboardRecordFixture) {
 
 async function installApiFixture(
   page: Page,
-  listedAssets: unknown[] = [asset, contractAsset]
+  listedAssets: unknown[] = [asset, contractAsset, contractDetailAsset]
 ) {
   let record: DashboardRecordFixture | null = null;
 
@@ -175,6 +275,10 @@ async function installApiFixture(
     }
     if (path === `/api/analytics/query-assets/${contractAsset.id}/preview` && request.method() === "POST") {
       await route.fulfill({ json: response(contractPreview) });
+      return;
+    }
+    if (path === `/api/analytics/query-assets/${contractDetailAsset.id}/preview` && request.method() === "POST") {
+      await route.fulfill({ json: response(contractDetailPreview) });
       return;
     }
     if (path === "/api/analytics/dashboards/save" && request.method() === "POST") {
@@ -241,7 +345,7 @@ test("favorite panel keeps chart actions visible when the asset list overflows",
   await page.setViewportSize({ width: 1440, height: 760 });
 
   await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
-  const addButton = page.getByRole("button", { name: "添加图表", exact: true });
+  const addButton = page.getByRole("button", { name: "添加到画布", exact: true });
   await expect(addButton).toBeVisible();
   await expect(addButton).toBeEnabled();
 
@@ -293,7 +397,7 @@ test("a selected favorite result adds one chart and survives save/reload", async
   await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
   await expect(page.getByRole("combobox", { name: "结果表" })).toHaveValue("revenue");
   await expect(page.getByText("3 行", { exact: true })).toBeVisible();
-  const addButton = page.getByRole("button", { name: "添加图表", exact: true });
+  const addButton = page.getByRole("button", { name: "添加到画布", exact: true });
   await expect(addButton).toBeEnabled();
   await addButton.click();
 
@@ -357,7 +461,7 @@ test("switching chart family and favorite binding keeps ECharts populated", asyn
 
   await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
   await page.getByRole("combobox", { name: "结果表" }).selectOption("revenue");
-  await page.getByRole("button", { name: "添加图表", exact: true }).click();
+  await page.getByRole("button", { name: "添加到画布", exact: true }).click();
   await expect(page.locator(".dashboard-widget-card")).toHaveCount(1);
   await expect(page.locator(".vue-echart[data-echarts-ready='true']")).toHaveCount(1);
 
@@ -369,7 +473,7 @@ test("switching chart family and favorite binding keeps ECharts populated", asyn
   await expect(page.getByText(/当前结果缺少可绘制的数值指标/)).toHaveCount(0);
 
   await page.getByRole("button", { name: /合同公司金额.*2023年各公司合同金额/ }).click();
-  const addContractButton = page.getByRole("button", { name: "添加图表", exact: true });
+  const addContractButton = page.getByRole("button", { name: "添加到画布", exact: true });
   await expect(addContractButton).toBeEnabled();
   await addContractButton.click();
   await expect(page.locator(".dashboard-widget-card")).toHaveCount(2);
@@ -435,3 +539,65 @@ test("switching chart family and favorite binding keeps ECharts populated", asyn
       .locator(".vue-echart[data-echarts-ready='true']")
   ).toHaveCount(1);
 });
+
+const detailViewports = [
+  { label: "1440x900", width: 1440, height: 900 },
+  { label: "1672x941", width: 1672, height: 941 },
+  { label: "2200x944", width: 2200, height: 944 },
+  { label: "390x844", width: 390, height: 844 }
+] as const;
+
+for (const viewport of detailViewports) {
+  test(`detail favorite defaults to a data table at ${viewport.label}`, async ({ page }) => {
+    await installApiFixture(page, [contractDetailAsset]);
+    await page.addInitScript(() => {
+      const user = {
+        token: "playwright-detail-table-token",
+        userId: 1,
+        username: "张三",
+        isAdmin: true
+      };
+      window.localStorage.setItem("xingshu_datahub_token", user.token);
+      window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
+      window.localStorage.setItem("xingshu_datahub_space_id", "1");
+    });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+
+    await page.goto(`/dashboard-editor?source=favorites&asset=${contractDetailAsset.id}`);
+    await expect(page.getByRole("combobox", { name: "结果表" })).toHaveValue("output_003");
+    await expect(page.getByText("组件配置", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "添加到画布", exact: true }).click();
+
+    const card = page.locator(".dashboard-widget-card").first();
+    const table = card.locator(".table-renderer");
+    await expect(page.locator(".dashboard-widget-card")).toHaveCount(1);
+    await expect(table).toBeVisible();
+    await expect(table.locator("thead th")).toHaveText([
+      "记录数",
+      "合同编号",
+      "合同名称",
+      "合同年份",
+      "合同金额(万元)"
+    ]);
+    await expect(table.locator("tbody tr")).toHaveCount(24);
+    await expect(card.locator(".vue-echart, canvas")).toHaveCount(0);
+    await expect(page.getByText("已加入 1 个组件", { exact: true })).toBeVisible();
+
+    const overflow = await page.evaluate(() => {
+      const root = document.documentElement;
+      const scroll = document.querySelector<HTMLElement>(".table-renderer__scroll")!;
+      return {
+        page: root.scrollWidth - window.innerWidth,
+        tableY: scroll.scrollHeight - scroll.clientHeight
+      };
+    });
+    expect(overflow.page).toBeLessThanOrEqual(1);
+    expect(overflow.tableY).toBeGreaterThan(0);
+
+    await page.screenshot({
+      path: `outputs/xingshu-homepage-system/qa/react/dashboard-favorite-detail-table-${viewport.label}.png`,
+      animations: "disabled",
+      fullPage: true
+    });
+  });
+}

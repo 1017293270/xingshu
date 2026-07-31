@@ -49,6 +49,12 @@ export type DataHubExecutionTimelineProps = {
   session: DataHubExecutionSession;
 };
 
+export type DataHubSubagentDagProps = {
+  mainSession: DataHubExecutionSession;
+  nodes: readonly DataHubSubagentTreeNode[];
+  onSelect: (sessionId: string, trigger: HTMLButtonElement) => void;
+};
+
 export type DataHubSubagentTreeProps = {
   nodes: readonly DataHubSubagentTreeNode[];
   selectedSessionId?: string;

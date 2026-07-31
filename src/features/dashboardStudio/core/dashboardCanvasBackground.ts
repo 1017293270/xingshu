@@ -1,6 +1,8 @@
+import defaultDashboardBackgroundUrl from "@/assets/dashboard-backgrounds/xingshu-dashboard-default.jpg";
 import type { DashboardSchema } from "@/types/dashboardStudio";
 
 export const DASHBOARD_BACKGROUND_IMAGE_LIMIT = 400 * 1024;
+export const DEFAULT_DASHBOARD_BACKGROUND_IMAGE_URL = defaultDashboardBackgroundUrl;
 
 const MAX_BACKGROUND_WIDTH = 2048;
 const JPEG_QUALITIES = [0.82, 0.7, 0.6] as const;
@@ -73,9 +75,11 @@ export async function compressDashboardBackgroundImage(file: File, canvasWidth: 
 export function resolveCanvasBackgroundStyle(canvas: DashboardSchema["canvas"]): Record<string, string> {
   const style: Record<string, string> = { backgroundColor: canvas.background };
   const image = canvas.backgroundImage;
-  if (image?.dataUrl) {
-    style.backgroundImage = `url("${image.dataUrl}")`;
-    style.backgroundSize = image.fit === "fill" ? "100% 100%" : image.fit;
+  const imageUrl = image?.dataUrl || DEFAULT_DASHBOARD_BACKGROUND_IMAGE_URL;
+  const fit = image?.fit ?? "cover";
+  if (imageUrl) {
+    style.backgroundImage = `url("${imageUrl}")`;
+    style.backgroundSize = fit === "fill" ? "100% 100%" : fit;
     style.backgroundPosition = "center";
     style.backgroundRepeat = "no-repeat";
   }

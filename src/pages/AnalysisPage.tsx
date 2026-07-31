@@ -177,6 +177,13 @@ const analysisModeMeta: Record<
   }
 };
 
+const analysisRouteByMode: Record<DataHubChatMode, string> = {
+  agent: "/ask-agent",
+  ask: "/ask-data",
+  rag: "/ask-knowledge",
+  document_lookup: "/document-lookup"
+};
+
 function DataHubQueryAssetActions({
   items,
   onFavorite,
@@ -1177,6 +1184,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
+  const [composerMode, setComposerMode] = useState<DataHubChatMode>(mode);
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [selectedQuickQuestion, setSelectedQuickQuestion] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
@@ -1226,6 +1234,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         : quickQuestions;
   const hasConversation =
     Boolean(activeAnalysisQuestion.trim()) || askDataStatus !== "idle" || askDataEvents.length > 0 || Boolean(askDataError);
+
+  useEffect(() => {
+    setComposerMode(mode);
+  }, [mode]);
+
   const visibleTurns =
     analysisTurns.length > 0
       ? analysisTurns
@@ -1540,10 +1553,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     });
   };
 
-  const streamDataHubQuestion = (question: string) => {
+  const streamDataHubQuestion = (question: string, chatMode: DataHubChatMode) => {
+    const submittedTaskName = analysisModeMeta[chatMode].taskName;
     shouldAutoScrollRef.current = true;
     setIsScrollToBottomVisible(false);
-    const runId = startAskDataRun(question, undefined, mode);
+    const runId = startAskDataRun(question, undefined, chatMode);
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId);
 
     if (import.meta.env.MODE === "test") {
@@ -1552,7 +1566,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     }
 
     if (!turn?.sessionId || !turn.chatId) {
-      failAskDataRun(runId, `${taskName}会话初始化失败`);
+      failAskDataRun(runId, `${submittedTaskName}会话初始化失败`);
       return;
     }
 
@@ -1562,7 +1576,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         sessionId: turn.sessionId,
         globalSessionId: turn.sessionId,
         chatId: turn.chatId,
-        chatMode: mode
+        chatMode
       },
       {
         onEvent: (event) => {
@@ -1571,7 +1585,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
             const data = event.data as { message?: string } | string | undefined;
             failAskDataRun(
               runId,
-              typeof data === "string" ? data : data?.message || `${taskName}执行失败`
+              typeof data === "string" ? data : data?.message || `${submittedTaskName}执行失败`
             );
           }
         },
@@ -1616,9 +1630,13 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       return;
     }
 
-    streamDataHubQuestion(command);
+    const submittedMode = composerMode;
+    streamDataHubQuestion(command, submittedMode);
     setFollowUpDraft("");
     setWorkflowStatus(`已继续追问：${command}`);
+    if (submittedMode !== mode) {
+      navigate(analysisRouteByMode[submittedMode]);
+    }
   };
 
   const handleOpenCitation = async (citation: DataHubCitationDocument) => {
@@ -1687,11 +1705,19 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 turn.error,
                 { sessionId: turn.sessionId, chatId: turn.chatId }
               );
+              const displayStatus: DataHubAskDataStatus =
+                turnAsk.error || turnAsk.done?.failed === true
+                  ? "error"
+                  : turn.status;
               const executionProjection = projectDataHubExecutionEvents(turn.events, {
                 mainSessionId: turn.sessionId || undefined,
                 globalSessionId: turn.sessionId || undefined,
                 chatId: turn.chatId,
-                fallbackAgentName: `${taskName}智能体`
+                fallbackAgentName: `${taskName}智能体`,
+                terminalStatus:
+                  displayStatus === "done" || displayStatus === "error"
+                    ? displayStatus
+                    : undefined
               });
               const hasNativeAgentScope = turn.events.some(
                 (event) =>
@@ -1709,8 +1735,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const documentLookupResults = hasDocumentUrlEvents
                 ? []
                 : getDataHubDocumentLookupResults(turnAsk.done);
-              const displayStatus: DataHubAskDataStatus =
-                turnAsk.done?.failed === true ? "error" : turn.status;
               const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
               const thinkingPhases = hasLegacyProcess ? buildThinkingPhases(turnAsk, displayStatus) : [];
               const playbackState = thinkingPlaybackStates[turn.id];
@@ -1727,14 +1751,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const isWaitingForPlayback =
                 !isResultReady && (displayStatus === "streaming" || displayStatus === "done");
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
-              const hasReasoning = Boolean(
-                hasLegacyProcess ||
-                  ((!shouldShowExecutionPanel || !expandExecutionPanelByDefault) &&
-                    turnAsk.thinkingBlocks.length) ||
-                  turnAsk.infoMessages.length ||
-                  (supportsTables && turnAsk.dataSources.length) ||
-                  (isAgentMode && turn.events.length)
-              );
+              const hasReasoning =
+                !isAgentMode &&
+                Boolean(
+                  hasLegacyProcess ||
+                    ((!shouldShowExecutionPanel || !expandExecutionPanelByDefault) &&
+                      turnAsk.thinkingBlocks.length) ||
+                    turnAsk.infoMessages.length ||
+                    (supportsTables && turnAsk.dataSources.length)
+                );
               const statusTitle =
                 displayStatus === "streaming" || (displayStatus === "done" && !isResultReady)
                   ? `正在${taskName}`
@@ -2043,6 +2068,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           onStop={handleStop}
           busy={askDataStatus === "streaming"}
           voiceState={voiceInput.state}
+          modelMode={composerMode}
+          onModelModeChange={setComposerMode}
         />
         <div className="analysis-composer__status-slot">
           {workflowStatus ? (

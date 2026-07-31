@@ -1,15 +1,15 @@
 import {
   CaretRight,
-  GitBranch,
-  Robot,
   TreeStructure
 } from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
 import {
+  assignSubagentTones,
   flattenSubagentTree,
   formatExecutionTime,
   sessionDisplayName
 } from "./display";
+import { DataHubAgentAvatar } from "./DataHubAgentAvatar";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import type { DataHubSubagentTreeProps } from "./types";
 
@@ -19,6 +19,7 @@ export function DataHubSubagentTree({
   onSelect
 }: DataHubSubagentTreeProps) {
   const entries = flattenSubagentTree(nodes);
+  const toneMap = assignSubagentTones(nodes);
 
   if (!entries.length) {
     return (
@@ -37,6 +38,7 @@ export function DataHubSubagentTree({
         const sessionId = session.sessionId ?? session.subagentId ?? `subagent-${node.level}`;
         const selected = selectedSessionId === sessionId;
         const startedAt = formatExecutionTime(session.startedAt);
+        const name = sessionDisplayName(session);
         return (
           <button
             key={sessionId}
@@ -55,11 +57,14 @@ export function DataHubSubagentTree({
             }
             onClick={() => onSelect(sessionId)}
           >
-            <span className="xs-datahub-subagent-tree__branch" aria-hidden="true">
-              {node.level ? <GitBranch size={14} /> : <Robot size={16} weight="duotone" />}
-            </span>
+            <DataHubAgentAvatar
+              name={name}
+              identity={sessionId}
+              size="small"
+              tone={toneMap.get(sessionId)}
+            />
             <span className="xs-datahub-subagent-tree__identity">
-              <strong>{sessionDisplayName(session)}</strong>
+              <strong>{name}</strong>
               <small title={session.sessionId}>
                 {startedAt || "时间未知"}
                 {session.sessionId ? ` · ${session.sessionId}` : ""}

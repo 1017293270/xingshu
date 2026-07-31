@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_DASHBOARD_BACKGROUND_IMAGE_URL,
   DASHBOARD_BACKGROUND_IMAGE_LIMIT,
   compressDashboardBackgroundImage,
   resolveBackgroundImageTargetSize,
@@ -39,8 +40,14 @@ describe("resolveBackgroundImageTargetSize", () => {
 describe("resolveCanvasBackgroundStyle", () => {
   const base = { width: 1920, height: 1080, columns: 12 as const, rows: 10, background: "#0B1B33" };
 
-  it("returns only the color when no image is set", () => {
-    expect(resolveCanvasBackgroundStyle(base)).toEqual({ backgroundColor: "#0B1B33" });
+  it("uses the bundled default background when no custom image is set", () => {
+    expect(resolveCanvasBackgroundStyle(base)).toEqual({
+      backgroundColor: "#0B1B33",
+      backgroundImage: `url("${DEFAULT_DASHBOARD_BACKGROUND_IMAGE_URL}")`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat"
+    });
   });
 
   it("maps fit modes to background-size", () => {
@@ -52,6 +59,9 @@ describe("resolveCanvasBackgroundStyle", () => {
     expect(resolveCanvasBackgroundStyle(withImage("contain")).backgroundSize).toBe("contain");
     expect(resolveCanvasBackgroundStyle(withImage("fill")).backgroundSize).toBe("100% 100%");
     expect(resolveCanvasBackgroundStyle(withImage("cover")).backgroundColor).toBe("#0B1B33");
+    expect(resolveCanvasBackgroundStyle(withImage("cover")).backgroundImage).toBe(
+      'url("data:image/jpeg;base64,abc")'
+    );
   });
 });
 

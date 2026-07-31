@@ -1,4 +1,9 @@
-import { XsAppCard, type XsAppCardData, XsCommandBox } from "@/components/xs";
+import {
+  getXsCommandModelMeta,
+  XsAppCard,
+  type XsAppCardData,
+  XsCommandBox
+} from "@/components/xs";
 import { useNavigate } from "react-router-dom";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
@@ -12,6 +17,7 @@ import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
+import type { DataHubChatMode } from "@/types/dataHub";
 import { useTypingPlaceholder } from "./useTypingPlaceholder";
 import "./home.css";
 
@@ -88,13 +94,27 @@ const recommendedApps: XsAppCardData[] = [
   }
 ];
 
+const modelModeByAppId: Partial<Record<string, DataHubChatMode>> = {
+  "data-chat": "ask",
+  knowledge: "rag"
+};
+
+const routeByModelMode: Record<DataHubChatMode, string> = {
+  agent: "/ask-agent",
+  ask: "/ask-data",
+  rag: "/ask-knowledge",
+  document_lookup: "/document-lookup"
+};
+
 export function HomePage() {
   const navigate = useNavigate();
   const username = useDataHubAuthStore((state) => state.user?.username?.trim() || "用户");
   const draft = useUiStore((state) => state.homeDraft);
   const selectedAppId = useUiStore((state) => state.selectedAppId);
+  const homeChatMode = useUiStore((state) => state.homeChatMode);
   const sentStatus = useUiStore((state) => state.sentStatus);
   const setDraft = useUiStore((state) => state.setHomeDraft);
+  const setHomeChatMode = useUiStore((state) => state.setHomeChatMode);
   const selectApp = useUiStore((state) => state.selectApp);
   const setSentStatus = useUiStore((state) => state.setSentStatus);
   const startAskDataRun = useUiStore((state) => state.startAskDataRun);
@@ -108,8 +128,8 @@ export function HomePage() {
   });
   const commandPlaceholder = useTypingPlaceholder(!draft.trim());
 
-  function startDataHubAgent(question: string) {
-    const runId = startAskDataRun(question, null, "agent");
+  function startDataHubConversation(question: string, chatMode: DataHubChatMode) {
+    const runId = startAskDataRun(question, null, chatMode);
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId);
 
     if (import.meta.env.MODE === "test") {
@@ -118,7 +138,7 @@ export function HomePage() {
     }
 
     if (!turn?.sessionId || !turn.chatId) {
-      failAskDataRun(runId, "智能编排会话初始化失败");
+      failAskDataRun(runId, `${getXsCommandModelMeta(chatMode).label}会话初始化失败`);
       return;
     }
 
@@ -128,7 +148,7 @@ export function HomePage() {
         sessionId: turn.sessionId,
         globalSessionId: turn.sessionId,
         chatId: turn.chatId,
-        chatMode: "agent"
+        chatMode
       },
       {
         onEvent: (event) => {
@@ -146,7 +166,15 @@ export function HomePage() {
   }
 
   function handleOpenApp(app: XsAppCardData) {
-    selectApp(app.id, app.prompt);
+    const appModelMode = modelModeByAppId[app.id];
+    selectApp(app.id, app.prompt, appModelMode);
+
+    if (appModelMode) {
+      setSentStatus("");
+      navigate(routeByModelMode[appModelMode]);
+      return;
+    }
+
     setSentStatus(`正在打开：${app.title}`);
 
     if (app.routeTo) {
@@ -159,8 +187,8 @@ export function HomePage() {
     if (!command) {
       return;
     }
-    startDataHubAgent(command);
-    navigate("/ask-agent");
+    startDataHubConversation(command, homeChatMode);
+    navigate(routeByModelMode[homeChatMode]);
   }
 
   return (
@@ -186,6 +214,11 @@ export function HomePage() {
           setSentStatus("已取消语音输入");
         }}
         voiceState={voiceInput.state}
+        modelMode={homeChatMode}
+        onModelModeChange={(mode) => {
+          setHomeChatMode(mode);
+          setSentStatus("");
+        }}
       />
 
       {sentStatus ? (

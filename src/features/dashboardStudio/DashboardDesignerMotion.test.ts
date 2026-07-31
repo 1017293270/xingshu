@@ -373,7 +373,7 @@ describe("dashboard designer motion states", () => {
       onChange
     });
 
-    const addButton = await screen.findByRole("button", { name: "添加图表" });
+    const addButton = await screen.findByRole("button", { name: "添加到画布" });
     await waitFor(() => expect(addButton).toBeEnabled());
     fireEvent.click(addButton);
 
@@ -522,20 +522,36 @@ describe("dashboard designer motion states", () => {
 
     const outputSelect = await screen.findByRole("combobox", { name: "结果表" });
     await waitFor(() => expect(outputSelect).toHaveValue("output_003"));
+    expect(screen.getByText("组件配置")).toBeInTheDocument();
     expect(screen.getByText("24 行")).toBeInTheDocument();
     expect(dataActions.previewAsset).toHaveBeenCalledWith(
       asset.id,
       expect.objectContaining({ versionId: asset.stableVersionId })
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "添加图表" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加到画布" }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const nextSchema = onChange.mock.calls.at(-1)![0];
+    const widget = nextSchema.widgets[0];
     const binding = Object.values(nextSchema.dataBindings)[0];
+    expect(widget?.type).toBe("table");
+    expect(widget?.mapping).toEqual({});
     expect(binding?.sourceRef?.outputKey).toBe("output_003");
     expect(binding?.status).toBe("success");
     expect(binding?.table.totalRows).toBe(24);
+    await waitFor(() => expect(host?.querySelector(".table-renderer")).toBeInTheDocument());
+    const table = host.querySelector(".table-renderer table");
+    expect(Array.from(table?.querySelectorAll("th") ?? []).map((header) => header.textContent)).toEqual([
+      "记录数",
+      "合同编号",
+      "合同名称",
+      "合同年份",
+      "合同金额(万元)"
+    ]);
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(24);
+    expect(host.querySelector(".vue-echart")).not.toBeInTheDocument();
+    expect(screen.getByText("已加入 1 个组件")).toBeInTheDocument();
   });
 
   it("previews and applies a tidy AI layout from the toolbar", async () => {
@@ -607,9 +623,9 @@ describe("dashboard designer motion states", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "预览整齐排版" })).not.toBeInTheDocument());
     const cardA = screen.getByRole("button", { name: "图表甲" });
     const cardB = screen.getByRole("button", { name: "图表乙" });
-    expect(cardA.style.left).toBe("24px");
-    expect(cardA.style.top).toBe("24px");
-    expect(cardB.style.top).toBe("24px");
+    expect(cardA.style.left).toBe("32px");
+    expect(cardA.style.top).toBe("32px");
+    expect(cardB.style.top).toBe("32px");
     expect(Number.parseInt(cardB.style.left, 10)).toBeGreaterThan(Number.parseInt(cardA.style.left, 10));
     expect(Number.parseInt(cardA.style.left, 10) % 8).toBe(0);
     expect(Number.parseInt(cardB.style.left, 10) % 8).toBe(0);
@@ -682,6 +698,9 @@ describe("dashboard designer motion states", () => {
     await waitFor(() => expect(canvas.style.backgroundImage).toContain("fakebg"));
 
     fireEvent.click(screen.getByRole("button", { name: "移除" }));
-    await waitFor(() => expect(canvas.style.backgroundImage).toBe(""));
+    await waitFor(() => {
+      expect(canvas.style.backgroundImage).not.toContain("fakebg");
+      expect(canvas.style.backgroundImage).toContain("xingshu-dashboard-default");
+    });
   });
 });

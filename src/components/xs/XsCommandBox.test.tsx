@@ -122,4 +122,28 @@ describe("XsCommandBox", () => {
 
     expect(onSuggestion).toHaveBeenCalledWith(suggestion);
   });
+
+  it("offers the four DataHub models from an optional polished selector", async () => {
+    const user = userEvent.setup();
+    const onModelModeChange = vi.fn();
+
+    render(
+      <XsCommandBox
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        modelMode="agent"
+        onModelModeChange={onModelModeChange}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "选择模型，当前编排模型" }));
+    expect(await screen.findByText("自动拆解并组合数据与知识能力")).toBeInTheDocument();
+    expect(screen.getByText("指标、趋势与结构化数据分析")).toBeInTheDocument();
+    expect(screen.getByText("企业制度、合同与知识库检索")).toBeInTheDocument();
+    expect(screen.getByText("定位并打开有权限的企业文档")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: /问数模型/ }));
+    expect(onModelModeChange).toHaveBeenCalledWith("ask");
+  });
 });

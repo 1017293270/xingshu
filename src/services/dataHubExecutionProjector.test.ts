@@ -584,4 +584,166 @@ describe("dataHubExecutionProjector", () => {
     });
     expect(projection.mainSession.events.map(({ type }) => type)).toEqual(["agent_start", "done"]);
   });
+
+  it("settles a completed transport when the stream omits the root done event", () => {
+    const projection = projectDataHubExecutionEvents(
+      [
+        event("agent_start"),
+        event("subagent_exposed", {
+          agentName: "问知智能体",
+          sessionId: "child-knowledge",
+          parentSessionId: "main-session",
+          subagentId: "subagent-knowledge",
+          label: "问知智能体",
+          content: {
+            sessionId: "child-knowledge",
+            subagentId: "subagent-knowledge",
+            label: "问知智能体"
+          }
+        }),
+        event("done", {
+          agentName: "问知智能体",
+          sessionId: "child-knowledge",
+          parentSessionId: "main-session",
+          content: { summary: "制度检索完成" },
+          finished: true
+        }),
+        event("text", {
+          content: "已检索相关制度，以下为综合结论。"
+        })
+      ],
+      { terminalStatus: "done" }
+    );
+
+    expect(projection.mainSession).toMatchObject({
+      status: "done",
+      finished: true
+    });
+    expect(projection.subagentSessions[0]).toMatchObject({
+      sessionId: "child-knowledge",
+      status: "done",
+      finished: true
+    });
+    expect(projection.mainSession.events.map(({ type }) => type)).toEqual([
+      "agent_start",
+      "text"
+    ]);
+    expect(projection.mainSession.cards.every((card) => card.status === "done")).toBe(true);
+  });
+
+  it("settles a late child event after the root session has already completed", () => {
+    const projection = projectDataHubExecutionEvents(
+      [
+        event("agent_start"),
+        event("done", {
+          content: { summary: "编排完成" },
+          finished: true
+        }),
+        event("subagent_exposed", {
+          agentName: "延迟回传智能体",
+          sessionId: "late-child",
+          parentSessionId: "main-session",
+          subagentId: "subagent-late",
+          label: "延迟回传智能体",
+          content: {
+            sessionId: "late-child",
+            subagentId: "subagent-late",
+            label: "延迟回传智能体"
+          }
+        })
+      ],
+      { terminalStatus: "done" }
+    );
+
+    expect(projection.mainSession.status).toBe("done");
+    expect(projection.subagentSessions[0]).toMatchObject({
+      sessionId: "late-child",
+      status: "done",
+      finished: true
+    });
+  });
+
+  it("normalizes explicit error events to a finished terminal session", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("agent_start"),
+      event("error", {
+        content: { message: "编排失败" }
+      })
+    ]);
+
+    expect(projection.mainSession).toMatchObject({
+      status: "error",
+      finished: true
+    });
+  });
+
+  it("cascades unfinished child sessions when the main session completes", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("agent_start"),
+      event("subagent_exposed", {
+        agentName: "问数智能体",
+        sessionId: "child-ask",
+        parentSessionId: "main-session",
+        subagentId: "subagent-ask",
+        label: "问数智能体",
+        content: {
+          sessionId: "child-ask",
+          subagentId: "subagent-ask",
+          label: "问数智能体"
+        }
+      }),
+      event("table", {
+        agentName: "问数智能体",
+        sessionId: "child-ask",
+        parentSessionId: "main-session",
+        content: {
+          columns: ["年份", "合同数"],
+          rows: [[2023, 24]],
+          totalRows: 1
+        }
+      }),
+      event("done", {
+        content: { mode: "agent", adaptiveTeam: true },
+        finished: true
+      })
+    ]);
+
+    expect(projection.mainSession.status).toBe("done");
+    expect(projection.subagentSessions[0]).toMatchObject({
+      sessionId: "child-ask",
+      status: "done",
+      finished: true
+    });
+    expect(
+      projection.subagentSessions[0].cards.every((card) => card.status === "done")
+    ).toBe(true);
+  });
+
+  it("cascades unfinished child sessions as errors when the main session fails", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("agent_start"),
+      event("subagent_exposed", {
+        agentName: "问数智能体",
+        sessionId: "child-ask",
+        parentSessionId: "main-session",
+        subagentId: "subagent-ask",
+        label: "问数智能体",
+        content: {
+          sessionId: "child-ask",
+          subagentId: "subagent-ask",
+          label: "问数智能体"
+        }
+      }),
+      event("done", {
+        content: { failed: true, summary: "编排失败" },
+        finished: true
+      })
+    ]);
+
+    expect(projection.mainSession.status).toBe("error");
+    expect(projection.subagentSessions[0]).toMatchObject({
+      status: "error",
+      finished: true
+    });
+  });
 });

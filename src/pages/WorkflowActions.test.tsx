@@ -233,6 +233,172 @@ describe("workflow page actions", () => {
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
   });
 
+  it("uses the execution panel as the only agent process surface", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("联合分析销售数据与制度", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-policy-review";
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    store.appendAskDataEvent(runId, {
+      type: "thinking",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "正在拆解跨来源任务。",
+      isThinking: true,
+      replyId: "root-reply",
+      modelCallIndex: 1
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "制度研究员",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        agentId: "policy-review",
+        sessionId: childSessionId,
+        subagentId: "subagent-policy-review",
+        label: "制度研究员"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "thinking",
+      agentName: "制度研究员",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "正在核对销售费用制度。",
+      isThinking: true,
+      replyId: "child-reply",
+      modelCallIndex: 1
+    });
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(screen.getByText("智能编排执行")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "收起分析过程" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent 正在思考")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "智能体执行卡" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "打开 制度研究员执行详情" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("正在核对销售费用制度。")).toBeInTheDocument();
+  });
+
+  it("settles the execution panel when the request ends without a root done event", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("检索制度并给出综合结论", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-policy-answer";
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问知智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        sessionId: childSessionId,
+        subagentId: "subagent-policy-answer",
+        label: "问知智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问知智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { summary: "制度检索完成" },
+      finished: true
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "已检索相关制度，以下为综合结论。"
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(
+      screen.getByRole("heading", { name: "智能编排完成" })
+    ).toBeInTheDocument();
+    const panel = screen
+      .getByText("智能编排执行")
+      .closest(".xs-datahub-execution");
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute("data-status", "done");
+    expect(
+      within(panel as HTMLElement).getAllByLabelText("已完成").length
+    ).toBeGreaterThan(0);
+    expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
+  });
+
+  it("keeps a replayed root error consistent across the heading and execution panel", () => {
+    useUiStore.getState().restoreAskDataHistory({
+      sessionId: "history-error-session",
+      question: "回放一次失败的编排",
+      chatMode: "agent",
+      status: "done",
+      events: [
+        {
+          type: "agent_start",
+          agentName: "编排智能体",
+          sessionId: "history-error-session",
+          globalSessionId: "history-error-session",
+          chatId: "history-error-chat"
+        },
+        {
+          type: "error",
+          agentName: "编排智能体",
+          sessionId: "history-error-session",
+          globalSessionId: "history-error-session",
+          chatId: "history-error-chat",
+          content: { message: "历史编排失败" }
+        }
+      ]
+    });
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(
+      screen.getByRole("heading", { name: "智能编排失败" })
+    ).toBeInTheDocument();
+    const panel = screen
+      .getByText("智能编排执行")
+      .closest(".xs-datahub-execution");
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute("data-status", "error");
+    expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
+  });
+
   it("favorites the structured ask result emitted by a child agent", async () => {
     const user = userEvent.setup();
     const store = useUiStore.getState();
@@ -814,6 +980,20 @@ describe("workflow page actions", () => {
     expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
       "当前浏览器不支持语音输入"
     );
+  });
+
+  it("lets the user choose a DataHub model from the workspace composer", async () => {
+    const user = userEvent.setup();
+    renderPage(<AnalysisPage mode="ask" />);
+
+    expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "命令输入" }), "查询最新销售制度");
+    await user.click(screen.getByRole("button", { name: "选择模型，当前问数模型" }));
+    await user.click(screen.getByRole("menuitem", { name: /问知模型/ }));
+
+    expect(screen.getByRole("button", { name: "选择模型，当前问知模型" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("查询最新销售制度");
   });
 
   it("keeps the restored history turn visible when submitting a follow-up", async () => {

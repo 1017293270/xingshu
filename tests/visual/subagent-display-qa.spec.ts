@@ -21,7 +21,10 @@ function sseEvent(event: Record<string, unknown>) {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
-function buildAgentStream(request: StreamRequest, options: { done: boolean }) {
+function buildAgentStream(
+  request: StreamRequest,
+  options: { done: boolean; omitRootDone?: boolean }
+) {
   const root = {
     agentName: "编排智能体",
     sessionId: request.sessionId,
@@ -193,39 +196,46 @@ function buildAgentStream(request: StreamRequest, options: { done: boolean }) {
         replyId: "root-final",
         modelCallIndex: 1,
         finished: false
-      }),
-      sseEvent({
-        ...root,
-        type: "done",
-        content: {
-          mode: "agent",
-          adaptiveTeam: true,
-          completion: "complete",
-          summary: "数据与制度来源均已完成。",
-          sourceResults: [
-            {
-              sourceKind: "data",
-              status: "answered",
-              datasourceId: 8,
-              datasourceName: "经营分析库"
-            },
-            {
-              sourceKind: "knowledge",
-              status: "answered",
-              knowledgeNames: ["财务制度库"]
-            }
-          ]
-        },
-        finished: true
-      }),
-      "data: [DONE]\n\n"
+      })
     );
+    if (!options.omitRootDone) {
+      events.push(
+        sseEvent({
+          ...root,
+          type: "done",
+          content: {
+            mode: "agent",
+            adaptiveTeam: true,
+            completion: "complete",
+            summary: "数据与制度来源均已完成。",
+            sourceResults: [
+              {
+                sourceKind: "data",
+                status: "answered",
+                datasourceId: 8,
+                datasourceName: "经营分析库"
+              },
+              {
+                sourceKind: "knowledge",
+                status: "answered",
+                knowledgeNames: ["财务制度库"]
+              }
+            ]
+          },
+          finished: true
+        })
+      );
+    }
+    events.push("data: [DONE]\n\n");
   }
 
   return events.join("");
 }
 
-async function installFixture(page: Page, options: { done: boolean }) {
+async function installFixture(
+  page: Page,
+  options: { done: boolean; omitRootDone?: boolean; responseDelayMs?: number }
+) {
   await page.addInitScript(() => {
     const user = {
       token: "playwright-subagent-qa-token",
@@ -246,6 +256,11 @@ async function installFixture(page: Page, options: { done: boolean }) {
       request.method() === "POST"
     ) {
       const body = request.postDataJSON() as StreamRequest;
+      if (options.responseDelayMs) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, options.responseDelayMs)
+        );
+      }
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream; charset=utf-8",
@@ -262,6 +277,46 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 });
 });
 
+test("capture preparing state", async ({ page }) => {
+  await installFixture(page, { done: false, responseDelayMs: 5_000 });
+  await page.goto("/ask-agent");
+  await page
+    .getByRole("textbox", { name: "命令输入" })
+    .fill("分析销售变化并核对费用制度");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  const preparing = page.getByRole("status", {
+    name: /编排智能体思考中/
+  });
+  await expect(preparing).toBeVisible();
+  await expect(
+    page.locator(".xs-datahub-subagent-dag__canvas--ghost")
+  ).toBeVisible();
+  await expect(
+    page.locator(".xs-datahub-subagent-dag__node--thinking")
+  ).toContainText("正在规划执行步骤");
+  await preparing.scrollIntoViewIfNeeded();
+  await page.locator(".xs-datahub-subagent-dag").screenshot({
+    path: "outputs/subagent-display-qa/after-thinking-focused.png",
+    animations: "allow"
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await preparing.scrollIntoViewIfNeeded();
+  await expect(
+    page.locator(".xs-datahub-subagent-dag__node--thinking")
+  ).toBeInViewport();
+  await page.screenshot({
+    path: "outputs/subagent-display-qa/after-thinking-390x844.png",
+    animations: "allow",
+    fullPage: true
+  });
+
+  await expect(
+    page.getByRole("heading", { name: "编排执行轨迹" })
+  ).toBeVisible();
+});
+
 test("capture running state", async ({ page }) => {
   await installFixture(page, { done: false });
   await page.goto("/ask-agent");
@@ -271,27 +326,21 @@ test("capture running state", async ({ page }) => {
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByRole("heading", { name: "编排执行轨迹" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "编排流程" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "智能体执行卡" })).toHaveCount(0);
+  await expect(page.getByText("Agent 正在思考")).toHaveCount(0);
   await page.waitForTimeout(1200);
 
-  await page.locator(".analysis-workspace").evaluate((workspace) => {
-    workspace.scrollTo({ top: 0, behavior: "auto" });
-  });
+  await page.getByRole("heading", { name: "编排流程" }).scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "outputs/subagent-display-qa/after-running-main.png",
     animations: "allow",
     fullPage: true
   });
 
-  await page.getByRole("button", { name: /子智能体/ }).click();
+  await page.getByRole("button", { name: "打开 数据研究员执行详情" }).click();
   const drawer = page.getByRole("dialog", { name: "子智能体执行详情" });
   await expect(drawer).toBeVisible();
-  await page.waitForTimeout(600);
-  await page.screenshot({
-    path: "outputs/subagent-display-qa/after-running-drawer.png",
-    animations: "allow"
-  });
-
-  await page.getByRole("treeitem", { name: /数据研究员/ }).click();
   await page.waitForTimeout(600);
   await page.screenshot({
     path: "outputs/subagent-display-qa/after-running-drawer-detail.png",
@@ -300,7 +349,7 @@ test("capture running state", async ({ page }) => {
 });
 
 test("capture done state", async ({ page }) => {
-  await installFixture(page, { done: true });
+  await installFixture(page, { done: true, omitRootDone: true });
   await page.goto("/ask-agent");
   await page
     .getByRole("textbox", { name: "命令输入" })
@@ -308,18 +357,28 @@ test("capture done state", async ({ page }) => {
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "编排流程" })).toBeVisible();
+  await expect(page.locator(".xs-datahub-execution")).toHaveAttribute(
+    "data-status",
+    "done"
+  );
+  await expect(
+    page.locator(".xs-datahub-execution [aria-label='运行中']")
+  ).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "智能体执行卡" })).toHaveCount(0);
+  await expect(page.getByText("Agent 思考完成")).toHaveCount(0);
   await page.waitForTimeout(800);
 
+  await page.getByRole("heading", { name: "编排流程" }).scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "outputs/subagent-display-qa/after-done-main.png",
     animations: "allow",
     fullPage: true
   });
 
-  await page.getByRole("button", { name: /子智能体/ }).click();
+  await page.getByRole("button", { name: "打开 数据研究员执行详情" }).click();
   const drawer = page.getByRole("dialog", { name: "子智能体执行详情" });
   await expect(drawer).toBeVisible();
-  await page.getByRole("treeitem", { name: /数据研究员/ }).click();
   await page.waitForTimeout(600);
   await page.screenshot({
     path: "outputs/subagent-display-qa/after-done-drawer-detail.png",

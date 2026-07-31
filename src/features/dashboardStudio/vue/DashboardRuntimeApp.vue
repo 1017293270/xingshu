@@ -26,12 +26,26 @@ const visibleWidgets = computed(() => runtimeSchema.value
 const canvasViewport = ref<HTMLElement | null>(null);
 const canvasScale = ref(1);
 let canvasResizeObserver: ResizeObserver | null = null;
+const canvasBackgroundStyle = computed(() =>
+  runtimeSchema.value
+    ? resolveCanvasBackgroundStyle(runtimeSchema.value.canvas)
+    : { backgroundColor: "#F5F9FF" }
+);
+const useFullscreenDefaultBackground = computed(() =>
+  Boolean(props.fullscreen && runtimeSchema.value && !runtimeSchema.value.canvas.backgroundImage)
+);
+const canvasViewportStyle = computed(() => {
+  if (!props.fullscreen || !runtimeSchema.value) return {};
+  return useFullscreenDefaultBackground.value
+    ? canvasBackgroundStyle.value
+    : { backgroundColor: runtimeSchema.value.canvas.background };
+});
 const canvasStyle = computed(() => ({
   width: `${runtimeSchema.value?.canvas.width ?? 1}px`,
   height: `${runtimeSchema.value?.canvas.height ?? 1}px`,
-  ...(runtimeSchema.value
-    ? resolveCanvasBackgroundStyle(runtimeSchema.value.canvas)
-    : { backgroundColor: "#F5F9FF" }),
+  ...(useFullscreenDefaultBackground.value
+    ? { backgroundColor: "transparent", backgroundImage: "none" }
+    : canvasBackgroundStyle.value),
   transform: `scale(${canvasScale.value})`
 }));
 const canvasStageStyle = computed(() => ({
@@ -101,7 +115,7 @@ function bindingForWidget(widget: DashboardWidget) {
       </div>
     </header>
 
-    <div ref="canvasViewport" class="runtime-canvas-viewport">
+    <div ref="canvasViewport" class="runtime-canvas-viewport" :style="canvasViewportStyle">
       <div class="runtime-canvas-stage" :style="canvasStageStyle">
         <div class="runtime-canvas" :style="canvasStyle">
           <DashboardWidgetCard
@@ -299,7 +313,7 @@ function bindingForWidget(widget: DashboardWidget) {
 .is-fullscreen .runtime-canvas {
   border: 0;
   border-radius: 0;
-  box-shadow: 0 24px 90px rgba(0, 0, 0, .42);
+  box-shadow: none;
 }
 
 .runtime-empty {
