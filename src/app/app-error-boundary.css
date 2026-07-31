@@ -1,0 +1,103 @@
+.app-error-boundary {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(53, 126, 255, 0.09), transparent 42%),
+    #f3f7fd;
+  color: #0b2b59;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.app-error-boundary__panel {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d8e5f7;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(29, 78, 137, 0.1);
+  max-width: 520px;
+  padding: 40px;
+  text-align: center;
+  width: 100%;
+}
+
+.app-error-boundary__mark {
+  align-items: center;
+  background: #edf5ff;
+  border: 1px solid #c9ddfb;
+  border-radius: 14px;
+  color: #2272e8;
+  display: inline-flex;
+  font-size: 22px;
+  font-weight: 700;
+  height: 48px;
+  justify-content: center;
+  margin-bottom: 18px;
+  width: 48px;
+}
+
+.app-error-boundary__eyebrow {
+  color: #5c7ca7;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin: 0 0 8px;
+}
+
+.app-error-boundary h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.app-error-boundary__panel > p:last-of-type {
+  color: #637b9b;
+  line-height: 1.7;
+  margin: 14px 0 26px;
+}
+
+.app-error-boundary__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.app-error-boundary__actions button,
+.app-error-boundary__actions a {
+  align-items: center;
+  border-radius: 12px;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 600;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 20px;
+  text-decoration: none;
+}
+
+.app-error-boundary__actions button {
+  background: #1769e0;
+  border: 1px solid #1769e0;
+  color: #fff;
+}
+
+.app-error-boundary__actions a {
+  background: #fff;
+  border: 1px solid #cbdcf2;
+  color: #205fae;
+}
+
+@media (max-width: 560px) {
+  .app-error-boundary {
+    padding: 20px;
+  }
+
+  .app-error-boundary__panel {
+    padding: 32px 24px;
+  }
+
+  .app-error-boundary__actions {
+    flex-direction: column;
+  }
+}
