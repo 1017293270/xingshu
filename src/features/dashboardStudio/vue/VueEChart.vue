@@ -47,7 +47,7 @@ onMounted(async () => {
     return;
   }
   chart = echarts.init(chartElement.value, null, { renderer: "canvas" });
-  chart.setOption(optionWithMotion(props.option), { notMerge: false, lazyUpdate: false });
+  chart.setOption(optionWithMotion(props.option), { notMerge: true, lazyUpdate: false });
   chartElement.value.dataset.echartsReady = "true";
   resizeObserver = new ResizeObserver(resizeChart);
   resizeObserver.observe(chartElement.value);
@@ -57,9 +57,8 @@ watch(
   () => props.option,
   (option) => {
     chart?.setOption(optionWithMotion(option, true), {
-      notMerge: false,
-      lazyUpdate: true,
-      replaceMerge: ["series", "xAxis", "yAxis"]
+      notMerge: true,
+      lazyUpdate: false
     });
   },
   { deep: true }

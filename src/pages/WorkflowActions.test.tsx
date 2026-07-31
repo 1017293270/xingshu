@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import * as knowledgeService from "@/services/dataHubKnowledgeService";
+import * as queryAssetMaterializationService from "@/services/dataHubQueryAssetMaterializationService";
 import * as queryAssetService from "@/services/queryAssetService";
 import { useUiStore } from "@/stores/uiStore";
 import { AnalysisPage } from "./AnalysisPage";
@@ -729,6 +730,207 @@ describe("workflow page actions", () => {
       ensuredArtifact,
       ensuredArtifact.resolvedQuestion
     );
+  });
+
+  it("backfills an obvious ask subagent when orchestration only returns a root Markdown table", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("统计咨询对象排名", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-consultation-ranking";
+    const ensuredArtifact = {
+      askRunId: "ask-run-consultation-ranking",
+      resolvedQuestion: "统计咨询对象排名",
+      canFavorite: true
+    };
+    const ensureSpy = vi
+      .spyOn(queryAssetService, "ensureAskArtifact")
+      .mockResolvedValue(ensuredArtifact);
+    const favoriteSpy = vi
+      .spyOn(queryAssetService, "favoriteAskArtifact")
+      .mockResolvedValue({
+        id: "asset-consultation-ranking",
+        name: ensuredArtifact.resolvedQuestion,
+        originalQuestion: "统计咨询对象排名",
+        resolvedQuestion: ensuredArtifact.resolvedQuestion,
+        ownerUserId: 1,
+        visibility: "PRIVATE",
+        stableVersionId: "version-consultation-ranking",
+        status: "ACTIVE",
+        createdAt: "2026-07-31T00:00:00.000Z",
+        updatedAt: "2026-07-31T00:00:00.000Z"
+      });
+
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        sessionId: childSessionId,
+        subagentId: "subagent-consultation-ranking",
+        label: "问数智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {}
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: [
+        "按咨询记录数据排名前十的咨询对象如下：",
+        "",
+        "| 排名 | 咨询对象 | 咨询量 |",
+        "| --- | --- | ---: |",
+        "| 1 | 小治 | 456 |"
+      ].join("\n")
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "agent", adaptiveTeam: true },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    const favoriteButton = screen.getByRole("button", { name: "收藏问数" });
+    expect(favoriteButton).toBeEnabled();
+    await user.click(favoriteButton);
+
+    expect(ensureSpy).toHaveBeenCalledWith(rootSessionId, turn.chatId, childSessionId);
+    expect(favoriteSpy).toHaveBeenCalledWith(
+      ensuredArtifact,
+      ensuredArtifact.resolvedQuestion
+    );
+  });
+
+  it("reruns a single historical ask before favoriting when persisted queries are incomplete", async () => {
+    const user = userEvent.setup();
+    const rootSessionId = "history-consultation-session";
+    const childSessionId = "history-consultation-child";
+    const chatId = "history-consultation-chat";
+    const ensuredArtifact = {
+      askRunId: "ask-run-history-consultation",
+      resolvedQuestion: "统计历史咨询对象排名",
+      canFavorite: true
+    };
+    const ensureSpy = vi
+      .spyOn(queryAssetService, "ensureAskArtifact")
+      .mockRejectedValue(
+        new Error("历史问数缺少完整可执行查询，请重新问数后收藏")
+      );
+    const materializeSpy = vi
+      .spyOn(queryAssetMaterializationService, "materializeAskArtifact")
+      .mockResolvedValue(ensuredArtifact);
+    const favoriteSpy = vi
+      .spyOn(queryAssetService, "favoriteAskArtifact")
+      .mockResolvedValue({
+        id: "asset-history-consultation",
+        name: ensuredArtifact.resolvedQuestion,
+        originalQuestion: "统计历史咨询对象排名",
+        resolvedQuestion: ensuredArtifact.resolvedQuestion,
+        ownerUserId: 1,
+        visibility: "PRIVATE",
+        stableVersionId: "version-history-consultation",
+        status: "ACTIVE",
+        createdAt: "2026-07-31T00:00:00.000Z",
+        updatedAt: "2026-07-31T00:00:00.000Z"
+      });
+
+    useUiStore.getState().restoreAskDataHistory({
+      sessionId: rootSessionId,
+      question: "统计历史咨询对象排名",
+      chatMode: "agent",
+      status: "done",
+      events: [
+        {
+          type: "subagent_exposed",
+          agentName: "问数智能体",
+          sessionId: childSessionId,
+          globalSessionId: rootSessionId,
+          parentSessionId: rootSessionId,
+          chatId,
+          content: {
+            agentId: "ask-data",
+            sessionId: childSessionId,
+            subagentId: "history-consultation-subagent",
+            label: "问数智能体"
+          }
+        },
+        {
+          type: "done",
+          agentName: "问数智能体",
+          sessionId: childSessionId,
+          globalSessionId: rootSessionId,
+          parentSessionId: rootSessionId,
+          chatId,
+          content: {}
+        },
+        {
+          type: "text",
+          agentName: "编排智能体",
+          sessionId: rootSessionId,
+          globalSessionId: rootSessionId,
+          chatId,
+          content: [
+            "历史咨询对象排名如下：",
+            "",
+            "| 排名 | 咨询对象 | 咨询量 |",
+            "| --- | --- | ---: |",
+            "| 1 | 小治 | 456 |"
+          ].join("\n")
+        },
+        {
+          type: "done",
+          agentName: "编排智能体",
+          sessionId: rootSessionId,
+          globalSessionId: rootSessionId,
+          chatId,
+          content: { mode: "agent", adaptiveTeam: true },
+          finished: true
+        }
+      ]
+    });
+
+    renderPage(<AnalysisPage mode="agent" />);
+
+    await user.click(screen.getByRole("button", { name: "收藏问数" }));
+
+    expect(ensureSpy).toHaveBeenNthCalledWith(
+      1,
+      rootSessionId,
+      chatId,
+      childSessionId
+    );
+    expect(ensureSpy).toHaveBeenNthCalledWith(2, rootSessionId, chatId);
+    expect(materializeSpy).toHaveBeenCalledWith({
+      question: "统计历史咨询对象排名"
+    });
+    expect(favoriteSpy).toHaveBeenCalledWith(
+      ensuredArtifact,
+      ensuredArtifact.resolvedQuestion
+    );
+    expect(
+      await screen.findByRole("button", { name: "已收藏问数" })
+    ).toBeDisabled();
   });
 
   it("streams every phase detail before advancing to the next ask-data phase", async () => {

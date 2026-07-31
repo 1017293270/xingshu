@@ -144,6 +144,10 @@
   gap: 10px;
 }
 
+.xs-datahub-execution + .analysis-output {
+  margin-top: 20px;
+}
+
 .xs-card--inner h3 {
   padding-right: 56px;
   white-space: nowrap;

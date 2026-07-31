@@ -1,4 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
+import { createHash } from "node:crypto";
 import type { QueryExecutionOutput } from "../../src/types/analytics";
 import type { DashboardSchema } from "../../src/types/dashboardStudio";
 
@@ -256,7 +257,8 @@ function runtime(record: DashboardRecordFixture) {
 
 async function installApiFixture(
   page: Page,
-  listedAssets: unknown[] = [asset, contractAsset, contractDetailAsset]
+  listedAssets: unknown[] = [asset, contractAsset, contractDetailAsset],
+  assetPreview: unknown = preview
 ) {
   let record: DashboardRecordFixture | null = null;
 
@@ -270,7 +272,7 @@ async function installApiFixture(
       return;
     }
     if (path === `/api/analytics/query-assets/${asset.id}/preview` && request.method() === "POST") {
-      await route.fulfill({ json: response(preview) });
+      await route.fulfill({ json: response(assetPreview) });
       return;
     }
     if (path === `/api/analytics/query-assets/${contractAsset.id}/preview` && request.method() === "POST") {
@@ -538,6 +540,149 @@ test("switching chart family and favorite binding keeps ECharts populated", asyn
     page.getByRole("button", { name: "折线图", exact: true })
       .locator(".vue-echart[data-echarts-ready='true']")
   ).toHaveCount(1);
+});
+
+test("repeated chart type switches replace the previous ECharts scene", async ({ page }) => {
+  const communityAsset = {
+    ...asset,
+    name: "咨询数前十的社区的咨询数分布",
+    originalQuestion: "咨询数前十的社区的咨询数分布",
+    resolvedQuestion: "咨询数前十的社区的咨询数分布",
+    stableVersion: {
+      ...asset.stableVersion,
+      resolvedQuestion: "咨询数前十的社区的咨询数分布",
+      outputs: [
+        asset.stableVersion.outputs[0],
+        {
+          ...asset.stableVersion.outputs[1],
+          label: "社区咨询数",
+          columns: [
+            { columnId: "community-id", key: "community", label: "社区", type: "string" },
+            {
+              columnId: "consultation-count-id",
+              key: "consultationCount",
+              label: "咨询数",
+              type: "number"
+            }
+          ]
+        }
+      ]
+    }
+  };
+  const communityRows = [
+    { community: "演示账号", consultationCount: 720 },
+    { community: "广汉市汉州街道龙居社区", consultationCount: 456 },
+    { community: "大连新城社区", consultationCount: 322 },
+    { community: "六角井社区", consultationCount: 264 },
+    { community: "贵州遵义纪念馆社区", consultationCount: 238 },
+    { community: "福陵社区", consultationCount: 210 },
+    { community: "葡萄井社区", consultationCount: 180 },
+    { community: "司马河公司", consultationCount: 166 },
+    { community: "广汉市汉州街道泥鳅社区", consultationCount: 142 },
+    { community: "海口市美兰区演丰镇大顶村", consultationCount: 128 }
+  ];
+  await installApiFixture(page, [communityAsset], {
+    ...preview,
+    outputs: [
+      preview.outputs[0],
+      {
+        ...preview.outputs[1],
+        columns: communityAsset.stableVersion.outputs[1].columns,
+        rows: communityRows,
+        totalRows: communityRows.length
+      }
+    ]
+  });
+  await page.addInitScript(() => {
+    const user = {
+      token: "playwright-chart-replacement-token",
+      userId: 1,
+      username: "张三",
+      isAdmin: true
+    };
+    window.localStorage.setItem("xingshu_datahub_token", user.token);
+    window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
+    window.localStorage.setItem("xingshu_datahub_space_id", "1");
+  });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
+  await page.getByRole("combobox", { name: "结果表" }).selectOption("revenue");
+  await page.getByRole("button", { name: "添加到画布", exact: true }).click();
+
+  const chartRoot = page.locator(".dashboard-widget-card .vue-echart");
+  const chartCanvas = chartRoot.locator("canvas");
+  const solidPiePreset = page.getByRole("button", { name: "饼图: 实心占比" });
+
+  const readStableCanvas = async () => {
+    await expect(chartRoot).toHaveCount(1);
+    await expect(chartCanvas).toHaveCount(1);
+
+    let previousFrame = "";
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await page.waitForTimeout(100);
+      const currentFrameData = await chartCanvas.evaluate(
+        (canvas) => (canvas as HTMLCanvasElement).toDataURL()
+      );
+      const currentFrame = createHash("sha256").update(currentFrameData).digest("hex");
+      if (currentFrame === previousFrame) return currentFrame;
+      previousFrame = currentFrame;
+    }
+    return previousFrame;
+  };
+
+  await solidPiePreset.click();
+  await expect(solidPiePreset).toHaveAttribute("aria-pressed", "true");
+  const directSolidPieFrame = await readStableCanvas();
+
+  const switchSequence = [
+    "饼图: 环形占比",
+    "折线图: 平滑折线",
+    "雷达图: 填充雷达",
+    "漏斗图: 转化漏斗",
+    "饼图: 玫瑰占比",
+    "饼图: 实心占比"
+  ] as const;
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    for (const presetName of switchSequence) {
+      await page.getByRole("button", { name: presetName }).click();
+    }
+  }
+
+  await expect(solidPiePreset).toHaveAttribute("aria-pressed", "true");
+  const repeatedlySwitchedFrame = await readStableCanvas();
+
+  const chartLayout = await page.evaluate(async () => {
+    const chart = document.querySelector<HTMLElement>(".dashboard-widget-card .vue-echart");
+    const echartsResource = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((name) => name.toLowerCase().includes("/echarts.js"));
+    if (!chart || !echartsResource) throw new Error("ECharts runtime was not found");
+
+    const echarts = await import(echartsResource);
+    const option = echarts.getInstanceByDom(chart)?.getOption();
+    const legend = Array.isArray(option?.legend) ? option.legend[0] : option?.legend;
+    const series = Array.isArray(option?.series) ? option.series : [];
+    const pieSeries = series.find((item: { type?: string }) => item.type === "pie");
+
+    return {
+      categoryCount: Array.isArray(pieSeries?.data) ? pieSeries.data.length : 0,
+      legendVisible: legend?.show !== false,
+      outsideLabelsVisible: pieSeries?.label?.show !== false,
+      radarComponentCount: Array.isArray(option?.radar) ? option.radar.length : 0
+    };
+  });
+
+  expect(repeatedlySwitchedFrame).toBe(directSolidPieFrame);
+  expect(chartLayout.radarComponentCount).toBe(0);
+  expect(chartLayout.categoryCount).toBe(10);
+  expect(chartLayout.legendVisible && chartLayout.outsideLabelsVisible).toBe(false);
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/dashboard-repeated-chart-switch-1920x1080.png",
+    animations: "disabled",
+    fullPage: true
+  });
 });
 
 const detailViewports = [

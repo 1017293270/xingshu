@@ -14,7 +14,12 @@ export type DataHubQueryAssetTarget = {
   sessionId?: string;
   chatId?: string;
   artifact?: AskArtifactRef;
+  canBackfill: boolean;
   tableCount: number;
+};
+
+type DataHubQueryAssetTargetOptions = {
+  mainSessionIsAskData?: boolean;
 };
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -75,15 +80,54 @@ function findSessionArtifact(session: DataHubExecutionSession): AskArtifactRef |
   return undefined;
 }
 
+function normalizeAgentIdentity(value: unknown) {
+  return optionalString(value)?.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function isAskDataSession(session: DataHubExecutionSession) {
+  if (normalizeAgentIdentity(session.done?.mode) === "ask") {
+    return true;
+  }
+
+  const hasAskDataId = [session.agentId, session.subagentId].some((value) => {
+    const identity = normalizeAgentIdentity(value);
+    return Boolean(identity?.includes("askdata"));
+  });
+  if (hasAskDataId) {
+    return true;
+  }
+
+  // Terminal child events can inherit the root agent name. Only trust a
+  // human-readable ask label when DataHub explicitly exposed that subagent.
+  const wasExplicitlyExposed = session.events.some(
+    (event) => event.type === "subagent_exposed"
+  );
+  if (!wasExplicitlyExposed) {
+    return false;
+  }
+
+  return [session.agentName, session.label].some((value) => {
+    const identity = normalizeAgentIdentity(value);
+    return Boolean(identity && (identity.includes("问数") || identity.includes("askdata")));
+  });
+}
+
 function createTarget(
   session: DataHubExecutionSession,
-  fallbackQuestion: string
+  fallbackQuestion: string,
+  assumeAskData = false
 ): DataHubQueryAssetTarget | undefined {
   const artifact = findSessionArtifact(session);
   const tableCount = session.tableResults.length;
   const rootSessionId = session.globalSessionId || session.sessionId;
+  const hasCompletedAskResult =
+    (session.status === "done" || session.finished) &&
+    (assumeAskData || isAskDataSession(session));
   const canBackfill = Boolean(
-    tableCount > 0 && rootSessionId && session.sessionId && session.chatId
+    (tableCount > 0 || hasCompletedAskResult) &&
+      rootSessionId &&
+      session.sessionId &&
+      session.chatId
   );
 
   if (!artifact && !canBackfill) {
@@ -106,6 +150,7 @@ function createTarget(
     sessionId: session.sessionId,
     chatId: session.chatId,
     artifact,
+    canBackfill,
     tableCount
   };
 }
@@ -117,14 +162,36 @@ function createTarget(
  */
 export function getDataHubQueryAssetTargets(
   projection: DataHubExecutionProjection,
-  fallbackQuestion: string
+  fallbackQuestion: string,
+  options: DataHubQueryAssetTargetOptions = {}
 ): DataHubQueryAssetTarget[] {
   const childTargets = projection.subagentSessions
     .map((session) => createTarget(session, fallbackQuestion))
     .filter((target): target is DataHubQueryAssetTarget => Boolean(target));
-  const mainTarget = createTarget(projection.mainSession, fallbackQuestion);
+  const mainTarget = createTarget(
+    projection.mainSession,
+    fallbackQuestion,
+    options.mainSessionIsAskData === true
+  );
+  const mergedSingleTarget =
+    childTargets.length === 1 &&
+    !childTargets[0].artifact &&
+    mainTarget?.artifact &&
+    childTargets[0].rootSessionId === mainTarget.rootSessionId &&
+    childTargets[0].chatId === mainTarget.chatId
+      ? {
+          ...childTargets[0],
+          key: mainTarget.key,
+          label: mainTarget.label,
+          artifact: mainTarget.artifact,
+          canBackfill:
+            childTargets[0].canBackfill || mainTarget.canBackfill
+        }
+      : undefined;
   const orderedTargets =
-    childTargets.length > 0
+    mergedSingleTarget
+      ? [mergedSingleTarget]
+      : childTargets.length > 0
       ? [
           ...childTargets,
           ...(mainTarget?.artifact ? [mainTarget] : [])

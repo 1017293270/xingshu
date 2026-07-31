@@ -180,12 +180,29 @@ export function buildDashboardChartOption(
     const metric = metrics[0];
     const isRose = variant === "pie-rose";
     const isSolid = variant === "pie-solid";
+    const data = categories.flatMap((name, index) => {
+      const value = metric.values[index];
+      return value === null ? [] : [{ name, value }];
+    });
+    const hasDenseCategories = data.length > 6;
+    const showOutsideLabels = (isSolid || isRose) && !hasDenseCategories;
     return {
       ...base,
       tooltip: { trigger: "item" },
       legend: isSolid
-        ? { right: 4, top: "middle", orient: "vertical", textStyle: { color: fontColor } }
-        : { bottom: 0, textStyle: { color: fontColor } },
+        ? {
+            type: hasDenseCategories ? "scroll" : "plain",
+            right: 4,
+            top: hasDenseCategories ? 12 : "middle",
+            bottom: hasDenseCategories ? 12 : undefined,
+            orient: "vertical",
+            textStyle: { color: fontColor }
+          }
+        : {
+            type: hasDenseCategories ? "scroll" : "plain",
+            bottom: 0,
+            textStyle: { color: fontColor }
+          },
       series: [
         {
           name: widget.title,
@@ -193,12 +210,10 @@ export function buildDashboardChartOption(
           radius: isSolid ? ["0%", "64%"] : isRose ? ["24%", "68%"] : ["42%", "68%"],
           center: isSolid ? ["42%", "48%"] : ["50%", "44%"],
           roseType: isRose ? "radius" : undefined,
-          // 默认环形图用图例承担类目名，隐藏外侧标签避免窄卡片截断；值走 tooltip
-          label: isSolid || isRose ? { color: fontColor } : { show: false },
-          data: categories.flatMap((name, index) => {
-            const value = metric.values[index];
-            return value === null ? [] : [{ name, value }];
-          })
+          // 密集类目统一交给图例承载，避免外侧标签与图例在窄卡片内互相覆盖。
+          label: showOutsideLabels ? { show: true, color: fontColor } : { show: false },
+          labelLine: { show: showOutsideLabels },
+          data
         }
       ]
     };

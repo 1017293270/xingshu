@@ -90,6 +90,40 @@ describe("dashboardWidgetData", () => {
       .toBe("funnel");
   });
 
+  it("uses one readable label system for dense solid pie charts", () => {
+    const denseBinding: DashboardDataBinding = {
+      ...binding,
+      resultKind: "category",
+      table: {
+        ...binding.table,
+        rows: Array.from({ length: 10 }, (_, index) => ({
+          month: `社区 ${index + 1}`,
+          revenue: (index + 1) * 10
+        })),
+        totalRows: 10
+      }
+    };
+    const solidPieWidget: DashboardWidget = {
+      ...widget("pie"),
+      style: {
+        ...widget("pie").style,
+        chartVariant: "pie-solid",
+        showLegend: true
+      }
+    };
+
+    const option = buildDashboardChartOption(solidPieWidget, denseBinding);
+    const legend = option?.legend as { type?: string };
+    const series = option?.series as Array<{
+      label?: { show?: boolean };
+      labelLine?: { show?: boolean };
+    }>;
+
+    expect(legend.type).toBe("scroll");
+    expect(series[0]?.label?.show).toBe(false);
+    expect(series[0]?.labelLine?.show).toBe(false);
+  });
+
   it("resolves immutable column IDs and infers numeric fields from real values", () => {
     const looselyTypedBinding: DashboardDataBinding = {
       ...binding,

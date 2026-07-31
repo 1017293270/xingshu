@@ -195,7 +195,7 @@ export function HomePage() {
     <div className="home-page">
       <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
       <section className="home-page__hero" aria-labelledby="home-greeting">
-        <h1 id="home-greeting">您好，{username}</h1>
+        <h1 id="home-greeting">您好，<span className="home-page__hero-name">{username}</span></h1>
         <p>我是您的数据管家，有什么可以帮您？</p>
       </section>
 

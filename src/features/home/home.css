@@ -1,3 +1,5 @@
+/* ---------- 首页布局基底 ---------- */
+
 .home-page {
   position: relative;
   width: 100%;
@@ -8,67 +10,76 @@
 .home-page__bg {
   position: absolute;
   z-index: -1;
-  top: 48px;
+  top: 40px;
   left: 50%;
   width: calc(100vw - var(--xs-sidebar-width));
   max-width: none;
-  height: 390px;
+  height: 380px;
   object-fit: cover;
   object-position: center 68%;
   transform: translateX(-50%);
-  opacity: 0.92;
-  mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.9) 22%, #000 72%, transparent 100%);
+  opacity: 0.72;
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 24%, #000 68%, transparent 100%);
   pointer-events: none;
   user-select: none;
 }
 
+/* ---------- 问候区：与命令框、推荐应用共享同一左轴 ---------- */
+
 .home-page__hero {
   width: min(100%, var(--xs-page-track));
-  margin: 128px auto 68px;
+  margin: 96px auto 56px;
   text-align: center;
 }
 
 .home-page__hero h1 {
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   color: var(--xs-text);
-  font-size: 52px;
-  line-height: 1.1;
-  font-weight: 780;
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 750;
   letter-spacing: 0;
+}
+
+.home-page__hero-name {
+  color: var(--xs-interactive-text);
+  font-weight: 780;
 }
 
 .home-page__hero p {
   margin: 0;
-  color: #0f2a59;
-  font-size: 25px;
-  line-height: 1.4;
-  font-weight: 520;
+  color: var(--xs-text-2);
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 500;
 }
 
+/* ---------- 主命令输入框：全页唯一一级焦点 ---------- */
+
 .home-page .xs-command-box {
-  width: min(100%, 1170px);
-  border-color: #bfd8ff;
+  width: min(100%, var(--xs-page-track));
+  border-color: #c9dcf6;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 36px rgba(35, 104, 210, 0.12);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 16px 40px rgba(35, 104, 210, 0.1);
 }
 
 .home-page .xs-command-box:focus-within {
   border-color: #8db9f7;
   box-shadow:
-    0 0 0 3px rgba(37, 99, 235, 0.14),
-    0 14px 36px rgba(35, 104, 210, 0.12);
+    0 0 0 3px rgba(37, 99, 235, 0.1),
+    0 16px 40px rgba(35, 104, 210, 0.1);
 }
 
 .home-page .xs-command-box__input {
-  height: 116px;
-  padding: 30px 38px 18px;
-  font-size: 19px;
+  height: 112px;
+  padding: 26px 34px 16px;
+  font-size: 18px;
   line-height: 1.6;
 }
 
 .home-page .xs-command-box__input::placeholder {
-  color: #7d8da7;
+  color: #8496b0;
 }
 
 .home-page .xs-command-box__input:focus-visible {
@@ -76,17 +87,11 @@
 }
 
 .home-page .xs-command-box__toolbar {
-  min-height: 60px;
-  padding: 0 24px 0 38px;
+  min-height: 64px;
+  padding: 0 22px 0 34px;
   border-top: 0 !important;
   box-shadow: none;
   background: transparent;
-}
-
-.home-page .xs-command-box__hint {
-  color: #5c739a;
-  font-size: 14px;
-  font-weight: 650;
 }
 
 .home-page .xs-command-box__actions {
@@ -94,8 +99,8 @@
 }
 
 .home-page .xs-command-model-select {
-  height: 40px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 14px;
   font-size: 14px;
 }
 
@@ -103,22 +108,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   color: #54729c;
   border-color: transparent;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   box-shadow: none;
 }
 
 .home-page .xs-command-box__send.ant-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   color: #ffffff;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #176ff2;
   box-shadow: none;
 }
@@ -144,89 +149,133 @@
   font-weight: 650;
 }
 
+/* ---------- 推荐应用：统一网格的左对齐竖卡 ---------- */
+
 .home-page__apps {
   width: min(100%, var(--xs-page-track));
-  margin: 36px auto 0;
+  margin: 40px auto 0;
 }
 
 .home-page__apps h2 {
-  margin: 0 0 24px;
+  margin: 0 0 18px;
   color: var(--xs-text);
-  font-size: 26px;
-  font-weight: 780;
+  font-size: 20px;
+  font-weight: 750;
   letter-spacing: 0;
 }
 
 .home-page__app-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 22px;
+  gap: 20px;
 }
 
 .home-page .xs-app-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 208px;
-  gap: 12px;
-  padding: 24px 12px 20px;
-  text-align: center;
-  border-color: #d8e8ff;
+  align-items: stretch;
+  min-height: 216px;
+  gap: 0;
+  padding: 20px 18px 16px;
+  text-align: left;
+  border-color: #d9e6f8;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 28px rgba(26, 83, 164, 0.08);
+  box-shadow: 0 8px 22px rgba(26, 83, 164, 0.06);
+}
+
+.home-page .xs-app-card:hover {
+  border-color: #b4d0f3;
+  box-shadow: 0 14px 32px rgba(26, 83, 164, 0.11);
+  transform: translateY(-2px);
+}
+
+.home-page .xs-app-card--selected,
+.home-page .xs-app-card--selected:hover {
+  border-color: rgba(22, 119, 255, 0.55);
+  background: #f6faff;
+  box-shadow:
+    0 0 0 3px rgba(22, 119, 255, 0.08),
+    0 10px 24px rgba(26, 83, 164, 0.08);
+  transform: none;
+}
+
+.home-page .xs-app-card:has(.xs-app-card__main:focus-visible),
+.home-page .xs-app-card:has(.xs-app-card__arrow:focus-visible) {
+  border-color: #9ec2f0;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, 0.1),
+    0 8px 22px rgba(26, 83, 164, 0.06);
+  transform: none;
 }
 
 .home-page .xs-app-card__main {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   width: 100%;
-  gap: 12px;
-  text-align: center;
+  gap: 14px;
+  text-align: left;
 }
 
 .home-page .xs-app-card .xs-icon-tile {
-  width: 74px;
-  height: 74px;
-  border: 0;
-  background: transparent;
+  width: 52px;
+  height: 52px;
+  border: 1px solid #e1ecfa;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f2f8ff);
+  box-shadow: 0 4px 10px rgba(26, 83, 164, 0.05);
 }
 
 .home-page .xs-app-card .xs-icon-tile__image {
-  width: 70px;
-  height: 70px;
+  width: 42px;
+  height: 42px;
 }
 
 .home-page .xs-app-card__title {
-  color: #051a4a;
-  font-size: 19px;
-  line-height: 1.25;
-  font-weight: 780;
+  color: var(--xs-text);
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 750;
 }
 
 .home-page .xs-app-card__desc {
-  display: none;
+  display: -webkit-box;
+  min-height: 40px;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .home-page .xs-app-card__arrow {
-  width: 34px;
-  height: 34px;
-  margin-top: 0;
-  color: var(--xs-primary);
-  border-color: #dce9ff;
-  background: #ffffff;
-  box-shadow: 0 6px 14px rgba(22, 119, 255, 0.08);
+  width: 32px;
+  height: 32px;
+  align-self: flex-end;
+  margin-top: auto;
+  color: #7c90ad;
+  border: 1px solid #e0ebfa;
+  border-radius: 10px;
+  background: #f7faff;
+  box-shadow: none;
+  opacity: 1;
 }
 
-@media (max-width: 1500px) {
-  .home-page__app-grid {
-    gap: 16px;
-  }
+.home-page .xs-app-card:hover .xs-app-card__arrow {
+  color: var(--xs-primary-2);
+  border-color: #c4dafa;
+  background: #eef5ff;
+  transform: translateX(2px);
 }
+
+/* ---------- 桌面分段响应式：垂直节奏随视口高度舒展 ---------- */
 
 @media (min-width: 901px) {
   .home-page {
@@ -234,57 +283,46 @@
   }
 
   .home-page__bg {
-    top: 18px;
-    height: min(360px, 40vh);
+    top: 16px;
+    height: min(340px, 38vh);
   }
 
   .home-page__hero {
-    margin: clamp(64px, 8vh, 92px) auto clamp(34px, 4.2vh, 48px);
+    margin: clamp(56px, 10.5vh, 124px) auto clamp(30px, 4.2vh, 46px);
   }
 
   .home-page__hero h1 {
-    font-size: clamp(42px, 3vw, 52px);
+    font-size: clamp(34px, 2.7vw, 40px);
   }
 
   .home-page__hero p {
-    font-size: clamp(20px, 1.55vw, 25px);
+    font-size: clamp(15px, 1.15vw, 17px);
   }
 
   .home-page .xs-command-box__input {
-    height: clamp(84px, 10vh, 104px);
-    padding-top: 24px;
+    height: clamp(88px, 10.5vh, 112px);
   }
 
   .home-page .xs-command-box__toolbar {
-    min-height: clamp(58px, 7vh, 68px);
+    min-height: clamp(58px, 6.8vh, 68px);
   }
 
   .home-page__apps {
-    margin-top: clamp(22px, 3vh, 32px);
+    margin-top: clamp(28px, 4.2vh, 44px);
   }
 
   .home-page__apps h2 {
-    margin-bottom: clamp(14px, 2vh, 20px);
-    font-size: 24px;
+    margin-bottom: clamp(14px, 1.8vh, 18px);
   }
 
   .home-page .xs-app-card {
-    min-height: clamp(164px, 21vh, 188px);
-    padding: 18px 10px 16px;
+    min-height: clamp(196px, 24vh, 236px);
   }
+}
 
-  .home-page .xs-app-card .xs-icon-tile {
-    width: clamp(58px, 6.6vh, 70px);
-    height: clamp(58px, 6.6vh, 70px);
-  }
-
-  .home-page .xs-app-card .xs-icon-tile__image {
-    width: clamp(56px, 6.3vh, 66px);
-    height: clamp(56px, 6.3vh, 66px);
-  }
-
-  .home-page .xs-app-card__title {
-    font-size: 18px;
+@media (max-width: 1500px) {
+  .home-page__app-grid {
+    gap: 16px;
   }
 }
 
@@ -294,37 +332,39 @@
   }
 }
 
+/* ---------- 移动端：横排卡片、紧凑工具栏 ---------- */
+
 @media (max-width: 900px) {
   .home-page {
     min-height: auto;
   }
 
   .home-page__bg {
-    top: 92px;
-    height: 260px;
+    top: 88px;
+    height: 240px;
   }
 
   .home-page__hero {
-    margin: 48px auto 36px;
+    margin: 40px auto 32px;
   }
 
   .home-page__hero h1 {
-    font-size: 34px;
+    font-size: 30px;
   }
 
   .home-page__hero p {
-    font-size: 18px;
+    font-size: 15px;
   }
 
   .home-page .xs-command-box__input {
     height: 118px;
-    padding: 22px 20px;
+    padding: 20px;
     font-size: 16px;
   }
 
   .home-page .xs-command-box__toolbar {
     min-height: 60px;
-    padding: 14px 16px;
+    padding: 12px 16px;
   }
 
   .home-page .xs-command-box__actions {
@@ -342,40 +382,46 @@
 
   .home-page .xs-app-card {
     flex-direction: row;
-    justify-content: flex-start;
-    min-height: 122px;
-    padding: 18px;
-    text-align: left;
+    align-items: center;
+    min-height: 0;
+    gap: 14px;
+    padding: 16px 18px;
   }
 
   .home-page .xs-app-card__main {
     flex-direction: row;
-    justify-content: flex-start;
-    text-align: left;
+    align-items: center;
+    gap: 14px;
   }
 
   .home-page .xs-app-card .xs-icon-tile {
-    width: 62px;
-    height: 62px;
+    width: 56px;
+    height: 56px;
   }
 
   .home-page .xs-app-card .xs-icon-tile__image {
-    width: 60px;
-    height: 60px;
+    width: 46px;
+    height: 46px;
   }
 
   .home-page .xs-app-card__desc {
-    display: block;
-    text-align: left;
+    min-height: 0;
+    -webkit-line-clamp: 1;
+  }
+
+  .home-page .xs-app-card__arrow {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-top: 0;
   }
 }
 
-/* ---------- 入场阶梯动效（与登录页 login-enter 同节奏） ---------- */
+/* ---------- 入场动效：统一短阶梯，卡片不依次久等 ---------- */
 
 @keyframes home-enter {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
 
   to {
@@ -390,56 +436,56 @@
   }
 
   to {
-    opacity: 0.92;
+    opacity: 0.72;
   }
 }
 
 .home-page__bg {
-  animation: home-bg-in 900ms var(--xs-motion-ease-out) backwards;
+  animation: home-bg-in 800ms var(--xs-motion-ease-out) backwards;
 }
 
 .home-page__hero {
-  animation: home-enter 560ms var(--xs-motion-ease-out) backwards;
+  animation: home-enter 480ms var(--xs-motion-ease-out) backwards;
 }
 
 .home-page .xs-command-box {
-  animation: home-enter 560ms var(--xs-motion-ease-out) 120ms backwards;
+  animation: home-enter 480ms var(--xs-motion-ease-out) 100ms backwards;
 }
 
 .home-page__apps > h2 {
-  animation: home-enter 560ms var(--xs-motion-ease-out) 200ms backwards;
+  animation: home-enter 480ms var(--xs-motion-ease-out) 160ms backwards;
 }
 
 .home-page__app-grid > .xs-app-card {
-  animation: home-enter 560ms var(--xs-motion-ease-out) backwards;
+  animation: home-enter 480ms var(--xs-motion-ease-out) backwards;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(1) {
-  animation-delay: 240ms;
+  animation-delay: 200ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(2) {
-  animation-delay: 295ms;
+  animation-delay: 230ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(3) {
-  animation-delay: 350ms;
+  animation-delay: 260ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(4) {
-  animation-delay: 405ms;
+  animation-delay: 290ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(5) {
-  animation-delay: 460ms;
+  animation-delay: 320ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(6) {
-  animation-delay: 515ms;
+  animation-delay: 350ms;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(7) {
-  animation-delay: 570ms;
+  animation-delay: 380ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -449,5 +495,15 @@
   .home-page__apps > h2,
   .home-page__app-grid > .xs-app-card {
     animation: none;
+  }
+
+  .home-page .xs-app-card,
+  .home-page .xs-app-card:hover,
+  .home-page .xs-app-card--selected,
+  .home-page .xs-app-card--selected:hover,
+  .home-page .xs-app-card:has(.xs-app-card__main:focus-visible),
+  .home-page .xs-app-card:has(.xs-app-card__arrow:focus-visible),
+  .home-page .xs-app-card:hover .xs-app-card__arrow {
+    transform: none;
   }
 }

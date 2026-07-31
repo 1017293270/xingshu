@@ -51,6 +51,7 @@ import {
   getDataHubQueryAssetTargets,
   type DataHubQueryAssetTarget
 } from "@/services/dataHubQueryAssetTargetService";
+import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
@@ -103,6 +104,15 @@ type QueryAssetActionItem = {
 };
 
 const autoScrollBottomThreshold = 24;
+const incompleteHistoryQueryMessage =
+  "历史问数缺少完整可执行查询，请重新问数后收藏";
+
+function isIncompleteHistoricalQueryError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes(incompleteHistoryQueryMessage)
+  );
+}
 
 const quickQuestions = [
   { icon: ChartLineUp, question: "本月销售额与目标完成率怎么样？" },
@@ -1462,7 +1472,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const ensureFavoriteAsset = async (
     stateKey: string,
     turn: DataHubAskTurn,
-    target: DataHubQueryAssetTarget
+    target: DataHubQueryAssetTarget,
+    allowRootHistoryFallback: boolean,
+    materializationQuestion?: string
   ) => {
     const existing = favoriteStates[stateKey]?.asset;
     if (existing) return existing;
@@ -1473,13 +1485,47 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       target.rootSessionId &&
       target.sessionId &&
       target.chatId &&
-      target.tableCount > 0
+      target.canBackfill
     ) {
-      artifact = await ensureAskArtifact(
-        target.rootSessionId,
-        target.chatId,
-        target.sessionId === target.rootSessionId ? undefined : target.sessionId
-      );
+      const resultSessionId =
+        target.sessionId === target.rootSessionId ? undefined : target.sessionId;
+      try {
+        artifact = await ensureAskArtifact(
+          target.rootSessionId,
+          target.chatId,
+          resultSessionId
+        );
+      } catch (error) {
+        if (
+          !allowRootHistoryFallback ||
+          !isIncompleteHistoricalQueryError(error)
+        ) {
+          throw error;
+        }
+        let incompleteError = error;
+        if (resultSessionId) {
+          try {
+            artifact = await ensureAskArtifact(
+              target.rootSessionId,
+              target.chatId
+            );
+          } catch (rootError) {
+            if (!isIncompleteHistoricalQueryError(rootError)) {
+              throw rootError;
+            }
+            incompleteError = rootError;
+          }
+        }
+        if (!artifact) {
+          if (!materializationQuestion) {
+            throw incompleteError;
+          }
+          setWorkflowStatus("原历史缺少可执行查询，正在重新问数并收藏");
+          artifact = await materializeAskArtifact({
+            question: materializationQuestion
+          });
+        }
+      }
     }
     if (!artifact?.canFavorite) throw new Error("该问数没有可复用的结构化查询，请重新问数后再收藏");
     const asset = await favoriteAskArtifact(
@@ -1493,7 +1539,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const handleFavoriteQuestion = async (
     turnId: string,
     turn: DataHubAskTurn,
-    target: DataHubQueryAssetTarget
+    target: DataHubQueryAssetTarget,
+    allowRootHistoryFallback: boolean,
+    materializationQuestion?: string
   ) => {
     const stateKey = `${turnId}::${target.key}`;
     setFavoriteStates((current) => ({
@@ -1501,7 +1549,13 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       [stateKey]: { ...current[stateKey], status: "saving" }
     }));
     try {
-      const asset = await ensureFavoriteAsset(stateKey, turn, target);
+      const asset = await ensureFavoriteAsset(
+        stateKey,
+        turn,
+        target,
+        allowRootHistoryFallback,
+        materializationQuestion
+      );
       setFavoriteStates((current) => ({ ...current, [stateKey]: { status: "saved", asset } }));
       setWorkflowStatus(`已收藏问数「${asset.name}」，可直接加入看板`);
     } catch (error) {
@@ -1785,7 +1839,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const queryAssetTargets =
                 isAskMode || isAgentMode
-                  ? getDataHubQueryAssetTargets(executionProjection, turn.question)
+                  ? getDataHubQueryAssetTargets(
+                      executionProjection,
+                      turn.question,
+                      { mainSessionIsAskData: isAskMode }
+                    )
                   : [];
               const queryAssetActionItems = queryAssetTargets.map((target) => ({
                 target,
@@ -1793,6 +1851,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   favoriteStates[`${turn.id}::${target.key}`] ??
                   ({ status: "idle" } as const)
               }));
+              const recoverySubQuestions =
+                turnAsk.decompose?.subQuestions
+                  ?.map((question) => question.trim())
+                  .filter(Boolean) ?? [];
+              const canMaterializeSingleQuery =
+                queryAssetTargets.length === 1 &&
+                (!isAgentMode ||
+                  (executionProjection.subagentSessions.length <= 1 &&
+                    recoverySubQuestions.length <= 1));
+              const materializationQuestion = canMaterializeSingleQuery
+                ? recoverySubQuestions[0] || turn.question
+                : undefined;
               const isGeneratingAiChart = aiChartState.status === "loading";
               const resultStageState = isResultReady
                 ? hasRenderableResult
@@ -1911,7 +1981,13 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               <DataHubQueryAssetActions
                                 items={queryAssetActionItems}
                                 onFavorite={(target) =>
-                                  void handleFavoriteQuestion(turn.id, turnAsk, target)
+                                  void handleFavoriteQuestion(
+                                    turn.id,
+                                    turnAsk,
+                                    target,
+                                    queryAssetTargets.length === 1,
+                                    materializationQuestion
+                                  )
                                 }
                                 onOpenDashboard={(asset) =>
                                   navigate(

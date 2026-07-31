@@ -10,6 +10,12 @@ type StreamRequest = {
   chatMode: "ask" | "rag" | "document_lookup" | "agent";
 };
 
+type DataHubFixtureOptions = {
+  buildAgentResponse?: (request: StreamRequest) => string;
+  rejectScopedHistoryEnsure?: boolean;
+  rejectAllHistoricalEnsure?: boolean;
+};
+
 type FixtureState = {
   streamRequests: StreamRequest[];
   ensuredArtifacts: Array<{
@@ -30,6 +36,8 @@ const expectedStreamRequestKeys = [
   "message",
   "sessionId"
 ];
+const incompleteHistoryQueryMessage =
+  "历史问数缺少完整可执行查询，请重新问数后收藏";
 
 function envelope(data: unknown) {
   return { code: 200, message: "datahub chat flow fixture", data };
@@ -101,6 +109,8 @@ function sseEvent(event: Record<string, unknown>) {
 }
 
 function buildAskStream(request: StreamRequest) {
+  const resolvedQuestion =
+    request.message === "本月收入是多少？" ? "统计本月收入" : request.message;
   const root = {
     agentName: "问数智能体",
     sessionId: request.sessionId,
@@ -163,7 +173,7 @@ function buildAskStream(request: StreamRequest) {
       type: "ask_artifact",
       content: {
         askRunId: "ask-run-playwright",
-        resolvedQuestion: "统计本月收入",
+        resolvedQuestion,
         canFavorite: true
       },
       finished: false
@@ -495,6 +505,82 @@ function buildAgentStream(request: StreamRequest) {
   ].join("");
 }
 
+function buildMarkdownOnlyAskAgentStream(request: StreamRequest) {
+  const root = {
+    agentName: "编排智能体",
+    sessionId: request.sessionId,
+    globalSessionId: request.globalSessionId,
+    chatId: request.chatId
+  };
+  const child = {
+    agentName: "问数智能体",
+    sessionId: "child-consultation-ranking",
+    globalSessionId: request.globalSessionId,
+    parentSessionId: request.sessionId,
+    chatId: request.chatId
+  };
+  const markdownTable = [
+    "按咨询记录数据排名前十的咨询对象如下：",
+    "",
+    "| 排名 | 咨询对象 | 咨询量 |",
+    "| --- | --- | ---: |",
+    "| 1 | 小治 | 456 |"
+  ].join("\n");
+
+  return [
+    sseEvent({ ...root, type: "agent_start", content: {}, finished: false }),
+    sseEvent({
+      ...child,
+      type: "subagent_exposed",
+      content: {
+        agentId: "ask-data",
+        sessionId: child.sessionId,
+        subagentId: "subagent-consultation-ranking",
+        label: "问数智能体"
+      },
+      subagentId: "subagent-consultation-ranking",
+      label: "问数智能体",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "done",
+      content: {},
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "text",
+      content: markdownTable,
+      replyId: "root-final",
+      modelCallIndex: 1,
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "ask_artifact",
+      content: {
+        askRunId: "ask-run-consultation-ranking",
+        resolvedQuestion: "咨询数前十的社区分布",
+        canFavorite: true
+      },
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "done",
+      content: {
+        mode: "agent",
+        adaptiveTeam: true,
+        completion: "complete",
+        sourceResults: [{ sourceKind: "data", status: "answered" }]
+      },
+      finished: true
+    }),
+    "data: [DONE]\n\n"
+  ].join("");
+}
+
 async function installAuthenticatedSession(page: Page) {
   await page.addInitScript(() => {
     const user = {
@@ -509,7 +595,10 @@ async function installAuthenticatedSession(page: Page) {
   });
 }
 
-async function installDataHubFixture(page: Page) {
+async function installDataHubFixture(
+  page: Page,
+  options: DataHubFixtureOptions = {}
+) {
   const state: FixtureState = {
     streamRequests: [],
     ensuredArtifacts: [],
@@ -556,7 +645,7 @@ async function installDataHubFixture(page: Page) {
             : body.chatMode === "document_lookup"
               ? buildDocumentLookupStream(body)
               : body.chatMode === "agent"
-                ? buildAgentStream(body)
+                ? (options.buildAgentResponse ?? buildAgentStream)(body)
                 : buildAskStream(body)
       });
       return;
@@ -569,6 +658,22 @@ async function installDataHubFixture(page: Page) {
         resultSessionId?: string;
       };
       state.ensuredArtifacts.push(body);
+      const isOriginalHistoricalQuery =
+        body.sessionId === "history-agent-session" &&
+        body.chatId === "history-agent-chat";
+      if (
+        (options.rejectScopedHistoryEnsure && body.resultSessionId) ||
+        (options.rejectAllHistoricalEnsure && isOriginalHistoricalQuery)
+      ) {
+        await route.fulfill({
+          json: {
+            code: 400,
+            message: incompleteHistoryQueryMessage,
+            data: null
+          }
+        });
+        return;
+      }
       await route.fulfill({
         json: envelope({
           askRunId: "ask-run-playwright",
@@ -687,7 +792,7 @@ async function installDataHubFixture(page: Page) {
           {
             id: 911,
             sessionId: "history-agent-session",
-            title: "销售与制度综合分析",
+            title: "销售变化分析",
             chatMode: "agent",
             createdAt: "2026-07-28T09:00:00.000Z",
             updatedAt: "2026-07-28T09:05:00.000Z"
@@ -717,7 +822,7 @@ async function installDataHubFixture(page: Page) {
         "history-agent-session": {
           id: 912,
           chatId: "history-agent-chat",
-          content: "分析销售变化并核对费用制度",
+          content: "分析销售变化",
           createdAt: "2026-07-28T09:00:00.000Z"
         },
         "history-document-session": {
@@ -805,7 +910,7 @@ async function installDataHubFixture(page: Page) {
                 type: "routing_decompose",
                 content: {
                   executionMode: "COMPLEX",
-                  subQuestions: ["恢复销售数据分析", "恢复制度核对"]
+                  subQuestions: ["恢复销售数据分析"]
                 }
               }),
               nestedEvent(915, 4, {
@@ -854,7 +959,7 @@ async function installDataHubFixture(page: Page) {
               nestedEvent(919, 8, {
                 agentName: "编排智能体",
                 type: "text",
-                content: "历史综合结论：销售额环比下降，应同步执行费用复核。",
+                content: "历史数据结论：销售额环比下降。",
                 replyId: "history-root-reply",
                 modelCallIndex: 1
               }),
@@ -1288,6 +1393,39 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
 });
 
+test("a single ask child and root artifact share one favorite action", async ({ page }) => {
+  const fixture = await installDataHubFixture(page, {
+    buildAgentResponse: buildMarkdownOnlyAskAgentStream
+  });
+  await page.goto("/ask-agent");
+
+  await page
+    .getByRole("textbox", { name: "命令输入" })
+    .fill("统计咨询对象排名");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "小治" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "456" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "收藏数据结果（2）" })
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "收藏问数" }).click();
+  await expect(page.getByRole("button", { name: "已收藏问数" })).toBeVisible();
+
+  expect(fixture.streamRequests).toHaveLength(1);
+  expectStrictStreamRequest(fixture.streamRequests[0], "agent");
+  expect(fixture.ensuredArtifacts).toEqual([]);
+  expect(fixture.favoriteRequests).toEqual([
+    {
+      askRunId: "ask-run-consultation-ranking",
+      name: "咨询数前十的社区分布"
+    }
+  ]);
+});
+
 test("persisted nested v2 events restore the same knowledge result", async ({ page }) => {
   await installDataHubFixture(page);
   await page.goto("/history");
@@ -1311,10 +1449,10 @@ test("persisted agent history restores the same root and child execution graph",
   await installDataHubFixture(page);
   await page.goto("/history");
 
-  await page.getByRole("button", { name: /销售与制度综合分析/ }).click();
+  await page.getByRole("button", { name: /销售变化分析/ }).click();
 
   await expect(page).toHaveURL(/\/ask-agent$/);
-  await expect(page.getByText("历史综合结论：销售额环比下降", { exact: false }).last()).toBeVisible();
+  await expect(page.getByText("历史数据结论：销售额环比下降", { exact: false }).last()).toBeVisible();
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByText("历史中的子 Agent 正在查询销售数据。")).toHaveCount(0);
@@ -1325,6 +1463,91 @@ test("persisted agent history restores the same root and child execution graph",
   await expect(drawer.getByText("历史中的子 Agent 正在查询销售数据。")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
+});
+
+test("persisted agent history can be favorited when child-scoped query is incomplete", async ({
+  page
+}) => {
+  const fixture = await installDataHubFixture(page, {
+    rejectScopedHistoryEnsure: true
+  });
+  await page.goto("/history");
+
+  await page.getByRole("button", { name: /销售变化分析/ }).click();
+
+  await expect(page).toHaveURL(/\/ask-agent$/);
+  await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
+  await page.getByRole("button", { name: "收藏问数" }).click();
+  await expect(page.getByRole("button", { name: "已收藏问数" })).toBeVisible();
+
+  expect(fixture.ensuredArtifacts).toEqual([
+    {
+      sessionId: "history-agent-session",
+      chatId: "history-agent-chat",
+      resultSessionId: "history-child-data"
+    },
+    {
+      sessionId: "history-agent-session",
+      chatId: "history-agent-chat"
+    }
+  ]);
+  expect(fixture.favoriteRequests).toEqual([
+    {
+      askRunId: "ask-run-playwright",
+      name: "统计本月收入"
+    }
+  ]);
+  await expect(page.getByText(incompleteHistoryQueryMessage)).toHaveCount(0);
+});
+
+test("persisted agent history reruns ask mode before favoriting when no executable query remains", async ({
+  page
+}) => {
+  const fixture = await installDataHubFixture(page, {
+    rejectAllHistoricalEnsure: true
+  });
+  await page.goto("/history");
+
+  await page.getByRole("button", { name: /销售变化分析/ }).click();
+
+  await expect(page).toHaveURL(/\/ask-agent$/);
+  await page.getByRole("button", { name: "收藏问数" }).click();
+  await expect(page.getByRole("button", { name: "已收藏问数" })).toBeVisible();
+
+  expect(fixture.ensuredArtifacts).toEqual([
+    {
+      sessionId: "history-agent-session",
+      chatId: "history-agent-chat",
+      resultSessionId: "history-child-data"
+    },
+    {
+      sessionId: "history-agent-session",
+      chatId: "history-agent-chat"
+    }
+  ]);
+  expect(fixture.streamRequests).toHaveLength(1);
+  expectStrictStreamRequest(fixture.streamRequests[0], "ask");
+  expect(fixture.streamRequests[0]).toEqual({
+    message: "恢复销售数据分析",
+    sessionId: expect.stringMatching(/^session-/),
+    globalSessionId: expect.stringMatching(/^session-/),
+    chatId: expect.stringMatching(/^chat-/),
+    chatMode: "ask"
+  });
+  expect(fixture.streamRequests[0].globalSessionId).toBe(
+    fixture.streamRequests[0].sessionId
+  );
+  expect(fixture.streamRequests[0].sessionId).not.toBe(
+    "history-agent-session"
+  );
+  expect(fixture.streamRequests[0].chatId).not.toBe("history-agent-chat");
+  expect(fixture.favoriteRequests).toEqual([
+    {
+      askRunId: "ask-run-playwright",
+      name: "恢复销售数据分析"
+    }
+  ]);
+  await expect(page.getByText(incompleteHistoryQueryMessage)).toHaveCount(0);
 });
 
 test("persisted document lookup history restores the validated document without duplication", async ({
