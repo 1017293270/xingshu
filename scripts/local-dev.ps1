@@ -2,7 +2,7 @@ param(
     [ValidateSet("start", "stop", "restart", "status")]
     [string]$Action = "start",
     [int]$Port = 5018,
-    [string]$DataHubProxyTarget = "http://127.0.0.1:8090",
+    [string]$DataHubProxyTarget = "http://132.232.141.234",
     [string]$AnalyticsProxyTarget = ""
 )
 

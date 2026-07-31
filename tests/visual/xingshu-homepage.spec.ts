@@ -300,6 +300,42 @@ test.describe("xingshu page visual smoke", () => {
   }
 });
 
+test("keeps cloud category card content comfortably separated", async ({ page }) => {
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1672, height: 941 },
+    { width: 2200, height: 944 }
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/cloud");
+    await expect(page.getByRole("heading", { name: "我的云盘", level: 1 })).toBeVisible();
+    await settleResponsiveLayout(page);
+
+    const cards = page.getByRole("article", { name: /云盘资料：/ });
+    await expect(cards).toHaveCount(3);
+
+    const metrics = await cards.evaluateAll((elements) => elements.map((element) => {
+      const cardRect = element.getBoundingClientRect();
+      const iconRect = element.querySelector(".xs-icon-tile")!.getBoundingClientRect();
+      const bodyRect = element.querySelector(".cloud-lane__body")!.getBoundingClientRect();
+      const headingRect = element.querySelector(".cloud-lane__head")!.getBoundingClientRect();
+      const descriptionRect = element.querySelector("p")!.getBoundingClientRect();
+
+      return {
+        cardHeight: cardRect.height,
+        iconBodyGap: bodyRect.left - iconRect.right,
+        headingDescriptionGap: descriptionRect.top - headingRect.bottom
+      };
+    }));
+
+    for (const metric of metrics) {
+      expect(metric.cardHeight).toBeGreaterThanOrEqual(112);
+      expect(metric.iconBodyGap).toBeGreaterThanOrEqual(14);
+      expect(metric.headingDescriptionGap).toBeGreaterThanOrEqual(6);
+    }
+  }
+});
+
 test.describe("login desktop viewport lock", () => {
   for (const viewport of [
     { name: "1366x768", width: 1366, height: 768 },

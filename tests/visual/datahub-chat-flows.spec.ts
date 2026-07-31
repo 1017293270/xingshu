@@ -387,7 +387,7 @@ function buildAgentStream(request: StreamRequest) {
       ...childData,
       type: "subagent_exposed",
       content: {
-        agentId: "agent-data",
+        agentId: "ask-data",
         sessionId: "child-data-session",
         subagentId: "subagent-data",
         label: "数据研究员"
@@ -499,6 +499,158 @@ function buildAgentStream(request: StreamRequest) {
           }
         ]
       },
+      finished: true
+    }),
+    "data: [DONE]\n\n"
+  ].join("");
+}
+
+function buildModelActivityAgentStream(request: StreamRequest) {
+  const root = {
+    agentName: "编排智能体",
+    sessionId: request.sessionId,
+    globalSessionId: request.globalSessionId,
+    chatId: request.chatId
+  };
+  const child = {
+    agentName: "问数智能体",
+    sessionId: "child-model-activity",
+    globalSessionId: request.globalSessionId,
+    parentSessionId: request.sessionId,
+    chatId: request.chatId
+  };
+
+  return [
+    sseEvent({ ...root, type: "agent_start", content: {}, finished: false }),
+    sseEvent({
+      ...root,
+      type: "routing_intent",
+      content: {
+        intent: "ask_data",
+        status: "success",
+        message: "交由问数智能体分析"
+      },
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "subagent_exposed",
+      content: {
+        agentId: "ask-data",
+        sessionId: child.sessionId,
+        subagentId: "subagent-model-activity",
+        label: child.agentName
+      },
+      subagentId: "subagent-model-activity",
+      label: child.agentName,
+      timestamp: "2026-07-31T16:00:32.000+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "thinking",
+      content: {
+        activityId: "activity-model-analysis",
+        kind: "model",
+        action: "model_analysis",
+        label: "理解数据问题",
+        status: "running",
+        summary: null,
+        startedAt: "2026-07-31T16:00:32.283+08:00",
+        completedAt: null,
+        durationMs: null
+      },
+      isThinking: true,
+      replyId: "activity-reply-1",
+      modelCallIndex: 1,
+      timestamp: "2026-07-31T16:00:32.283+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "thinking",
+      content: {
+        activityId: "activity-model-analysis",
+        kind: "model",
+        action: "model_analysis",
+        label: "理解数据问题",
+        status: "success",
+        summary: "已识别查询口径、时间范围与目标指标。",
+        startedAt: "2026-07-31T16:00:32.283+08:00",
+        completedAt: "2026-07-31T16:00:35.733+08:00",
+        durationMs: 3450
+      },
+      isThinking: true,
+      replyId: "activity-reply-1",
+      modelCallIndex: 1,
+      timestamp: "2026-07-31T16:00:35.733+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "thinking",
+      content: {
+        activityId: "activity-query-plan",
+        kind: "model",
+        action: "model_plan",
+        label: "生成查询方案",
+        status: "running",
+        summary: null,
+        startedAt: "2026-07-31T16:00:35.800+08:00",
+        completedAt: null,
+        durationMs: null
+      },
+      isThinking: true,
+      replyId: "activity-reply-2",
+      modelCallIndex: 2,
+      timestamp: "2026-07-31T16:00:35.800+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "thinking",
+      content: {
+        activityId: "activity-query-plan",
+        kind: "model",
+        action: "model_plan",
+        label: "生成查询方案",
+        status: "success",
+        summary: "查询方案已生成，准备执行数据检索。",
+        startedAt: "2026-07-31T16:00:35.800+08:00",
+        completedAt: "2026-07-31T16:00:38.000+08:00",
+        durationMs: 2200
+      },
+      isThinking: true,
+      replyId: "activity-reply-2",
+      modelCallIndex: 2,
+      timestamp: "2026-07-31T16:00:38.000+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...child,
+      type: "done",
+      content: { mode: "ask" },
+      timestamp: "2026-07-31T16:00:38.100+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "text",
+      content: "问数任务已完成。",
+      replyId: "root-model-activity",
+      modelCallIndex: 1,
+      timestamp: "2026-07-31T16:00:38.200+08:00",
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "done",
+      content: {
+        mode: "agent",
+        adaptiveTeam: true,
+        completion: "complete"
+      },
+      timestamp: "2026-07-31T16:00:38.300+08:00",
       finished: true
     }),
     "data: [DONE]\n\n"
@@ -647,6 +799,42 @@ async function installDataHubFixture(
               : body.chatMode === "agent"
                 ? (options.buildAgentResponse ?? buildAgentStream)(body)
                 : buildAskStream(body)
+      });
+      return;
+    }
+
+    if (path === "/api/v1/chat/chart-plan" && request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        tables?: Array<{ columns?: Array<{ key?: string }> }>;
+      };
+      const columnKeys = new Set(
+        body.tables?.flatMap((table) => table.columns?.map((column) => column.key ?? "") ?? []) ?? []
+      );
+      const isMonthlyRevenue = columnKeys.has("month") && columnKeys.has("revenue");
+      await route.fulfill({
+        json: envelope(
+          isMonthlyRevenue
+            ? {
+                chartable: true,
+                reason: "月份维度与收入指标适合趋势图。",
+                chartType: "line",
+                allowedTypes: ["line", "bar"],
+                title: "月度收入趋势",
+                tableIndex: 0,
+                dimensionKey: "month",
+                metricKeys: ["revenue"]
+              }
+            : {
+                chartable: true,
+                reason: "季度维度与销售额指标适合趋势图。",
+                chartType: "line",
+                allowedTypes: ["line", "bar"],
+                title: "本季度销售趋势",
+                tableIndex: 0,
+                dimensionKey: "季度",
+                metricKeys: ["销售额"]
+              }
+        )
       });
       return;
     }
@@ -1127,6 +1315,8 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   await expect(page.getByText("子任务已完成。")).toHaveCount(0);
   await expect(page.getByRole("cell", { name: "7月" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "128" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "月度收入趋势" })).toBeVisible();
+  await expect(page.locator('[data-echarts-ready="true"]')).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
 
   expect(fixture.streamRequests).toHaveLength(1);
@@ -1263,6 +1453,169 @@ test("document lookup renders the validated document once and opens it through D
   });
 });
 
+test("agent ask-data child automatically generates a chart from its structured table", async ({
+  page
+}, testInfo) => {
+  await installDataHubFixture(page);
+  await page.goto("/ask-agent");
+
+  await page
+    .getByRole("textbox", { name: "命令输入" })
+    .fill("分析本季度销售变化");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  const chartCard = page.getByRole("region", { name: "智能图表建议" });
+  await expect(chartCard).toBeVisible();
+  await expect(
+    chartCard.getByRole("heading", { name: "本季度销售趋势" })
+  ).toBeVisible();
+  await expect(
+    chartCard.locator('[data-echarts-ready="true"]')
+  ).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.screenshot({
+    path: testInfo.outputPath("agent-ask-chart-action-1672x941.png"),
+    animations: "disabled",
+    fullPage: true
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await expect(
+    page.getByRole("button", { name: "AI 生成图表" })
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("agent-ask-chart-action-390x844.png"),
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
+test("right subagent drawer summarizes model activity lifecycle updates", async ({
+  page
+}, testInfo) => {
+  await installDataHubFixture(page, {
+    buildAgentResponse: buildModelActivityAgentStream
+  });
+  await page.goto("/ask-agent");
+
+  await page
+    .getByRole("textbox", { name: "命令输入" })
+    .fill("分析本季度销售变化");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "打开 问数智能体执行详情" })
+    .click();
+
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveAccessibleName("子智能体执行详情");
+  const drawerWidth = await drawer.evaluate(
+    (element) => element.getBoundingClientRect().width
+  );
+  expect(drawerWidth).toBeGreaterThanOrEqual(390);
+  expect(drawerWidth).toBeLessThanOrEqual(410);
+  await expect(
+    drawer.getByRole("button", { name: "返回列表" })
+  ).toBeVisible();
+  const timeline = drawer.getByRole("list", {
+    name: "问数智能体执行时间轴"
+  });
+  await expect(timeline).toBeVisible();
+  await expect(timeline.getByRole("listitem")).toHaveCount(2);
+
+  const analysisActivity = drawer.getByRole("region", {
+    name: "模型活动：理解数据问题"
+  });
+  await expect(analysisActivity).toHaveCount(1);
+  const analysisNode = analysisActivity.locator(
+    ".xs-datahub-agent-card__activity-node"
+  );
+  await expect(analysisNode).toHaveCount(1);
+  const nodeBox = await analysisNode.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  });
+  expect(nodeBox.width).toBeLessThanOrEqual(11);
+  expect(nodeBox.height).toBeLessThanOrEqual(11);
+  await expect(
+    drawer.locator(".xs-datahub-agent-card__model-call")
+  ).toHaveCount(0);
+  await expect(
+    analysisActivity.getByText("已识别查询口径、时间范围与目标指标。", {
+      exact: true
+    })
+  ).toBeHidden();
+  await expect(analysisActivity.getByText(/已完成\s*·\s*3\.5s/)).toBeVisible();
+
+  const planActivity = drawer.getByRole("region", {
+    name: "模型活动：生成查询方案"
+  });
+  await expect(planActivity).toHaveCount(1);
+  await expect(
+    planActivity.getByText("查询方案已生成，准备执行数据检索。", {
+      exact: true
+    })
+  ).toBeVisible();
+
+  await analysisActivity
+    .locator(":scope > summary")
+    .getByText("理解数据问题", { exact: true })
+    .click();
+  await expect(
+    analysisActivity.getByText("已识别查询口径、时间范围与目标指标。", {
+      exact: true
+    })
+  ).toBeVisible();
+  await expect(
+    planActivity.getByText("查询方案已生成，准备执行数据检索。", {
+      exact: true
+    })
+  ).toBeHidden();
+
+  const technicalDetails = analysisActivity.getByRole("group", {
+    name: "技术详情"
+  });
+  await expect(technicalDetails).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("subagent-model-activity-drawer-1672x941.png"),
+    animations: "disabled",
+    fullPage: true
+  });
+
+  await expect(technicalDetails).toContainText("模型推理");
+  await expect(technicalDetails).toContainText("理解数据问题");
+  await expect(technicalDetails).toContainText("已完成");
+  await expect(technicalDetails).toContainText("16:00:32");
+  await expect(technicalDetails).toContainText("16:00:35");
+  await expect(technicalDetails).toContainText("3.5s");
+  await expect(analysisActivity).not.toContainText("activity-model-analysis");
+
+  await drawer.getByRole("button", { name: "返回列表" }).click();
+  await expect(drawer).toHaveAccessibleName("子智能体");
+  await expect(
+    drawer.getByRole("navigation", { name: "子智能体列表" })
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("list", { name: "问数智能体执行时间轴" })
+  ).toHaveCount(0);
+  await drawer.getByRole("treeitem", { name: /问数智能体/ }).click();
+  await expect(drawer).toHaveAccessibleName("子智能体执行详情");
+  await expect(timeline).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await expect(analysisActivity).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("subagent-model-activity-drawer-390x844.png"),
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
 test("agent mode shows real orchestration events and nested child-agent sessions", async ({
   page
 }) => {
@@ -1278,14 +1631,14 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "编排执行轨迹" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "协作子智能体" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "编排流程" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "智能体执行卡" })).toHaveCount(0);
   await expect(page.getByText("Agent 思考完成")).toHaveCount(0);
   await expect(page.getByText("销售额环比下降", { exact: false }).last()).toBeVisible();
   const dataAgentSummary = page.getByRole("button", {
-    name: "查看 数据研究员执行详情"
+    name: "打开 数据研究员执行详情"
   });
-  await expect(dataAgentSummary).toContainText("子任务已完成");
+  await expect(dataAgentSummary).toContainText("已完成");
 
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "agent");
@@ -1297,17 +1650,24 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     fullPage: true
   });
   await dataAgentSummary.click();
-  const drawer = page.getByRole("dialog", { name: "子智能体执行详情" });
+  const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
-  const dataAgent = page.getByRole("treeitem", { name: /数据研究员/ });
-  const policyAgent = page.getByRole("treeitem", { name: /制度研究员/ });
-  await expect(dataAgent).toHaveAttribute("aria-level", "1");
-  await expect(policyAgent).toHaveAttribute("aria-level", "2");
+  await expect(drawer).toHaveAccessibleName("子智能体执行详情");
+  await expect(
+    drawer.getByRole("list", { name: "数据研究员执行时间轴" })
+  ).toBeVisible();
 
   await expect(drawer.getByText("正在查询销售数据。")).toBeVisible();
+  await expect(drawer.getByRole("table")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
 
+  await drawer.getByRole("button", { name: "返回列表" }).click();
+  await expect(drawer).toHaveAccessibleName("子智能体");
+  const dataAgent = drawer.getByRole("treeitem", { name: /数据研究员/ });
+  const policyAgent = drawer.getByRole("treeitem", { name: /制度研究员/ });
+  await expect(dataAgent).toHaveAttribute("aria-level", "1");
+  await expect(policyAgent).toHaveAttribute("aria-level", "2");
   await policyAgent.click();
   await expect(drawer.getByText("正在检索费用制度。")).toBeVisible();
   await expect(
@@ -1330,7 +1690,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     animations: "disabled",
     fullPage: true
   });
-  await page.getByRole("button", { name: "查看 数据研究员执行详情" }).click();
+  await page.getByRole("button", { name: "打开 数据研究员执行详情" }).click();
   await expect(page.getByRole("dialog", { name: "子智能体执行详情" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/agent-orchestration-v2-flow-390x844.png",
@@ -1457,10 +1817,16 @@ test("persisted agent history restores the same root and child execution graph",
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByText("历史中的子 Agent 正在查询销售数据。")).toHaveCount(0);
 
-  await page.getByRole("button", { name: /查看子智能体/ }).click();
-  await page.getByRole("treeitem", { name: /数据研究员/ }).click();
-  const drawer = page.getByRole("dialog", { name: "子智能体执行详情" });
+  await page
+    .getByRole("button", { name: "打开 数据研究员执行详情" })
+    .click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toHaveAccessibleName("子智能体执行详情");
+  await expect(
+    drawer.getByRole("list", { name: "数据研究员执行时间轴" })
+  ).toBeVisible();
   await expect(drawer.getByText("历史中的子 Agent 正在查询销售数据。")).toBeVisible();
+  await expect(drawer.getByRole("table")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
 });

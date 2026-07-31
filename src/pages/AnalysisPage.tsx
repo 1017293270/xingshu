@@ -38,6 +38,7 @@ import { streamAgentMessage } from "@/services/agentService";
 import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
+  canAutoGenerateAiChart,
   planAiChart
 } from "@/services/aiChartPlannerService";
 import {
@@ -48,6 +49,7 @@ import {
   projectDataHubExecutionEvents
 } from "@/services/dataHubExecutionProjector";
 import {
+  getDataHubSingleQueryTableResults,
   getDataHubQueryAssetTargets,
   type DataHubQueryAssetTarget
 } from "@/services/dataHubQueryAssetTargetService";
@@ -1211,6 +1213,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const lastWorkspaceScrollTopRef = useRef(0);
   const isWorkspacePointerDownRef = useRef(false);
   const lastWorkspaceTouchYRef = useRef<number | null>(null);
+  const liveChartTurnIdsRef = useRef(new Set<string>());
+  const autoChartAttemptedRef = useRef(new Set<string>());
+  const chartPlanInFlightRef = useRef(new Set<string>());
   const isKnowledgeMode = mode === "rag";
   const isDocumentLookupMode = mode === "document_lookup";
   const isAgentMode = mode === "agent";
@@ -1289,6 +1294,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     if (!hasConversation) {
       shouldAutoScrollRef.current = true;
       lastWorkspaceScrollTopRef.current = 0;
+      liveChartTurnIdsRef.current.clear();
+      autoChartAttemptedRef.current.clear();
+      chartPlanInFlightRef.current.clear();
       setIsScrollToBottomVisible(false);
     }
   }, [hasConversation]);
@@ -1565,7 +1573,16 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     }
   };
 
-  const handleGenerateAiChart = async (turnId: string, question: string, tables: DataHubTableResult[]) => {
+  const handleGenerateAiChart = useCallback(async (
+    turnId: string,
+    question: string,
+    tables: DataHubTableResult[]
+  ) => {
+    if (chartPlanInFlightRef.current.has(turnId)) {
+      return;
+    }
+
+    chartPlanInFlightRef.current.add(turnId);
     setAiChartStates((current) => ({ ...current, [turnId]: { status: "loading" } }));
     setWorkflowStatus("DataHub 正在使用编排 Agent 模型规划图表");
 
@@ -1589,8 +1606,74 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       const message = error instanceof Error ? error.message : "AI 图表判断失败";
       setAiChartStates((current) => ({ ...current, [turnId]: { status: "error", message } }));
       setWorkflowStatus(message);
+    } finally {
+      chartPlanInFlightRef.current.delete(turnId);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!supportsTables) {
+      return;
+    }
+
+    for (const turn of visibleTurns) {
+      if (turn.status === "streaming") {
+        liveChartTurnIdsRef.current.add(turn.id);
+        continue;
+      }
+
+      if (
+        turn.status !== "done" ||
+        !liveChartTurnIdsRef.current.has(turn.id) ||
+        autoChartAttemptedRef.current.has(turn.id) ||
+        (aiChartStates[turn.id]?.status ?? "idle") !== "idle"
+      ) {
+        continue;
+      }
+
+      const turnAsk = createDataHubAskTurn(
+        turn.question,
+        turn.events,
+        turn.status,
+        turn.error,
+        { sessionId: turn.sessionId, chatId: turn.chatId }
+      );
+      const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
+      if (hasLegacyProcess && thinkingPlaybackStates[turn.id]?.isComplete !== true) {
+        continue;
+      }
+
+      const tables = isAskMode
+        ? turnAsk.tableResults
+        : isAgentMode
+          ? getDataHubSingleQueryTableResults(
+              projectDataHubExecutionEvents(turn.events, {
+                mainSessionId: turn.sessionId || undefined,
+                globalSessionId: turn.sessionId || undefined,
+                chatId: turn.chatId,
+                fallbackAgentName: `${taskName}智能体`,
+                terminalStatus: "done"
+              })
+            )
+          : [];
+
+      if (!canAutoGenerateAiChart({ question: turn.question, tables })) {
+        continue;
+      }
+
+      autoChartAttemptedRef.current.add(turn.id);
+      void handleGenerateAiChart(turn.id, turn.question, tables);
+    }
+  }, [
+    aiChartStates,
+    handleGenerateAiChart,
+    isAgentMode,
+    isAskMode,
+    supportsTables,
+    taskName,
+    thinkingPlaybackStates,
+    visibleTurns
+  ]);
 
   const handleChartTypeChange = (turnId: string, type: AiChartType) => {
     setAiChartStates((current) => {
@@ -1845,6 +1928,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       { mainSessionIsAskData: isAskMode }
                     )
                   : [];
+              const chartTables =
+                isAskMode
+                  ? turnAsk.tableResults
+                  : isAgentMode
+                    ? getDataHubSingleQueryTableResults(executionProjection)
+                    : [];
               const queryAssetActionItems = queryAssetTargets.map((target) => ({
                 target,
                 state:
@@ -1996,11 +2085,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 }
                               />
                             ) : null}
-                            {isAskMode && isResultReady && turnAsk.tableResults.length > 0 ? (
+                            {isResultReady && chartTables.length > 0 ? (
                               <Button
                                 icon={<MagicWand size={18} />}
                                 loading={isGeneratingAiChart}
-                                onClick={() => handleGenerateAiChart(turn.id, turn.question, turnAsk.tableResults)}
+                                onClick={() => handleGenerateAiChart(turn.id, turn.question, chartTables)}
                               >
                                 AI 生成图表
                               </Button>
@@ -2020,7 +2109,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           {!isDocumentLookupMode && isResultReady && turnAsk.answerBlocks.length > 0 ? (
                             <DataHubAnswer blocks={turnAsk.answerBlocks} />
                           ) : null}
-                          {isAskMode && isResultReady ? (
+                          {isResultReady && aiChartState.status !== "idle" ? (
                             <AiChartSuggestionCard
                               state={aiChartState}
                               onTypeChange={(type) => handleChartTypeChange(turn.id, type)}

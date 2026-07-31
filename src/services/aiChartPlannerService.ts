@@ -174,6 +174,10 @@ function getLocalGuardResult(summary: AiChartPlanRequestSummary): AiChartPlanRes
   return null;
 }
 
+export function canAutoGenerateAiChart(request: AiChartPlanRequest) {
+  return getLocalGuardResult(createAiChartPlanRequestSummary(request)) === null;
+}
+
 function normalizeAiPlan(parsed: unknown): AiChartPlanResult {
   if (!isRecord(parsed)) {
     throw new Error("DataHub 模型返回的图表规划无效");

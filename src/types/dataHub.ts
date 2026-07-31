@@ -95,6 +95,7 @@ export type DataHubAskRunId = string;
 export type DataHubSseEventType =
   | "agent_start"
   | "subagent_exposed"
+  | "activity"
   | "thinking"
   | "routing_intent"
   | "routing_skill"
@@ -116,6 +117,25 @@ export type DataHubSseEventType =
   | "final_thinking"
   | "done"
   | "error";
+
+export type DataHubActivityStatus =
+  | "running"
+  | "success"
+  | "warning"
+  | "failed"
+  | "cancelled";
+
+export type DataHubActivityData = {
+  activityId: string;
+  kind: "model" | "tool";
+  action: string;
+  label: string;
+  status: DataHubActivityStatus;
+  summary?: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+};
 
 export type DataHubStreamEvent = {
   type: DataHubSseEventType | string;

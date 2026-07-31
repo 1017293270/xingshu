@@ -41,6 +41,7 @@ const fallbackAgentName = "AI 助手";
 const mergeableBlockTypes = new Set(["thinking", "text"]);
 const executionCardEventTypes = new Set([
   "agent_start",
+  "activity",
   "thinking",
   "final_thinking",
   "content",
@@ -223,6 +224,17 @@ function createBlock(event: DataHubStreamEvent): DataHubExecutionBlock {
   };
 }
 
+function activityIdFromPayload(payload: unknown): string | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+  const kind = optionalString(payload.kind)?.toLowerCase();
+  if (kind !== "model" && kind !== "tool") {
+    return undefined;
+  }
+  return optionalString(payload.activityId);
+}
+
 function upsertExecutionCard(
   cards: DataHubAgentExecutionCard[],
   event: DataHubStreamEvent,
@@ -256,8 +268,21 @@ function upsertExecutionCard(
 
   if (hasBlock) {
     const block = createBlock(event);
+    const activityId =
+      event.type === "activity" ? activityIdFromPayload(block.content) : undefined;
+    const activityIndex = activityId
+      ? blocks.findIndex(
+          (candidate) =>
+            candidate.type === "activity" &&
+            activityIdFromPayload(candidate.content) === activityId
+        )
+      : -1;
     const previous = blocks[blocks.length - 1];
-    if (
+    if (activityIndex >= 0) {
+      blocks = blocks.map((candidate, index) =>
+        index === activityIndex ? block : candidate
+      );
+    } else if (
       previous &&
       previous.type === block.type &&
       previous.isThinking === block.isThinking &&

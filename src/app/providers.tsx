@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConfigProvider } from "antd";
+import zhCN from "antd/es/locale/zh_CN";
 import type { ThemeConfig } from "antd";
 import type { PropsWithChildren } from "react";
 import { useMemo, useState } from "react";
@@ -28,7 +29,7 @@ export function AppProviders({ children }: PropsWithChildren) {
   );
 
   return (
-    <ConfigProvider button={{ autoInsertSpace: false }} theme={theme}>
+    <ConfigProvider button={{ autoInsertSpace: false }} locale={zhCN} theme={theme}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ConfigProvider>
   );

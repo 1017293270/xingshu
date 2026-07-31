@@ -37,6 +37,8 @@ const scenePrompts: Record<WritingSceneIconId, string> = {
   copywriting: "请帮我撰写产品文案、宣传文案、营销文案等。"
 };
 
+const writingTypes = ["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"];
+
 export function WritingPage() {
   const [prompt, setPrompt] = useState("例如：撰写一份关于数据资产管理平台的产品介绍文档，包含产品概述、核心功能、应用场景和价值优势，字数约1500字");
   const [submissionStatus, setSubmissionStatus] = useState("");
@@ -239,18 +241,23 @@ export function WritingPage() {
           disabled={isSubmitting}
           onChange={(event) => setPrompt(event.target.value)}
         />
-        <div className="writing-tabs writing-panel__controls" aria-label="写作类型与提交操作">
-          {["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"].map((tab) => (
-            <Button
-              className={activeWritingType === tab ? "is-active" : ""}
-              aria-pressed={activeWritingType === tab}
-              disabled={isSubmitting}
-              key={tab}
-              onClick={() => handleSelectWritingType(tab)}
-            >
-              {tab}
-            </Button>
-          ))}
+        <div className="writing-panel__types">
+          <span className="writing-panel__types-label" id="writing-types-label">写作类型</span>
+          <div className="writing-tabs writing-panel__controls" role="group" aria-labelledby="writing-types-label">
+            {writingTypes.map((tab) => (
+              <Button
+                className={activeWritingType === tab ? "is-active" : ""}
+                aria-pressed={activeWritingType === tab}
+                disabled={isSubmitting}
+                key={tab}
+                onClick={() => handleSelectWritingType(tab)}
+              >
+                {tab}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="writing-panel__actions-bar">
           <input
             ref={attachmentInputRef}
             className="sr-only"
@@ -262,19 +269,23 @@ export function WritingPage() {
             onChange={handleAttachmentsChange}
           />
           <Button
-            icon={<Paperclip size={18} />}
+            icon={<Paperclip size={16} />}
             aria-label="附件"
             disabled={isSubmitting}
             onClick={handleOpenAttachmentPicker}
-          />
+          >
+            添加附件
+          </Button>
           <Button
             type="primary"
-            icon={<PaperPlaneTilt size={18} />}
+            icon={<PaperPlaneTilt size={16} />}
             aria-label="发送"
             loading={isSubmitting}
             disabled={isSubmitting}
             onClick={handleSubmit}
-          />
+          >
+            发送
+          </Button>
         </div>
         {attachments.length > 0 ? (
           <ul className="writing-attachment-queue" aria-label="写作附件队列">
@@ -309,9 +320,10 @@ export function WritingPage() {
         </div>
       </section>
 
-      <h2 className="subsection-title xs-page-enter" style={{ animationDelay: "140ms" }}>
-        推荐写作场景
-      </h2>
+      <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
+        <h2 className="subsection-title">推荐写作场景</h2>
+        <span className="section-title-meta">点击场景快速套用</span>
+      </div>
       <XsAsyncPanel
         status={scenesStatus}
         empty={scenes.length === 0}
@@ -350,13 +362,16 @@ export function WritingPage() {
         contentKey={documentsQuery.dataUpdatedAt}
       >
         <section className="xs-card xs-page-enter doc-table" style={{ animationDelay: "280ms" }} aria-label="我的文稿">
-          <h2>我的文稿</h2>
+          <div className="section-title-row section-title-row--compact">
+            <h2>我的文稿</h2>
+            <span className="section-title-meta">{documents.length} 篇文稿</span>
+          </div>
           <table className="xs-table">
             <thead><tr><th>文稿名称</th><th>类型</th><th>字数</th><th>更新时间</th><th>操作</th></tr></thead>
             <tbody>
               {documents.map((document) => (
                 <tr key={document.id}>
-                  <td><FileText size={16} /> {document.name}</td>
+                  <td><span className="doc-table__name"><FileText size={16} />{document.name}</span></td>
                   <td>{document.type}</td>
                   <td>{document.words}</td>
                   <td>{document.updatedAt}</td>

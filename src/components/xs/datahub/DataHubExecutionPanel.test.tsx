@@ -184,7 +184,10 @@ describe("DataHubExecutionPanel", () => {
     const repeatedSqlAvatars = screen.getAllByRole("img", {
       name: "SQL 分析智能体头像，数据分析"
     });
-    expect(repeatedSqlAvatars).toHaveLength(3);
+    expect(repeatedSqlAvatars).toHaveLength(2);
+    expect(
+      screen.getByRole("navigation", { name: "子智能体列表" })
+    ).toBeVisible();
     expect(
       new Set(
         repeatedSqlAvatars.map(
@@ -197,10 +200,197 @@ describe("DataHubExecutionPanel", () => {
         `${sqlAvatar.dataset.avatarPersona}:${sqlAvatar.dataset.avatarTone}`
       ])
     );
-    expect(screen.getByText("第 1 次模型调用")).toBeInTheDocument();
+    expect(screen.queryByText("第 1 次模型调用")).not.toBeInTheDocument();
     expect(screen.getByText("学生指标口径")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "打开原文：学生指标口径" }));
     expect(onCitationOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("summarizes repeated model activity updates in the right detail drawer", async () => {
+    const user = userEvent.setup();
+    const activityEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "编排智能体",
+        sessionId: "activity-main",
+        chatId: "activity-chat",
+        timestamp: "2026-07-31T16:00:31.000+08:00"
+      },
+      {
+        type: "subagent_exposed",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        content: {
+          agentId: "ask-data",
+          sessionId: "activity-child",
+          subagentId: "activity-subagent",
+          label: "问数智能体"
+        },
+        timestamp: "2026-07-31T16:00:32.000+08:00"
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        replyId: "activity-reply",
+        modelCallIndex: 1,
+        content: {
+          activityId: "activity-model-1",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "running",
+          summary: null,
+          startedAt: "2026-07-31T16:00:32.283+08:00",
+          completedAt: null,
+          durationMs: null
+        },
+        timestamp: "2026-07-31T16:00:32.283+08:00"
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        replyId: "activity-reply",
+        modelCallIndex: 1,
+        content: {
+          activityId: "activity-model-1",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "success",
+          summary: "问题分析完成",
+          startedAt: "2026-07-31T16:00:32.283+08:00",
+          completedAt: "2026-07-31T16:00:35.733+08:00",
+          durationMs: 3450
+        },
+        timestamp: "2026-07-31T16:00:35.733+08:00"
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        replyId: "activity-reply-2",
+        modelCallIndex: 2,
+        content: {
+          activityId: "activity-model-2",
+          kind: "model",
+          action: "model_plan",
+          label: "生成查询方案",
+          status: "running",
+          summary: null,
+          startedAt: "2026-07-31T16:00:35.800+08:00",
+          completedAt: null,
+          durationMs: null
+        },
+        timestamp: "2026-07-31T16:00:35.800+08:00"
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        replyId: "activity-reply-2",
+        modelCallIndex: 2,
+        content: {
+          activityId: "activity-model-2",
+          kind: "model",
+          action: "model_plan",
+          label: "生成查询方案",
+          status: "success",
+          summary: "查询方案已生成",
+          startedAt: "2026-07-31T16:00:35.800+08:00",
+          completedAt: "2026-07-31T16:00:38.000+08:00",
+          durationMs: 2200
+        },
+        timestamp: "2026-07-31T16:00:38.000+08:00"
+      },
+      {
+        type: "done",
+        agentName: "问数智能体",
+        sessionId: "activity-child",
+        globalSessionId: "activity-main",
+        parentSessionId: "activity-main",
+        chatId: "activity-chat",
+        content: { mode: "ask" },
+        timestamp: "2026-07-31T16:00:36.000+08:00"
+      },
+      {
+        type: "done",
+        agentName: "编排智能体",
+        sessionId: "activity-main",
+        globalSessionId: "activity-main",
+        chatId: "activity-chat",
+        content: { mode: "agent" },
+        finished: true,
+        timestamp: "2026-07-31T16:00:36.100+08:00"
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(activityEvents, {
+      mainSessionId: "activity-main",
+      fallbackAgentName: "编排智能体"
+    });
+
+    render(<DataHubExecutionPanel projection={projection} />);
+    await user.click(
+      screen.getByRole("button", { name: "打开 问数智能体执行详情" })
+    );
+
+    const drawer = screen.getByRole("dialog", { name: "子智能体执行详情" });
+    expect(
+      within(drawer).getByRole("button", { name: "返回列表" })
+    ).toBeVisible();
+    const timeline = within(drawer).getByRole("list", {
+      name: "问数智能体执行时间轴"
+    });
+    expect(within(timeline).getAllByRole("listitem")).toHaveLength(2);
+
+    const activity = screen.getByRole("region", {
+      name: "模型活动：理解数据问题"
+    });
+    expect(within(activity).getByText("问题分析完成")).not.toBeVisible();
+    expect(within(activity).getByText(/已完成\s*·\s*3\.5s/)).toBeVisible();
+    await user.click(
+      within(activity).getByText("理解数据问题", {
+        selector: ":scope > summary > strong"
+      })
+    );
+    expect(within(activity).getByText("问题分析完成")).toBeVisible();
+
+    const technicalDetails = within(activity).getByRole("group", {
+      name: "技术详情"
+    });
+    expect(technicalDetails).toBeVisible();
+    expect(within(activity).getByText("技术详情")).toBeVisible();
+    expect(within(technicalDetails).getByText("模型推理")).toBeVisible();
+    expect(within(technicalDetails).getByText("理解数据问题")).toBeVisible();
+    expect(within(technicalDetails).getByText("已完成")).toBeVisible();
+    expect(within(technicalDetails).getByText("16:00:32")).toBeVisible();
+    expect(within(technicalDetails).getByText("16:00:35")).toBeVisible();
+    expect(within(technicalDetails).getByText("3.5s")).toBeVisible();
+    expect(within(activity).queryByText(/activity-model-1/)).not.toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole("button", { name: "返回列表" }));
+    expect(
+      within(drawer).getByRole("navigation", { name: "子智能体列表" })
+    ).toBeVisible();
+    expect(
+      within(drawer).queryByRole("list", { name: "问数智能体执行时间轴" })
+    ).not.toBeInTheDocument();
   });
 });

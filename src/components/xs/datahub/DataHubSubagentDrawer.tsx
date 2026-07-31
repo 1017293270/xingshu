@@ -1,21 +1,15 @@
 import {
   ArrowLeft,
-  GitBranch,
   TreeStructure,
   X
 } from "@phosphor-icons/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  assignSubagentTones,
   flattenSubagentTree,
-  formatExecutionTime,
   sessionDisplayName
 } from "./display";
-import { XsCountUpText } from "../XsCountUpText";
-import { DataHubAgentAvatar } from "./DataHubAgentAvatar";
 import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
-import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import { DataHubSubagentTree } from "./DataHubSubagentTree";
 import type { DataHubSubagentDrawerProps } from "./types";
 
@@ -55,15 +49,11 @@ export function DataHubSubagentDrawer({
     return () => window.clearTimeout(timer);
   }, [open]);
   const flattened = useMemo(() => flattenSubagentTree(nodes), [nodes]);
-  const toneMap = useMemo(() => assignSubagentTones(nodes), [nodes]);
   const selected = flattened.find((node) => {
     const key = node.session.sessionId ?? node.session.subagentId;
     return key === selectedSessionId;
   });
   const selectedName = selected ? sessionDisplayName(selected.session) : "";
-  const selectedIdentity = selected
-    ? (selected.session.sessionId ?? selected.session.subagentId ?? selectedName)
-    : "";
 
   useEffect(() => {
     if (!open) {
@@ -143,14 +133,35 @@ export function DataHubSubagentDrawer({
         aria-labelledby={titleId}
         tabIndex={-1}
       >
-        <header className="xs-datahub-subagent-drawer__header">
-          <span className="xs-datahub-subagent-drawer__icon" aria-hidden="true">
-            <TreeStructure size={20} weight="duotone" />
-          </span>
-          <div>
-            <p>SUBAGENT GRAPH</p>
-            <h2 id={titleId}>子智能体执行详情</h2>
-          </div>
+        <header
+          className="xs-datahub-subagent-drawer__header"
+          data-has-selection={Boolean(selected)}
+        >
+          {selected ? (
+            <>
+              <button
+                type="button"
+                className="xs-datahub-subagent-drawer__header-back"
+                onClick={() => onSelectedSessionChange(undefined)}
+              >
+                <ArrowLeft size={15} aria-hidden="true" />
+                返回列表
+              </button>
+              <h2 id={titleId} className="sr-only">
+                子智能体执行详情
+              </h2>
+            </>
+          ) : (
+            <>
+              <span className="xs-datahub-subagent-drawer__icon" aria-hidden="true">
+                <TreeStructure size={20} weight="duotone" />
+              </span>
+              <div>
+                <p>SUBAGENT TIMELINE</p>
+                <h2 id={titleId}>子智能体</h2>
+              </div>
+            </>
+          )}
           <span className="xs-datahub-subagent-drawer__count" key={flattened.length}>
             {flattened.length}
           </span>
@@ -195,61 +206,8 @@ export function DataHubSubagentDrawer({
               {selected ? (
                 <>
                   <header className="xs-datahub-subagent-drawer__detail-header">
-                    <button
-                      type="button"
-                      className="xs-datahub-subagent-drawer__back"
-                      onClick={() => onSelectedSessionChange(undefined)}
-                    >
-                      <ArrowLeft size={14} aria-hidden="true" />
-                      返回执行树
-                    </button>
-                    <div>
-                      <DataHubAgentAvatar
-                        name={selectedName}
-                        identity={selectedIdentity}
-                        size="large"
-                        tone={toneMap.get(selectedIdentity)}
-                      />
-                      <div>
-                        <h3>{selectedName}</h3>
-                        <p>
-                          {selected.session.sessionId || "无会话标识"}
-                          {formatExecutionTime(selected.session.startedAt)
-                            ? ` · ${formatExecutionTime(selected.session.startedAt)}`
-                            : ""}
-                        </p>
-                      </div>
-                      <DataHubExecutionStatus status={selected.session.status} />
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>层级</dt>
-                        <dd>
-                          <XsCountUpText value={String(selected.level + 1)} />
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>模型调用</dt>
-                        <dd>
-                          <XsCountUpText value={String(selected.session.cards.length)} />
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>下游智能体</dt>
-                        <dd>
-                          <XsCountUpText value={String(selected.children.length)} />
-                        </dd>
-                      </div>
-                    </dl>
+                    <h3>{selectedName}</h3>
                   </header>
-
-                  {selected.session.parentSessionId ? (
-                    <div className="xs-datahub-subagent-drawer__parent">
-                      <GitBranch size={15} aria-hidden="true" />
-                      <span>父会话</span>
-                      <code>{selected.session.parentSessionId}</code>
-                    </div>
-                  ) : null}
 
                   <div className="xs-datahub-subagent-drawer__cards">
                     {selected.session.cards.length ? (

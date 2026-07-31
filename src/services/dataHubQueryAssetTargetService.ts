@@ -1,8 +1,10 @@
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
+import { normalizeDataHubTableResult } from "@/services/dataHubAskDataPresenter";
 import type {
   AskArtifactRef,
   DataHubExecutionProjection,
-  DataHubExecutionSession
+  DataHubExecutionSession,
+  DataHubTableResult
 } from "@/types/dataHub";
 
 type UnknownRecord = Record<string, unknown>;
@@ -110,6 +112,37 @@ function isAskDataSession(session: DataHubExecutionSession) {
     const identity = normalizeAgentIdentity(value);
     return Boolean(identity && (identity.includes("问数") || identity.includes("askdata")));
   });
+}
+
+/**
+ * Returns structured tables only when they belong to one unambiguous query
+ * execution. Agent orchestration may contain several query children whose
+ * table indexes restart per session, so callers must not merge those results.
+ */
+export function getDataHubSingleQueryTableResults(
+  projection: DataHubExecutionProjection,
+  mainSessionIsAskData = false
+): DataHubTableResult[] {
+  const normalizeSessionTables = (session: DataHubExecutionSession) =>
+    session.tableResults
+      .map((table, index) => normalizeDataHubTableResult(table, index))
+      .filter((table): table is DataHubTableResult => Boolean(table));
+  const childTableGroups = projection.subagentSessions
+    .filter(isAskDataSession)
+    .map(normalizeSessionTables)
+    .filter((tables) => tables.length > 0);
+
+  if (childTableGroups.length === 1) {
+    return childTableGroups[0];
+  }
+
+  if (childTableGroups.length > 1) {
+    return [];
+  }
+
+  return mainSessionIsAskData || isAskDataSession(projection.mainSession)
+    ? normalizeSessionTables(projection.mainSession)
+    : [];
 }
 
 function createTarget(

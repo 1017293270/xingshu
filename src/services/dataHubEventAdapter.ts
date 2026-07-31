@@ -14,6 +14,7 @@ const stringPayloadEventTypes = [
 const knownDataHubEventTypes = new Set([
   "agent_start",
   "subagent_exposed",
+  "activity",
   "thinking",
   "final_thinking",
   "routing_intent",

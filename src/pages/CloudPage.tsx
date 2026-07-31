@@ -1,5 +1,16 @@
 import { Button, Tag } from "antd";
-import { ArrowsClockwise, Database, Files, ShieldCheck, UploadSimple } from "@phosphor-icons/react";
+import {
+  ArrowsClockwise,
+  Database,
+  FileDoc,
+  FilePdf,
+  FileText,
+  FileXls,
+  Files,
+  ShieldCheck,
+  UploadSimple
+} from "@phosphor-icons/react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { XsCountUpText, XsIconTile, XsStatusBar } from "@/components/xs";
 import cloudDriveIcon from "@/assets/cloud-icons/cloud-drive.png";
@@ -23,6 +34,26 @@ const statusColor: Record<CloudMaterialStatus, string> = {
   待同步: "gold",
   已入库: "blue"
 };
+
+type CloudFileKind = "pdf" | "sheet" | "doc" | "file";
+
+function resolveCloudFileIcon(name: string): { kind: CloudFileKind; Icon: PhosphorIcon } {
+  const extension = name.split(".").pop()?.toLowerCase() ?? "";
+
+  if (extension === "pdf") {
+    return { kind: "pdf", Icon: FilePdf };
+  }
+
+  if (["xls", "xlsx", "csv"].includes(extension)) {
+    return { kind: "sheet", Icon: FileXls };
+  }
+
+  if (["doc", "docx"].includes(extension)) {
+    return { kind: "doc", Icon: FileDoc };
+  }
+
+  return { kind: "file", Icon: FileText };
+}
 
 type CloudPageProps = {
   service?: CloudService;
@@ -295,13 +326,15 @@ export function CloudPage({ service }: CloudPageProps = {}) {
             key={lane.title}
           >
             <XsIconTile icon={lane.icon} label={lane.title} tone={lane.tone} />
-            <div>
-              <h2>{lane.title}</h2>
-              <strong>
-                {lane.title === "企业文件"
-                  ? `${snapshot.overview.enterpriseFileCount.toLocaleString("zh-CN")} 份资料`
-                  : lane.meta}
-              </strong>
+            <div className="cloud-lane__body">
+              <div className="cloud-lane__head">
+                <h2>{lane.title}</h2>
+                <strong>
+                  {lane.title === "企业文件"
+                    ? `${snapshot.overview.enterpriseFileCount.toLocaleString("zh-CN")} 份资料`
+                    : lane.meta}
+                </strong>
+              </div>
               <p>{lane.desc}</p>
             </div>
           </article>
@@ -309,7 +342,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
       </section>
 
       <section className="xs-card xs-page-enter cloud-recent" style={{ animationDelay: "320ms" }} aria-labelledby="cloud-recent-title">
-        <div className="section-title-row">
+        <div className="section-title-row section-title-row--compact">
           <h2 id="cloud-recent-title">最近资料</h2>
           <Button
             type="link"
@@ -321,15 +354,23 @@ export function CloudPage({ service }: CloudPageProps = {}) {
           </Button>
         </div>
         <div className="cloud-recent__list">
-          {snapshot.recentMaterials.map((item) => (
-            <div className="cloud-recent__row" key={item.id}>
-              <strong>{item.name}</strong>
-              <span>{item.owner}</span>
-              <Tag bordered={false} color={statusColor[item.status]}>
-                {item.status}
-              </Tag>
-            </div>
-          ))}
+          {snapshot.recentMaterials.map((item) => {
+            const { kind, Icon } = resolveCloudFileIcon(item.name);
+
+            return (
+              <div className="cloud-recent__row" key={item.id}>
+                <span className="cloud-recent__file-icon" data-kind={kind} aria-hidden="true">
+                  <Icon size={18} />
+                </span>
+                <strong title={item.name}>{item.name}</strong>
+                <span>{item.owner}</span>
+                <span className="cloud-recent__time">{item.updatedAt}</span>
+                <Tag bordered={false} color={statusColor[item.status]}>
+                  {item.status}
+                </Tag>
+              </div>
+            );
+          })}
         </div>
       </section>
       <div className="cloud-status-slot">

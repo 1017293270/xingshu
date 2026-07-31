@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     env.VITE_DATAHUB_PROXY_TARGET ??
     (process.env.VITE_DATAHUB_BFF_PORT || env.VITE_DATAHUB_BFF_PORT
       ? `http://127.0.0.1:${process.env.VITE_DATAHUB_BFF_PORT || env.VITE_DATAHUB_BFF_PORT}`
-      : "http://127.0.0.1:8090");
+      : "http://132.232.141.234");
 
   return {
     plugins: [react(), vue()],

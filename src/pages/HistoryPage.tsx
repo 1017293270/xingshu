@@ -1,5 +1,5 @@
-import { MagnifyingGlass } from "@phosphor-icons/react";
-import { Input, Pagination, Segmented, Space, Tag, Tooltip } from "antd";
+import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react";
+import { Input, Pagination, Segmented, Tag, Tooltip } from "antd";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -198,7 +198,7 @@ export function HistoryPage() {
         <section ref={historyListRef} className="history-list" aria-label="历史对话列表">
           {visibleSessions.map((session, index) => (
             <button
-              className={`xs-card history-card xs-card-button xs-card-lift${index < 8 ? " history-card--enter" : ""}`}
+              className={`history-card xs-card-button${index < 8 ? " history-card--enter" : ""}`}
               style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
               key={session.id}
               type="button"
@@ -215,27 +215,30 @@ export function HistoryPage() {
                   <h2 className="history-card__title">{session.title}</h2>
                 </Tooltip>
                 <p>{session.summary}</p>
-                <Space size={10} className="tagline" wrap>
-                  <Tag bordered={false} color="blue">
-                    {session.category}
-                  </Tag>
-                  <span>{session.updatedAt}</span>
-                </Space>
               </div>
-              <span
-                className="history-card__restore-state"
-                data-active={restoringSessionId === session.id}
-                aria-hidden="true"
-              >
-                {restoringSessionId === session.id ? (
-                  <>
-                    <span className="history-card__restore-spinner" />
-                    恢复中
-                  </>
-                ) : (
-                  "打开"
-                )}
-              </span>
+              <div className="history-card__aside">
+                <Tag bordered={false} color="blue">
+                  {session.category}
+                </Tag>
+                <span className="history-card__time">{session.updatedAt}</span>
+                <span
+                  className="history-card__restore-state"
+                  data-active={restoringSessionId === session.id}
+                  aria-hidden="true"
+                >
+                  {restoringSessionId === session.id ? (
+                    <>
+                      <span className="history-card__restore-spinner" />
+                      恢复中
+                    </>
+                  ) : (
+                    <>
+                      打开
+                      <ArrowRight size={14} weight="bold" />
+                    </>
+                  )}
+                </span>
+              </div>
             </button>
           ))}
         </section>

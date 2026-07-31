@@ -213,6 +213,44 @@ describe("dataHubEventAdapter", () => {
     );
   });
 
+  it("unwraps a legacy thinking record that contains a type/data activity event", () => {
+    const event = adaptDataHubStreamEvent({
+      type: "thinking",
+      sessionId: "history-child",
+      globalSessionId: "history-main",
+      parentSessionId: "history-main",
+      chatId: "history-chat",
+      data: JSON.stringify({
+        type: "activity",
+        data: {
+          activityId: "tool:query-1",
+          kind: "tool",
+          action: "execute_query",
+          label: "执行数据查询",
+          status: "success",
+          startedAt: "2026-07-31T16:00:32.283+08:00",
+          completedAt: "2026-07-31T16:00:35.733+08:00",
+          durationMs: 3450
+        }
+      })
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        type: "activity",
+        sessionId: "history-child",
+        globalSessionId: "history-main",
+        parentSessionId: "history-main",
+        chatId: "history-chat",
+        data: expect.objectContaining({
+          activityId: "tool:query-1",
+          kind: "tool",
+          status: "success"
+        })
+      })
+    );
+  });
+
   it("unwraps legacy non-text events that only contain type/data", () => {
     const event = adaptDataHubStreamEvent({
       type: "persisted_event",

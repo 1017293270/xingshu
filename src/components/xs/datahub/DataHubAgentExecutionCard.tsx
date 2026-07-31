@@ -9,7 +9,13 @@ import {
   Table,
   Wrench
 } from "@phosphor-icons/react";
-import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react";
 import type {
   DataHubAgentExecutionCard,
   DataHubExecutionBlock
@@ -25,6 +31,11 @@ import {
   formatStructuredContent
 } from "./display";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
+import {
+  DataHubModelActivityCard,
+  groupDataHubModelActivities,
+  type DataHubExecutionDisplayItem
+} from "./DataHubModelActivity";
 import type { DataHubAgentExecutionCardProps } from "./types";
 
 function blockIcon(block: DataHubExecutionBlock) {
@@ -172,13 +183,20 @@ function tablePreview(content: unknown): TablePreview | undefined {
   };
 }
 
-function renderTableBlock(block: DataHubExecutionBlock) {
+function renderTableBlock(
+  block: DataHubExecutionBlock,
+  options?: {
+    compact?: boolean;
+    expanded?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
+  }
+) {
   const preview = tablePreview(block.content);
   if (!preview) {
     return <pre className="xs-datahub-agent-card__json">{formatStructuredContent(block.content)}</pre>;
   }
   const visibleRows = preview.rows.slice(0, 5);
-  return (
+  const table = (
     <div className="xs-datahub-agent-card__table">
       <div className="xs-datahub-agent-card__table-meta">
         <span>{preview.totalRows ?? preview.rows.length} 行数据</span>
@@ -208,6 +226,46 @@ function renderTableBlock(block: DataHubExecutionBlock) {
         </table>
       </div>
     </div>
+  );
+
+  if (!options?.compact) {
+    return table;
+  }
+
+  return (
+    <details
+      className="xs-datahub-agent-card__table-disclosure"
+      open={options.expanded}
+      onToggle={(event) => {
+        if (event.currentTarget.open !== options.expanded) {
+          options.onExpandedChange?.(event.currentTarget.open);
+        }
+      }}
+    >
+      <summary>
+        <span>
+          <Table size={13} aria-hidden="true" />
+          查询结果
+        </span>
+        <small>{preview.totalRows ?? preview.rows.length} 行</small>
+      </summary>
+      {table}
+    </details>
+  );
+}
+
+function displayItemKey(
+  cardId: string,
+  item: DataHubExecutionDisplayItem,
+  index: number
+) {
+  if (item.kind === "model-activity") {
+    return `activity:${item.activity.id}`;
+  }
+  const block = item.block;
+  return (
+    block.eventId ??
+    `${cardId}-${block.sourceType}-${block.sequence ?? index}-${index}`
   );
 }
 
@@ -277,7 +335,12 @@ function renderCitation(
 
 function defaultBlockContent(
   block: DataHubExecutionBlock,
-  onCitationOpen?: DataHubAgentExecutionCardProps["onCitationOpen"]
+  onCitationOpen?: DataHubAgentExecutionCardProps["onCitationOpen"],
+  tableOptions?: {
+    compact?: boolean;
+    expanded?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
+  }
 ): ReactNode {
   const isThinking =
     block.isThinking || block.type === "thinking" || block.type === "final_thinking";
@@ -301,7 +364,7 @@ function defaultBlockContent(
     return renderToolBlock(block);
   }
   if (block.type === "table") {
-    return renderTableBlock(block);
+    return renderTableBlock(block, tableOptions);
   }
   if (block.type === "data_source_selected") {
     return renderDataSource(block);
@@ -332,6 +395,49 @@ export function DataHubAgentExecutionCard({
   }
   const startedAt = formatExecutionTime(card.startedAt);
   const updatedAt = formatExecutionTime(card.updatedAt);
+  const displayItems: DataHubExecutionDisplayItem[] = renderBlock
+    ? card.blocks.map((block) => ({ kind: "block", block }))
+    : groupDataHubModelActivities(card.blocks);
+  const displayBlocks = displayItems.map((item) => item.block);
+  const activityItems = displayItems.filter(
+    (
+      item
+    ): item is Extract<DataHubExecutionDisplayItem, { kind: "model-activity" }> =>
+      item.kind === "model-activity"
+  );
+  const runningActivityId = [...activityItems]
+    .reverse()
+    .find((item) => item.activity.status === "running")?.activity.id;
+  const latestActivityId = activityItems.at(-1)?.activity.id;
+  const [expandedActivityId, setExpandedActivityId] = useState<
+    string | undefined
+  >(runningActivityId ?? latestActivityId);
+  const tableItemKeys = displayItems.flatMap((item, index) =>
+    item.kind === "block" && item.block.type === "table"
+      ? [displayItemKey(card.id, item, index)]
+      : []
+  );
+  const latestTableKey = tableItemKeys.at(-1);
+  const [expandedTableKey, setExpandedTableKey] = useState<string | undefined>(
+    latestTableKey
+  );
+  const previousLatestTableKeyRef = useRef(latestTableKey);
+
+  useEffect(() => {
+    if (runningActivityId) {
+      setExpandedActivityId(runningActivityId);
+    }
+  }, [runningActivityId]);
+
+  useEffect(() => {
+    if (
+      latestTableKey &&
+      latestTableKey !== previousLatestTableKeyRef.current
+    ) {
+      previousLatestTableKeyRef.current = latestTableKey;
+      setExpandedTableKey(latestTableKey);
+    }
+  }, [latestTableKey]);
 
   return (
     <article
@@ -352,7 +458,7 @@ export function DataHubAgentExecutionCard({
         <div className="xs-datahub-agent-card__identity">
           <h4>{card.agentName}</h4>
           <p>
-            {`${card.blocks.length} 个执行事件`}
+            {`${displayItems.length} 个执行阶段`}
             {startedAt ? ` · ${startedAt}` : ""}
             {updatedAt && updatedAt !== startedAt ? `–${updatedAt}` : ""}
           </p>
@@ -375,45 +481,79 @@ export function DataHubAgentExecutionCard({
       >
         <div className="xs-datahub-collapse__inner">
           {blocksMountedRef.current
-            ? card.blocks.length
+            ? displayItems.length
               ? (
-                <div className="xs-datahub-agent-card__blocks">
-                  {card.blocks.map((block, index) => {
+                <ol
+                  className="xs-datahub-agent-card__blocks"
+                  aria-label={`${card.agentName}执行时间轴`}
+                >
+                  {displayItems.map((item, index) => {
+                    const block = item.block;
                     const Icon = blockIcon(block);
                     const modelCallIndex = block.modelCallIndex;
-                    const customContent = renderBlock?.({ card, block });
+                    const itemKey = displayItemKey(card.id, item, index);
+                    const customContent =
+                      item.kind === "block"
+                        ? renderBlock?.({ card, block })
+                        : undefined;
                     return (
-                      <section
-                        key={
-                          block.eventId ??
-                          `${card.id}-${block.sourceType}-${block.sequence ?? index}-${index}`
-                        }
+                      <li
+                        key={itemKey}
                         className={`xs-datahub-agent-card__block xs-datahub-agent-card__block--${
-                          block.isThinking ? "thinking" : block.type
+                          item.kind === "model-activity"
+                            ? "model-activity"
+                            : block.isThinking
+                              ? "thinking"
+                              : block.type
                         }`}
                         style={{ "--xs-datahub-stagger": index } as CSSProperties}
                       >
-                        {startsModelCall(card.blocks, index) && modelCallIndex !== undefined ? (
+                        {!compact &&
+                        startsModelCall(displayBlocks, index) &&
+                        modelCallIndex !== undefined ? (
                           <div className="xs-datahub-agent-card__model-call">
                             <span>第 {modelCallIndex} 次模型调用</span>
-                            {block.replyId ? <small title={block.replyId}>回复 {block.replyId}</small> : null}
+                            {item.kind === "block" && block.replyId ? (
+                              <small title={block.replyId}>回复 {block.replyId}</small>
+                            ) : null}
                           </div>
                         ) : null}
-                        {!block.isThinking &&
+                        {item.kind === "block" &&
+                        !block.isThinking &&
                         block.type !== "thinking" &&
-                        block.type !== "final_thinking" ? (
+                        block.type !== "final_thinking" &&
+                        !(compact && block.type === "table") ? (
                           <div className="xs-datahub-agent-card__block-label">
                             <Icon size={14} weight="duotone" aria-hidden="true" />
                             <span>{executionBlockLabel(block)}</span>
                           </div>
                         ) : null}
-                        {customContent !== undefined
-                          ? customContent
-                          : defaultBlockContent(block, onCitationOpen)}
-                      </section>
+                        {item.kind === "model-activity" ? (
+                          <DataHubModelActivityCard
+                            activity={item.activity}
+                            expanded={expandedActivityId === item.activity.id}
+                            onExpandedChange={(nextExpanded) =>
+                              setExpandedActivityId(
+                                nextExpanded ? item.activity.id : undefined
+                              )
+                            }
+                          />
+                        ) : customContent !== undefined ? (
+                          customContent
+                        ) : (
+                          defaultBlockContent(block, onCitationOpen, {
+                            compact,
+                            expanded: expandedTableKey === itemKey,
+                            onExpandedChange: (nextExpanded) =>
+                              setExpandedTableKey(
+                                nextExpanded ? itemKey : undefined
+                              )
+                          })
+                        )}
+                      </li>
                     );
                   })}
-                </div>
+                </ol>
               )
               : (
                 <div className="xs-datahub-agent-card__empty">

@@ -169,6 +169,66 @@ describe("dataHubExecutionProjector", () => {
     expect(projection.mainSession.cards.every((card) => card.status === "done")).toBe(true);
   });
 
+  it("updates model and tool activities in place by activityId", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("activity", {
+        content: {
+          activityId: "model:reply-1",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "running",
+          startedAt: "2026-07-31T16:00:32.283+08:00"
+        },
+        replyId: "reply-1",
+        modelCallIndex: 1
+      }),
+      event("activity", {
+        content: {
+          activityId: "tool:query-1",
+          kind: "tool",
+          action: "execute_query",
+          label: "执行数据查询",
+          status: "running",
+          startedAt: "2026-07-31T16:00:33.000+08:00"
+        },
+        replyId: "reply-1",
+        modelCallIndex: 1
+      }),
+      event("activity", {
+        content: {
+          activityId: "model:reply-1",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "success",
+          summary: "问题分析完成",
+          startedAt: "2026-07-31T16:00:32.283+08:00",
+          completedAt: "2026-07-31T16:00:35.733+08:00",
+          durationMs: 3450
+        },
+        replyId: "reply-1",
+        modelCallIndex: 1
+      })
+    ]);
+
+    const blocks = projection.mainSession.cards[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    expect(blocks.map((block) => block.content)).toMatchObject([
+      {
+        activityId: "model:reply-1",
+        kind: "model",
+        status: "success",
+        summary: "问题分析完成"
+      },
+      {
+        activityId: "tool:query-1",
+        kind: "tool",
+        status: "running"
+      }
+    ]);
+  });
+
   it("starts a new card only when the continuous agent changes", () => {
     const projection = projectDataHubExecutionEvents([
       event("text", {

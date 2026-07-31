@@ -22,6 +22,8 @@ const sheetIconById: Record<TableTemplateIconId, string> = {
 
 const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销售排行」「各部门人员通讯录」...";
 
+const tableSuggestions = ["华东区Q1销售排行", "各部门人员通讯录", "月度费用统计报表"];
+
 export function TablePage() {
   const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
@@ -91,36 +93,68 @@ export function TablePage() {
     copiedTimerRef.current = window.setTimeout(() => setCopiedTemplateId(null), 1200);
   };
 
+  const handleUseSuggestion = (suggestion: string) => {
+    if (isGeneratingRef.current) {
+      return;
+    }
+
+    setPrompt(suggestion);
+    setSubmissionTone("info");
+    setSubmissionStatus(`已填入制表示例：${suggestion}`);
+  };
+
   return (
-    <PageFrame title="智能制表" className="table-page">
-      <section
-        className="sheet-prompt xs-page-enter"
-        style={{ animationDelay: "80ms" }}
-        aria-label="制表需求输入"
-        aria-busy={isGenerating}
-        data-state={isGenerating ? "submitting" : submissionTone}
-      >
-        <span className="sheet-prompt__addon" aria-hidden="true">
-          <Plus size={18} weight="bold" />
-        </span>
-        <Input
-          aria-label="制表需求"
-          className="xs-focus-glow"
-          placeholder={tablePromptPlaceholder}
-          value={prompt}
-          disabled={isGenerating}
-          onChange={(event) => setPrompt(event.target.value)}
-          onPressEnter={handleGenerate}
-        />
-        <Button
-          type="primary"
-          icon={<Lightning size={18} />}
-          loading={isGenerating}
-          disabled={isGenerating || !prompt.trim()}
-          onClick={handleGenerate}
+    <PageFrame
+      title="智能制表"
+      subtitle="用自然语言描述表格结构，AI 帮你生成企业表格"
+      className="table-page"
+    >
+      <section className="xs-card sheet-workbench xs-page-enter" style={{ animationDelay: "80ms" }}>
+        <div className="sheet-workbench__head">
+          <h2>描述制表需求</h2>
+          <p>说明表格主题、字段与统计口径，AI 将生成结构化表格</p>
+        </div>
+        <section
+          className="sheet-prompt"
+          aria-label="制表需求输入"
+          aria-busy={isGenerating}
+          data-state={isGenerating ? "submitting" : submissionTone}
         >
-          生成
-        </Button>
+          <span className="sheet-prompt__addon" aria-hidden="true">
+            <Plus size={18} weight="bold" />
+          </span>
+          <Input
+            aria-label="制表需求"
+            className="xs-focus-glow"
+            placeholder={tablePromptPlaceholder}
+            value={prompt}
+            disabled={isGenerating}
+            onChange={(event) => setPrompt(event.target.value)}
+            onPressEnter={handleGenerate}
+          />
+          <Button
+            type="primary"
+            icon={<Lightning size={18} />}
+            loading={isGenerating}
+            disabled={isGenerating || !prompt.trim()}
+            onClick={handleGenerate}
+          >
+            生成
+          </Button>
+        </section>
+        <div className="sheet-suggestions" aria-label="快捷制表示例">
+          <span>试试</span>
+          {tableSuggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              disabled={isGenerating}
+              onClick={() => handleUseSuggestion(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
       </section>
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
@@ -131,9 +165,10 @@ export function TablePage() {
           reserveSpace
         />
       </div>
-      <h2 className="subsection-title xs-page-enter" style={{ animationDelay: "140ms" }}>
-        最近制表
-      </h2>
+      <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
+        <h2 className="subsection-title">最近制表</h2>
+        <span className="section-title-meta">{recentTables.length} 个模板</span>
+      </div>
       <XsAsyncPanel
         status={recentTablesStatus}
         empty={recentTables.length === 0}
@@ -146,24 +181,23 @@ export function TablePage() {
         <section className="sheet-list" aria-label="最近制表">
           {recentTables.map((table, index) => (
             <article
-              className="xs-card xs-card-lift xs-page-enter sheet-row"
+              className="xs-page-enter sheet-row"
               style={{ animationDelay: `${200 + index * 60}ms` }}
               key={table.id}
               aria-label={`${table.title} ${table.description}`}
-            >              <span className="sheet-icon" aria-hidden="true">
+            >
+              <span className="sheet-icon" aria-hidden="true">
                 <img src={sheetIconById[table.iconId]} alt="" />
               </span>
               <div className="sheet-row__body">
                 <h2 className="sheet-row__title" title={table.title}>
                   {table.title}
                 </h2>
-                <p className="sheet-row__meta">
-                  <Tag bordered={false} color="blue">
-                    {table.tag}
-                  </Tag>
-                  <span>{table.description}</span>
-                </p>
+                <p className="sheet-row__meta">{table.description}</p>
               </div>
+              <Tag className="sheet-row__tag" bordered={false} color="blue">
+                {table.tag}
+              </Tag>
               <Button disabled={isGenerating} onClick={() => handleCopyTemplate(table)}>
                 {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
               </Button>
