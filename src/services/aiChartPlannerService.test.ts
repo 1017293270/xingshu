@@ -159,6 +159,34 @@ describe("aiChartPlannerService", () => {
     ]);
   });
 
+  it("uses a Chinese legend label for qualified DataHub metric fields", () => {
+    const dataTable = table(
+      [
+        { key: "WechatyProjectInfo.projectName", title: "WechatyProjectInfo.projectName" },
+        { key: "WechatyEventRecord.count", title: "WechatyEventRecord.count", type: "number" }
+      ],
+      [
+        { "WechatyProjectInfo.projectName": "红星社区", "WechatyEventRecord.count": 1192 },
+        { "WechatyProjectInfo.projectName": "六角井社区", "WechatyEventRecord.count": 816 }
+      ]
+    );
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "包含社区和事件记录数量",
+        chartType: "bar",
+        allowedTypes: ["bar"],
+        title: "社区事件数",
+        dimensionKey: "WechatyProjectInfo.projectName",
+        metricKeys: ["WechatyEventRecord.count"]
+      },
+      [dataTable]
+    );
+    const series = buildGeneratedChartOption(spec!).series as Array<{ name?: string }>;
+
+    expect(series[0]?.name).toBe("事件记录数");
+  });
+
   it("preserves missing metrics instead of inventing zero values", () => {
     const dataTable = table(
       [
@@ -278,7 +306,7 @@ describe("aiChartPlannerService", () => {
       metricKeys: ["count"]
     });
     expect(plan.reason).toContain("本地规则");
-    expect(spec).toMatchObject({ title: "项目名称表分布", tableTitle: "结果表 1" });
+    expect(spec).toMatchObject({ title: "项目名称分布", tableTitle: "结果表 1" });
   });
 
   it("falls back to not chartable when AI references missing fields", async () => {

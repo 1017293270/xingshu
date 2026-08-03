@@ -69,7 +69,7 @@ function inferColumnType(
 function summarizeTable(table: DataHubTableResult, index: number): AiChartTableSummary {
   const columns = table.columns.map((column) => ({
     key: column.key,
-    title: formatDataHubColumnTitle(column.title),
+    title: formatDataHubColumnTitle(column.title, column.key),
     type: inferColumnType(column, table.rows)
   }));
 
@@ -297,7 +297,8 @@ export function buildGeneratedChartSpec(
 }
 
 function metricTitle(table: DataHubTableResult, key: string) {
-  return formatDataHubColumnTitle(table.columns.find((column) => column.key === key)?.title || key);
+  const column = table.columns.find((candidate) => candidate.key === key);
+  return formatDataHubColumnTitle(column?.title || key, column?.key || key);
 }
 
 export function buildGeneratedChartOption(spec: GeneratedChartSpec, chartType = spec.chartType): EChartsOption {

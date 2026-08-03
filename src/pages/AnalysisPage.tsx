@@ -384,7 +384,9 @@ function buildDataHubTablesCsv(tables: DataHubTableResult[]) {
   return tables
     .map((table, index) => {
       const title = table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : index + 1}`;
-      const header = table.columns.map((column) => escapeCsvCell(formatDataHubColumnTitle(column.title))).join(",");
+      const header = table.columns
+        .map((column) => escapeCsvCell(formatDataHubColumnTitle(column.title, column.key)))
+        .join(",");
       const rows = table.rows.map((row) => table.columns.map((column) => escapeCsvCell(row[column.key])).join(","));
 
       return [escapeCsvCell(title), header, ...rows].join("\r\n");
@@ -1042,7 +1044,7 @@ function DataHubResultTable({ table }: { table: DataHubTableResult }) {
           <thead>
             <tr>
               {table.columns.map((column) => {
-                const title = formatDataHubColumnTitle(column.title);
+                const title = formatDataHubColumnTitle(column.title, column.key);
 
                 return (
                   <th key={column.key} title={column.title} style={{ minWidth: getColumnMinWidth(column) }}>

@@ -96,4 +96,33 @@ describe("XsChartCard", () => {
     await user.click(screen.getByText("查看数据"));
     expect(screen.getByRole("table", { name: "收入趋势数据（前 2 行，共 100 行）" })).toBeInTheDocument();
   });
+
+  it("renders physical DataHub field names as Chinese table headers", async () => {
+    const user = userEvent.setup();
+    render(
+      <XsChartCard
+        title="社区事件数"
+        summary="展示事件记录数量"
+        option={{ series: [] }}
+        table={{
+          columns: [
+            { key: "WechatyProjectInfo.projectName", title: "WechatyProjectInfo.projectName" },
+            { key: "WechatyEventRecord.count", title: "WechatyEventRecord.count", type: "number" }
+          ],
+          rows: [
+            {
+              "WechatyProjectInfo.projectName": "红星社区",
+              "WechatyEventRecord.count": 1192
+            }
+          ],
+          totalRows: 1
+        }}
+      />
+    );
+
+    await user.click(screen.getByText("查看数据"));
+    const dataTable = screen.getByRole("table", { name: "社区事件数数据" });
+    expect(within(dataTable).getByRole("columnheader", { name: "项目名称" })).toBeVisible();
+    expect(within(dataTable).getByRole("columnheader", { name: "事件记录数" })).toBeVisible();
+  });
 });

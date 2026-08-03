@@ -15,6 +15,7 @@ import type {
   DataHubToolResultData
 } from "@/types/dataHub";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
+import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -116,7 +117,7 @@ function normalizeColumns(columns: unknown, rows: unknown): DataHubTableColumn[]
   if (Array.isArray(parsedColumns) && parsedColumns.length > 0) {
     return parsedColumns.map((column, index) => {
       if (typeof column === "string") {
-        return { key: column, title: column };
+        return { key: column, title: formatDataHubColumnTitle(column, column) };
       }
 
       if (isRecord(column)) {
@@ -126,7 +127,8 @@ function normalizeColumns(columns: unknown, rows: unknown): DataHubTableColumn[]
           asString(column.field) ||
           asString(column.title) ||
           `col_${index + 1}`;
-        const title = asString(column.title) || asString(column.label) || asString(column.name) || key;
+        const rawTitle = asString(column.label) || asString(column.title) || asString(column.name) || key;
+        const title = formatDataHubColumnTitle(rawTitle, key);
         const type = asString(column.type) || undefined;
         return { key, title, type };
       }
@@ -138,7 +140,10 @@ function normalizeColumns(columns: unknown, rows: unknown): DataHubTableColumn[]
 
   if (Array.isArray(parsedRows) && parsedRows.length > 0) {
     if (isRecord(parsedRows[0])) {
-      return Object.keys(parsedRows[0]).map((key) => ({ key, title: key }));
+      return Object.keys(parsedRows[0]).map((key) => ({
+        key,
+        title: formatDataHubColumnTitle(key, key)
+      }));
     }
 
     if (Array.isArray(parsedRows[0])) {

@@ -138,6 +138,27 @@ describe("dataHubAskDataPresenter", () => {
     expect(table?.rows[0]).toEqual({ 社区: "六角井社区", 咨询数: 128 });
   });
 
+  it("restores Chinese titles when persisted tables only contain physical field keys", () => {
+    const table = normalizeDataHubTableResult({
+      rows: [
+        {
+          "WechatyProjectInfo.projectName": "红星社区",
+          "WechatyEventRecord.count": 1192
+        }
+      ],
+      totalRows: 1
+    });
+
+    expect(table?.columns).toEqual([
+      { key: "WechatyProjectInfo.projectName", title: "项目名称" },
+      { key: "WechatyEventRecord.count", title: "事件记录数" }
+    ]);
+    expect(table?.rows[0]).toEqual({
+      "WechatyProjectInfo.projectName": "红星社区",
+      "WechatyEventRecord.count": 1192
+    });
+  });
+
   it("presents new ask events with real thinking, text, table, and artifacts", () => {
     const events: DataHubStreamEvent[] = [
       {

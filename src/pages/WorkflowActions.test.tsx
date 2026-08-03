@@ -1156,7 +1156,7 @@ describe("workflow page actions", () => {
     await user.click(screen.getByRole("button", { name: "导出结果" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
-    await expect(blob.text()).resolves.toContain("项目名称表,记录数");
+    await expect(blob.text()).resolves.toContain("项目名称,记录数");
     await expect(blob.text()).resolves.toContain("六角井社区,262");
     expect(clickSpy).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:xingshu-csv");

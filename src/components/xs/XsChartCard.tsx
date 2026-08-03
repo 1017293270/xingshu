@@ -3,6 +3,7 @@ import { ArrowsOutSimple, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { DataHubTableResult } from "@/types/dataHub";
+import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
 import { XsEChart } from "./XsEChart";
 
 export type XsChartCardProps = {
@@ -157,8 +158,8 @@ export function XsChartCard({
                 <thead>
                   <tr>
                     {table.columns.map((column) => (
-                      <th key={column.key} scope="col">
-                        {column.title}
+                      <th key={column.key} scope="col" title={column.title}>
+                        {formatDataHubColumnTitle(column.title, column.key)}
                       </th>
                     ))}
                   </tr>
