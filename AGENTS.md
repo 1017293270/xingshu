@@ -1,5 +1,13 @@
 # 星数项目协作约束
 
+## 当前仓库事实（2026-08-03）
+
+- 当前仓库已经是 React 19、TypeScript 6、Vite 8 正式前端工程，不再是静态 HTML 原型。
+- React 是主应用；`src/features/dashboardStudio/` 内包含 Vue 看板工作室组件。
+- 当前权威代码目录是 `src/`，自动化测试位于 `src/**/*.test.ts(x)` 和 `tests/visual/`，历史 `outputs/xingshu-homepage-system/` 路径不在当前克隆中。
+- 先读 `README.md` 获取启动和验证命令，再读 `PROJECT.md` 获取当前里程碑、下一步与阻塞。
+- 本节中的当前仓库事实优先于下方仍具有历史背景的设计说明。
+
 ## 读取中文文件
 
 在 Windows PowerShell 5.1 中读取 Markdown、中文规格、README、AGENTS.md 等文本时，必须显式指定 UTF-8：
@@ -23,7 +31,7 @@ Get-Content -LiteralPath <path> -Encoding utf8
 - 组件以白底、细边框、低阴影、强网格对齐为准。
 - 图标系统遵循“星轨 Agent Icons”：线性、圆角、蓝/青节点点缀、企业感。
 - 常规导航和应用卡 icon 必须保持干净，不允许每个图标都叠加星轨纹路背景。
-- 当前原型图标库使用本地 `outputs/xingshu-homepage-system/prototype/vendor/phosphor/`，不要改回远程动态脚本。
+- 当前图标使用 `@phosphor-icons/react` 与 `src/assets/icon-kit/`、`src/assets/*-icons/` 下的本地资产，不要改回远程动态脚本。
 - 大屏响应式必须使用分段内容轨道：主页约 1170/1320/1440px，问数页约 1220/1360/1480px；不要把 1672px 构图窄窄居中到 1920px 以上屏幕。
 - 星轨弧线只用于品牌展示、空状态或少量重点插画。
 
@@ -38,32 +46,51 @@ Get-Content -LiteralPath <path> -Encoding utf8
 
 ## 资产使用顺序
 
-1. 优先使用 `outputs/xingshu-homepage-system/references/` 中的参考图和原始截图。
-2. Logo、头像等已有可裁切资产，优先从原始截图或正式素材中提取。
-3. Icon 优先使用真实图标库，并通过统一容器、颜色、状态实现星轨风格。
-4. 只有在真实图标库无法表达某个品牌级专属图标时，才允许调用 image2 单独生成。
-5. 调用 image2 前必须写明：图标名称、用途、尺寸、背景、状态、参考源、禁止项。
+1. 优先使用 `src/assets/brand/`、`src/assets/home/`、`src/assets/icon-kit/` 和各页面现有本地资产。
+2. `design-qa.md` 中的 Windows `outputs/` 路径是历史证据；本地文件缺失时不要假装已查看，应请用户重新提供参考图。
+3. Logo、头像等已有可裁切资产，优先使用仓库内正式素材。
+4. Icon 优先使用真实图标库，并通过统一容器、颜色、状态实现星轨风格。
+5. 只有在真实图标库无法表达某个品牌级专属图标时，才允许调用 image2 单独生成。
+6. 调用 image2 前必须写明：图标名称、用途、尺寸、背景、状态、参考源、禁止项。
 
 ## 当前交付目录
 
-- 高保真首页：`outputs/xingshu-homepage-system/prototype/`
-- 视觉规范：`outputs/xingshu-homepage-system/docs/visual-spec.md`
-- 参考图：`outputs/xingshu-homepage-system/references/`
+- 正式应用：`src/`
+- 星数组件：`src/components/xs/`
+- 主题与视觉 token：`src/theme/`、`src/styles/`
+- 品牌和页面资产：`src/assets/`
+- 单元/组件测试：`src/**/*.test.ts(x)`
+- 视觉与无障碍测试：`tests/visual/`
+- 视觉 QA 记录：`design-qa.md`
+
+## 当前命令
+
+```bash
+npm ci
+npm run dev
+npm test
+npm run build
+npm run test:visual:typecheck
+npm run test:visual
+```
+
+- `npm run test:visual` 会启动本地服务和 Chromium；执行前确认测试环境与外部服务边界。
+- 纯文档变更只需检查文档、链接、`git diff --check` 和 Git 状态，不要求启动前端或生成截图。
 
 ## 前端实现规则
 
-- 当前原型是静态 HTML/CSS/JS，不依赖构建步骤。
-- 若后续迁移到 React/Vite，应先保留现有视觉 token，再拆组件。
+- 当前应用使用 React/TypeScript/Vite，必须保留 `src/theme/` 与 `src/styles/` 中的现有视觉 token，并优先复用 `src/components/xs/`。
+- 看板工作室包含 Vue 组件；修改 React/Vue 边界时保持类型化回调和服务适配层，不在岛组件中直接请求后端。
 - 交互至少覆盖：侧栏激活态、更多展开、应用卡选择、快捷 prompt、发送、语音、附件、新建对话。
 - 修改完成后必须启动本地服务并截图检查：布局、间距、字体、按钮、图标、响应式。
 
-## 正式开发推荐架构
+## 当前正式开发架构
 
-正式开发建议采用纯前端 SPA 起步，暂不在本仓库内实现后端。后端能力由外部业务系统、数据平台、Agent 编排系统或网关接入，前端只保留清晰的服务适配层。
+当前采用纯前端 SPA，暂不在本仓库内实现后端。后端能力由外部业务系统、数据平台、Agent 编排系统或网关接入，前端只保留清晰的服务适配层。
 
-推荐技术栈：
+当前技术栈与约束：
 
-- 应用框架：React + TypeScript + Vite。
+- 应用框架：React 19 + TypeScript 6 + Vite 8。
 - 路由：React Router，按页面功能拆分路由。
 - 组件库：Ant Design v5 作为主组件库；Agent 对话相关组件可评估同生态的 Ant Design X，但必须经过视觉适配后再使用。
 - 图表：Apache ECharts，所有柱状图、折线图、环图、排行图、趋势图都必须通过 ECharts 渲染，不允许用静态 div 或图片伪造。
@@ -82,7 +109,7 @@ Get-Content -LiteralPath <path> -Encoding utf8
 - 页面中优先使用星数组件，不直接散落大量 Ant Design 原子组件；只有一次性局部控件可以直接使用。
 - 组件库不等于图标库。图标继续遵循“星轨 Agent Icons”，可使用 Phosphor React 版本或现有透明 PNG 资产，不要因为引入 Ant Design 就改成 Ant Design Icons 全套风格。
 
-推荐正式目录结构：
+当前目录结构：
 
 ```text
 src/
@@ -90,34 +117,44 @@ src/
   assets/              # logo、头像、透明 PNG icon、品牌插画
   components/
     xs/                # 星数设计系统业务组件
-    base/              # 必要的低层通用组件
+  config/              # feature flag 与运行配置
   features/
-    chat/              # 新建对话、问数过程、输入框、Agent 状态
-    history/           # 历史对话
-    table/             # 智能制表
-    writing/           # 智能写作
+    home/              # 首页功能
     dashboard/         # 我的看板
-    dataAssets/        # 数据资产看板、数据资产管理
+    dashboardStudio/   # React 外壳与 Vue 看板工作室
+  hooks/               # 共享 hooks
   pages/               # 路由页面，只做组合，不堆业务细节
   services/            # API client、业务系统适配器、mock adapter
   stores/              # Zustand UI 状态
   styles/              # tokens.css、全局样式、响应式轨道
+  test/                # Vitest 测试初始化
   theme/               # Ant Design 主题适配
   types/               # 跨模块共享类型
+tests/visual/           # Playwright 视觉、流程和无障碍测试
+scripts/                # 截图与局部检查脚本
+docs/                   # 设计、实施和集成说明
 ```
 
 ## 后端对接边界
 
 - 当前阶段不要在前端仓库内实现业务后端。
 - 所有接口调用必须经过 `src/services/`，页面和组件不得直接写 `fetch`、`axios`、SSE 或 WebSocket 细节。
-- 使用 `VITE_API_BASE_URL`、`VITE_AGENT_BASE_URL` 等环境变量区分本地、测试、生产环境。
+- 使用 `.env.example` 中的 `VITE_DATAHUB_API_BASE_URL`、`VITE_DATAHUB_PROXY_TARGET`、`VITE_DATAHUB_BFF_PORT`、`VITE_QUERY_ASSETS_ENABLED`、`VITE_DASHBOARD_EDITOR_URL` 区分环境；不得记录真实秘密值。
 - Agent 流式输出、文件上传、数据查询、看板指标、知识库列表都先定义 TypeScript 接口和 mock 数据，再接真实系统。
 - 不确定真实接口时，优先保留 adapter 方法名和类型，不在 UI 里硬编码临时字段。
 
-## 迁移规则
+## 页面演进规则
 
-- 从静态原型迁移到正式工程时必须按页面逐个迁移，不要一次性重写全部页面。
-- 每迁移一个页面，先对齐现有 `outputs/xingshu-homepage-system/prototype/` 的视觉和交互，再接入真实数据。
-- 迁移顺序建议：首页、问数过程、智能写作、智能制表、我的看板、历史对话、数据资产看板、数据资产管理。
+- 正式工程迁移已经完成；后续重构仍须按页面逐个推进，不要一次性重写全部页面。
+- 每重构一个页面，先对齐当前主题 token、版本化资产和 `design-qa.md` 中仍可访问的视觉证据，再接入真实数据。
+- 大范围重构顺序建议：首页、问数过程、智能写作、智能制表、我的看板、历史对话、数据资产看板、数据资产管理。
 - 每个页面完成后必须用 Playwright 截图验证 1440、1672、1920/2200 宽度，以及一个移动端宽度。
-- 视觉验收必须参考 `outputs/xingshu-homepage-system/docs/visual-spec.md` 和 `design-qa.md`。
+- 视觉验收必须参考 `design-qa.md`、当前主题 token 和用户重新提供的原始参考图；不得把本机不存在的历史路径当作已验证证据。
+
+## Repository safety
+
+- 保留无关的用户改动，修改前后检查 `git status --short --branch`。
+- 不读取、复制或输出 `.env*` 中的真实地址、Token、密钥和身份信息；只使用 `.env.example` 的变量名与安全占位符。
+- Vite 代理存在后备目标；启动交互流程前显式确认 `VITE_DATAHUB_PROXY_TARGET` 或 `VITE_DATAHUB_BFF_PORT`，避免非预期外部请求。
+- 未经用户明确批准，不执行 commit、push、merge、rebase、reset、clean 或发布。
+- 验证强度与变更范围匹配；历史 QA、旧截图和测试文件数量都不等同于当前工作树已通过。
