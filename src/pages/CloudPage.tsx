@@ -12,7 +12,11 @@ import {
 } from "@phosphor-icons/react";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { XsCountUpText, XsIconTile, XsStatusBar } from "@/components/xs";
+import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
+import { XsCountUpText } from "@/components/xs/XsCountUpText";
+import { XsIconTile } from "@/components/xs/XsIconTile";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
+import { productCapabilities } from "@/config/capabilities";
 import cloudDriveIcon from "@/assets/cloud-icons/cloud-drive.png";
 import {
   createMockCloudService,
@@ -62,7 +66,11 @@ type CloudPageProps = {
 export function CloudPage({ service }: CloudPageProps = {}) {
   const [cloudService] = useState(() => service ?? createMockCloudService());
   const [snapshot, setSnapshot] = useState(() => cloudService.getSnapshot());
-  const [operation, setOperation] = useState<CloudOperationUpdate | null>(null);
+  const [operation, setOperationState] = useState<CloudOperationUpdate | null>(null);
+  const setOperation = (update: CloudOperationUpdate) => setOperationState({
+    ...update,
+    message: `预览模式：${update.message}`
+  });
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(false);
@@ -251,7 +259,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
             loading={isBusy && operation?.operation === "sync"}
             onClick={handleSyncKnowledgeBase}
           >
-            同步知识库
+            模拟同步
           </Button>
           <Button
             disabled={isBusy}
@@ -260,7 +268,7 @@ export function CloudPage({ service }: CloudPageProps = {}) {
             loading={isBusy && operation?.operation === "upload"}
             onClick={handleCreateUploadTask}
           >
-            上传文件
+            模拟上传
           </Button>
           <input
             ref={uploadInputRef}
@@ -273,13 +281,14 @@ export function CloudPage({ service }: CloudPageProps = {}) {
         </>
       )}
     >
+      <XsCapabilityStatus capability={productCapabilities.cloud} />
       <section className="xs-card xs-page-enter cloud-workbench" style={{ animationDelay: "80ms" }} aria-label="我的云盘内容">
         <div className="cloud-workbench__intro">
           <XsIconTile imageSrc={cloudDriveIcon} label="我的云盘" tone="cyan" />
           <div>
             <span className="cloud-eyebrow">企业资料工作台</span>
-            <h2>资料上传后可用于问数、写作和知识问答</h2>
-            <p>按企业文件、知识素材和权限范围组织资料，让常用资料随时可检索、可引用、可追溯。</p>
+            <h2>预览企业资料如何服务问数、写作和知识问答</h2>
+            <p>当前操作仅在本页模拟，不会读取文件内容或把资料上传到企业知识库。</p>
           </div>
         </div>
         <div className="cloud-workbench__metrics" aria-label="云盘概览指标">

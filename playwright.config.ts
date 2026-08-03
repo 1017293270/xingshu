@@ -26,7 +26,9 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --port 4173 --strictPort",
     env: {
-      VITE_DASHBOARD_EDITOR_URL: "http://127.0.0.1:5174/workbenches"
+      VITE_DASHBOARD_EDITOR_URL: "http://127.0.0.1:5174/workbenches",
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:65535",
+      VITE_QUERY_ASSETS_ENABLED: "true"
     },
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,

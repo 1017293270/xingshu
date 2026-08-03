@@ -121,6 +121,7 @@ test.beforeEach(async ({ page }) => {
     window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
     window.localStorage.setItem("xingshu_datahub_space_id", "1");
     window.localStorage.setItem("xingshu_onboarding_v1", "done");
+    window.localStorage.setItem("xingshu_dashboard_onboarding_v2:1", "done");
   });
 });
 
@@ -184,6 +185,24 @@ async function expectNoHorizontalOverflow(page: Page) {
   }));
 
   expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
+}
+
+async function ensureChartsReady(page: Page, expectedCount: number) {
+  const chartHosts = page.locator('[role="img"].xs-echart, [role="img"].vue-echart');
+  await expect(chartHosts).toHaveCount(expectedCount);
+
+  for (let index = 0; index < expectedCount; index += 1) {
+    const chartHost = chartHosts.nth(index);
+    await chartHost.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => chartHost.evaluate((element) =>
+        element.dataset.echartsReady === "true" ||
+        Boolean(element.querySelector('[data-echarts-ready="true"]'))
+      ))
+      .toBe(true);
+  }
+
+  await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(expectedCount);
 }
 
 async function expectReducedMotionStatic(page: Page) {
@@ -259,6 +278,9 @@ test.describe("xingshu page visual smoke", () => {
             page.getByRole("button", { name: "选择模型，当前编排模型" })
           ).toBeVisible();
         }
+        if (pageCase.slug === "login" && viewport.width >= 1024) {
+          await expect(page.locator(".xs-ask-demo")).toBeVisible();
+        }
         if (pageCase.slug === "analysis") {
           await expect(
             page.getByRole("button", { name: "选择模型，当前编排模型" })
@@ -282,7 +304,7 @@ test.describe("xingshu page visual smoke", () => {
           await expect(page.getByRole("button", { name: "打开主导航" })).toBeVisible();
         }
         if (pageCase.charts > 0) {
-          await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(pageCase.charts);
+          await ensureChartsReady(page, pageCase.charts);
           await expect(page.locator('[data-echarts-renderer="canvas"]')).toHaveCount(pageCase.charts);
         }
 
@@ -480,7 +502,9 @@ test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
   await expect(page.getByRole("main", { name: "大屏运行态" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
   await expect(page.locator(".runtime-header")).toHaveCount(0);
-  await expect(page.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "返回大屏库" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新" })).toBeVisible();
+  await expect(page.getByText(/最近更新/)).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expect(page.locator("html")).toHaveJSProperty("scrollHeight", 768);
 
@@ -702,7 +726,7 @@ test("sidebar logo is readable at desktop size", async ({ page }) => {
 
   const logo = page.getByRole("img", { name: "星数" });
   await expect(logo).toBeVisible();
-  await expect(logo).toHaveAttribute("src", /xingshu-logo-transparent/);
+  await expect(logo).toHaveAttribute("src", /xingshu-logo-2x/);
 
   const box = await logo.boundingBox();
   expect(box).not.toBeNull();
@@ -710,12 +734,12 @@ test("sidebar logo is readable at desktop size", async ({ page }) => {
   expect(box!.height).toBeGreaterThanOrEqual(76);
   expect(box!.height).toBeLessThanOrEqual(86);
 
-  const firstNavTile = page.locator(".xs-sidebar__nav .xs-icon-tile").first();
-  await expect(firstNavTile.locator("svg")).toBeVisible();
+  const firstNavTile = page.locator(".xs-sidebar__menu svg").first();
+  await expect(firstNavTile).toBeVisible();
   const firstNavTileBox = await firstNavTile.boundingBox();
   expect(firstNavTileBox).not.toBeNull();
-  expect(firstNavTileBox!.width).toBeGreaterThanOrEqual(28);
-  expect(firstNavTileBox!.height).toBeGreaterThanOrEqual(28);
+  expect(firstNavTileBox!.width).toBeGreaterThanOrEqual(20);
+  expect(firstNavTileBox!.height).toBeGreaterThanOrEqual(20);
 });
 
 test("home page matches the reference welcome workbench composition", async ({ page }) => {
@@ -862,10 +886,11 @@ test("home model selector exposes all modes and recommendation cards open their 
 test("sidebar active item has a stronger selected state", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "我的看板" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
 
   const activeState = await page.getByRole("link", { name: /我的看板/ }).evaluate((element) => {
-    const styles = window.getComputedStyle(element);
+    const selectedItem = element.closest(".ant-menu-item") ?? element;
+    const styles = window.getComputedStyle(selectedItem);
 
     return {
       backgroundColor: styles.backgroundColor,
@@ -883,11 +908,11 @@ test("sidebar active item has a stronger selected state", async ({ page }) => {
 test("dashboard library hides the fixed business demo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "我的看板" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "大屏列表" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "还没有大屏" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "新建空白大屏" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "去问数生成" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "大屏库空状态" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "创建第一个大屏" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建大屏" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "选择收藏问数" })).toBeVisible();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await expect(page.getByText("月度营收趋势")).toHaveCount(0);
 });
@@ -897,7 +922,8 @@ test("dashboard editor opens as a fullscreen zoomable workspace", async ({ page 
   await page.goto("/dashboard-editor");
   await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
-  await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("1");
+  await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("fit");
+  await page.getByRole("combobox", { name: "缩放" }).selectOption("1");
   await page.getByRole("button", { name: "放大" }).click();
   await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("1.25");
   await expectNoHorizontalOverflow(page);
@@ -1029,7 +1055,7 @@ test("mobile navigation reaches every product destination and account route", as
       await expect(page.getByText(destination.readyText, { exact: false }).first()).toBeVisible();
     }
     if (destination.charts) {
-      await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(destination.charts);
+      await ensureChartsReady(page, destination.charts);
     }
     await expect(drawer).toBeHidden();
   }
@@ -1076,7 +1102,7 @@ test.describe("desktop content density", () => {
     { path: "/table", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
     { path: "/writing", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
     { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
-    { path: "/dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
+    { path: "/dashboard", selector: ".dashboard-list__header", minWidth: 1439, maxWidth: 1441 },
     { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/data-management", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 }
   ];
@@ -1101,7 +1127,22 @@ test.describe("desktop content density", () => {
     await page.goto("/table");
     await expect(page.locator(".sheet-list")).toHaveCSS("grid-template-columns", /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/);
 
+    await page.route("**/api/v1/chat/sessions/list", (route) =>
+      route.fulfill({
+        json: {
+          code: 200,
+          message: "history density fixture",
+          data: [1, 2, 3, 4].map((index) => ({
+            sessionId: `density-session-${index}`,
+            title: `经营分析会话 ${index}`,
+            chatMode: "ask",
+            updatedAt: `2026-08-0${index}T10:00:00`
+          }))
+        }
+      })
+    );
     await page.goto("/history");
+    await expect(page.locator(".history-card")).toHaveCount(4);
     await expect(page.locator(".history-list")).toHaveCSS("grid-template-columns", /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/);
   });
 });

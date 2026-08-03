@@ -2,6 +2,13 @@
   animation: analysis-turn-in var(--xs-motion-slow) var(--xs-motion-ease-out) backwards;
 }
 
+/* 浏览器原生跳过视口外旧轮次的布局与绘制，保留真实高度估算，避免长会话
+   在滚动时反复渲染 Markdown、表格和图表。最新流式轮次始终完整渲染。 */
+.analysis-turn--virtualized {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 720px;
+}
+
 .analysis-card__status-copy,
 .reasoning-block:not([hidden]),
 .analysis-result-stage > *,

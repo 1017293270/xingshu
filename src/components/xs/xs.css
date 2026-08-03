@@ -266,7 +266,7 @@
 }
 
 .xs-sidebar__brand img {
-  width: 150px;
+  width: 170px;
   height: auto;
   object-fit: contain;
 }
@@ -1716,6 +1716,11 @@
   margin-inline-end: 0;
   border-radius: 999px;
   font-weight: 720;
+}
+
+.xs-status-bar .ant-tag-warning {
+  color: #713800;
+  background: #fff0c7;
 }
 
 .xs-status-bar__loading {

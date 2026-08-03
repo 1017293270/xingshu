@@ -105,6 +105,15 @@ function createPresetWidget(
 }
 
 const textStyle = { background: "transparent" };
+const titleStyle = { ...textStyle, color: "#102A4C", fontWeight: 800 };
+const subtitleStyle = { ...textStyle, color: "#5C718D", fontWeight: 600 };
+const surfaceStyle = (accent: string, background = "#FFFFFF"): DashboardWidgetStyle => ({
+  background,
+  color: "#17365D",
+  accent,
+  borderColor: "#DCE8F8",
+  borderRadius: 14
+});
 
 export const dashboardStudioPresets: DashboardStudioPreset[] = [
   {
@@ -115,13 +124,13 @@ export const dashboardStudioPresets: DashboardStudioPreset[] = [
     colors: ["#38bdf8", "#22c55e", "#f59e0b", "#ef4444", "#a78bfa"],
     refreshSeconds: 30,
     seeds: [
-      { id: "ai-ops-title", type: "text", title: "大屏标题", content: "AI 运营指挥中心", position: { x: 48, y: 28, w: 920, h: 72 }, locked: true, style: { ...textStyle, color: "#f8fafc", fontSize: 40, fontWeight: 800 } },
-      { id: "ai-ops-subtitle", type: "text", title: "大屏副标题", content: "实时工作量、自动化质量和响应健康度", position: { x: 52, y: 94, w: 780, h: 42 }, locked: true, style: { ...textStyle, color: "#94a3b8", fontSize: 18, fontWeight: 600 } },
-      { id: "ai-ops-metric-requests", type: "metric", title: "AI 请求总量", binding: "ai-ops-total-requests", position: { x: 48, y: 164, w: 360, h: 180 }, style: { background: "rgba(15, 23, 42, 0.92)", color: "#e2e8f0", accent: "#38bdf8" } },
-      { id: "ai-ops-metric-autonomous", type: "metric", title: "自动解决量", binding: "ai-ops-autonomous-resolutions", position: { x: 432, y: 164, w: 360, h: 180 }, style: { background: "rgba(10, 31, 46, 0.92)", color: "#e0f2fe", accent: "#22c55e" } },
-      { id: "ai-ops-trend-chart", type: "line", title: "解决趋势", binding: "ai-ops-resolution-trend", position: { x: 48, y: 380, w: 900, h: 408 }, style: { background: "rgba(15, 23, 42, 0.88)", color: "#dbeafe", accent: "#60a5fa" } },
-      { id: "ai-ops-workload-chart", type: "pie", title: "工作量分布", binding: "ai-ops-workload-mix", position: { x: 988, y: 164, w: 432, h: 360 }, style: { background: "rgba(17, 24, 39, 0.9)", color: "#e5e7eb", accent: "#f59e0b" } },
-      { id: "ai-ops-queue-table", name: "运营队列", type: "table", title: "运营队列明细", binding: "ai-ops-queue-detail", position: { x: 988, y: 560, w: 820, h: 348 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#e2e8f0", accent: "#a78bfa" } },
+      { id: "ai-ops-title", type: "text", title: "大屏标题", content: "AI 运营指挥中心", position: { x: 48, y: 28, w: 920, h: 72 }, locked: true, style: { ...titleStyle, fontSize: 40 } },
+      { id: "ai-ops-subtitle", type: "text", title: "大屏副标题", content: "实时工作量、自动化质量和响应健康度", position: { x: 52, y: 94, w: 780, h: 42 }, locked: true, style: { ...subtitleStyle, fontSize: 18 } },
+      { id: "ai-ops-metric-requests", type: "metric", title: "AI 请求总量", binding: "ai-ops-total-requests", position: { x: 48, y: 164, w: 360, h: 180 }, style: surfaceStyle("#1677FF", "#F7FAFF") },
+      { id: "ai-ops-metric-autonomous", type: "metric", title: "自动解决量", binding: "ai-ops-autonomous-resolutions", position: { x: 432, y: 164, w: 360, h: 180 }, style: surfaceStyle("#18A67A", "#F4FBF8") },
+      { id: "ai-ops-trend-chart", type: "line", title: "解决趋势", binding: "ai-ops-resolution-trend", position: { x: 48, y: 380, w: 900, h: 408 }, style: surfaceStyle("#397BE8") },
+      { id: "ai-ops-workload-chart", type: "pie", title: "工作量分布", binding: "ai-ops-workload-mix", position: { x: 988, y: 164, w: 432, h: 360 }, style: surfaceStyle("#D48718") },
+      { id: "ai-ops-queue-table", name: "运营队列", type: "table", title: "运营队列明细", binding: "ai-ops-queue-detail", position: { x: 988, y: 560, w: 820, h: 348 }, style: surfaceStyle("#7758C7") },
       { id: "ai-ops-footer", type: "text", title: "运行态备注", content: "模拟数据每 30 秒刷新一次，用于稳定验证运行态预览。", position: { x: 50, y: 950, w: 980, h: 46 }, locked: true, style: { ...textStyle, color: "#64748b", fontSize: 16, fontWeight: 600 } }
     ]
   },
@@ -133,14 +142,14 @@ export const dashboardStudioPresets: DashboardStudioPreset[] = [
     colors: ["#14b8a6", "#f97316", "#22c55e", "#0ea5e9", "#f43f5e"],
     refreshSeconds: 45,
     seeds: [
-      { id: "business-title", type: "text", title: "大屏标题", content: "经营 KPI 指挥舱", position: { x: 52, y: 34, w: 780, h: 64 }, locked: true, style: { ...textStyle, color: "#f8fafc", fontSize: 38, fontWeight: 800 } },
-      { id: "business-subtitle", type: "text", title: "大屏副标题", content: "收入脉搏、管道质量和客户变化", position: { x: 54, y: 96, w: 740, h: 42 }, locked: true, style: { ...textStyle, color: "#8fb4c7", fontSize: 17, fontWeight: 600 } },
-      { id: "business-revenue-card", type: "metric", title: "本月收入", binding: "business-revenue", position: { x: 52, y: 168, w: 356, h: 172 }, style: { background: "rgba(12, 42, 49, 0.9)", color: "#ecfeff", accent: "#14b8a6" } },
-      { id: "business-pipeline-card", type: "metric", title: "合格商机管道", binding: "business-pipeline", position: { x: 432, y: 168, w: 356, h: 172 }, style: { background: "rgba(42, 26, 10, 0.88)", color: "#fff7ed", accent: "#f97316" } },
-      { id: "business-area-chart", type: "area", title: "收入运行速率", binding: "business-revenue-trend", position: { x: 52, y: 380, w: 900, h: 408 }, style: { background: "rgba(8, 22, 38, 0.9)", color: "#dff7f3", accent: "#14b8a6" } },
-      { id: "business-channel-chart", type: "bar", title: "渠道收入", binding: "business-channel-mix", position: { x: 988, y: 168, w: 460, h: 336 }, style: { background: "rgba(11, 27, 44, 0.9)", color: "#e0f2fe", accent: "#0ea5e9" } },
-      { id: "business-funnel-chart", type: "funnel", title: "管道阶段", binding: "business-pipeline-stages", position: { x: 1488, y: 168, w: 380, h: 336 }, style: { background: "rgba(35, 17, 28, 0.86)", color: "#ffe4e6", accent: "#fb7185" } },
-      { id: "business-account-table", name: "客户健康", type: "table", title: "客户健康关注清单", binding: "business-account-health", position: { x: 988, y: 548, w: 880, h: 348 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#e2e8f0", accent: "#22c55e" } },
+      { id: "business-title", type: "text", title: "大屏标题", content: "经营 KPI 指挥舱", position: { x: 52, y: 34, w: 780, h: 64 }, locked: true, style: { ...titleStyle, fontSize: 38 } },
+      { id: "business-subtitle", type: "text", title: "大屏副标题", content: "收入脉搏、管道质量和客户变化", position: { x: 54, y: 96, w: 740, h: 42 }, locked: true, style: { ...subtitleStyle, fontSize: 17 } },
+      { id: "business-revenue-card", type: "metric", title: "本月收入", binding: "business-revenue", position: { x: 52, y: 168, w: 356, h: 172 }, style: surfaceStyle("#148D82", "#F2FBFA") },
+      { id: "business-pipeline-card", type: "metric", title: "合格商机管道", binding: "business-pipeline", position: { x: 432, y: 168, w: 356, h: 172 }, style: surfaceStyle("#D96716", "#FFF8F2") },
+      { id: "business-area-chart", type: "area", title: "收入运行速率", binding: "business-revenue-trend", position: { x: 52, y: 380, w: 900, h: 408 }, style: surfaceStyle("#148D82") },
+      { id: "business-channel-chart", type: "bar", title: "渠道收入", binding: "business-channel-mix", position: { x: 988, y: 168, w: 460, h: 336 }, style: surfaceStyle("#1677B8") },
+      { id: "business-funnel-chart", type: "funnel", title: "管道阶段", binding: "business-pipeline-stages", position: { x: 1488, y: 168, w: 380, h: 336 }, style: surfaceStyle("#D94E73") },
+      { id: "business-account-table", name: "客户健康", type: "table", title: "客户健康关注清单", binding: "business-account-health", position: { x: 988, y: 548, w: 880, h: 348 }, style: surfaceStyle("#279463") },
       { id: "business-bottom-rule", type: "decoration", title: "底部边框", props: { variant: "frame" }, position: { x: 52, y: 928, w: 1816, h: 38 }, locked: true, style: { background: "rgba(20, 184, 166, 0.06)", accent: "#14b8a6", borderColor: "rgba(20, 184, 166, 0.36)" } }
     ]
   },
@@ -152,14 +161,14 @@ export const dashboardStudioPresets: DashboardStudioPreset[] = [
     colors: ["#f59e0b", "#38bdf8", "#a78bfa", "#22c55e", "#f87171"],
     refreshSeconds: 30,
     seeds: [
-      { id: "service-title", type: "text", title: "大屏标题", content: "客服体验分析", position: { x: 50, y: 30, w: 760, h: 68 }, locked: true, style: { ...textStyle, color: "#f8fafc", fontSize: 40, fontWeight: 800 } },
-      { id: "service-subtitle", type: "text", title: "大屏副标题", content: "体验质量、渠道压力和升级关注", position: { x: 54, y: 96, w: 760, h: 42 }, locked: true, style: { ...textStyle, color: "#a6b7d4", fontSize: 17, fontWeight: 600 } },
-      { id: "service-satisfaction-card", type: "metric", title: "客户满意度", binding: "service-satisfaction", position: { x: 52, y: 164, w: 356, h: 172 }, style: { background: "rgba(43, 32, 13, 0.9)", color: "#fef3c7", accent: "#f59e0b" } },
-      { id: "service-response-card", type: "metric", title: "首次响应 SLA", binding: "service-response", position: { x: 432, y: 164, w: 356, h: 172 }, style: { background: "rgba(8, 31, 48, 0.9)", color: "#e0f2fe", accent: "#38bdf8" } },
-      { id: "service-response-chart", type: "line", title: "响应趋势", binding: "service-response-trend", position: { x: 52, y: 380, w: 770, h: 392 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#dbeafe", accent: "#38bdf8" } },
-      { id: "service-quality-radar-chart", name: "服务质量", type: "radar", title: "服务质量画像", binding: "service-quality-radar", position: { x: 858, y: 164, w: 520, h: 408 }, style: { background: "rgba(30, 23, 52, 0.9)", color: "#ede9fe", accent: "#a78bfa" } },
-      { id: "service-contact-chart", type: "pie", title: "触点分布", binding: "service-contact-mix", position: { x: 1412, y: 164, w: 440, h: 408 }, style: { background: "rgba(17, 24, 39, 0.9)", color: "#e5e7eb", accent: "#22c55e" } },
-      { id: "service-escalation-table-component", type: "table", title: "升级关注", binding: "service-escalation-table", position: { x: 858, y: 612, w: 994, h: 312 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#e2e8f0", accent: "#f87171" } },
+      { id: "service-title", type: "text", title: "大屏标题", content: "客服体验分析", position: { x: 50, y: 30, w: 760, h: 68 }, locked: true, style: { ...titleStyle, fontSize: 40 } },
+      { id: "service-subtitle", type: "text", title: "大屏副标题", content: "体验质量、渠道压力和升级关注", position: { x: 54, y: 96, w: 760, h: 42 }, locked: true, style: { ...subtitleStyle, fontSize: 17 } },
+      { id: "service-satisfaction-card", type: "metric", title: "客户满意度", binding: "service-satisfaction", position: { x: 52, y: 164, w: 356, h: 172 }, style: surfaceStyle("#C98213", "#FFF9EE") },
+      { id: "service-response-card", type: "metric", title: "首次响应 SLA", binding: "service-response", position: { x: 432, y: 164, w: 356, h: 172 }, style: surfaceStyle("#1677B8", "#F4FAFF") },
+      { id: "service-response-chart", type: "line", title: "响应趋势", binding: "service-response-trend", position: { x: 52, y: 380, w: 770, h: 392 }, style: surfaceStyle("#1677B8") },
+      { id: "service-quality-radar-chart", name: "服务质量", type: "radar", title: "服务质量画像", binding: "service-quality-radar", position: { x: 858, y: 164, w: 520, h: 408 }, style: surfaceStyle("#7758C7") },
+      { id: "service-contact-chart", type: "pie", title: "触点分布", binding: "service-contact-mix", position: { x: 1412, y: 164, w: 440, h: 408 }, style: surfaceStyle("#279463") },
+      { id: "service-escalation-table-component", type: "table", title: "升级关注", binding: "service-escalation-table", position: { x: 858, y: 612, w: 994, h: 312 }, style: surfaceStyle("#D0525B") },
       { id: "service-note", type: "text", title: "运行态备注", content: "面向客服主管和服务负责人的运营视图。", position: { x: 52, y: 842, w: 720, h: 46 }, locked: true, style: { ...textStyle, color: "#64748b", fontSize: 16 } }
     ]
   },
@@ -171,15 +180,15 @@ export const dashboardStudioPresets: DashboardStudioPreset[] = [
     colors: ["#22c55e", "#38bdf8", "#f59e0b", "#f43f5e", "#a78bfa"],
     refreshSeconds: 30,
     seeds: [
-      { id: "quality-title", type: "text", title: "大屏标题", content: "数据质量与系统健康", position: { x: 50, y: 32, w: 840, h: 68 }, locked: true, style: { ...textStyle, color: "#f8fafc", fontSize: 40, fontWeight: 800 } },
-      { id: "quality-subtitle", type: "text", title: "大屏副标题", content: "新鲜度、链路可靠性和修复状态", position: { x: 54, y: 98, w: 760, h: 42 }, locked: true, style: { ...textStyle, color: "#94a3b8", fontSize: 17, fontWeight: 600 } },
-      { id: "quality-freshness-card", type: "metric", title: "新鲜数据源", binding: "quality-freshness", position: { x: 52, y: 166, w: 344, h: 170 }, style: { background: "rgba(10, 36, 25, 0.9)", color: "#dcfce7", accent: "#22c55e" } },
-      { id: "quality-incident-card", type: "metric", title: "未处理事件", binding: "quality-incidents", position: { x: 420, y: 166, w: 344, h: 170 }, style: { background: "rgba(43, 19, 23, 0.9)", color: "#ffe4e6", accent: "#f43f5e" } },
-      { id: "quality-freshness-area", type: "area", title: "新鲜度趋势", binding: "quality-freshness-trend", position: { x: 52, y: 382, w: 764, h: 392 }, style: { background: "rgba(8, 28, 25, 0.9)", color: "#d1fae5", accent: "#22c55e" } },
-      { id: "quality-error-bars", name: "源系统错误", type: "bar", title: "各系统错误数", binding: "quality-source-errors", position: { x: 852, y: 166, w: 500, h: 352 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#e2e8f0", accent: "#f59e0b" } },
-      { id: "quality-health-radar", name: "平台健康", type: "radar", title: "平台健康画像", binding: "quality-platform-health", position: { x: 1390, y: 166, w: 458, h: 352 }, style: { background: "rgba(26, 22, 48, 0.88)", color: "#ede9fe", accent: "#a78bfa" } },
-      { id: "quality-remediation-funnel", type: "funnel", title: "修复漏斗", binding: "quality-remediation", position: { x: 852, y: 558, w: 500, h: 352 }, style: { background: "rgba(37, 25, 15, 0.88)", color: "#ffedd5", accent: "#fb7185" } },
-      { id: "quality-job-table-component", type: "table", title: "数据任务", binding: "quality-job-table", position: { x: 1390, y: 558, w: 458, h: 352 }, style: { background: "rgba(15, 23, 42, 0.9)", color: "#e2e8f0", accent: "#38bdf8" } }
+      { id: "quality-title", type: "text", title: "大屏标题", content: "数据质量与系统健康", position: { x: 50, y: 32, w: 840, h: 68 }, locked: true, style: { ...titleStyle, fontSize: 40 } },
+      { id: "quality-subtitle", type: "text", title: "大屏副标题", content: "新鲜度、链路可靠性和修复状态", position: { x: 54, y: 98, w: 760, h: 42 }, locked: true, style: { ...subtitleStyle, fontSize: 17 } },
+      { id: "quality-freshness-card", type: "metric", title: "新鲜数据源", binding: "quality-freshness", position: { x: 52, y: 166, w: 344, h: 170 }, style: surfaceStyle("#279463", "#F3FBF6") },
+      { id: "quality-incident-card", type: "metric", title: "未处理事件", binding: "quality-incidents", position: { x: 420, y: 166, w: 344, h: 170 }, style: surfaceStyle("#C9343F", "#FFF6F7") },
+      { id: "quality-freshness-area", type: "area", title: "新鲜度趋势", binding: "quality-freshness-trend", position: { x: 52, y: 382, w: 764, h: 392 }, style: surfaceStyle("#279463") },
+      { id: "quality-error-bars", name: "源系统错误", type: "bar", title: "各系统错误数", binding: "quality-source-errors", position: { x: 852, y: 166, w: 500, h: 352 }, style: surfaceStyle("#C98213") },
+      { id: "quality-health-radar", name: "平台健康", type: "radar", title: "平台健康画像", binding: "quality-platform-health", position: { x: 1390, y: 166, w: 458, h: 352 }, style: surfaceStyle("#7758C7") },
+      { id: "quality-remediation-funnel", type: "funnel", title: "修复漏斗", binding: "quality-remediation", position: { x: 852, y: 558, w: 500, h: 352 }, style: surfaceStyle("#D0525B") },
+      { id: "quality-job-table-component", type: "table", title: "数据任务", binding: "quality-job-table", position: { x: 1390, y: 558, w: 458, h: 352 }, style: surfaceStyle("#1677B8") }
     ]
   }
 ];

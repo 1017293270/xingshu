@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import logo from "@/assets/brand/xingshu-logo-transparent.png";
+import { Link } from "react-router";
+import logo from "@/assets/brand/xingshu-logo-2x.png";
 import welcomeHero from "@/assets/welcome/xingshu-welcome-hero-image2.webp";
 import arrowIcon from "@/assets/welcome/icons/welcome-icon-enter-arrow.png";
 import trustIcon from "@/assets/welcome/icons/welcome-icon-trust.png";
@@ -33,7 +33,7 @@ export function WelcomePage() {
       <div className="welcome-page__shell">
         <header className="welcome-page__header" aria-label="星数欢迎页顶部">
           <Link className="welcome-page__brand" to="/" aria-label="进入星数首页">
-            <img src={logo} alt="星数" />
+            <img src={logo} alt="星数" width={400} height={183} />
           </Link>
           <div className="welcome-page__trust">
             <img className="welcome-page__trust-icon" src={trustIcon} alt="" data-icon-source="image2" />

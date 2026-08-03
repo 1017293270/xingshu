@@ -182,6 +182,11 @@
   margin-top: 24px;
 }
 
+.login-showcase__demo-placeholder {
+  min-height: 350px;
+  margin-top: 24px;
+}
+
 .login-showcase .xs-ask-demo__thread {
   height: 300px;
 }
@@ -470,8 +475,8 @@
   min-height: 50px;
   margin-top: 6px;
   border-radius: var(--xs-radius-control);
-  background: var(--xs-primary);
-  box-shadow: 0 10px 20px rgba(22, 119, 255, 0.18);
+  background: #1468e8;
+  box-shadow: 0 10px 20px rgba(20, 104, 232, 0.18);
   font-size: 16px;
   font-weight: 700;
   transition:
@@ -482,8 +487,8 @@
 
 .login-panel__submit:hover,
 .login-panel__submit:focus-visible {
-  background: #0f63f4;
-  box-shadow: 0 14px 26px rgba(22, 119, 255, 0.24);
+  background: #0f5fd7;
+  box-shadow: 0 14px 26px rgba(20, 104, 232, 0.24);
   transform: translateY(-1px);
 }
 
@@ -502,6 +507,7 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .login-panel__link:hover,
@@ -732,7 +738,7 @@
   }
 
   .login-showcase .xs-ask-demo {
-    max-width: 100%;
+    display: none;
   }
 
   .login-panel {

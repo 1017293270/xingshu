@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes, resolveRouteFallbackVariant } from "./AppRoutes";
@@ -11,6 +11,8 @@ import { useUiStore } from "@/stores/uiStore";
 vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
   DashboardDesignerIsland: () => <div aria-label="星数大屏设计器">Vue 大屏工作区</div>
 }));
+
+const ROUTE_LOAD_TIMEOUT_MS = 4_000;
 
 function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
   const authenticated = options.authenticated ?? true;
@@ -76,8 +78,12 @@ describe("AppRoutes", () => {
   it.each(routeCases)("renders %s", async (path, heading, landmark) => {
     renderRoute(path, { authenticated: !["/welcome", "/login"].includes(path) });
 
-    expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
-    expect(await screen.findByLabelText(landmark)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: heading }, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText(landmark, {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+    ).toBeInTheDocument();
   });
 
   it("opens analysis as a blank agent workspace without a mode switcher", async () => {
@@ -132,7 +138,7 @@ describe("AppRoutes", () => {
     expect(await screen.findByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "星数" })).toHaveAttribute(
       "src",
-      expect.stringContaining("xingshu-logo-transparent.png")
+      expect.stringContaining("xingshu-logo-2x.png")
     );
     expect(screen.getByRole("link", { name: /数据资产管理/ })).toHaveAttribute("href", "/data-management");
     expect(container.querySelectorAll(".xs-sidebar__menu > .ant-menu-item")).toHaveLength(5);
@@ -288,10 +294,10 @@ describe("AppRoutes", () => {
 
     await user.clear(screen.getByRole("textbox", { name: "制表需求" }));
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成华南区客户销售排行");
-    await user.click(screen.getByRole("button", { name: /生成/ }));
+    await user.click(screen.getByRole("button", { name: "预览需求" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "制表需求已加入生成队列，尚未生成：生成华南区客户销售排行"
+      "预览需求已记录，不会创建真实报表：生成华南区客户销售排行"
     );
   });
 
@@ -301,10 +307,10 @@ describe("AppRoutes", () => {
 
     await user.clear(screen.getByRole("textbox", { name: "写作需求" }));
     await user.type(screen.getByRole("textbox", { name: "写作需求" }), "写一份数据资产月报");
-    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(screen.getByRole("button", { name: "预览写作需求" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "写作需求已加入生成队列，尚未生成：写一份数据资产月报"
+      "预览需求已记录，不会调用真实生成服务：写一份数据资产月报"
     );
   });
 
@@ -322,6 +328,8 @@ describe("AppRoutes", () => {
     renderRoute("/dashboard");
 
     await user.click((await screen.findAllByRole("button", { name: "新建大屏" }))[0]);
+    await user.type(await screen.findByLabelText("大屏名称"), "路由回归看板");
+    await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     expect(await screen.findByRole("heading", { name: "看板编辑器" })).toBeInTheDocument();
     expect(await screen.findByLabelText("星数大屏设计器")).toBeInTheDocument();

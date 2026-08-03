@@ -2,11 +2,13 @@ import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react";
 import { Input, Pagination, Segmented, Tag, Tooltip } from "antd";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
 import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
 import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.svg";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar, type XsStatusTone } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
+import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import {
   filterHistorySessionList,
   listHistorySessions,
@@ -62,6 +64,7 @@ function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
 
 export function HistoryPage() {
   const navigate = useNavigate();
+  const sessionScope = useSessionQueryScope();
   const restoreAskDataHistory = useUiStore((state) => state.restoreAskDataHistory);
   const [keyword, setKeyword] = useState("");
   const deferredKeyword = useDeferredValue(keyword);
@@ -73,7 +76,7 @@ export function HistoryPage() {
   const historyListRef = useRef<HTMLElement | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const historyQuery = useQuery({
-    queryKey: ["historySessions"],
+    queryKey: sessionQueryKey(sessionScope, "historySessions"),
     queryFn: listHistorySessions,
     placeholderData: keepPreviousData
   });

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 
 export function setReducedMotion(matches: boolean) {
   Object.defineProperty(window, "matchMedia", {
@@ -19,3 +19,8 @@ export function setReducedMotion(matches: boolean) {
 }
 
 setReducedMotion(false);
+
+beforeEach(() => {
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+});

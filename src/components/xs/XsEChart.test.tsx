@@ -14,7 +14,11 @@ const chartMocks = vi.hoisted(() => {
   return { init, setOption, resize, dispose };
 });
 
-vi.mock("echarts", () => ({ init: chartMocks.init }));
+vi.mock("@/services/echartsRuntime", () => ({ init: chartMocks.init }));
+
+function renderEagerChart(option: Parameters<typeof XsEChart>[0]["option"], label = "营收趋势图") {
+  return render(<XsEChart option={option} label={label} renderPolicy="eager" />);
+}
 
 afterEach(() => {
   cleanup();
@@ -55,11 +59,24 @@ describe("XsEChart", () => {
     expect(chartMocks.init).not.toHaveBeenCalled();
   });
 
+  it("includes the data summary in the chart's accessible name", () => {
+    const { getByRole } = render(
+      <XsEChart option={{ series: [] }} label="营收趋势图" summary="本月营收 120 万元，环比增长 8%" />
+    );
+
+    expect(
+      getByRole("img", { name: "营收趋势图。本月营收 120 万元，环比增长 8%" })
+    ).toBeInTheDocument();
+  });
+
   it("initializes once and applies option updates without rebuilding the chart", async () => {
-    vi.stubEnv("MODE", "development");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 640, bottom: 360, width: 640, height: 360,
+      toJSON: () => ({})
+    });
     const firstOption = { title: { text: "第一版" } };
     const nextOption = { title: { text: "第二版" } };
-    const { rerender } = render(<XsEChart option={firstOption} label="营收趋势图" />);
+    const { rerender } = renderEagerChart(firstOption);
 
     await waitFor(() => expect(chartMocks.init).toHaveBeenCalledTimes(1));
     expect(chartMocks.setOption).toHaveBeenLastCalledWith(firstOption, {
@@ -68,7 +85,7 @@ describe("XsEChart", () => {
       replaceMerge: ["series", "xAxis", "yAxis"]
     });
 
-    rerender(<XsEChart option={nextOption} label="营收趋势图" />);
+    rerender(<XsEChart option={nextOption} label="营收趋势图" renderPolicy="eager" />);
 
     await waitFor(() =>
       expect(chartMocks.setOption).toHaveBeenLastCalledWith(nextOption, {
@@ -81,7 +98,10 @@ describe("XsEChart", () => {
   });
 
   it("replaces structural components when switching between cartesian and pie charts", async () => {
-    vi.stubEnv("MODE", "development");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 640, bottom: 360, width: 640, height: 360,
+      toJSON: () => ({})
+    });
     const lineOption = {
       xAxis: { type: "category" as const },
       yAxis: { type: "value" as const },
@@ -90,10 +110,10 @@ describe("XsEChart", () => {
     const pieOption = {
       series: [{ type: "pie" as const, data: [{ name: "已治理", value: 2 }] }]
     };
-    const { rerender } = render(<XsEChart option={lineOption} label="资产类型图" />);
+    const { rerender } = renderEagerChart(lineOption, "资产类型图");
 
     await waitFor(() => expect(chartMocks.init).toHaveBeenCalledTimes(1));
-    rerender(<XsEChart option={pieOption} label="资产类型图" />);
+    rerender(<XsEChart option={pieOption} label="资产类型图" renderPolicy="eager" />);
 
     await waitFor(() =>
       expect(chartMocks.setOption).toHaveBeenLastCalledWith(pieOption, {
@@ -106,8 +126,11 @@ describe("XsEChart", () => {
   });
 
   it("disposes the chart instance when unmounted", async () => {
-    vi.stubEnv("MODE", "development");
-    const { unmount } = render(<XsEChart option={{ series: [] }} label="营收趋势图" />);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 640, bottom: 360, width: 640, height: 360,
+      toJSON: () => ({})
+    });
+    const { unmount } = renderEagerChart({ series: [] });
     await waitFor(() => expect(chartMocks.init).toHaveBeenCalledTimes(1));
 
     unmount();
@@ -116,7 +139,10 @@ describe("XsEChart", () => {
   });
 
   it("coalesces ResizeObserver notifications into one animation frame", async () => {
-    vi.stubEnv("MODE", "development");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 640, bottom: 360, width: 640, height: 360,
+      toJSON: () => ({})
+    });
     let notifyResize: ResizeObserverCallback = () => undefined;
     const disconnect = vi.fn();
     const observe = vi.fn();
@@ -133,7 +159,7 @@ describe("XsEChart", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     const addWindowListener = vi.spyOn(window, "addEventListener");
 
-    render(<XsEChart option={{ series: [] }} label="营收趋势图" />);
+    renderEagerChart({ series: [] });
     await waitFor(() => expect(chartMocks.init).toHaveBeenCalledTimes(1));
 
     notifyResize([], {} as ResizeObserver);
@@ -148,11 +174,14 @@ describe("XsEChart", () => {
   });
 
   it("forces ECharts animation off when reduced motion is preferred", async () => {
-    vi.stubEnv("MODE", "development");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 640, bottom: 360, width: 640, height: 360,
+      toJSON: () => ({})
+    });
     setReducedMotion(true);
     const option = { animation: true, series: [] };
 
-    render(<XsEChart option={option} label="营收趋势图" />);
+    renderEagerChart(option);
 
     await waitFor(() => expect(chartMocks.setOption).toHaveBeenCalled());
     expect(chartMocks.setOption).toHaveBeenLastCalledWith(

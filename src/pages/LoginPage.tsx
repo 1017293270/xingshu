@@ -1,9 +1,9 @@
 import { Button, Form, Input } from "antd";
 import { ChartLineUp, Check, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User, WarningCircle } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import logo from "@/assets/brand/xingshu-logo-transparent.png";
-import { XsAskDataDemo } from "@/components/xs";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import logo from "@/assets/brand/xingshu-logo-2x.png";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { loginToDataHub } from "@/services/dataHubAuthService";
 import { DataHubServiceError } from "@/services/dataHubClient";
 import { ensureDataHubSpace } from "@/services/dataHubSpaceService";
@@ -23,13 +23,20 @@ const showcaseCapabilities = [
 ];
 
 const loginStepTimeoutMs = 8_000;
+const XsAskDataDemo = lazy(() => import("@/components/xs/XsAskDataDemo").then((module) => ({
+  default: module.XsAskDataDemo
+})));
 
 function getSafeReturnPath(value: unknown) {
+  const containsUnsafeCharacter = typeof value === "string" && Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return character === "\\" || code <= 31 || code === 127;
+  });
   if (
     typeof value !== "string" ||
     !value.startsWith("/") ||
     value.startsWith("//") ||
-    /[\\\u0000-\u001F\u007F]/.test(value)
+    containsUnsafeCharacter
   ) {
     return "/";
   }
@@ -47,6 +54,7 @@ function getSafeReturnPath(value: unknown) {
 }
 
 export function LoginPage() {
+  const [form] = Form.useForm<LoginFormValues>();
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useDataHubAuthStore((state) => state.setSession);
@@ -57,6 +65,10 @@ export function LoginPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [isLoginComplete, setIsLoginComplete] = useState(false);
   const loginAbortRef = useRef<AbortController | null>(null);
+  const showAskDataDemo = useMediaQuery("(min-width: 1024px)");
+  const isEncryptedTransport = typeof window !== "undefined" && window.location.protocol === "https:";
+  const AccessStatusIcon = isEncryptedTransport ? ShieldCheck : Database;
+  const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
   const locationState = location.state as { from?: unknown; sessionExpired?: boolean } | null;
   const returnPath = getSafeReturnPath(locationState?.from);
   const isSessionExpired = locationState?.sessionExpired === true || sessionExpired;
@@ -148,7 +160,7 @@ export function LoginPage() {
       <section className="login-showcase" aria-labelledby="login-page-title">
         <header className="login-showcase__header login-enter" style={{ animationDelay: "0ms" }}>
           <Link className="login-showcase__brand" to="/welcome" aria-label="返回星数欢迎页">
-            <img src={logo} alt="星数 XingShu" />
+            <img src={logo} alt="星数 XingShu" width={400} height={183} />
           </Link>
         </header>
 
@@ -168,7 +180,11 @@ export function LoginPage() {
               </p>
             </div>
 
-            <XsAskDataDemo className="login-enter" style={{ animationDelay: "300ms" }} />
+            {showAskDataDemo ? (
+              <Suspense fallback={<div className="login-showcase__demo-placeholder" aria-hidden="true" />}>
+                <XsAskDataDemo className="login-enter" style={{ animationDelay: "300ms" }} />
+              </Suspense>
+            ) : null}
           </div>
         </div>
 
@@ -189,17 +205,17 @@ export function LoginPage() {
 
       <section className="login-access" aria-label="登录星数">
         <div className="login-access__secure login-enter" style={{ animationDelay: "120ms" }}>
-          <ShieldCheck size={15} weight="fill" />
-          企业级安全防护已启用
+          <AccessStatusIcon size={15} weight="fill" />
+          {isEncryptedTransport ? "当前页面使用加密连接" : "登录时将验证 DataHub 连接"}
         </div>
 
         <div className="login-access__inner">
           <div className="login-panel login-enter" style={{ animationDelay: "200ms" }}>
             <div className="login-panel__meta">
-              <span>SECURE ACCESS</span>
+              <span>{isEncryptedTransport ? "ENCRYPTED ACCESS" : "DATAHUB ACCESS"}</span>
               <span className="login-panel__connection">
                 <i aria-hidden="true" />
-                安全连接
+                {isEncryptedTransport ? "加密连接" : "登录时验证连接"}
               </span>
             </div>
             <div className="login-panel__head">
@@ -218,10 +234,17 @@ export function LoginPage() {
             ) : null}
 
             <Form<LoginFormValues>
+              form={form}
               className="login-panel__form"
               layout="vertical"
               requiredMark={false}
               onFinish={handleLogin}
+              onFinishFailed={({ errorFields }) => {
+                const firstInvalidField = errorFields[0]?.name;
+                if (firstInvalidField) {
+                  form.scrollToField(firstInvalidField, { focus: true });
+                }
+              }}
               initialValues={{ username: "", password: "" }}
             >
               <Form.Item
@@ -264,9 +287,15 @@ export function LoginPage() {
                 {isLoginComplete ? "登录成功" : "登录"}
               </Button>
 
-              <button className="login-panel__link" type="button" onClick={handleForgotPassword}>
-                忘记密码
-              </button>
+              {supportUrl ? (
+                <a className="login-panel__link" href={supportUrl} target="_blank" rel="noreferrer">
+                  忘记密码
+                </a>
+              ) : (
+                <button className="login-panel__link" type="button" onClick={handleForgotPassword}>
+                  忘记密码
+                </button>
+              )}
             </Form>
 
             {statusMessage ? (

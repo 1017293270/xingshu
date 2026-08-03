@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppProviders } from "@/app/providers";
 import {
@@ -53,6 +53,8 @@ describe("dashboard and cloud page actions", () => {
     renderPage(<DashboardPage />);
 
     await user.click(screen.getAllByRole("button", { name: "新建大屏" })[0]);
+    await user.type(await screen.findByLabelText("大屏名称"), "全高清空白看板");
+    await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     const records = JSON.parse(localStorage.getItem("xingshu.dashboard.records.v1") ?? "[]") as Array<{
       schema: { canvas: { width: number; height: number }; widgets: unknown[] };
@@ -72,20 +74,22 @@ describe("dashboard and cloud page actions", () => {
 
     expect(screen.getByText("企业资料工作台")).toBeInTheDocument();
     expect(screen.queryByText(/adapter|内部实现|数据适配层|尚未上传|正式后端接入前/)).not.toBeInTheDocument();
-    expect(screen.getByText("6 GB")).toBeInTheDocument();
+    expect(screen.getByText("6 GB", { selector: ".sr-only" })).toBeInTheDocument();
     expect(screen.getAllByRole("article", { name: /云盘资料：/ })).toHaveLength(3);
 
     const file = new File(["region,revenue"], "七月经营数据.csv", { type: "text/csv" });
     await user.upload(screen.getByLabelText("选择上传文件"), file);
 
     expect(await screen.findByRole("status")).toHaveTextContent("七月经营数据.csv 已上传");
-    expect(within(screen.getByLabelText("云盘概览指标")).getByText("87")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("云盘概览指标")).getByText("87", { selector: ".sr-only" })
+    ).toBeInTheDocument();
     expect(within(screen.getByRole("article", { name: "云盘资料：企业文件" })).getByText("2,347 份资料")).toBeInTheDocument();
     const uploadedRow = screen.getByText("七月经营数据.csv").closest(".cloud-recent__row");
     expect(uploadedRow).not.toBeNull();
     expect(within(uploadedRow as HTMLElement).getByText("待同步")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "同步知识库" }));
+    await user.click(screen.getByRole("button", { name: "模拟同步" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("知识库已同步");
     expect(screen.getByText("最近同步：2026-07-10 23:36")).toBeInTheDocument();
@@ -128,8 +132,8 @@ describe("dashboard and cloud page actions", () => {
       new File(["region,revenue"], "待上传.csv", { type: "text/csv" })
     );
 
-    expect(screen.getByRole("button", { name: /上传文件/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "同步知识库" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /模拟上传/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "模拟同步" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "查看同步状态" })).toBeDisabled();
 
     await act(async () => {
@@ -137,7 +141,7 @@ describe("dashboard and cloud page actions", () => {
       request.resolve({ ok: true, snapshot: seedService.getSnapshot() });
       await request.promise;
     });
-    expect(screen.getByRole("button", { name: "上传文件" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "模拟上传" })).toBeEnabled();
   });
 
   it("maps a rejected cloud adapter request to a recoverable error", async () => {
@@ -153,10 +157,10 @@ describe("dashboard and cloud page actions", () => {
     };
     renderPage(<CloudPage service={service} />);
 
-    await user.click(screen.getByRole("button", { name: "同步知识库" }));
+    await user.click(screen.getByRole("button", { name: "模拟同步" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("知识库同步失败，请重试");
-    expect(screen.getByRole("button", { name: "同步知识库" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "模拟同步" })).toBeEnabled();
   });
 
   it("maps an unsuccessful cloud result without a terminal observer update to an error", async () => {
@@ -169,10 +173,10 @@ describe("dashboard and cloud page actions", () => {
     };
     renderPage(<CloudPage service={service} />);
 
-    await user.click(screen.getByRole("button", { name: "同步知识库" }));
+    await user.click(screen.getByRole("button", { name: "模拟同步" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("知识库同步失败，请重试");
-    expect(screen.getByRole("button", { name: "同步知识库" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "模拟同步" })).toBeEnabled();
   });
 
   it("synthesizes a successful cloud terminal state when the observer is omitted", async () => {
@@ -192,10 +196,10 @@ describe("dashboard and cloud page actions", () => {
     };
     renderPage(<CloudPage service={service} />);
 
-    await user.click(screen.getByRole("button", { name: "同步知识库" }));
+    await user.click(screen.getByRole("button", { name: "模拟同步" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("知识库已同步，更新时间 2026-07-10 08:58");
-    expect(screen.getByRole("button", { name: "同步知识库" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "模拟同步" })).toBeEnabled();
   });
 
   it("ignores late observer updates from a completed cloud request", async () => {
@@ -223,7 +227,7 @@ describe("dashboard and cloud page actions", () => {
       screen.getByLabelText("选择上传文件"),
       new File(["region,revenue"], "已上传.csv", { type: "text/csv" })
     );
-    await user.click(screen.getByRole("button", { name: "同步知识库" }));
+    await user.click(screen.getByRole("button", { name: "模拟同步" }));
     expect(screen.getByRole("status")).toHaveTextContent("正在同步");
 
     act(() => {

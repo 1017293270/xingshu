@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Input, Modal, Pagination, Segmented } from "antd";
+import { MagnifyingGlass } from "@phosphor-icons/react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import dashboardEmptyIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { DashboardCard } from "@/features/dashboard/DashboardCard";
+import { hasCompletedDashboardOnboarding } from "@/features/dashboard/DashboardOnboarding";
 import {
   archiveDashboard,
   copyDashboard,
@@ -14,6 +18,8 @@ import {
 } from "@/services/dashboardAnalyticsService";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import type { DashboardRecord, DashboardVersion } from "@/types/dashboardStudio";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
+import { useUiStore } from "@/stores/uiStore";
 import "./styles/page-shell.css";
 import "./styles/dashboard-list.css";
 
@@ -30,28 +36,44 @@ function runtimePath(id: string) {
 export function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const sessionScope = useSessionQueryScope();
+  const dashboardsKey = sessionQueryKey(sessionScope, "analytics-dashboards");
+  const userId = useDataHubAuthStore((state) => state.user?.userId);
+  const dashboardOnboardingOpen = useUiStore((state) => state.dashboardOnboardingOpen);
+  const setDashboardOnboardingOpen = useUiStore((state) => state.setDashboardOnboardingOpen);
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({});
   const [operationError, setOperationError] = useState("");
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | DashboardRecord["status"]>("all");
+  const [page, setPage] = useState(1);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createSource, setCreateSource] = useState<"blank" | "favorites">("blank");
+  const [archiveCandidate, setArchiveCandidate] = useState<DashboardRecord | null>(null);
+  const pageSize = 9;
 
   const dashboardsQuery = useQuery({
-    queryKey: ["analytics-dashboards"],
+    queryKey: dashboardsKey,
     queryFn: listDashboards,
     initialData: getDashboardListInitialData,
     retry: false
   });
-  const refreshList = () => queryClient.invalidateQueries({ queryKey: ["analytics-dashboards"] });
+  const refreshList = () => queryClient.invalidateQueries({ queryKey: dashboardsKey });
 
   const createMutation = useMutation({
-    mutationFn: (_source: "blank" | "favorites") =>
-      createDashboard(createBlankDashboard({ title: "未命名大屏" })),
-    onSuccess: (record, source) => navigate(editorPath(record.id, source === "favorites" ? "favorites" : undefined)),
+    mutationFn: ({ title }: { source: "blank" | "favorites"; title: string }) =>
+      createDashboard(createBlankDashboard({ title })),
+    onSuccess: (record, variables) => {
+      setCreateDialogOpen(false);
+      navigate(editorPath(record.id, variables.source === "favorites" ? "favorites" : undefined));
+    },
     onError: (error) => setOperationError(error instanceof Error ? error.message : "创建看板失败")
   });
   const copyMutation = useMutation({
     mutationFn: copyDashboard,
     onSuccess: (record) => {
-      queryClient.setQueryData<DashboardRecord[]>(["analytics-dashboards"], (current = []) => [record, ...current]);
+      queryClient.setQueryData<DashboardRecord[]>(dashboardsKey, (current = []) => [record, ...current]);
       navigate(editorPath(record.id));
     },
     onError: (error) => setOperationError(error instanceof Error ? error.message : "复制看板失败")
@@ -59,7 +81,7 @@ export function DashboardPage() {
   const archiveMutation = useMutation({
     mutationFn: archiveDashboard,
     onSuccess: (_result, id) => {
-      queryClient.setQueryData<DashboardRecord[]>(["analytics-dashboards"], (current = []) =>
+      queryClient.setQueryData<DashboardRecord[]>(dashboardsKey, (current = []) =>
         current.filter((record) => record.id !== id));
     },
     onError: (error) => setOperationError(error instanceof Error ? error.message : "归档看板失败")
@@ -76,7 +98,54 @@ export function DashboardPage() {
     setShareLinks((current) => ({ ...current, [record.id]: link }));
   };
 
+  const requestCreate = (source: "blank" | "favorites") => {
+    setOperationError("");
+    setCreateSource(source);
+    setCreateTitle("");
+    setCreateDialogOpen(true);
+  };
+
   const records = dashboardsQuery.data ?? [];
+  const filteredRecords = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
+    return records.filter((record) => {
+      const matchesStatus = statusFilter === "all" || record.status === statusFilter;
+      const matchesQuery = !normalizedQuery || [record.schema.title, record.schema.description]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase("zh-CN").includes(normalizedQuery));
+      return matchesStatus && matchesQuery;
+    });
+  }, [records, searchQuery, statusFilter]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredRecords.length / pageSize)));
+  const visibleRecords = filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => {
+    if (
+      import.meta.env.MODE === "test" ||
+      dashboardsQuery.isPending ||
+      dashboardsQuery.isError ||
+      records.length > 0 ||
+      dashboardOnboardingOpen ||
+      hasCompletedDashboardOnboarding(userId)
+    ) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setDashboardOnboardingOpen(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    dashboardOnboardingOpen,
+    dashboardsQuery.isError,
+    dashboardsQuery.isPending,
+    records.length,
+    setDashboardOnboardingOpen,
+    userId
+  ]);
+
+  useEffect(
+    () => () => setDashboardOnboardingOpen(false),
+    [setDashboardOnboardingOpen]
+  );
+
   return (
     <main className="dashboard-list">
       <header className="dashboard-list__header xs-page-enter">
@@ -90,7 +159,7 @@ export function DashboardPage() {
               className="dashboard-list__secondary-action"
               type="button"
               disabled={createMutation.isPending}
-              onClick={() => createMutation.mutate("favorites")}
+              onClick={() => requestCreate("favorites")}
             >
               从收藏问数创建
             </button>
@@ -100,13 +169,42 @@ export function DashboardPage() {
             type="button"
             disabled={createMutation.isPending}
             data-testid="create-dashboard-button"
-            onClick={() => createMutation.mutate("blank")}
+            onClick={() => requestCreate("blank")}
           >{createMutation.isPending ? "创建中" : "新建大屏"}</button>
         </div>
       </header>
 
       {operationError ? (
         <p className="dashboard-list__alert dashboard-list__alert--error" role="alert">{operationError}</p>
+      ) : null}
+
+      {records.length > 0 && !dashboardsQuery.isLoading && !dashboardsQuery.isError ? (
+        <section className="dashboard-list__toolbar xs-page-enter" aria-label="筛选大屏">
+          <Input
+            allowClear
+            prefix={<MagnifyingGlass size={18} />}
+            placeholder="搜索大屏名称或说明"
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setPage(1);
+            }}
+          />
+          <Segmented
+            aria-label="按发布状态筛选"
+            value={statusFilter}
+            options={[
+              { label: "全部", value: "all" },
+              { label: "草稿", value: "draft" },
+              { label: "已发布", value: "published" }
+            ]}
+            onChange={(value) => {
+              setStatusFilter(value as "all" | DashboardRecord["status"]);
+              setPage(1);
+            }}
+          />
+          <span>{filteredRecords.length} 个大屏</span>
+        </section>
       ) : null}
 
       {dashboardsQuery.isLoading ? (
@@ -140,18 +238,29 @@ export function DashboardPage() {
           <p>可从空白画布开始，也可在问数结果中收藏并一键生成。</p>
           <div className="dashboard-list__state-actions">
             {queryAssetFeatureEnabled ? (
-              <button className="dashboard-list__secondary-action" type="button" onClick={() => createMutation.mutate("favorites")}>
+              <button className="dashboard-list__secondary-action" type="button" onClick={() => requestCreate("favorites")}>
                 选择收藏问数
               </button>
             ) : null}
-            <button className="dashboard-list__primary-action" type="button" onClick={() => createMutation.mutate("blank")}>
+            <button className="dashboard-list__primary-action" type="button" onClick={() => requestCreate("blank")}>
               新建大屏
             </button>
           </div>
         </section>
+      ) : filteredRecords.length === 0 ? (
+        <section className="dashboard-list__state" role="status">
+          <p className="dashboard-list__eyebrow">无匹配结果</p>
+          <h2>没有找到符合条件的大屏</h2>
+          <p>调整关键词或发布状态后重试。</p>
+          <button type="button" onClick={() => {
+            setSearchQuery("");
+            setStatusFilter("all");
+          }}>清除筛选</button>
+        </section>
       ) : (
+        <>
         <section className="dashboard-list__grid xs-page-enter" aria-label="大屏库">
-          {records.map((record) => (
+          {visibleRecords.map((record) => (
             <DashboardCard
               key={record.id}
               record={record}
@@ -166,16 +275,70 @@ export function DashboardPage() {
                 setExpandedVersions((current) => ({ ...current, [record.id]: !current[record.id] }))}
               onCopy={() => copyMutation.mutate(record)}
               onShare={() => void copyLoginLink(record)}
-              onArchive={() => {
-                if (window.confirm(`归档“${record.schema.title}”？它会从大屏库中移除。`)) {
-                  archiveMutation.mutate(record.id);
-                }
-              }}
+              onArchive={() => setArchiveCandidate(record)}
               onRollback={(version) => rollbackMutation.mutate({ record, version })}
             />
           ))}
         </section>
+        {filteredRecords.length > pageSize ? (
+          <Pagination
+            className="dashboard-list__pagination"
+            current={currentPage}
+            pageSize={pageSize}
+            total={filteredRecords.length}
+            showSizeChanger={false}
+            onChange={setPage}
+          />
+        ) : null}
+        </>
       )}
+
+      <Modal
+        title={createSource === "favorites" ? "从收藏问数创建大屏" : "新建大屏"}
+        open={createDialogOpen}
+        okText={createMutation.isPending ? "创建中" : "创建并进入编辑器"}
+        cancelText="取消"
+        confirmLoading={createMutation.isPending}
+        okButtonProps={{ disabled: !createTitle.trim() }}
+        destroyOnHidden
+        onCancel={() => setCreateDialogOpen(false)}
+        onOk={() => createMutation.mutate({ source: createSource, title: createTitle.trim() })}
+      >
+        <label className="dashboard-list__create-label" htmlFor="dashboard-create-title">大屏名称</label>
+        <Input
+          id="dashboard-create-title"
+          autoFocus
+          maxLength={80}
+          placeholder="例如：华东区经营驾驶舱"
+          value={createTitle}
+          onChange={(event) => setCreateTitle(event.target.value)}
+          onPressEnter={() => {
+            if (createTitle.trim() && !createMutation.isPending) {
+              createMutation.mutate({ source: createSource, title: createTitle.trim() });
+            }
+          }}
+        />
+      </Modal>
+
+      <Modal
+        title="归档大屏"
+        open={Boolean(archiveCandidate)}
+        okText="确认归档"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        confirmLoading={archiveMutation.isPending}
+        destroyOnHidden
+        onCancel={() => setArchiveCandidate(null)}
+        onOk={() => {
+          if (archiveCandidate) {
+            archiveMutation.mutate(archiveCandidate.id, {
+              onSuccess: () => setArchiveCandidate(null)
+            });
+          }
+        }}
+      >
+        <p>归档“{archiveCandidate?.schema.title}”？它会从大屏库中移除。</p>
+      </Modal>
     </main>
   );
 }

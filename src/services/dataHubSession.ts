@@ -19,9 +19,50 @@ function getStorage() {
   }
 
   try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function getLegacyStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
     return window.localStorage;
   } catch {
     return null;
+  }
+}
+
+function migrateLegacySession() {
+  const storage = getStorage();
+  const legacyStorage = getLegacyStorage();
+  if (!storage || !legacyStorage) {
+    return;
+  }
+
+  const keys = [DATA_HUB_TOKEN_KEY, DATA_HUB_USER_KEY, DATA_HUB_SPACE_ID_KEY];
+  try {
+    if (!storage.getItem(DATA_HUB_TOKEN_KEY)) {
+      const legacyToken = legacyStorage.getItem(DATA_HUB_TOKEN_KEY);
+      if (legacyToken) {
+        for (const key of keys) {
+          const value = legacyStorage.getItem(key);
+          if (value !== null) {
+            storage.setItem(key, value);
+          }
+        }
+      }
+    }
+
+    for (const key of keys) {
+      legacyStorage.removeItem(key);
+    }
+  } catch {
+    // Continue with the best available storage. Login can establish a fresh session.
   }
 }
 
@@ -45,6 +86,7 @@ function readJson<T>(key: string): T | null {
 }
 
 export function readDataHubSession(): DataHubSessionSnapshot {
+  migrateLegacySession();
   const storage = getStorage();
   const rawSpaceId = storage?.getItem(DATA_HUB_SPACE_ID_KEY) ?? null;
   const parsedSpaceId = rawSpaceId ? Number(rawSpaceId) : null;
@@ -114,13 +156,17 @@ export function writeDataHubSession(user: DataHubLoginResponse, spaceId: number)
 
 export function clearDataHubSession() {
   const storage = getStorage();
-  if (!storage) {
-    return;
-  }
+  const legacyStorage = getLegacyStorage();
 
-  storage.removeItem(DATA_HUB_TOKEN_KEY);
-  storage.removeItem(DATA_HUB_USER_KEY);
-  storage.removeItem(DATA_HUB_SPACE_ID_KEY);
+  for (const targetStorage of [storage, legacyStorage]) {
+    if (!targetStorage) {
+      continue;
+    }
+
+    targetStorage.removeItem(DATA_HUB_TOKEN_KEY);
+    targetStorage.removeItem(DATA_HUB_USER_KEY);
+    targetStorage.removeItem(DATA_HUB_SPACE_ID_KEY);
+  }
 }
 
 function getSessionStorage() {

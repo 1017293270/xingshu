@@ -14,7 +14,7 @@ export type BrandAssetRecord = {
 export const brandAssetRegistry = {
   "xingshu-logo": {
     semantic: "星数品牌标识",
-    assetPath: "src/assets/brand/xingshu-logo-transparent.png",
+    assetPath: "src/assets/brand/xingshu-logo-2x.png",
     sourcePath: "src/assets/brand/xingshu-logo-source.png",
     allowedWidthsPx: [96, 132, 160],
     pages: ["welcome", "login", "app-shell"]
@@ -35,7 +35,7 @@ export const brandAssetRegistry = {
   },
   "assistant-mark": {
     semantic: "星数 Agent 助手标识",
-    assetPath: "src/assets/brand/xingshu-assistant-mark-image2-transparent.png",
+    assetPath: "src/assets/brand/xingshu-assistant-mark-2x.png",
     sourcePath: "src/assets/brand/xingshu-assistant-mark-source.png",
     allowedWidthsPx: [28, 36, 48],
     pages: ["analysis"]

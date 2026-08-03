@@ -7,10 +7,10 @@ import {
 } from "@phosphor-icons/react";
 import { Button, Dropdown, Layout, Menu, type MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router";
 import { primaryNavigation, secondaryNavigation } from "./navigation";
 import { useXsAccountMenu } from "./useXsAccountMenu";
-import logoSource from "@/assets/brand/xingshu-logo-transparent.png";
+import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import avatarSource from "@/assets/brand/zhangsan-avatar-source.png";
 import { xingshuTokens } from "@/theme/xingshuTokens";
 
@@ -87,7 +87,7 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
       aria-label="星数侧边栏"
     >
       <div className="xs-sidebar__brand">
-        <img src={logoSource} alt="星数" />
+        <img src={logoSource} alt="星数" width={400} height={183} />
         <Button
           type="text"
           className="xs-sidebar__collapse"

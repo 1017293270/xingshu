@@ -6,6 +6,7 @@ import type { PropsWithChildren } from "react";
 import { useMemo, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { antdTheme } from "@/theme/antdTheme";
+import { SessionQueryBoundary } from "./sessionQuery";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => new QueryClient({
@@ -30,7 +31,9 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <ConfigProvider button={{ autoInsertSpace: false }} locale={zhCN} theme={theme}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <SessionQueryBoundary>{children}</SessionQueryBoundary>
+      </QueryClientProvider>
     </ConfigProvider>
   );
 }

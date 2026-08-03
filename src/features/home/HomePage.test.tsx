@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router";
 import { AppProviders } from "@/app/providers";
 import { XsShell } from "@/components/xs";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";

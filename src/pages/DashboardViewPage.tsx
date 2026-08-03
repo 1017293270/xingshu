@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowsClockwise } from "@phosphor-icons/react";
+import { Link, useSearchParams } from "react-router";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { GeneratedDashboardView } from "@/features/dashboardStudio/GeneratedDashboardView";
 import {
   getDashboardRuntime,
@@ -7,10 +9,11 @@ import {
 } from "@/services/dashboardAnalyticsService";
 
 export function DashboardViewPage() {
+  const sessionScope = useSessionQueryScope();
   const [searchParams] = useSearchParams();
   const dashboardId = searchParams.get("dashboard");
   const runtimeQuery = useQuery({
-    queryKey: ["analytics-dashboard-runtime", dashboardId],
+    queryKey: sessionQueryKey(sessionScope, "analytics-dashboard-runtime", dashboardId),
     enabled: Boolean(dashboardId),
     initialData: () => getDashboardRuntimeInitialData(dashboardId),
     retry: false,
@@ -44,5 +47,29 @@ export function DashboardViewPage() {
     );
   }
 
-  return <GeneratedDashboardView record={runtimeQuery.data} />;
+  const updatedAt = runtimeQuery.data.publishedAt || runtimeQuery.data.updatedAt;
+  return (
+    <main className="dashboard-fullscreen-view">
+      <header className="dashboard-fullscreen-view__toolbar">
+        <Link className="dashboard-fullscreen-view__back" to="/dashboard">
+          <ArrowLeft size={18} aria-hidden="true" />
+          返回大屏库
+        </Link>
+        <div className="dashboard-fullscreen-view__meta">
+          <strong>{runtimeQuery.data.schema.title}</strong>
+          <time dateTime={updatedAt}>最近更新 {new Date(updatedAt).toLocaleString("zh-CN", { hour12: false })}</time>
+        </div>
+        <button
+          type="button"
+          className="dashboard-fullscreen-view__refresh"
+          disabled={runtimeQuery.isFetching}
+          onClick={() => void runtimeQuery.refetch()}
+        >
+          <ArrowsClockwise size={18} aria-hidden="true" />
+          {runtimeQuery.isFetching ? "刷新中" : "刷新"}
+        </button>
+      </header>
+      <GeneratedDashboardView record={runtimeQuery.data} />
+    </main>
+  );
 }

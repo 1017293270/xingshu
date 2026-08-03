@@ -195,3 +195,16 @@ export type DashboardGenerationInput = {
   spaceId?: number;
   dataMode?: DashboardDataMode;
 };
+
+export type DashboardValidationIssue = {
+  code: string;
+  message: string;
+  severity: "error" | "warning";
+  widgetId?: string;
+};
+
+export type DashboardValidationResult = {
+  valid: boolean;
+  errors: DashboardValidationIssue[];
+  warnings: DashboardValidationIssue[];
+};

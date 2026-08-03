@@ -1,6 +1,6 @@
 import { MonitorPlay, SignOut, Sparkle, UserCircle } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { logoutDataHub } from "@/services/dataHubAuthService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";

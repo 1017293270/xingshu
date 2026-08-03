@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 
 export function ProtectedRoute({ children }: PropsWithChildren) {

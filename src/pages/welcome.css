@@ -240,6 +240,20 @@
   pointer-events: none;
 }
 
+.welcome-page__visual.xs-page-enter {
+  animation-name: welcome-visual-enter;
+}
+
+@keyframes welcome-visual-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 .welcome-page__visual::before {
   position: absolute;
   inset: -12% -6% -10% -22%;

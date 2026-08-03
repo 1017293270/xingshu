@@ -2,16 +2,27 @@ import { Button, Modal } from "antd";
 import type { EChartsOption } from "echarts";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { XsEChart } from "@/components/xs";
+import { XsEChart } from "@/components/xs/XsEChart";
 import { useCountUp } from "@/hooks/useCountUp";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 /* 弹窗外壳（视觉区 / 文案 / 底部操作）与首页新手引导共用 home-onboarding__* 样式 */
 import "../home/home-onboarding.css";
 import "./dashboard-onboarding.css";
 
-const DASHBOARD_ONBOARDING_FLAG_KEY = "xingshu_dashboard_onboarding_v1";
-const AUTO_OPEN_DELAY_MS = 700;
+const DASHBOARD_ONBOARDING_FLAG_KEY = "xingshu_dashboard_onboarding_v2";
+
+export function dashboardOnboardingStorageKey(userId: number | null | undefined) {
+  return `${DASHBOARD_ONBOARDING_FLAG_KEY}:${userId ?? "anonymous"}`;
+}
+
+export function hasCompletedDashboardOnboarding(userId: number | null | undefined) {
+  try {
+    return window.localStorage.getItem(dashboardOnboardingStorageKey(userId)) === "done";
+  } catch {
+    return true;
+  }
+}
 
 const slides = [
   {
@@ -299,7 +310,7 @@ type DashboardOnboardingProps = {
 };
 
 export function DashboardOnboarding({ defaultOpen = false }: DashboardOnboardingProps) {
-  const location = useLocation();
+  const userId = useDataHubAuthStore((state) => state.user?.userId);
   const storeOpen = useUiStore((state) => state.dashboardOnboardingOpen);
   const setStoreOpen = useUiStore((state) => state.setDashboardOnboardingOpen);
   const [open, setOpen] = useState(defaultOpen);
@@ -310,28 +321,16 @@ export function DashboardOnboarding({ defaultOpen = false }: DashboardOnboarding
     if (storeOpen) {
       setIndex(0);
       setOpen(true);
+      return;
     }
-  }, [storeOpen]);
-
-  /* 首访自动弹出：仅大屏库 `/dashboard`，且未写过完成标记 */
-  useEffect(() => {
-    if (defaultOpen || storeOpen || location.pathname !== "/dashboard" || import.meta.env.MODE === "test") {
-      return undefined;
+    if (!defaultOpen) {
+      setOpen(false);
     }
-    try {
-      if (window.localStorage.getItem(DASHBOARD_ONBOARDING_FLAG_KEY)) {
-        return undefined;
-      }
-    } catch {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => setOpen(true), AUTO_OPEN_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [defaultOpen, storeOpen, location.pathname]);
+  }, [defaultOpen, storeOpen]);
 
   const close = useCallback(() => {
     try {
-      window.localStorage.setItem(DASHBOARD_ONBOARDING_FLAG_KEY, "done");
+      window.localStorage.setItem(dashboardOnboardingStorageKey(userId), "done");
     } catch {
       /* 无痕模式等场景忽略写入失败 */
     }
@@ -339,7 +338,7 @@ export function DashboardOnboarding({ defaultOpen = false }: DashboardOnboarding
     if (useUiStore.getState().dashboardOnboardingOpen) {
       setStoreOpen(false);
     }
-  }, [setStoreOpen]);
+  }, [setStoreOpen, userId]);
 
   const slide = slides[index];
   const isLast = index === slides.length - 1;

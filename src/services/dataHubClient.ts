@@ -43,6 +43,28 @@ export function joinDataHubUrl(path: string, baseUrl = dataHubApiBaseUrl) {
   return `${base}${suffix}`;
 }
 
+function getBrowserOrigin() {
+  return typeof window === "undefined" ? "http://127.0.0.1" : window.location.origin;
+}
+
+export function isTrustedDataHubAuthTarget(path: string, baseUrl = dataHubApiBaseUrl) {
+  const requestUrl = joinDataHubUrl(path, baseUrl);
+  if (!/^https?:\/\//.test(requestUrl)) {
+    return true;
+  }
+
+  try {
+    const browserOrigin = getBrowserOrigin();
+    const requestOrigin = new URL(requestUrl, browserOrigin).origin;
+    const allowedOrigin = /^https?:\/\//.test(baseUrl)
+      ? new URL(baseUrl, browserOrigin).origin
+      : browserOrigin;
+    return requestOrigin === allowedOrigin;
+  } catch {
+    return false;
+  }
+}
+
 async function parseJson(response: Response) {
   const text = await response.text();
   if (!text) {
@@ -113,6 +135,12 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
 
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (includeAuth && !isTrustedDataHubAuthTarget(path, baseUrl)) {
+    throw new DataHubServiceError("已阻止向未授权地址发送登录凭证", {
+      code: "UNTRUSTED_AUTH_ORIGIN"
+    });
   }
 
   const requestAuthToken = applySessionHeaders(headers, includeAuth, spaceId, authToken);

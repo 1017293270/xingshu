@@ -55,6 +55,33 @@ describe("dataHubClient", () => {
     const headers = init.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer token-123");
     expect(headers.get("X-Space-Id")).toBe("7");
+    expect(sessionStorage.getItem("xingshu_datahub_token")).toBe("token-123");
+    expect(localStorage.getItem("xingshu_datahub_token")).toBeNull();
+  });
+
+  it("blocks authenticated requests to origins outside the configured DataHub target", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    writeDataHubAuth({ token: "token-123", userId: 1, username: "demo", isAdmin: false });
+
+    await expect(requestDataHub("https://untrusted.example/api/export", {
+      baseUrl: "https://datahub.example"
+    })).rejects.toMatchObject({
+      code: "UNTRUSTED_AUTH_ORIGIN",
+      message: "已阻止向未授权地址发送登录凭证"
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows unauthenticated requests without attaching session credentials", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    writeDataHubAuth({ token: "token-123", userId: 1, username: "demo", isAdmin: false });
+
+    await requestDataHub("https://public.example/health", { includeAuth: false });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).get("Authorization")).toBeNull();
   });
 
   it("returns login results without persisting a partial session", async () => {

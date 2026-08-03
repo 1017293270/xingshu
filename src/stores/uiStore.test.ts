@@ -114,6 +114,20 @@ describe("useUiStore", () => {
     expect(useUiStore.getState().analysisTurns.map((turn) => turn.question)).toEqual(["历史问题", "继续追问"]);
   });
 
+  it("releases the duplicated active event buffer after leaving a settled conversation", () => {
+    const event = { type: "done", data: { summary: "历史答案" } };
+    useUiStore.getState().restoreAskDataHistory({
+      sessionId: "history-session-1",
+      question: "历史问题",
+      events: [event]
+    });
+
+    useUiStore.getState().releaseAnalysisTransientBuffers();
+
+    expect(useUiStore.getState().askDataEvents).toEqual([]);
+    expect(useUiStore.getState().analysisTurns[0]?.events).toEqual([event]);
+  });
+
   it("ignores late events from a cancelled run", () => {
     const staleEvent = { type: "text", data: "旧回答", timestamp: 1 };
     const currentEvent = { type: "text", data: "新回答", timestamp: 2 };

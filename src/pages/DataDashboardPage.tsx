@@ -1,14 +1,14 @@
 import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import {
-  resolveXsAsyncStatus,
-  XsAsyncPanel,
-  XsChartCard,
-  XsCountUpText,
-  XsIconTile,
-  XsStatusBar
-} from "@/components/xs";
+import { Link } from "react-router";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
+import { productCapabilities } from "@/config/capabilities";
+import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
+import { XsChartCard } from "@/components/xs/XsChartCard";
+import { XsCountUpText } from "@/components/xs/XsCountUpText";
+import { XsIconTile } from "@/components/xs/XsIconTile";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import kpiDataApisIcon from "@/assets/data-dashboard-icons/kpi-data-apis.png";
 import kpiDataAssetsIcon from "@/assets/data-dashboard-icons/kpi-data-assets.png";
 import kpiDataTablesIcon from "@/assets/data-dashboard-icons/kpi-data-tables.png";
@@ -35,6 +35,7 @@ const kpiIconById: Record<DataAssetKpiIconId, string> = {
 };
 
 export function DataDashboardPage() {
+  const sessionScope = useSessionQueryScope();
   const options = getDataAssetChartOptions();
   const chartInsights = getDataAssetChartInsights();
   const dataUpdate = getDataAssetUpdateStatus();
@@ -42,7 +43,7 @@ export function DataDashboardPage() {
     ? `数据已超过 ${dataUpdate.staleAfterHours} 小时未更新，请谨慎解读当前指标。`
     : "";
   const kpiQuery = useQuery({
-    queryKey: ["dataAssetKpis"],
+    queryKey: sessionQueryKey(sessionScope, "dataAssetKpis"),
     queryFn: getDataAssetKpis
   });
   const kpis = kpiQuery.data ?? [];
@@ -77,6 +78,7 @@ export function DataDashboardPage() {
       }
       className="data-dashboard-page"
     >
+      <XsCapabilityStatus capability={productCapabilities.dataAssets} />
       <XsStatusBar
         tone="warning"
         label="数据新鲜度"

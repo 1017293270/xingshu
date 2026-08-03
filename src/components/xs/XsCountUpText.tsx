@@ -18,7 +18,8 @@ export function XsCountUpText({
   const displayValue = useCountUp(value, active, durationMs, previousValue);
 
   return (
-    <span className={`xs-count-up-text ${className}`.trim()} aria-label={value}>
+    <span className={`xs-count-up-text ${className}`.trim()}>
+      <span className="sr-only">{value}</span>
       <span aria-hidden="true">{displayValue}</span>
     </span>
   );

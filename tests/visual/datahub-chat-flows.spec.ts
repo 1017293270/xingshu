@@ -1413,7 +1413,7 @@ test("document lookup renders the validated document once and opens it through D
   await expect(page.getByRole("heading", { name: "找文档完成" })).toBeVisible();
   await expect(page.getByText("找文档 Agent 执行")).toBeVisible();
   await expect(page.getByText("销售管理制度（2026）")).toHaveCount(1);
-  await expect(page.locator(".document-lookup-card")).toHaveCount(0);
+  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
 
@@ -1925,10 +1925,10 @@ test("persisted document lookup history restores the validated document without 
   await page.getByRole("button", { name: /查找销售管理制度/ }).click();
 
   await expect(page).toHaveURL(/\/document-lookup$/);
-  await expect(page.getByText("正在恢复文档定位过程。")).toBeVisible();
+  await expect(page.getByText("找文档 Agent 执行")).toBeVisible();
   await expect(page.getByText("销售管理制度（2026）")).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "打开原文：销售管理制度（2026）" })
   ).toBeVisible();
-  await expect(page.locator(".document-lookup-card")).toHaveCount(0);
+  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
 });

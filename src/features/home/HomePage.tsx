@@ -1,10 +1,7 @@
-import {
-  getXsCommandModelMeta,
-  XsAppCard,
-  type XsAppCardData,
-  XsCommandBox
-} from "@/components/xs";
-import { useNavigate } from "react-router-dom";
+import { XsAppCard, type XsAppCardData } from "@/components/xs/XsAppCard";
+import { XsCommandBox } from "@/components/xs/XsCommandBox";
+import { getXsCommandModelMeta } from "@/components/xs/XsCommandModelSelect";
+import { useNavigate } from "react-router";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
 import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";

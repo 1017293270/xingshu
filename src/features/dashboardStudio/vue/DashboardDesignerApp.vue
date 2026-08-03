@@ -60,6 +60,7 @@ import type {
   DashboardWidgetType
 } from "@/types/dashboardStudio";
 import { queryAssetFeatureEnabled } from "@/config/features";
+import XsConfirmDialog from "./XsConfirmDialog.vue";
 import {
   dashboardCanvasPresets,
   dashboardZoomLevels,
@@ -73,6 +74,7 @@ import {
   moveDashboardWidgetPosition,
   resizeDashboardWidgetPosition
 } from "../core/dashboardDesignerGeometry";
+import { validateDashboardForPublish } from "../core/dashboardValidation";
 import { clampDashboardWidgetPosition } from "../core/dashboardFreeLayout";
 import {
   dashboardChartWidgetTypes,
@@ -196,12 +198,47 @@ const customCanvasWidth = ref(schema.canvas.width);
 const customCanvasHeight = ref(schema.canvas.height);
 const canvasScroll = ref<HTMLElement | null>(null);
 const canvasSurface = ref<HTMLElement | null>(null);
+const canvasZoomStorageKey = `xingshu.dashboard.zoom.v1:${schema.id}`;
+function readCanvasZoomPreference() {
+  try {
+    const stored = window.localStorage.getItem(canvasZoomStorageKey);
+    if (!stored || stored === "fit") return { fit: true, zoom: 1 };
+    const zoom = Number(stored);
+    return Number.isFinite(zoom) ? { fit: false, zoom } : { fit: true, zoom: 1 };
+  } catch {
+    return { fit: true, zoom: 1 };
+  }
+}
+const initialCanvasZoomPreference = readCanvasZoomPreference();
 const fitCanvasScale = ref(1);
-const canvasZoom = ref(1);
-const isFitZoom = ref(false);
+const canvasZoom = ref(initialCanvasZoomPreference.zoom);
+const isFitZoom = ref(initialCanvasZoomPreference.fit);
 const pointerDrag = ref<PointerDragState | null>(null);
 const canvasPan = ref<CanvasPanState | null>(null);
 const canvasScale = computed(() => (isFitZoom.value ? fitCanvasScale.value : canvasZoom.value));
+type DesignerConfirmation = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  tone?: "default" | "danger";
+};
+const designerConfirmation = ref<DesignerConfirmation | null>(null);
+let resolveDesignerConfirmation: ((confirmed: boolean) => void) | null = null;
+
+function requestDesignerConfirmation(options: DesignerConfirmation) {
+  resolveDesignerConfirmation?.(false);
+  designerConfirmation.value = options;
+  return new Promise<boolean>((resolve) => {
+    resolveDesignerConfirmation = resolve;
+  });
+}
+
+function finishDesignerConfirmation(confirmed: boolean) {
+  const resolve = resolveDesignerConfirmation;
+  resolveDesignerConfirmation = null;
+  designerConfirmation.value = null;
+  resolve?.(confirmed);
+}
 let canvasResizeObserver: ResizeObserver | null = null;
 let pendingHistoryOrigin: DashboardSchema | null = null;
 let lastCommittedSchema = clone(props.initialSchema);
@@ -586,6 +623,17 @@ watch(
   }
 );
 
+watch([isFitZoom, canvasZoom], () => {
+  try {
+    window.localStorage.setItem(
+      canvasZoomStorageKey,
+      isFitZoom.value ? "fit" : String(canvasZoom.value)
+    );
+  } catch {
+    // Zoom persistence is optional; editing remains available without storage.
+  }
+});
+
 onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
   if (typeof ResizeObserver !== "undefined" && canvasScroll.value) {
@@ -615,6 +663,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("pointermove", handleCanvasPanMove);
   window.removeEventListener("pointerup", finishCanvasPan);
   window.removeEventListener("pointercancel", finishCanvasPan);
+  finishDesignerConfirmation(false);
 });
 
 function bindingForWidget(widget: DashboardWidget) {
@@ -638,7 +687,13 @@ async function removeDashboardQueryChart(widgetId: string) {
     assetError.value = "该收藏组件已锁定，请先解锁后再移除";
     return;
   }
-  if (!window.confirm(`确认从当前看板移除“${widget.title}”吗？此操作可撤销。`)) return;
+  const confirmed = await requestDesignerConfirmation({
+    title: "移除看板组件",
+    message: `确认从当前看板移除“${widget.title}”吗？此操作可通过撤销恢复。`,
+    confirmLabel: "确认移除",
+    tone: "danger"
+  });
+  if (!confirmed) return;
   await applySchemaChange(removeQueryAssetChart(plainSchema(), widgetId));
   if (selectedWidgetId.value === widgetId) selectedWidgetId.value = "";
 }
@@ -829,9 +884,15 @@ function pasteWidget() {
   markWidgetSettling(copy.id);
 }
 
-function clearCanvas() {
+async function clearCanvas() {
   if (schema.widgets.length === 0) return;
-  if (!window.confirm("确认清空画布中的全部组件吗？此操作可通过撤销恢复。")) return;
+  const confirmed = await requestDesignerConfirmation({
+    title: "清空画布",
+    message: "确认清空画布中的全部组件吗？此操作可通过撤销恢复。",
+    confirmLabel: "确认清空",
+    tone: "danger"
+  });
+  if (!confirmed) return;
   schema.widgets = [];
   schema.modules = {};
   schema.dataBindings = {};
@@ -1449,7 +1510,14 @@ async function promoteAndUpgrade(candidate: QueryVersion) {
     errorMessage.value = "请先为所有正在使用的字段选择新版本映射";
     return;
   }
-  if (schemaChanged && !window.confirm("新版本字段结构发生变化，确认查看差异并升级当前草稿模块吗？")) return;
+  if (schemaChanged) {
+    const confirmed = await requestDesignerConfirmation({
+      title: "升级查询版本",
+      message: "新版本字段结构发生变化。确认使用当前字段映射并升级草稿模块吗？",
+      confirmLabel: "确认升级"
+    });
+    if (!confirmed) return;
+  }
   moduleAction.value = "upgrade";
   try {
     await props.dataActions.promoteVersion(versionAsset.value.id, candidate.id);
@@ -1784,11 +1852,33 @@ async function save() {
 }
 
 async function publish() {
+  const draft = plainSchema();
+  const validation = validateDashboardForPublish(draft);
+  if (!validation.valid) {
+    const firstIssue = validation.errors[0];
+    errorMessage.value = firstIssue?.message || "发布前检查未通过";
+    if (firstIssue?.widgetId) selectedWidgetId.value = firstIssue.widgetId;
+    lifecycle.value = "error";
+    return;
+  }
+  if (validation.warnings.length > 0) {
+    const warningSummary = validation.warnings
+      .slice(0, 3)
+      .map((issue) => issue.message)
+      .join("；");
+    const confirmed = await requestDesignerConfirmation({
+      title: "发布前检查",
+      message: `${warningSummary}${validation.warnings.length > 3 ? `；另有 ${validation.warnings.length - 3} 项提醒` : ""}`,
+      confirmLabel: "仍要发布"
+    });
+    if (!confirmed) return;
+  }
+
   activeSaveIntent.value = "publish";
   lifecycle.value = "saving";
   errorMessage.value = "";
   try {
-    const record = await props.publishDashboard(plainSchema(), revision.value, dashboardVisibility.value);
+    const record = await props.publishDashboard(draft, revision.value, dashboardVisibility.value);
     await replaceSchema(record.schema);
     revision.value = record.revision;
     recordStatus.value = record.status;
@@ -1807,9 +1897,15 @@ async function publish() {
   }
 }
 
-function exitDesigner() {
-  if (lifecycle.value === "dirty" && !window.confirm("当前修改尚未保存，确认返回吗？")) {
-    return;
+async function exitDesigner() {
+  if (lifecycle.value === "dirty") {
+    const confirmed = await requestDesignerConfirmation({
+      title: "离开看板编辑器",
+      message: "当前修改尚未保存，离开后这些修改将丢失。",
+      confirmLabel: "放弃修改",
+      tone: "danger"
+    });
+    if (!confirmed) return;
   }
   props.exit();
 }
@@ -1855,6 +1951,14 @@ function exitDesigner() {
       </div>
 
       <div class="designer-toolbar__cluster designer-toolbar__cluster--zoom" aria-label="缩放控制">
+        <button
+          type="button"
+          class="designer-toolbar__button"
+          :class="{ 'is-active': isFitZoom }"
+          :aria-pressed="isFitZoom"
+          :disabled="lifecycle === 'saving'"
+          @click="fitCanvasToViewport"
+        >适应窗口</button>
         <button type="button" class="designer-toolbar__icon-button" aria-label="缩小" :disabled="canvasScale <= .25 || lifecycle === 'saving'" @click="stepCanvasZoom(-1)">-</button>
         <select :value="isFitZoom ? 'fit' : canvasZoom" aria-label="缩放" :disabled="lifecycle === 'saving'" @change="handleZoomChange">
           <option v-if="isFitZoom" value="fit" disabled>{{ canvasScaleLabel }}</option>
@@ -2364,6 +2468,16 @@ function exitDesigner() {
         <div class="designer-modal__actions"><button type="button" @click="showLayoutDialog = false">取消</button><button type="button" class="designer-modal__primary" @click="applyLayoutPreview">应用排版</button></div>
       </section>
     </div>
+
+    <XsConfirmDialog
+      v-if="designerConfirmation"
+      :title="designerConfirmation.title"
+      :message="designerConfirmation.message"
+      :confirm-label="designerConfirmation.confirmLabel"
+      :tone="designerConfirmation.tone"
+      @confirm="finishDesignerConfirmation(true)"
+      @cancel="finishDesignerConfirmation(false)"
+    />
   </section>
 </template>
 

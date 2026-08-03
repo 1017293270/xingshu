@@ -10,6 +10,7 @@ type XsStatusBarProps = {
   className?: string;
   transitionKey?: string | number;
   reserveSpace?: boolean;
+  announce?: boolean;
 };
 
 const toneTagColor: Record<Exclude<XsStatusTone, "loading">, string> = {
@@ -33,7 +34,8 @@ export function XsStatusBar({
   label,
   className = "",
   transitionKey,
-  reserveSpace = false
+  reserveSpace = false,
+  announce = true
 }: XsStatusBarProps) {
   if (!message && !reserveSpace) {
     return null;
@@ -45,10 +47,13 @@ export function XsStatusBar({
       type="error"
       showIcon
       message={message}
-      role="alert"
+      role={announce ? "alert" : undefined}
     />
   ) : (
-    <div className={`xs-status-bar xs-status-bar--${tone} ${className}`.trim()} role="status">
+    <div
+      className={`xs-status-bar xs-status-bar--${tone} ${className}`.trim()}
+      role={announce ? "status" : undefined}
+    >
       {tone === "loading" ? (
         <span className="xs-status-bar__loading">
           <Spin size="small" />

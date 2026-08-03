@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { DashboardDesignerIsland } from "@/features/dashboardStudio/DashboardDesignerIsland";
 import {
@@ -32,6 +33,7 @@ function resolveEditorReturnPath(value: string | null) {
 export function DashboardEditorPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const sessionScope = useSessionQueryScope();
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get("draft");
   const favoriteAssetId = searchParams.get("asset") || undefined;
@@ -42,7 +44,7 @@ export function DashboardEditorPage() {
   const creationStarted = useRef(false);
 
   const recordQuery = useQuery({
-    queryKey: ["analytics-dashboard-editor", draftId],
+    queryKey: sessionQueryKey(sessionScope, "analytics-dashboard-editor", draftId),
     enabled: Boolean(draftId),
     retry: false,
     queryFn: async () => {
@@ -56,7 +58,7 @@ export function DashboardEditorPage() {
   const createMutation = useMutation({
     mutationFn: () => createDashboard(createBlankDashboard()),
     onSuccess: (record) => {
-      queryClient.setQueryData(["analytics-dashboard-editor", record.id], record);
+      queryClient.setQueryData(sessionQueryKey(sessionScope, "analytics-dashboard-editor", record.id), record);
       const nextParams = new URLSearchParams({ draft: record.id });
       if (openFavoriteAssets) nextParams.set("source", "favorites");
       if (favoriteAssetId) nextParams.set("asset", favoriteAssetId);
@@ -73,9 +75,9 @@ export function DashboardEditorPage() {
   }, [createMutation, draftId]);
 
   const updateRecord = useCallback((record: DashboardRecord) => {
-    queryClient.setQueryData(["analytics-dashboard-editor", record.id], record);
+    queryClient.setQueryData(sessionQueryKey(sessionScope, "analytics-dashboard-editor", record.id), record);
     return record;
-  }, [queryClient]);
+  }, [queryClient, sessionScope]);
 
   const saveDraft = useCallback(async (
     schema: DashboardSchema,

@@ -1,8 +1,9 @@
 import type { EChartsOption } from "echarts";
 import { Checks } from "@phosphor-icons/react";
 import { useEffect, useState, type CSSProperties } from "react";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-2x.png";
 import { XsEChart } from "./XsEChart";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 const demoScript = {
@@ -71,7 +72,7 @@ const chartDemoOption: EChartsOption = {
   ]
 };
 
-function useAskDemo(reducedMotion: boolean) {
+function useAskDemo(reducedMotion: boolean, active: boolean) {
   const [state, setState] = useState<{ phase: DemoPhase; questionChars: number; answerChars: number }>(() =>
     reducedMotion
       ? { phase: "hold", questionChars: demoScript.question.length, answerChars: demoScript.answer.length }
@@ -79,7 +80,7 @@ function useAskDemo(reducedMotion: boolean) {
   );
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion || !active) {
       setState({
         phase: "hold",
         questionChars: demoScript.question.length,
@@ -130,10 +131,7 @@ function useAskDemo(reducedMotion: boolean) {
             schedule(typeAnswer, 34);
             return;
           }
-          schedule(() => {
-            setState((prev) => ({ ...prev, phase: "hold" }));
-            schedule(play, 3_400);
-          }, 280);
+          schedule(() => setState((prev) => ({ ...prev, phase: "hold" })), 280);
         };
         schedule(typeAnswer, 140);
       };
@@ -147,19 +145,21 @@ function useAskDemo(reducedMotion: boolean) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [reducedMotion]);
+  }, [active, reducedMotion]);
 
   return state;
 }
 
 type XsAskDataDemoProps = {
+  active?: boolean;
   className?: string;
   style?: CSSProperties;
 };
 
-export function XsAskDataDemo({ className = "", style }: XsAskDataDemoProps) {
+export function XsAskDataDemo({ active = true, className = "", style }: XsAskDataDemoProps) {
   const reducedMotion = usePrefersReducedMotion();
-  const demo = useAskDemo(reducedMotion);
+  const isPageVisible = usePageVisibility();
+  const demo = useAskDemo(reducedMotion, active && isPageVisible);
   const isChartVisible = demo.phase === "chart" || demo.phase === "answer" || demo.phase === "hold";
   const isAnswerVisible = demo.phase === "answer" || demo.phase === "hold";
   const isGenerating = demo.phase === "chart" && !reducedMotion;
@@ -215,7 +215,7 @@ export function XsAskDataDemo({ className = "", style }: XsAskDataDemoProps) {
 
           {isAnswerVisible ? (
             <div className="xs-ask-demo__answer">
-              <img src={assistantMark} alt="" />
+              <img src={assistantMark} alt="" width={160} height={160} />
               <p>
                 {demoScript.answer.slice(0, demo.answerChars)}
                 {demo.phase === "answer" ? <span className="xs-ask-demo__caret" /> : null}

@@ -49,6 +49,22 @@ function inferCategory(text: string): HistoryCategory {
   return "知识快查";
 }
 
+export function resolveHistoryCategory(
+  chatMode: DataHubChatMode | null | undefined,
+  fallbackText: string
+): HistoryCategory {
+  if (chatMode === "document_lookup") {
+    return "文档处理";
+  }
+  if (chatMode === "rag") {
+    return "知识快查";
+  }
+  if (chatMode === "ask" || chatMode === "agent") {
+    return "数据洞察";
+  }
+  return inferCategory(fallbackText);
+}
+
 function formatDateTime(value?: string) {
   if (!value) {
     return "-";
@@ -65,7 +81,7 @@ function mapDataHubSession(session: DataHubChatSession): HistorySession {
     sessionId: session.sessionId,
     title,
     summary: "来自 data-hub 的历史会话，点击后恢复完整过程与结果。",
-    category: inferCategory(title),
+    category: resolveHistoryCategory(session.chatMode, title),
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
     source: "data-hub",
     chatMode: session.chatMode

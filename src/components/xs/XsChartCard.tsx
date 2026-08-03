@@ -59,7 +59,6 @@ export function XsChartCard({
 }: XsChartCardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const chartLabel = `${title}。${summary}`;
   const visibleRows = table.rows.slice(0, maxTableRows);
   const totalRows = Math.max(table.totalRows, table.rows.length);
   const tableCaption =
@@ -124,7 +123,8 @@ export function XsChartCard({
             <XsEChart
               className={`xs-chart-card__chart ${chartClassName}`.trim()}
               option={option}
-              label={chartLabel}
+              label={title}
+              summary={summary}
               motionPreset={motionPreset}
             />
             {chartAside}
@@ -133,7 +133,8 @@ export function XsChartCard({
           <XsEChart
             className={`xs-chart-card__chart ${chartClassName}`.trim()}
             option={option}
-            label={chartLabel}
+            label={title}
+            summary={summary}
             motionPreset={motionPreset}
           />
         )}
@@ -199,7 +200,8 @@ export function XsChartCard({
                 <XsEChart
                   className="xs-chart-card__fullscreen-chart"
                   option={option}
-                  label={chartLabel}
+                  label={title}
+                  summary={summary}
                   motionPreset={motionPreset}
                 />
               </div>

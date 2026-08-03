@@ -1,22 +1,6 @@
 import type { EChartsOption } from "echarts";
 import type { DataHubTableResult } from "@/types/dataHub";
 
-export type AiProviderKind = "minimax" | "openai-compatible" | "custom";
-
-export type AiProviderConfig = {
-  provider: AiProviderKind;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  temperature: number;
-  rememberApiKey?: boolean;
-};
-
-export type AiProviderConnectionResult = {
-  ok: boolean;
-  message: string;
-};
-
 export type AiChartType = "bar" | "line" | "pie";
 
 export type AiChartPlanRequest = {

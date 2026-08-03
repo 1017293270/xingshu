@@ -1,8 +1,9 @@
 import { Button, Modal } from "antd";
 import type { EChartsOption } from "echarts";
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { XsAskDataDemo, XsEChart } from "@/components/xs";
+import { useLocation } from "react-router";
+import { XsAskDataDemo } from "@/components/xs/XsAskDataDemo";
+import { XsEChart } from "@/components/xs/XsEChart";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useUiStore } from "@/stores/uiStore";
 import "./home-onboarding.css";

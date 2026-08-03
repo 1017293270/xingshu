@@ -68,6 +68,7 @@ type UiStoreActions = {
     error?: string;
   }) => void;
   clearHomeConversation: () => void;
+  releaseAnalysisTransientBuffers: () => void;
   setSentStatus: (status: string) => void;
   setOnboardingOpen: (open: boolean) => void;
   setDashboardOnboardingOpen: (open: boolean) => void;
@@ -120,6 +121,70 @@ function updateTurn(
 }
 
 const askDataControllers = new Map<DataHubAskRunId, AbortController>();
+const pendingAskDataEvents = new Map<DataHubAskRunId, DataHubStreamEvent[]>();
+let pendingAskDataFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushPendingAskDataEvents(runId?: DataHubAskRunId) {
+  if (pendingAskDataFlushTimer !== null) {
+    globalThis.clearTimeout(pendingAskDataFlushTimer);
+    pendingAskDataFlushTimer = null;
+  }
+
+  const batches = runId
+    ? [[runId, pendingAskDataEvents.get(runId) ?? []] as const]
+    : Array.from(pendingAskDataEvents.entries());
+  if (runId) {
+    pendingAskDataEvents.delete(runId);
+  } else {
+    pendingAskDataEvents.clear();
+  }
+  if (batches.every(([, events]) => events.length === 0)) {
+    return;
+  }
+
+  useUiStore.setState((state) => {
+    let analysisTurns = state.analysisTurns;
+    let askDataEvents = state.askDataEvents;
+
+    for (const [batchRunId, events] of batches) {
+      if (events.length === 0) continue;
+      const targetTurn = analysisTurns.find((turn) => turn.id === batchRunId);
+      if (!targetTurn || targetTurn.status !== "streaming") continue;
+
+      analysisTurns = updateTurn(analysisTurns, batchRunId, (turn) => ({
+        ...turn,
+        events: [...turn.events, ...events]
+      }));
+      if (state.activeAskDataRunId === batchRunId) {
+        askDataEvents = [...askDataEvents, ...events];
+      }
+    }
+
+    return { analysisTurns, askDataEvents };
+  });
+}
+
+function queueAskDataEvent(runId: DataHubAskRunId, event: DataHubStreamEvent) {
+  const events = pendingAskDataEvents.get(runId) ?? [];
+  events.push(event);
+  pendingAskDataEvents.set(runId, events);
+
+  if (import.meta.env.MODE === "test") {
+    flushPendingAskDataEvents(runId);
+    return;
+  }
+  if (pendingAskDataFlushTimer === null) {
+    pendingAskDataFlushTimer = globalThis.setTimeout(() => flushPendingAskDataEvents(), 50);
+  }
+}
+
+function clearPendingAskDataEvents() {
+  if (pendingAskDataFlushTimer !== null) {
+    globalThis.clearTimeout(pendingAskDataFlushTimer);
+    pendingAskDataFlushTimer = null;
+  }
+  pendingAskDataEvents.clear();
+}
 
 function releaseAskDataController(runId: DataHubAskRunId, abort = false) {
   const controller = askDataControllers.get(runId);
@@ -205,28 +270,9 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     });
     return runId;
   },
-  appendAskDataEvent: (runId, event) =>
-    set((state) => {
-      const targetTurn = state.analysisTurns.find((turn) => turn.id === runId);
-      if (!targetTurn || targetTurn.status !== "streaming") {
-        return {};
-      }
-
-      const nextTurns = updateTurn(state.analysisTurns, runId, (turn) => ({
-        ...turn,
-        events: [...turn.events, event]
-      }));
-
-      if (state.activeAskDataRunId !== runId) {
-        return { analysisTurns: nextTurns };
-      }
-
-      return {
-        askDataEvents: [...state.askDataEvents, event],
-        analysisTurns: nextTurns
-      };
-    }),
+  appendAskDataEvent: (runId, event) => queueAskDataEvent(runId, event),
   completeAskDataRun: (runId) => {
+    flushPendingAskDataEvents(runId);
     set((state) => {
       const targetTurn = state.analysisTurns.find((turn) => turn.id === runId);
       if (!targetTurn || targetTurn.status !== "streaming") {
@@ -241,6 +287,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     releaseAskDataController(runId);
   },
   failAskDataRun: (runId, message) => {
+    flushPendingAskDataEvents(runId);
     set((state) => {
       const targetTurn = state.analysisTurns.find((turn) => turn.id === runId);
       if (!targetTurn || targetTurn.status !== "streaming") {
@@ -259,6 +306,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     releaseAskDataController(runId);
   },
   cancelAskDataRun: (runId) => {
+    flushPendingAskDataEvents(runId);
     set((state) => {
       const targetTurn = state.analysisTurns.find((turn) => turn.id === runId);
       if (!targetTurn || targetTurn.status !== "streaming") {
@@ -304,6 +352,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     status = "done",
     error = ""
   }) => {
+    clearPendingAskDataEvents();
     const restoredTurns =
       turns && turns.length > 0
         ? turns
@@ -336,6 +385,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     abortAllAskDataControllers();
   },
   clearHomeConversation: () => {
+    clearPendingAskDataEvents();
     set({
       selectedAppId: null,
       homeDraft: "",
@@ -353,10 +403,17 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
     });
     abortAllAskDataControllers();
   },
+  releaseAnalysisTransientBuffers: () => {
+    flushPendingAskDataEvents();
+    set((state) => state.activeAskDataRunId === null && state.askDataEvents.length > 0
+      ? { askDataEvents: [] }
+      : {});
+  },
   setSentStatus: (status) => set({ sentStatus: status }),
   setOnboardingOpen: (open) => set({ onboardingOpen: open }),
   setDashboardOnboardingOpen: (open) => set({ dashboardOnboardingOpen: open }),
   resetUiState: () => {
+    clearPendingAskDataEvents();
     set(initialState);
     abortAllAskDataControllers();
   }

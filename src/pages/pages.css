@@ -1016,6 +1016,20 @@
     background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
+@media (min-width: 1181px) {
+  .history-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-card:nth-child(odd) {
+    border-right: 1px solid #edf2fb;
+  }
+
+  .history-card:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+}
+
 .history-card:not(:disabled):hover .history-card__restore-state,
 .history-card:not(:disabled):focus-visible .history-card__restore-state {
   color: var(--xs-primary-2);

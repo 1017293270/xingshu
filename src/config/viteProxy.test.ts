@@ -27,19 +27,14 @@ afterEach(() => {
 });
 
 describe("Vite data-hub proxy", () => {
-  it("defaults browser API traffic to the authenticated remote DataHub BFF", async () => {
+  it("fails closed when no DataHub proxy target is configured", async () => {
     delete process.env.VITE_DATAHUB_PROXY_TARGET;
     delete process.env.VITE_DATAHUB_BFF_PORT;
 
-    const loaded = await loadConfigFromFile(
+    await expect(loadConfigFromFile(
       { command: "serve", mode: "development" },
       path.resolve(process.cwd(), "vite.config.ts")
-    );
-
-    expect(loaded?.config.server?.proxy?.["/api"]).toMatchObject({
-      target: "http://132.232.141.234",
-      changeOrigin: true
-    });
+    )).rejects.toThrow("VITE_DATAHUB_PROXY_TARGET");
   });
 
   it("keeps Analytics requests behind the BFF even when a direct target is present", async () => {

@@ -2,6 +2,9 @@ import { Button, Input, Segmented, Space } from "antd";
 import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useState } from "react";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
+import { productCapabilities } from "@/config/capabilities";
 import metricKnowledge from "@/assets/data-management-icons/metric-knowledge-total.png";
 import metricDocument from "@/assets/data-management-icons/metric-document-total.png";
 import metricParsed from "@/assets/data-management-icons/metric-parsed-complete.png";
@@ -12,7 +15,9 @@ import kbHr from "@/assets/data-management-icons/kb-human-resources.png";
 import kbMarket from "@/assets/data-management-icons/kb-market-marketing.png";
 import kbTech from "@/assets/data-management-icons/kb-tech-rd.png";
 import kbFinance from "@/assets/data-management-icons/kb-finance-audit.png";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsCountUpText, XsStatusBar } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
+import { XsCountUpText } from "@/components/xs/XsCountUpText";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { getKnowledgeBaseStats, listKnowledgeBases } from "@/services/dataAssetService";
 import type { KnowledgeBaseIconId, KnowledgeBaseStatIconId } from "@/types/dataAsset";
 import { PageFrame } from "./PageFrame";
@@ -43,14 +48,15 @@ const assetTabs = [
 ];
 
 export function DataManagementPage() {
+  const sessionScope = useSessionQueryScope();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const statsQuery = useQuery({
-    queryKey: ["knowledgeBaseStats"],
+    queryKey: sessionQueryKey(sessionScope, "knowledgeBaseStats"),
     queryFn: getKnowledgeBaseStats
   });
   const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases"],
+    queryKey: sessionQueryKey(sessionScope, "knowledgeBases"),
     queryFn: listKnowledgeBases
   });
   const stats = statsQuery.data ?? [];
@@ -107,6 +113,7 @@ export function DataManagementPage() {
       )}
       className="data-management-page"
     >
+      <XsCapabilityStatus capability={productCapabilities.dataAssets} />
       <nav className="asset-tabs xs-page-enter" style={{ animationDelay: "60ms" }} aria-label="资产管理类型">
         <Segmented
           aria-label="资产管理类型"

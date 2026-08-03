@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import dashboardIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
 import type { DashboardRecord, DashboardVersion } from "@/types/dashboardStudio";
 

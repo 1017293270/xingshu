@@ -5,6 +5,7 @@ export { resolveXsAsyncStatus, XsAsyncPanel } from "./XsAsyncPanel";
 export type { XsAsyncStatus } from "./XsAsyncPanel";
 export { XsChartCard } from "./XsChartCard";
 export type { XsChartCardProps } from "./XsChartCard";
+export { XsCapabilityStatus } from "./XsCapabilityStatus";
 export { XsCommandBox } from "./XsCommandBox";
 export type { XsCommandSuggestion } from "./XsCommandBox";
 export {

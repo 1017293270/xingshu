@@ -42,8 +42,8 @@ const accessibilityRoutes: AccessibilityRoute[] = [
     path: "/dashboard",
     authenticated: true,
     ready: async (page) => {
-      await expect(page.getByRole("heading", { name: "我的看板", level: 1 })).toBeVisible();
-      await expect(page.locator('[data-echarts-ready="true"]')).toHaveCount(6);
+      await expect(page.getByRole("heading", { name: "大屏库", level: 1 })).toBeVisible();
+      await expect(page.getByRole("region", { name: "大屏库空状态" })).toBeVisible();
     }
   },
   {
@@ -78,6 +78,7 @@ async function installAuthenticatedSession(page: Page) {
     window.localStorage.setItem("xingshu_datahub_token", user.token);
     window.localStorage.setItem("xingshu_datahub_user", JSON.stringify(user));
     window.localStorage.setItem("xingshu_datahub_space_id", "1");
+    window.localStorage.setItem("xingshu_dashboard_onboarding_v2:1", "done");
   });
 }
 
@@ -110,6 +111,12 @@ test.describe("xingshu WCAG serious and critical gate", () => {
         await routeCase.ready(page);
         await page.evaluate(async () => {
           await document.fonts.ready;
+          document.getAnimations().forEach((animation) => {
+            const iterations = animation.effect?.getComputedTiming().iterations;
+            if (typeof iterations === "number" && Number.isFinite(iterations)) {
+              animation.finish();
+            }
+          });
         });
 
         const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { AppRoutes } from "@/app/AppRoutes";
@@ -62,12 +62,12 @@ describe("LoginPage", () => {
 
     expect(await screen.findByRole("heading", { name: /让每一次问数/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "登录星数" })).toBeInTheDocument();
-    expect(screen.getByText("企业级安全防护已启用")).toBeInTheDocument();
-    expect(screen.getByText("SECURE ACCESS")).toBeInTheDocument();
-    expect(screen.getByText("安全连接")).toBeInTheDocument();
+    expect(screen.getByText("登录时将验证 DataHub 连接")).toBeInTheDocument();
+    expect(screen.getByText("DATAHUB ACCESS")).toBeInTheDocument();
+    expect(screen.getByText("登录时验证连接")).toBeInTheDocument();
     expect(screen.getByText("由 data-hub 权限体系提供认证")).toBeInTheDocument();
     expect(container.querySelector(".login-page__atmosphere")).toHaveAttribute("aria-hidden", "true");
-    expect(container.querySelector(".xs-ask-demo")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector(".xs-ask-demo")).not.toBeInTheDocument();
     const convergence = container.querySelector(".login-star-convergence");
     expect(convergence).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelectorAll(".login-star-convergence__p")).toHaveLength(12);
@@ -82,6 +82,15 @@ describe("LoginPage", () => {
     expect(await screen.findByText("请输入用户名")).toBeInTheDocument();
     expect(screen.getByText("请输入密码")).toBeInTheDocument();
     expect(loginToDataHub).not.toHaveBeenCalled();
+  });
+
+  it("focuses the first invalid field after an empty submission", async () => {
+    const user = userEvent.setup();
+    renderLoginRoute();
+
+    await user.click(await screen.findByRole("button", { name: "登录" }));
+
+    expect(await screen.findByLabelText("用户名")).toHaveFocus();
   });
 
   it("shows forgot password guidance", async () => {

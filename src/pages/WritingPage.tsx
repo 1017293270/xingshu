@@ -2,8 +2,11 @@ import { Button } from "antd";
 import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt, X } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
-import type { XsStatusTone } from "@/components/xs";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { productCapabilities } from "@/config/capabilities";
+import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
+import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
+import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { createAttachmentQueue } from "@/services/attachmentService";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
 import { createWritingDraft, listWritingDocuments, listWritingScenes } from "@/services/writingService";
@@ -40,7 +43,8 @@ const scenePrompts: Record<WritingSceneIconId, string> = {
 const writingTypes = ["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"];
 
 export function WritingPage() {
-  const [prompt, setPrompt] = useState("例如：撰写一份关于数据资产管理平台的产品介绍文档，包含产品概述、核心功能、应用场景和价值优势，字数约1500字");
+  const sessionScope = useSessionQueryScope();
+  const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
   const [attachments, setAttachments] = useState<AttachmentQueueItem[]>([]);
@@ -53,11 +57,11 @@ export function WritingPage() {
   const removalTimersRef = useRef(new Map<string, number>());
   const isSubmittingRef = useRef(false);
   const scenesQuery = useQuery({
-    queryKey: ["writingScenes"],
+    queryKey: sessionQueryKey(sessionScope, "writingScenes"),
     queryFn: listWritingScenes
   });
   const documentsQuery = useQuery({
-    queryKey: ["writingDocuments"],
+    queryKey: sessionQueryKey(sessionScope, "writingDocuments"),
     queryFn: listWritingDocuments
   });
   const scenes = scenesQuery.data ?? [];
@@ -94,7 +98,7 @@ export function WritingPage() {
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setSubmissionTone("loading");
-    setSubmissionStatus("正在提交写作需求");
+    setSubmissionStatus("正在创建写作预览");
 
     try {
       const result = await createWritingDraft({ prompt: trimmedPrompt, attachments: readyAttachments });
@@ -102,8 +106,8 @@ export function WritingPage() {
         setSubmissionTone("info");
         setSubmissionStatus(
           result.attachmentCount > 0
-            ? `写作需求已加入生成队列，${result.attachmentCount} 个附件将参与生成：${result.prompt}`
-            : `写作需求已加入生成队列，尚未生成：${result.prompt}`
+            ? `预览已记录 ${result.attachmentCount} 个附件，不会上传或生成真实文档：${result.prompt}`
+            : `预览需求已记录，不会调用真实生成服务：${result.prompt}`
         );
       }
     } catch {
@@ -179,8 +183,8 @@ export function WritingPage() {
     setSubmissionTone(rejectedCount > 0 ? "warning" : "info");
     setSubmissionStatus(
       rejectedCount > 0
-        ? `${readyCount} 个附件可参与生成，${rejectedCount} 个附件不可用`
-        : `${readyCount} 个附件可参与生成`
+        ? `${readyCount} 个附件可参与预览，${rejectedCount} 个附件不可用于预览`
+        : `${readyCount} 个附件可参与预览`
     );
     event.target.value = "";
   };
@@ -223,6 +227,7 @@ export function WritingPage() {
         </>
       }
     >
+      <XsCapabilityStatus capability={productCapabilities.writing} />
       <section
         className="xs-card xs-page-enter xs-focus-glow writing-panel writing-panel--compact"
         style={{ animationDelay: "80ms" }}
@@ -231,12 +236,13 @@ export function WritingPage() {
       >
         <div className="writing-panel__intro">
           <h2>描述你要写作的内容</h2>
-          <p>请详细描述写作主题、目标、要点、受众等要求，AI 将为你生成高质量内容</p>
+          <p>请描述写作主题、目标、要点和受众；当前可预览需求组织方式</p>
         </div>
         <textarea
           ref={promptInputRef}
           rows={5}
           aria-label="写作需求"
+          placeholder="例如：撰写一份数据资产管理平台介绍，包含产品概述、核心功能、应用场景和价值优势"
           value={prompt}
           disabled={isSubmitting}
           onChange={(event) => setPrompt(event.target.value)}
@@ -279,12 +285,12 @@ export function WritingPage() {
           <Button
             type="primary"
             icon={<PaperPlaneTilt size={16} />}
-            aria-label="发送"
+            aria-label="预览写作需求"
             loading={isSubmitting}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !prompt.trim()}
             onClick={handleSubmit}
           >
-            发送
+            预览需求
           </Button>
         </div>
         {attachments.length > 0 ? (
@@ -296,7 +302,7 @@ export function WritingPage() {
                 data-removing={removingAttachmentIds.has(attachment.id)}
               >
                 <span title={attachment.name}>{attachment.name}</span>
-                <small>{attachment.status === "ready" ? "可参与生成" : attachment.error}</small>
+                <small>{attachment.status === "ready" ? "可参与预览" : attachment.error}</small>
                 <Button
                   type="text"
                   size="small"

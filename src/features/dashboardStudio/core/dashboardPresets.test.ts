@@ -13,7 +13,7 @@ describe("dashboardPresets", () => {
     expect(dashboardStudioPresets.map((preset) => preset.seeds.length)).toEqual([8, 9, 9, 9]);
   });
 
-  it("applies the original AI operations layout while keeping only the canvas light", () => {
+  it("applies the AI operations layout with the light enterprise theme", () => {
     const base = createBlankDashboard({ idFactory: (prefix) => `${prefix}-preset` });
     const schema = applyDashboardStudioPreset(base, dashboardStudioPresets[0]!);
 
@@ -22,11 +22,11 @@ describe("dashboardPresets", () => {
     expect(schema.widgets[0]).toMatchObject({
       id: "ai-ops-title",
       position: { x: 48, y: 28, w: 920, h: 72 },
-      style: { color: "#f8fafc", fontSize: 40, fontWeight: 800, locked: true, zIndex: 1 }
+      style: { color: "#102A4C", fontSize: 40, fontWeight: 800, locked: true, zIndex: 1 }
     });
     expect(schema.widgets.find((widget) => widget.id === "ai-ops-metric-requests")).toMatchObject({
       position: { x: 48, y: 164, w: 360, h: 180 },
-      style: { background: "rgba(15, 23, 42, 0.92)", accent: "#38bdf8" }
+      style: { background: "#F7FAFF", accent: "#1677FF" }
     });
     expect(schema.widgets.find((widget) => widget.id === "ai-ops-queue-table")?.name).toBe("运营队列");
     expect(schema.dataBindings["ai-ops-workload-mix"]).toMatchObject({

@@ -1,9 +1,9 @@
 import { CaretRight, List, PlusCircle } from "@phosphor-icons/react";
 import { Button, Drawer, Dropdown } from "antd";
 import { useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import avatarSource from "@/assets/brand/zhangsan-avatar-source.png";
-import logoSource from "@/assets/brand/xingshu-logo-transparent.png";
+import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import { XsIconTile } from "./XsIconTile";
 import { primaryNavigation, routeTitles, secondaryNavigation } from "./navigation";
 import { useXsAccountMenu } from "./useXsAccountMenu";
@@ -33,7 +33,7 @@ export function XsMobileNav({ onNewChat }: XsMobileNavProps) {
   return (
     <header className="xs-mobile-nav">
       <NavLink className="xs-mobile-nav__brand" to="/" aria-label="返回星数首页">
-        <img src={logoSource} alt="" />
+        <img src={logoSource} alt="" width={400} height={183} />
       </NavLink>
       <strong className="xs-mobile-nav__title">{routeTitles[location.pathname] || "星数"}</strong>
       <Button

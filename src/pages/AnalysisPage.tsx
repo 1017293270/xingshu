@@ -28,8 +28,10 @@ import type {
   TouchEvent as ReactTouchEvent,
   WheelEvent as ReactWheelEvent
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { XsChartCard, XsCommandBox, XsSafeMarkdown } from "@/components/xs";
+import { useLocation, useNavigate } from "react-router";
+import { XsChartCard } from "@/components/xs/XsChartCard";
+import { XsCommandBox } from "@/components/xs/XsCommandBox";
+import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { DataHubExecutionPanel } from "@/components/xs/datahub";
 import { XsStreamingText } from "@/components/xs/XsStreamingText";
 import { queryAssetFeatureEnabled } from "@/config/features";
@@ -71,7 +73,7 @@ import type {
   DataHubToolResultData
 } from "@/types/dataHub";
 import type { QueryAsset } from "@/types/analytics";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-2x.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
 import "./styles/analysis-motion.css";
@@ -984,6 +986,7 @@ function DataHubDocumentLookupList({
             </div>
             <Button
               icon={<ArrowSquareOut size={17} />}
+              aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
               disabled={document.sourceAvailable === false}
               onClick={() => onOpen(document)}
             >
@@ -1196,6 +1199,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const cancelAskDataRun = useUiStore((state) => state.cancelAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
+  const releaseAnalysisTransientBuffers = useUiStore((state) => state.releaseAnalysisTransientBuffers);
   const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [composerMode, setComposerMode] = useState<DataHubChatMode>(mode);
@@ -1255,6 +1259,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   useEffect(() => {
     setComposerMode(mode);
   }, [mode]);
+
+  useEffect(() => () => {
+    releaseAnalysisTransientBuffers();
+  }, [releaseAnalysisTransientBuffers]);
 
   const visibleTurns =
     analysisTurns.length > 0
@@ -1869,11 +1877,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 isAgentMode || isDocumentLookupMode || hasNativeAgentScope;
               const expandExecutionPanelByDefault =
                 isAgentMode || isDocumentLookupMode;
-              const hasDocumentUrlEvents =
-                executionProjection.mainSession.documentResults.length > 0;
-              const documentLookupResults = hasDocumentUrlEvents
-                ? []
-                : getDataHubDocumentLookupResults(turnAsk.done);
+              const documentLookupResults = getDataHubDocumentLookupResults(turnAsk.done);
               const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
               const thinkingPhases = hasLegacyProcess ? buildThinkingPhases(turnAsk, displayStatus) : [];
               const playbackState = thinkingPlaybackStates[turn.id];
@@ -1881,8 +1885,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 (!isDocumentLookupMode && turnAsk.answerBlocks.length) ||
                   (supportsTables && turnAsk.tableResults.length) ||
                   (supportsCitations && turnAsk.citationDocuments.length) ||
-                  (isDocumentLookupMode &&
-                    (documentLookupResults.length || hasDocumentUrlEvents))
+                  (isDocumentLookupMode && documentLookupResults.length)
               );
               const isResultReady = hasLegacyProcess
                 ? playbackState?.isComplete === true
@@ -1965,7 +1968,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
               return (
                 <div
-                  className="analysis-turn"
+                  className={`analysis-turn${!isLatestTurn && displayStatus !== "streaming" ? " analysis-turn--virtualized" : ""}`}
                   data-status={displayStatus}
                   data-result-ready={isResultReady}
                   key={turn.id}
@@ -1974,11 +1977,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     <div>
                       <strong>{turn.question}</strong>
                     </div>
-                    <img src={userAvatar} alt="" />
+                    <img src={userAvatar} alt="" width={53} height={56} />
                   </section>
 
                   <section className="analysis-response" aria-label="星数分析结果">
-                    <img className="analysis-response__mark" src={assistantMark} alt="" />
+                    <img className="analysis-response__mark" src={assistantMark} alt="" width={160} height={160} />
                     <article className="xs-card analysis-card">
                       <header className="analysis-card__head">
                         <div className="analysis-card__status-copy" key={`${turn.id}:${statusTitle}`}>
@@ -2062,8 +2065,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         </section>
                       ) : null}
 
-                      {!(isDocumentLookupMode && hasDocumentUrlEvents) ? (
-                        <section className="analysis-output" aria-label="分析结果">
+                      <section className="analysis-output" aria-label="分析结果">
                         <div className="section-title-row">
                           <h2>{modeMeta.resultTitle}</h2>
                           {isAskMode || isAgentMode ? (
@@ -2157,8 +2159,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             </div>
                           ) : null}
                         </div>
-                        </section>
-                      ) : null}
+                      </section>
                     </article>
                   </section>
                 </div>
@@ -2177,7 +2178,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               <span className="analysis-empty-state__orbit analysis-empty-state__orbit--inner" aria-hidden="true" />
               <span className="analysis-empty-state__star analysis-empty-state__star--a" aria-hidden="true" />
               <span className="analysis-empty-state__star analysis-empty-state__star--b" aria-hidden="true" />
-              <img src={assistantMark} alt="" aria-hidden="true" />
+              <img src={assistantMark} alt="" width={160} height={160} aria-hidden="true" />
             </div>
             <div className="analysis-empty-state__copy xs-page-enter" style={{ animationDelay: "120ms" }}>
               <h1 id="analysis-empty-title">

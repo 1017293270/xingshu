@@ -266,6 +266,7 @@ describe("dashboard designer motion states", () => {
     });
 
     await waitFor(() => expect(screen.getByRole("button", { name: "指标卡 320 × 180" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("缩放"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "指标卡 320 × 180" }));
 
     const firstWidget = await screen.findByRole("button", { name: "指标卡" });

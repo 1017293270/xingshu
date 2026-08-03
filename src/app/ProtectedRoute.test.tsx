@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { ProtectedRoute } from "./ProtectedRoute";

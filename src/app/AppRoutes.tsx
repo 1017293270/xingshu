@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { XsRouteFallback, type XsRouteFallbackVariant } from "@/components/xs";
+import { Navigate, Route, Routes, useLocation } from "react-router";
+import { XsRouteFallback, type XsRouteFallbackVariant } from "@/components/xs/XsRouteFallback";
 import { routeTitles } from "@/components/xs/navigation";
-import { HomePage } from "@/features/home/HomePage";
-import { AppLayout } from "./AppLayout";
 import { DataHubSessionExpiryHandler } from "./DataHubSessionExpiryHandler";
 import { ProtectedRoute } from "./ProtectedRoute";
 
+const AppLayout = lazy(() => import("./AppLayout").then((module) => ({ default: module.AppLayout })));
+const HomePage = lazy(() => import("@/features/home/HomePage").then((module) => ({ default: module.HomePage })));
 const AnalysisPage = lazy(() => import("@/pages/AnalysisPage").then((module) => ({ default: module.AnalysisPage })));
 const HistoryPage = lazy(() => import("@/pages/HistoryPage").then((module) => ({ default: module.HistoryPage })));
 const TablePage = lazy(() => import("@/pages/TablePage").then((module) => ({ default: module.TablePage })));

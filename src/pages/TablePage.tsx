@@ -2,12 +2,15 @@ import { Button, Input, Tag } from "antd";
 import { Lightning, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
+import { productCapabilities } from "@/config/capabilities";
 import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
-import { resolveXsAsyncStatus, XsAsyncPanel, XsStatusBar } from "@/components/xs";
-import type { XsStatusTone } from "@/components/xs";
+import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
+import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { createTableFromPrompt, listRecentTables } from "@/services/tableService";
 import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
@@ -25,6 +28,7 @@ const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销�
 const tableSuggestions = ["华东区Q1销售排行", "各部门人员通讯录", "月度费用统计报表"];
 
 export function TablePage() {
+  const sessionScope = useSessionQueryScope();
   const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
@@ -33,7 +37,7 @@ export function TablePage() {
   const copiedTimerRef = useRef<number | null>(null);
   const isGeneratingRef = useRef(false);
   const recentTablesQuery = useQuery({
-    queryKey: ["recentTables"],
+    queryKey: sessionQueryKey(sessionScope, "recentTables"),
     queryFn: listRecentTables
   });
   const recentTables = recentTablesQuery.data ?? [];
@@ -60,13 +64,13 @@ export function TablePage() {
     isGeneratingRef.current = true;
     setIsGenerating(true);
     setSubmissionTone("loading");
-    setSubmissionStatus("正在提交制表需求");
+    setSubmissionStatus("正在创建制表预览");
 
     try {
       const result = await createTableFromPrompt(trimmedPrompt);
       if (result.status === "accepted") {
         setSubmissionTone("info");
-        setSubmissionStatus(`制表需求已加入生成队列，尚未生成：${result.prompt}`);
+        setSubmissionStatus(`预览需求已记录，不会创建真实报表：${result.prompt}`);
       }
     } catch {
       setSubmissionTone("error");
@@ -109,10 +113,11 @@ export function TablePage() {
       subtitle="用自然语言描述表格结构，AI 帮你生成企业表格"
       className="table-page"
     >
+      <XsCapabilityStatus capability={productCapabilities.tables} />
       <section className="xs-card sheet-workbench xs-page-enter" style={{ animationDelay: "80ms" }}>
         <div className="sheet-workbench__head">
           <h2>描述制表需求</h2>
-          <p>说明表格主题、字段与统计口径，AI 将生成结构化表格</p>
+          <p>说明表格主题、字段与统计口径；当前可预览需求组织方式</p>
         </div>
         <section
           className="sheet-prompt"
@@ -139,7 +144,7 @@ export function TablePage() {
             disabled={isGenerating || !prompt.trim()}
             onClick={handleGenerate}
           >
-            生成
+            预览需求
           </Button>
         </section>
         <div className="sheet-suggestions" aria-label="快捷制表示例">
@@ -205,7 +210,7 @@ export function TablePage() {
           ))}
         </section>
       </XsAsyncPanel>
-      <p className="page-disclaimer">内容由 AI 生成，仅供参考，请按实际业务需求调整。</p>
+      <p className="page-disclaimer">当前为预览数据，不会生成或保存真实企业表格。</p>
     </PageFrame>
   );
 }

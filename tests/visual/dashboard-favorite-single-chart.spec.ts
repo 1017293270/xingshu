@@ -657,7 +657,7 @@ test("repeated chart type switches replace the previous ECharts scene", async ({
     const echartsResource = performance
       .getEntriesByType("resource")
       .map((entry) => entry.name)
-      .find((name) => name.toLowerCase().includes("/echarts.js"));
+      .find((name) => name.toLowerCase().includes("/echartsruntime"));
     if (!chart || !echartsResource) throw new Error("ECharts runtime was not found");
 
     const echarts = await import(echartsResource);

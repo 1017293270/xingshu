@@ -1,6 +1,6 @@
 import { Alert, Button } from "antd";
 import type { ReactNode } from "react";
-import assistantMark from "@/assets/brand/xingshu-assistant-mark-image2-transparent.png";
+import assistantMark from "@/assets/brand/xingshu-assistant-mark-2x.png";
 
 type XsEmptyStateProps = {
   description: ReactNode;
@@ -44,7 +44,7 @@ export function XsEmptyState({
       <div className="xs-empty-state__visual" aria-hidden="true">
         <span className="xs-empty-state__orbit xs-empty-state__orbit--outer" />
         <span className="xs-empty-state__orbit xs-empty-state__orbit--inner" />
-        <img src={assistantMark} alt="" />
+        <img src={assistantMark} alt="" width={160} height={160} />
       </div>
       <div className="xs-empty-state__copy">
         {title ? <strong>{title}</strong> : null}

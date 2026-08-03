@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { useUiStore } from "@/stores/uiStore";
-import { DashboardOnboarding } from "./DashboardOnboarding";
+import { DashboardOnboarding, dashboardOnboardingStorageKey } from "./DashboardOnboarding";
 
 function renderOnboarding() {
   return render(
@@ -42,7 +42,7 @@ describe("DashboardOnboarding", () => {
     expect(document.querySelector(".db-present")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "开始体验" }));
-    expect(window.localStorage.getItem("xingshu_dashboard_onboarding_v1")).toBe("done");
+    expect(window.localStorage.getItem(dashboardOnboardingStorageKey(null))).toBe("done");
     await waitFor(() => expect(screen.queryByText("一键放映，经营尽览")).not.toBeInTheDocument());
   });
 
@@ -51,7 +51,7 @@ describe("DashboardOnboarding", () => {
     renderOnboarding();
 
     await user.click(await screen.findByRole("button", { name: "跳过" }));
-    expect(window.localStorage.getItem("xingshu_dashboard_onboarding_v1")).toBe("done");
+    expect(window.localStorage.getItem(dashboardOnboardingStorageKey(null))).toBe("done");
     await waitFor(() => expect(screen.queryByText("数据繁星，汇聚成屏")).not.toBeInTheDocument());
   });
 
@@ -72,7 +72,7 @@ describe("DashboardOnboarding", () => {
 
     await user.click(screen.getByRole("button", { name: "跳过" }));
     expect(useUiStore.getState().dashboardOnboardingOpen).toBe(false);
-    expect(window.localStorage.getItem("xingshu_dashboard_onboarding_v1")).toBe("done");
+    expect(window.localStorage.getItem(dashboardOnboardingStorageKey(null))).toBe("done");
     await waitFor(() => expect(screen.queryByText("数据繁星，汇聚成屏")).not.toBeInTheDocument());
   });
 });

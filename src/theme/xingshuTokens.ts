@@ -13,7 +13,7 @@ export const xingshuTokens = {
   colorDanger: "#FF4D4F",
   colorText: "#081A3A",
   colorTextSecondary: "#294469",
-  colorTextTertiary: "#5F7391",
+  colorTextTertiary: "#536987",
   colorInteractiveText: "#1D4ED8",
   radiusControl: 12,
   radiusCard: 14,
@@ -28,5 +28,5 @@ export const xingshuTokens = {
   motionEaseOut: "cubic-bezier(.2, 0, 0, 1)",
   controlHeight: 44,
   controlHeightLarge: 52,
-  fontFamily: "Source Han Sans SC, Noto Sans SC, Microsoft YaHei, Arial, sans-serif"
+  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif'
 } as const;

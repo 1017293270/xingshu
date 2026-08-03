@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
@@ -93,16 +93,18 @@ describe("DashboardPage", () => {
     });
   });
 
-  it("creates an untitled draft and enters the editor", async () => {
+  it("requires a dashboard name before entering the editor", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getAllByRole("button", { name: "新建大屏" })[0]);
+    await user.type(await screen.findByLabelText("大屏名称"), "华东区经营驾驶舱");
+    await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     expect(await screen.findByText("编辑器目标页")).toBeInTheDocument();
     const records = createDashboardRepository(localStorage).list();
     expect(records).toHaveLength(1);
-    expect(records[0]?.schema.title).toBe("未命名大屏");
+    expect(records[0]?.schema.title).toBe("华东区经营驾驶舱");
   });
 
   it("copies a dashboard into a new editable draft", async () => {
@@ -122,13 +124,15 @@ describe("DashboardPage", () => {
   it("archives a dashboard after confirmation", async () => {
     const user = userEvent.setup();
     createStoredDashboard("待归档大屏", "archive");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
 
     await openCardMenu(user, "待归档大屏");
     await user.click(screen.getByRole("menuitem", { name: "归档" }));
 
-    expect(window.confirm).toHaveBeenCalledWith("归档“待归档大屏”？它会从大屏库中移除。");
+    expect(await screen.findByRole("dialog", { name: "归档大屏" })).toHaveTextContent(
+      "归档“待归档大屏”？它会从大屏库中移除。"
+    );
+    await user.click(screen.getByRole("button", { name: "确认归档" }));
     expect(screen.queryByText("待归档大屏")).not.toBeInTheDocument();
     expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
   });

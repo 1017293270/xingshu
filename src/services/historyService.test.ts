@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { filterHistorySessionList, loadDataHubHistoryReplay } from "./historyService";
+import {
+  filterHistorySessionList,
+  loadDataHubHistoryReplay,
+  resolveHistoryCategory
+} from "./historyService";
 import { createDataHubAskTurn } from "./dataHubAskDataPresenter";
 import { projectDataHubExecutionEvents } from "./dataHubExecutionProjector";
 import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
@@ -523,6 +527,14 @@ describe("historyService data-hub replay", () => {
     expect(projection.mainSession.done?.adaptiveTeam).toBe(true);
     expect(projection.mainSession.citationDocuments).toEqual([]);
     expect(projection.subagentSessions[0]?.citationDocuments).toHaveLength(1);
+  });
+});
+
+describe("resolveHistoryCategory", () => {
+  it("uses the backend chat mode before title heuristics", () => {
+    expect(resolveHistoryCategory("ask", "客户政策咨询")).toBe("数据洞察");
+    expect(resolveHistoryCategory("rag", "本月营收趋势")).toBe("知识快查");
+    expect(resolveHistoryCategory("document_lookup", "销售数据分析")).toBe("文档处理");
   });
 });
 

@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { AppRoutes } from "@/app/AppRoutes";
@@ -90,6 +90,8 @@ describe("data asset actions", () => {
     renderRoute("/dashboard");
 
     await user.click((await screen.findAllByRole("button", { name: "新建大屏" }))[0]);
+    await user.type(await screen.findByLabelText("大屏名称"), "数据资产经营看板");
+    await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     expect(await screen.findByLabelText("看板编辑器工作区")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();

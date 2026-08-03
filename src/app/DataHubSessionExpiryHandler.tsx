@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { DATA_HUB_SESSION_EXPIRED_EVENT } from "@/services/dataHubSession";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 
