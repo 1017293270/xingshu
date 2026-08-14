@@ -10,7 +10,6 @@ import * as queryAssetService from "@/services/queryAssetService";
 import { useUiStore } from "@/stores/uiStore";
 import { AnalysisPage } from "./AnalysisPage";
 import { TablePage } from "./TablePage";
-import { WritingPage } from "./WritingPage";
 
 const phasePlaybackSettleForTest = 250;
 
@@ -1306,31 +1305,4 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已复制制表要求：客户销售排行榜表");
   });
 
-  it("selects writing type and scene prompts while marking unavailable writing actions", async () => {
-    const user = userEvent.setup();
-    renderPage(<WritingPage />);
-
-    await user.click(screen.getByRole("button", { name: "方案策划" }));
-
-    expect(screen.getByRole("textbox", { name: "写作需求" })).toHaveValue("请帮我撰写一份方案策划，包含背景、目标、步骤和交付物。");
-    expect(screen.getByRole("status")).toHaveTextContent("已切换写作类型：方案策划");
-
-    expect(screen.getByRole("button", { name: /使用指南.*即将开放/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /写作历史.*即将开放/ })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: "附件" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已打开写作附件选择");
-
-    await user.click(screen.getByRole("button", { name: /方案策划：生成项目方案/ }));
-    expect(screen.getByRole("textbox", { name: "写作需求" })).toHaveValue("请帮我生成项目方案、解决方案、实施计划等。");
-  });
-
-  it("marks unavailable writing document details instead of claiming they opened", async () => {
-    renderPage(<WritingPage />);
-
-    expect(
-      await screen.findByRole("button", { name: /查看 数据资产管理平台产品介绍.*即将开放/ })
-    ).toBeDisabled();
-    expect(screen.queryByText(/已打开文稿/)).not.toBeInTheDocument();
-  });
 });

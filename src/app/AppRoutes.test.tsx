@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes, resolveRouteFallbackVariant } from "./AppRoutes";
 import { expireDataHubSession } from "@/services/dataHubSession";
+import * as dataAssetService from "@/services/dataAssetService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -42,6 +43,7 @@ function renderRoute(path: string, options: { authenticated?: boolean } = {}) {
 
 describe("AppRoutes", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -65,7 +67,7 @@ describe("AppRoutes", () => {
     ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
-    ["/writing", "智能写作", "推荐写作场景"],
+    ["/writing", "公文写作", "公文写作工作台"],
     ["/dashboard", "大屏库", "大屏库空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
@@ -76,6 +78,25 @@ describe("AppRoutes", () => {
   ];
 
   it.each(routeCases)("renders %s", async (path, heading, landmark) => {
+    if (path === "/data-dashboard") {
+      vi.spyOn(dataAssetService, "getDataAssetOverview").mockResolvedValue({
+        updatedAt: "2026-08-11T08:00:00Z",
+        range: "30D",
+        kpis: {
+          assetCount: 0,
+          dataVolumeBytes: 0,
+          unstructuredCount: 0,
+          tableCount: 0,
+          dataSourceCount: 0,
+          serviceCallCount: 0
+        },
+        typeDistribution: [],
+        growth: [{ date: "2026-08-11", assetCount: 0, dataVolumeBytes: 0 }],
+        sourceDistribution: [],
+        usageByScenario: [],
+        hotAssets: []
+      });
+    }
     renderRoute(path, { authenticated: !["/welcome", "/login"].includes(path) });
 
     expect(
@@ -159,7 +180,7 @@ describe("AppRoutes", () => {
     const navigationDialog = screen.getByRole("dialog", { name: "星数主导航" });
     expect(navigationDialog).toBeVisible();
     expect(within(navigationDialog).getByRole("link", { name: "历史对话" })).toHaveAttribute("href", "/history");
-    expect(within(navigationDialog).getByRole("link", { name: "智能写作" })).toHaveAttribute("href", "/writing");
+    expect(within(navigationDialog).getByRole("link", { name: "公文写作" })).toHaveAttribute("href", "/writing");
     expect(within(navigationDialog).getByRole("link", { name: "数据资产管理" })).toHaveAttribute(
       "href",
       "/data-management"
@@ -298,19 +319,6 @@ describe("AppRoutes", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent(
       "预览需求已记录，不会创建真实报表：生成华南区客户销售排行"
-    );
-  });
-
-  it("submits a writing prompt through the mock service", async () => {
-    const user = userEvent.setup();
-    renderRoute("/writing");
-
-    await user.clear(screen.getByRole("textbox", { name: "写作需求" }));
-    await user.type(screen.getByRole("textbox", { name: "写作需求" }), "写一份数据资产月报");
-    await user.click(screen.getByRole("button", { name: "预览写作需求" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "预览需求已记录，不会调用真实生成服务：写一份数据资产月报"
     );
   });
 

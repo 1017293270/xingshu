@@ -61,9 +61,9 @@ const recommendedApps: XsAppCardData[] = [
   },
   {
     id: "writing",
-    title: "智能写作",
-    description: "报告总结、方案策划与工作汇报",
-    prompt: "帮我写一份经营分析汇报提纲",
+    title: "公文写作",
+    description: "套用已发布模板并绑定问数结果",
+    prompt: "从共享模板库创建一份公文",
     routeTo: "/writing",
     imageSrc: appWritingIcon,
     imageSource: "xingshu-home-apps-image2-v1",

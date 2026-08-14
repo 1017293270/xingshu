@@ -88,7 +88,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: "新建对话" })).toBeInTheDocument();
     expect(within(navigation).getByText("历史对话")).toBeInTheDocument();
     expect(within(navigation).getByText("智能制表")).toBeInTheDocument();
-    expect(within(navigation).getByText("智能写作")).toBeInTheDocument();
+    expect(within(navigation).getByText("公文写作")).toBeInTheDocument();
     expect(within(navigation).getByText("我的看板")).toBeInTheDocument();
     expect(within(navigation).getByText("我的云盘")).toBeInTheDocument();
     expect(within(navigation).getByText("数据资产看板")).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     const { container } = renderHomePage();
 
-    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智能写作", "会议纪要", "更多应用"];
+    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "公文写作", "会议纪要", "更多应用"];
 
     for (const appName of expectedApps) {
       expect(screen.getByRole("button", { name: new RegExp(`打开 ${appName}`) })).toHaveAttribute(
@@ -168,7 +168,7 @@ describe("HomePage", () => {
   it.each([
     ["文档助手", "/cloud"],
     ["报表生成", "/dashboard"],
-    ["智能写作", "/writing"],
+    ["公文写作", "/writing"],
     ["会议纪要", "/writing"],
     ["更多应用", "/data-dashboard"]
   ])("routes %s to its product workspace", async (appName, expectedPath) => {

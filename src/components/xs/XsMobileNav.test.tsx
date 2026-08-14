@@ -42,7 +42,7 @@ describe("XsMobileNav", () => {
     const dialog = screen.getByRole("dialog", { name: "星数主导航" });
     expect(within(dialog).getByRole("link", { name: "历史对话" })).toHaveAttribute("href", "/history");
     expect(within(dialog).getByRole("link", { name: "智能制表" })).toHaveAttribute("href", "/table");
-    expect(within(dialog).getByRole("link", { name: "智能写作" })).toHaveAttribute("href", "/writing");
+    expect(within(dialog).getByRole("link", { name: "公文写作" })).toHaveAttribute("href", "/writing");
     expect(within(dialog).getByRole("link", { name: "我的看板" })).toHaveAttribute("href", "/dashboard");
     expect(within(dialog).getByRole("link", { name: "我的云盘" })).toHaveAttribute("href", "/cloud");
     expect(within(dialog).getByRole("link", { name: "数据资产看板" })).toHaveAttribute(

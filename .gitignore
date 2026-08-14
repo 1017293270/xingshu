@@ -5,6 +5,7 @@ outputs/
 .superpowers/
 .claude/
 .env.local
+.env.development.local
 .run-logs/
 .codex-tmp/
 outputs/playwright/
