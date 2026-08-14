@@ -31,6 +31,34 @@ export function resolveDataHubProxyTarget({ command, env, mode, processEnv }: Pr
   return "http://127.0.0.1:65535";
 }
 
+export function createDataHubBrowserProxy(target: string) {
+  return {
+    "/api": {
+      target,
+      changeOrigin: true
+    },
+    "/platform": {
+      target,
+      changeOrigin: true
+    },
+    "/platform-login": {
+      target,
+      changeOrigin: true
+    },
+    "/assets": {
+      target,
+      changeOrigin: true,
+      bypass(req: { url?: string }) {
+        const pathname = req.url?.split("?")[0] ?? "";
+        if (/^\/assets\/[^/]+-[A-Za-z0-9_-]+\.(js|css)$/.test(pathname)) {
+          return;
+        }
+        return false;
+      }
+    }
+  };
+}
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxyTarget = resolveDataHubProxyTarget({ command, env, mode, processEnv: process.env });
@@ -44,12 +72,10 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       proxy: {
-        // Keep browser requests same-origin. Vite forwards them to the selected
-        // data-hub BFF, which remains responsible for JWT and space headers.
-        "/api": {
-          target: proxyTarget,
-          changeOrigin: true
-        }
+        // Keep browser requests same-origin. /api is the BFF. /platform and
+        // hashed /assets/* let “添加知识库” open DataHub’s UI on this origin
+        // so Xingshu can seed platform_token without putting JWT in the URL.
+        ...createDataHubBrowserProxy(proxyTarget)
       }
     },
     test: {

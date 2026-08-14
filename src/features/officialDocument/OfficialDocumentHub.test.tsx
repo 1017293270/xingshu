@@ -34,6 +34,8 @@ describe("OfficialDocumentHub", () => {
 
     expect(screen.getByLabelText("公文写作工作台")).toBeInTheDocument();
     expect(await screen.findByText("还没有可用的公文模板")).toBeInTheDocument();
+    expect(screen.queryByText("结构化写作与 Word 引擎可用")).not.toBeInTheDocument();
+    expect(screen.queryByText(/QueryAsset preview is configured/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /打开模板/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
   });

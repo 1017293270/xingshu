@@ -46,6 +46,40 @@ const knowledgeBaseFixtures = [
   }
 ];
 
+const knowledgeDocumentFixtures = [
+  {
+    doc_id: "doc-policy-1",
+    doc_name: "合同管理办法.pdf",
+    doc_key: "contract-policy.pdf",
+    doc_status: "indexed",
+    size: 2_355_200,
+    chunk_count: 128,
+    markdown_available: true
+  },
+  {
+    doc_id: "doc-policy-2",
+    doc_name: "2026 年度采购制度.docx",
+    doc_key: "purchase-policy.docx",
+    doc_status: "parsing",
+    size: 486_400
+  },
+  {
+    doc_id: "doc-policy-3",
+    doc_name: "供应商准入标准.xlsx",
+    doc_key: "supplier-standard.xlsx",
+    doc_status: "uploaded",
+    size: 132_096
+  },
+  {
+    doc_id: "doc-policy-4",
+    doc_name: "历史归档说明.txt",
+    doc_key: "archive-note.txt",
+    doc_status: "failed",
+    size: 4_096,
+    message: "解析失败，请重新上传"
+  }
+];
+
 const dataAssetOverviewFixture = {
   updatedAt: "2026-08-11T08:00:00Z",
   range: "30D",
@@ -156,8 +190,12 @@ test.beforeEach(async ({ page }) => {
   analyticsFixtures.set(page, { records: new Map() });
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/api/ai/rag/kb/list") {
-      await route.fulfill({ json: { code: 200, message: "visual knowledge fixture", data: knowledgeBaseFixtures } });
+    if (path === "/api/ai/rag/kbs") {
+      await route.fulfill({ json: { kbs: knowledgeBaseFixtures } });
+      return;
+    }
+    if (path === "/api/ai/rag/kb/documents" || path === "/api/ai/rag/kb/files") {
+      await route.fulfill({ json: { files: knowledgeDocumentFixtures } });
       return;
     }
     if (path.startsWith("/api/analytics/")) {
@@ -400,32 +438,96 @@ test("keeps cloud knowledge-base card content comfortably separated", async ({ p
     await page.setViewportSize(viewport);
     await page.goto("/cloud");
     await expect(page.getByRole("heading", { name: "我的云盘", level: 1 })).toBeVisible();
-    await expect(page.getByRole("button", { name: "知识库：企业制度知识库" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "知识库：企业制度知识库" })).toBeVisible();
     await settleResponsiveLayout(page);
 
-    const cards = page.locator(".cloud-lane");
+    const cards = page.locator(".cloud-kb-card");
     await expect(cards).toHaveCount(3);
 
     const metrics = await cards.evaluateAll((elements) => elements.map((element) => {
       const cardRect = element.getBoundingClientRect();
       const iconRect = element.querySelector(".xs-icon-tile")!.getBoundingClientRect();
-      const bodyRect = element.querySelector(".cloud-lane__body")!.getBoundingClientRect();
-      const headingRect = element.querySelector(".cloud-lane__head")!.getBoundingClientRect();
-      const descriptionRect = element.querySelector("p")!.getBoundingClientRect();
+      const bodyRect = element.querySelector(".cloud-kb-card__heading")!.getBoundingClientRect();
+      const headingRect = element.querySelector(".cloud-kb-card__heading h2")!.getBoundingClientRect();
+      const descriptionRect = element.querySelector(".cloud-kb-card__heading p")!.getBoundingClientRect();
+      const footRect = element.querySelector(".cloud-kb-card__foot")!.getBoundingClientRect();
 
       return {
         cardHeight: cardRect.height,
         iconBodyGap: bodyRect.left - iconRect.right,
-        headingDescriptionGap: descriptionRect.top - headingRect.bottom
+        headingDescriptionGap: descriptionRect.top - headingRect.bottom,
+        footBottomGap: cardRect.bottom - footRect.bottom
       };
     }));
 
     for (const metric of metrics) {
-      expect(metric.cardHeight).toBeGreaterThanOrEqual(112);
+      expect(metric.cardHeight).toBeGreaterThanOrEqual(180);
       expect(metric.iconBodyGap).toBeGreaterThanOrEqual(14);
       expect(metric.headingDescriptionGap).toBeGreaterThanOrEqual(6);
+      expect(metric.footBottomGap).toBeGreaterThanOrEqual(16);
     }
   }
+});
+
+test("switches the cloud drive between card and list views", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/cloud");
+  await expect(page.getByRole("link", { name: "知识库：企业制度知识库" })).toBeVisible();
+  await settleResponsiveLayout(page);
+
+  await expect(page.locator(".cloud-kb-card")).toHaveCount(3);
+  await page.locator(".cloud-toolbar__view").getByText("列表").click();
+  await expect(page.locator(".cloud-kb-row")).toHaveCount(3);
+  await expect(page.locator(".cloud-kb-card")).toHaveCount(0);
+  await settleResponsiveLayout(page);
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/cloud-list-react-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
+
+  await page.getByLabel("知识库搜索").fill("法务");
+  await expect(page.locator(".cloud-kb-row")).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "知识库：合同法务知识库" })).toBeVisible();
+});
+
+test("fills the smart table composer from a recent template", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/table");
+  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+
+  const template = page.getByRole("article", { name: /客户销售排行榜表/ });
+  await template.getByRole("button", { name: "复制制表要求" }).click();
+
+  await expect(page.getByRole("textbox", { name: "制表需求" }))
+    .toHaveValue("客户销售排行榜表：2024年Q1华东区TOP20");
+  await expect(page.getByRole("button", { name: "预览需求" })).toBeEnabled();
+  await settleResponsiveLayout(page);
+  await expectNoHorizontalOverflow(page);
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/table-filled-react-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
+test("renders the knowledge-base document table with parse status", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/cloud");
+  await page.getByRole("link", { name: "知识库：企业制度知识库" }).click();
+
+  await expect(page.getByRole("heading", { name: "企业制度知识库", level: 1 })).toBeVisible();
+  await expect(page.locator(".cloud-doc-row")).toHaveCount(4);
+  await expect(page.getByText("已入库")).toBeVisible();
+  await settleResponsiveLayout(page);
+  await expectNoHorizontalOverflow(page);
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/cloud-detail-react-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
 });
 
 test.describe("login desktop viewport lock", () => {
@@ -951,6 +1053,69 @@ test("home model selector exposes all modes and recommendation cards open their 
   await page.getByRole("button", { name: /^打开 知识问答/ }).click();
   await expect(page).toHaveURL(/\/ask-knowledge$/);
   await expect(page.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeVisible();
+});
+
+test("centers collapsed sidebar icons in their tiles", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/history");
+  await expect(page.getByRole("heading", { name: "历史对话" })).toBeVisible();
+  await page.getByRole("button", { name: "收起侧边栏" }).click();
+  await expect(page.locator(".xs-sidebar--collapsed")).toBeVisible();
+  await expect(page.getByRole("button", { name: "展开侧边栏" })).toBeVisible();
+  await expect.poll(async () => {
+    const box = await page.locator(".xs-sidebar").boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeLessThanOrEqual(80);
+  await settleResponsiveLayout(page);
+
+  const offsets = await page.evaluate(() => {
+    const measure = (container: Element, icon: Element | null) => {
+      if (!icon) {
+        return { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY };
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      return {
+        x: Math.abs(iconRect.left + iconRect.width / 2 - (containerRect.left + containerRect.width / 2)),
+        y: Math.abs(iconRect.top + iconRect.height / 2 - (containerRect.top + containerRect.height / 2))
+      };
+    };
+
+    const newChat = document.querySelector(".xs-sidebar__new-chat");
+    const items = [...document.querySelectorAll(".xs-sidebar__menu .ant-menu-item, .xs-sidebar__menu .ant-menu-submenu-title")];
+
+    return {
+      newChat: newChat ? measure(newChat, newChat.querySelector("svg")) : { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY },
+      items: items.map((item) => measure(item, item.querySelector("svg")))
+    };
+  });
+
+  expect(offsets.newChat.x).toBeLessThanOrEqual(2);
+  expect(offsets.newChat.y).toBeLessThanOrEqual(2);
+  expect(offsets.items.length).toBeGreaterThan(0);
+  for (const item of offsets.items) {
+    expect(item.x).toBeLessThanOrEqual(2);
+    expect(item.y).toBeLessThanOrEqual(2);
+  }
+});
+
+test("navigates from collapsed sidebar icons", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/history");
+  await expect(page.getByRole("heading", { name: "历史对话" })).toBeVisible();
+  await page.getByRole("button", { name: "收起侧边栏" }).click();
+  await expect(page.locator(".xs-sidebar--collapsed")).toBeVisible();
+  await expect.poll(async () => {
+    const box = await page.locator(".xs-sidebar").boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeLessThanOrEqual(80);
+
+  await page.getByRole("menuitem", { name: "我的看板" }).click();
+  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
+
+  await page.getByRole("button", { name: "新建对话" }).click();
+  await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
 });
 
 test("sidebar active item has a stronger selected state", async ({ page }) => {

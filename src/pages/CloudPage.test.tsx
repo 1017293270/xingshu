@@ -106,14 +106,39 @@ describe("CloudPage", () => {
   it("renders knowledge bases from DataHub and derived metrics", async () => {
     renderCloudPage();
 
-    expect(await screen.findByRole("article", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
-    expect(screen.getAllByRole("article", { name: /知识库：/ })).toHaveLength(3);
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toHaveAttribute(
+      "href",
+      "/cloud/kb-policy"
+    );
+    expect(screen.getAllByRole("link", { name: /知识库：/ })).toHaveLength(3);
     expect(screen.getByText("合同、制度、报告统一入库")).toBeInTheDocument();
     expect(within(screen.getByLabelText("云盘概览指标")).getByText("3", { selector: ".sr-only" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("云盘概览指标")).getByText("89", { selector: ".sr-only" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("云盘概览指标")).getByText("2026-08-13 10:00")).toBeInTheDocument();
-    expect(screen.getByText("知识库来自当前登录空间的 DataHub；新增请到 DataHub 平台完成。")).toBeInTheDocument();
     expect(screen.queryByText(/模拟上传|模拟同步|预览企业资料/)).not.toBeInTheDocument();
+  });
+
+  it("shows knowledge-base timestamps without the ISO T separator", async () => {
+    listKnowledgeBases.mockResolvedValue([
+      {
+        id: "kb-contract",
+        title: "合同知识库",
+        documentCount: 9,
+        updatedAt: "2026-07-17T11:02:15"
+      },
+      {
+        id: "kb-test",
+        title: "测试知识库",
+        documentCount: 16,
+        updatedAt: "2026-07-16T10:11:55"
+      }
+    ]);
+    renderCloudPage();
+
+    expect(await screen.findByRole("link", { name: "知识库：合同知识库" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("云盘概览指标")).getByText("2026-07-17 11:02:15")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-16 10:11:55")).toBeInTheDocument();
+    expect(screen.queryByText("2026-07-17T11:02:15")).not.toBeInTheDocument();
   });
 
   it("shows an empty state when the space has no knowledge bases", async () => {
@@ -134,24 +159,24 @@ describe("CloudPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("知识库列表加载失败");
     await user.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByRole("article", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
   });
 
   it("disables add when the DataHub app origin is not configured", async () => {
     renderCloudPage();
 
-    await screen.findByRole("article", { name: "知识库：企业制度知识库" });
+    await screen.findByRole("link", { name: "知识库：企业制度知识库" });
     expect(screen.getByRole("button", { name: "添加知识库" })).toBeDisabled();
     expect(screen.getByText("无法从当前登录配置确定 DataHub 地址")).toBeInTheDocument();
   });
 
-  it("opens DataHub from add and from a knowledge-base card", async () => {
+  it("opens DataHub only from add, and keeps knowledge-base cards inside Xingshu", async () => {
     const user = userEvent.setup();
     knowledgeAppLinks.mockReturnValue(enabledAppLinks());
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     renderCloudPage();
 
-    await screen.findByRole("button", { name: "知识库：企业制度知识库" });
+    await screen.findByRole("link", { name: "知识库：企业制度知识库" });
     await user.click(screen.getByRole("button", { name: "添加知识库" }));
     expect(open).toHaveBeenCalledWith(
       "https://datahub.example.test/knowledge?space_id=7",
@@ -159,12 +184,9 @@ describe("CloudPage", () => {
       "noopener,noreferrer"
     );
 
-    await user.click(screen.getByRole("button", { name: "知识库：企业制度知识库" }));
-    expect(open).toHaveBeenCalledWith(
-      "https://datahub.example.test/knowledge/kb-policy?space_id=7",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    open.mockClear();
+    await user.click(screen.getByRole("link", { name: "知识库：企业制度知识库" }));
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("opens DataHub from the empty-state action", async () => {
@@ -188,12 +210,12 @@ describe("CloudPage", () => {
       .mockResolvedValueOnce(sampleKnowledgeBases);
     renderCloudPage();
 
-    expect(await screen.findByRole("article", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
-    expect(screen.queryByRole("article", { name: "知识库：合同法务知识库" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "知识库：合同法务知识库" })).not.toBeInTheDocument();
 
     window.dispatchEvent(new Event("focus"));
 
-    expect(await screen.findByRole("article", { name: "知识库：合同法务知识库" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "知识库：合同法务知识库" })).toBeInTheDocument();
     expect(listKnowledgeBases).toHaveBeenCalledTimes(2);
   });
 });

@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_DATAHUB_BFF_PORT?: string;
   readonly VITE_DATAHUB_KB_MANAGE_PATH?: string;
   readonly VITE_DATAHUB_KB_DETAIL_PATH?: string;
+  readonly VITE_DATAHUB_UI_SAME_ORIGIN?: string;
 }
 
 declare module "*.vue" {

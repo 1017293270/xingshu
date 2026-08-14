@@ -49,6 +49,7 @@ describe("AppRoutes", () => {
 
   it("maps routes to layout-matched loading fallbacks", () => {
     expect(resolveRouteFallbackVariant("/history")).toBe("rows");
+    expect(resolveRouteFallbackVariant("/cloud/kb-policy")).toBe("rows");
     expect(resolveRouteFallbackVariant("/data-dashboard")).toBe("metrics");
     expect(resolveRouteFallbackVariant("/settings/ai")).toBe("cards");
     expect(resolveRouteFallbackVariant("/ask-data")).toBe("workspace");
@@ -171,6 +172,9 @@ describe("AppRoutes", () => {
     await user.click(screen.getByRole("button", { name: "收起侧边栏" }));
     expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeTruthy();
     expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "我的云盘" }));
+    expect(await screen.findByRole("heading", { name: "我的云盘", level: 1 })).toBeInTheDocument();
   });
 
   it("exposes every product destination from the mobile navigation drawer", async () => {

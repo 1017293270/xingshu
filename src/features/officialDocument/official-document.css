@@ -3,7 +3,7 @@
 .official-document-hub,
 .official-document-detail {
   display: grid;
-  gap: 16px;
+  gap: var(--xs-module-gap);
 }
 
 .official-document-page .xs-status-bar__message {
@@ -414,7 +414,7 @@
 
 .official-document-calibration {
   display: grid;
-  gap: 16px;
+  gap: var(--xs-module-gap);
 }
 
 .official-document-toolbar {

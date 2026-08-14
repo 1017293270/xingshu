@@ -31,6 +31,9 @@ const DataManagementPage = lazy(() =>
   import("@/pages/DataManagementPage").then((module) => ({ default: module.DataManagementPage }))
 );
 const CloudPage = lazy(() => import("@/pages/CloudPage").then((module) => ({ default: module.CloudPage })));
+const CloudKnowledgeDetailPage = lazy(() =>
+  import("@/pages/CloudKnowledgeDetailPage").then((module) => ({ default: module.CloudKnowledgeDetailPage }))
+);
 const WelcomePage = lazy(() => import("@/pages/WelcomePage").then((module) => ({ default: module.WelcomePage })));
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 function AppRouteTitle() {
@@ -47,7 +50,7 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
   if (pathname === "/" || pathname === "/welcome" || pathname === "/login") {
     return "hero";
   }
-  if (pathname === "/history") {
+  if (pathname === "/history" || pathname.startsWith("/cloud/")) {
     return "rows";
   }
   if (pathname === "/data-dashboard" || pathname === "/data-management") {
@@ -99,6 +102,7 @@ export function AppRoutes() {
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />
+            <Route path="/cloud/:kbId" element={<CloudKnowledgeDetailPage />} />
           </Route>
           <Route
             path="/dashboard-editor"

@@ -421,3 +421,25 @@ export type DataHubKnowledgeBase = {
   documentCount?: number;
   updatedAt?: string;
 };
+
+export type DataHubKnowledgeDocumentStatus =
+  | "uploading"
+  | "uploaded"
+  | "parsing"
+  | "indexed"
+  | "failed"
+  | "unknown";
+
+export type DataHubKnowledgeDocument = {
+  id: string;
+  title: string;
+  docId?: string;
+  docKey?: string;
+  status: DataHubKnowledgeDocumentStatus;
+  sizeBytes?: number;
+  sourceAvailable: boolean;
+  sourceUrl?: string;
+  markdownAvailable?: boolean;
+  chunkCount?: number;
+  message?: string;
+};

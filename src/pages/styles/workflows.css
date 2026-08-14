@@ -3,54 +3,80 @@
 /* ---------- 智能制表：需求工作台 ---------- */
 
 .sheet-workbench {
-  padding: 20px 24px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: var(--xs-module-gap) 0 0;
 }
 
-.sheet-workbench__head h2 {
+.sheet-console {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 22px 24px 20px;
+}
+
+.sheet-console__eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--xs-primary-2);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+}
+
+.sheet-console__head h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
 }
 
-.sheet-workbench__head p {
-  margin: 4px 0 0;
+.sheet-console__head p {
+  margin: 5px 0 0;
   color: var(--xs-text-3);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .sheet-prompt {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.sheet-prompt__addon {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  color: var(--xs-primary-2);
+  display: grid;
+  overflow: hidden;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   background: var(--xs-surface-soft);
 }
 
 .sheet-prompt .ant-input {
-  min-height: 44px;
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  border-radius: var(--xs-radius-control);
+  padding: 14px 16px 6px;
+  background: transparent;
+  color: var(--xs-text);
+  font-size: 14px;
+  line-height: 1.7;
+  resize: none;
+}
+
+.sheet-prompt .ant-input::placeholder {
+  color: #8698b4;
+}
+
+.sheet-prompt__bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 12px 12px 14px;
+}
+
+.sheet-prompt__shortcut {
+  color: var(--xs-text-3);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .sheet-prompt .ant-btn {
   flex: 0 0 auto;
-  height: 44px;
-  padding-inline: 22px;
+  height: 40px;
+  padding-inline: 20px;
   border-radius: var(--xs-radius-control);
   font-weight: 650;
   transition:
@@ -65,7 +91,7 @@
   transform: translateY(1px);
 }
 
-.sheet-prompt[data-state="submitting"] .ant-input {
+.sheet-prompt[data-state="submitting"] {
   animation: sheet-submit-highlight var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
 }
 
@@ -86,7 +112,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
 }
 
 .sheet-suggestions > span {
@@ -190,7 +215,7 @@
 }
 
 .table-page__status-slot {
-  margin-bottom: 4px;
+  margin-bottom: var(--xs-module-gap);
 }
 
 /* 区块标题行：标题 + 计数元信息 */
@@ -223,10 +248,11 @@
 
 .sheet-row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 13px 20px;
+  min-height: 72px;
+  padding: 14px 18px;
   border-bottom: 1px solid #edf2fb;
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
@@ -244,6 +270,13 @@
   min-width: 0;
 }
 
+.sheet-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .sheet-row__title {
   margin: 0;
   overflow: hidden;
@@ -256,49 +289,86 @@
 }
 
 .sheet-row__meta {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sheet-row__tag.ant-tag {
-  margin-inline-end: 0;
+.sheet-row__tag {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.sheet-row > .ant-btn {
-  min-height: 32px;
+.sheet-row__tag--blue {
   color: var(--xs-interactive-text);
+  background: var(--xs-info-soft);
+}
+
+.sheet-row__tag--cyan {
+  color: #047fb3;
+  background: #e6f7ff;
+}
+
+.sheet-row__tag--green {
+  color: #0f7a5b;
+  background: var(--xs-success-soft);
+}
+
+.sheet-row__copy.ant-btn {
+  min-height: 34px;
+  padding-inline: 12px;
+  color: var(--xs-interactive-text);
+  font-size: 13px;
+  font-weight: 650;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.sheet-row > .ant-btn:hover,
-.sheet-row > .ant-btn:focus-visible {
+.sheet-row__copy.ant-btn:not(:disabled):hover,
+.sheet-row__copy.ant-btn:not(:disabled):focus-visible {
   color: var(--xs-interactive-text);
-  border-color: #9fc8ff;
-  background: #f3f8ff;
+  background: #eaf3ff;
+}
+
+/* 指针设备上按钮低调呈现，悬停整行时再强调 */
+@media (hover: hover) {
+  .sheet-row__copy.ant-btn:not(:disabled) {
+    opacity: 0.72;
+  }
+
+  .sheet-row:hover .sheet-row__copy.ant-btn:not(:disabled),
+  .sheet-row:focus-within .sheet-row__copy.ant-btn:not(:disabled) {
+    opacity: 1;
+  }
 }
 
 .sheet-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--xs-border);
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff, #f1f7ff);
 }
 
 .sheet-icon img {
-  max-width: 34px;
-  max-height: 34px;
+  max-width: 32px;
+  max-height: 32px;
 }
 
 @media (min-width: 1181px) {
@@ -601,34 +671,24 @@
 }
 
 @media (max-width: 900px) {
-  .sheet-workbench {
-    padding: 16px 18px 14px;
+  .sheet-console {
+    padding: 18px;
   }
 
-  .sheet-prompt {
-    flex-wrap: wrap;
-  }
-
-  .sheet-prompt__addon {
-    display: none;
-  }
-
-  .sheet-prompt .ant-input {
-    flex: 1 1 100%;
-  }
-
-  .sheet-prompt .ant-btn {
-    width: 100%;
+  .sheet-prompt__bar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .sheet-row {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
+    row-gap: 10px;
   }
 
-  .sheet-row__tag,
-  .sheet-row > .ant-btn {
+  .sheet-row__copy.ant-btn {
     grid-column: 2;
     justify-self: start;
+    padding-inline: 0;
   }
 
   .scene-row {
@@ -667,8 +727,15 @@
   }
 }
 
+/* 触屏没有物理键盘，快捷键提示无意义 */
+@media (max-width: 900px), (pointer: coarse) {
+  .sheet-prompt__shortcut {
+    display: none;
+  }
+}
+
 @media (pointer: coarse) {
-  .sheet-row > .ant-btn,
+  .sheet-row__copy.ant-btn,
   .writing-panel__controls .ant-btn,
   .writing-panel__actions-bar .ant-btn,
   .doc-table .ant-btn-text {

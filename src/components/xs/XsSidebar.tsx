@@ -77,6 +77,14 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
     navigate("/");
   }
 
+  function handleMenuClick({ key }: { key: string }) {
+    if (key === MORE_MENU_KEY || !key.startsWith("/")) {
+      return;
+    }
+
+    navigate(key);
+  }
+
   return (
     <Sider
       className={`xs-sidebar${collapsed ? " xs-sidebar--collapsed" : ""}`}
@@ -118,6 +126,7 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
           selectedKeys={selectedKeys}
           openKeys={openKeys}
           onOpenChange={setOpenKeys}
+          onClick={handleMenuClick}
           items={menuItems}
         />
       </nav>

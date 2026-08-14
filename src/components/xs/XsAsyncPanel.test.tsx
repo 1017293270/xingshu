@@ -1,5 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "./XsAsyncPanel";
 
@@ -154,5 +155,13 @@ describe("XsAsyncPanel", () => {
 
     expect(screen.getByText("第二页")).toBeVisible();
     expect(container.querySelector(".xs-async-panel__content")).not.toBe(firstContent);
+  });
+
+  it("stacks loaded modules with the shared page gap", () => {
+    const xsCss = readFileSync("src/components/xs/xs.css", "utf8");
+    const contentRule = xsCss.match(/\.xs-async-panel__content\[data-view="content"\]\s*\{(?<declarations>[^}]*)\}/)?.groups?.declarations ?? "";
+
+    expect(contentRule).toContain("display: grid");
+    expect(contentRule).toContain("gap: var(--xs-module-gap)");
   });
 });

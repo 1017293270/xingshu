@@ -468,16 +468,27 @@
 }
 
 .xs-sidebar--collapsed .xs-sidebar__new-chat.ant-btn {
+  position: relative;
   justify-content: center;
+  gap: 0;
+  overflow: hidden;
   padding: 0;
 }
 
+.xs-sidebar--collapsed .xs-sidebar__new-chat.ant-btn .ant-btn-icon {
+  margin-inline: 0 !important;
+}
+
 .xs-sidebar--collapsed .xs-sidebar__new-chat-label,
-.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-title-content,
 .xs-sidebar--collapsed .xs-sidebar__user-copy,
 .xs-sidebar--collapsed .xs-sidebar__user-caret {
+  position: absolute;
+  width: 0;
   max-width: 0;
+  height: 0;
+  overflow: hidden;
   opacity: 0;
+  pointer-events: none;
   transform: translateX(-4px);
 }
 
@@ -485,11 +496,42 @@
   width: 100%;
 }
 
-.xs-sidebar--collapsed .xs-sidebar__menu.ant-menu-inline-collapsed .ant-menu-item,
-.xs-sidebar--collapsed .xs-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title {
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-item,
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-submenu-title {
+  position: relative;
+  display: flex !important;
+  align-items: center;
   justify-content: center;
+  margin-inline: 0 !important;
   padding-inline: 0 !important;
+  overflow: hidden;
   border-left-width: 0;
+}
+
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-title-content {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  max-width: none;
+  height: auto;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-title-content a {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-item-icon,
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-submenu-title .ant-menu-item-icon {
+  margin-inline: 0 !important;
+}
+
+.xs-sidebar--collapsed .xs-sidebar__menu .ant-menu-submenu-arrow {
+  display: none;
 }
 
 .xs-sidebar--collapsed .xs-sidebar__user {
@@ -828,6 +870,12 @@
   width: 100%;
   min-width: 0;
   animation: xs-async-content-in var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+.xs-async-panel__content[data-view="content"] {
+  display: grid;
+  align-content: start;
+  gap: var(--xs-module-gap);
 }
 
 .xs-mobile-drawer-root .ant-drawer-mask,

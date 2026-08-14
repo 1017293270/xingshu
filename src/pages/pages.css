@@ -60,6 +60,7 @@
 .history-page__async > .xs-async-panel__content {
   display: flex;
   flex-direction: column;
+  gap: var(--xs-module-gap);
 }
 
 .history-page__async > .xs-async-panel__content > .history-list,

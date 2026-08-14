@@ -29,13 +29,6 @@ export const productCapabilities = {
     provenance: "mock",
     message: "模板、最近表格和生成结果均为演示数据，不会创建真实报表。"
   },
-  cloud: {
-    id: "cloud",
-    label: "实时能力",
-    state: "live",
-    provenance: "datahub",
-    message: "知识库来自当前登录空间的 DataHub；新增请到 DataHub 平台完成。"
-  },
   dataAssets: {
     id: "data-assets",
     label: "实时能力",

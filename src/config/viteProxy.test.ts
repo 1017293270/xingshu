@@ -54,5 +54,13 @@ describe("Vite data-hub proxy", () => {
       target: "http://127.0.0.1:8090",
       changeOrigin: true
     });
+    expect(proxy?.["/platform"]).toMatchObject({
+      target: "http://127.0.0.1:8090",
+      changeOrigin: true
+    });
+    expect(proxy?.["/platform-login"]).toMatchObject({
+      target: "http://127.0.0.1:8090",
+      changeOrigin: true
+    });
   });
 });

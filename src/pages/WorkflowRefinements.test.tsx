@@ -64,6 +64,8 @@ describe("workflow refinements", () => {
     const { container } = renderPage(<TablePage />);
 
     expect(container.querySelector(".workflow-status-slot.table-page__status-slot")).toBeInTheDocument();
+    expect(screen.queryByText("写清这 4 点，表结构更准")).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "制表描述要点" })).not.toBeInTheDocument();
 
     const title = await screen.findByRole("heading", { name: fullTitle });
     expect(title).toHaveAttribute("title", fullTitle);
@@ -99,6 +101,14 @@ describe("workflow refinements", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("制表需求提交失败，请稍后重试");
     expect(screen.getByRole("button", { name: "预览需求" })).toBeEnabled();
+  });
+
+  it("keeps space between the table preview banner and the workbench", () => {
+    const workflowsCss = readFileSync("src/pages/styles/workflows.css", "utf8");
+    const workbenchRule = workflowsCss.match(/\.sheet-workbench\s*\{(?<declarations>[^}]*)\}/)?.groups?.declarations ?? "";
+
+    expect(workbenchRule).toContain("margin: var(--xs-module-gap) 0 0");
+    expect(workbenchRule).not.toContain("1.62fr");
   });
 
   it("keeps the welcome page on the document scrollport instead of creating a second vertical scroller", () => {

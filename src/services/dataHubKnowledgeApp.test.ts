@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DATA_HUB_KNOWLEDGE_DETAIL_PATH,
+  DATA_HUB_KNOWLEDGE_MANAGE_PATH,
+  DATA_HUB_WEB_SPACE_ID_KEY,
+  DATA_HUB_WEB_TOKEN_KEY,
+  DATA_HUB_WEB_USER_KEY,
   buildDataHubKnowledgeDetailUrl,
   buildDataHubKnowledgeManageUrl,
   openDataHubUrl,
   resolveDataHubAppOrigin,
   resolveDataHubKnowledgeAppLinks
 } from "./dataHubKnowledgeApp";
+import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
 
 describe("dataHubKnowledgeApp URLs", () => {
   it("builds a manage URL with an optional path and space id", () => {
@@ -44,6 +50,21 @@ describe("dataHubKnowledgeApp URLs", () => {
     expect(
       buildDataHubKnowledgeDetailUrl("https://datahub.example.test", "/knowledge/", "kb 2")
     ).toBe("https://datahub.example.test/knowledge/kb%202");
+    expect(
+      buildDataHubKnowledgeDetailUrl(
+        "https://datahub.example.test",
+        DATA_HUB_KNOWLEDGE_DETAIL_PATH,
+        "kb-1",
+        7
+      )
+    ).toBe("https://datahub.example.test/platform/knowledge/7/kb-1?space_id=7");
+    expect(
+      buildDataHubKnowledgeDetailUrl(
+        "https://datahub.example.test",
+        DATA_HUB_KNOWLEDGE_DETAIL_PATH,
+        "kb-1"
+      )
+    ).toBeNull();
   });
 
   it("does not build a detail URL without a path or id", () => {
@@ -77,6 +98,12 @@ describe("dataHubKnowledgeApp URLs", () => {
     });
     expect(resolveDataHubKnowledgeAppLinks({
       VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
+    }, 7)).toMatchObject({
+      canAdd: true,
+      manageUrl: `http://127.0.0.1:8090${DATA_HUB_KNOWLEDGE_MANAGE_PATH}?space_id=7`
+    });
+    expect(resolveDataHubKnowledgeAppLinks({
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
     }, 7).manageUrl).not.toContain("token");
   });
 
@@ -95,21 +122,23 @@ describe("dataHubKnowledgeApp URLs", () => {
     });
   });
 
-  it("returns detail URLs only when a detail path is configured", () => {
-    const withoutDetail = resolveDataHubKnowledgeAppLinks({
-      VITE_DATAHUB_APP_URL: "https://datahub.example.test",
-      VITE_DATAHUB_KB_MANAGE_PATH: "/knowledge"
+  it("uses DataHub platform paths by default and still honors explicit overrides", () => {
+    const defaults = resolveDataHubKnowledgeAppLinks({
+      VITE_DATAHUB_APP_URL: "https://datahub.example.test"
     }, 3);
-    expect(withoutDetail.canAdd).toBe(true);
-    expect(withoutDetail.manageUrl).toBe("https://datahub.example.test/knowledge?space_id=3");
-    expect(withoutDetail.detailUrlFor("kb-1")).toBeNull();
+    expect(defaults.canAdd).toBe(true);
+    expect(defaults.manageUrl).toBe("https://datahub.example.test/platform/knowledge?space_id=3");
+    expect(defaults.detailUrlFor("kb-1")).toBe(
+      "https://datahub.example.test/platform/knowledge/3/kb-1?space_id=3"
+    );
 
-    const withDetail = resolveDataHubKnowledgeAppLinks({
+    const overridden = resolveDataHubKnowledgeAppLinks({
       VITE_DATAHUB_APP_URL: "https://datahub.example.test",
       VITE_DATAHUB_KB_MANAGE_PATH: "/knowledge",
       VITE_DATAHUB_KB_DETAIL_PATH: "/knowledge/{id}"
     }, 3);
-    expect(withDetail.detailUrlFor("kb-1")).toBe(
+    expect(overridden.manageUrl).toBe("https://datahub.example.test/knowledge?space_id=3");
+    expect(overridden.detailUrlFor("kb-1")).toBe(
       "https://datahub.example.test/knowledge/kb-1?space_id=3"
     );
   });
@@ -124,5 +153,34 @@ describe("dataHubKnowledgeApp URLs", () => {
       "_blank",
       "noopener,noreferrer"
     );
+    expect(window.localStorage.getItem(DATA_HUB_WEB_TOKEN_KEY)).toBeNull();
+  });
+
+  it("launches DataHub on the current origin during local development", () => {
+    expect(resolveDataHubKnowledgeAppLinks({}, 7, {
+      currentOrigin: "http://127.0.0.1:5175",
+      sameOriginUi: true
+    })).toMatchObject({
+      canAdd: true,
+      usesSameOriginUi: true,
+      manageUrl: "http://127.0.0.1:5175/platform/knowledge?space_id=7"
+    });
+  });
+
+  it("seeds DataHub web storage only when opening a same-origin manage page", () => {
+    writeDataHubAuth({ token: "token-123", userId: 1, username: "demo", isAdmin: false });
+    writeDataHubSpaceId(7);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+
+    openDataHubUrl(`${window.location.origin}/platform/knowledge?space_id=7`);
+
+    expect(open).toHaveBeenCalledWith(
+      `${window.location.origin}/platform/knowledge?space_id=7`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+    expect(window.localStorage.getItem(DATA_HUB_WEB_TOKEN_KEY)).toBe("token-123");
+    expect(window.localStorage.getItem(DATA_HUB_WEB_SPACE_ID_KEY)).toBe("7");
+    expect(window.localStorage.getItem(DATA_HUB_WEB_USER_KEY)).toContain("demo");
   });
 });

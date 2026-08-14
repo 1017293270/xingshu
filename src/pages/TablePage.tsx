@@ -1,5 +1,5 @@
-import { Button, Input, Tag } from "antd";
-import { Lightning, Plus } from "@phosphor-icons/react";
+import { Button, Input } from "antd";
+import { Check, CopySimple, Lightning } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
@@ -26,6 +26,12 @@ const sheetIconById: Record<TableTemplateIconId, string> = {
 const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销售排行」「各部门人员通讯录」...";
 
 const tableSuggestions = ["华东区Q1销售排行", "各部门人员通讯录", "月度费用统计报表"];
+
+const templateTagTone: Record<TableTemplate["tag"], string> = {
+  排行: "blue",
+  清单: "cyan",
+  统计: "green"
+};
 
 export function TablePage() {
   const sessionScope = useSessionQueryScope();
@@ -114,53 +120,63 @@ export function TablePage() {
       className="table-page"
     >
       <XsCapabilityStatus capability={productCapabilities.tables} />
-      <section className="xs-card sheet-workbench xs-page-enter" style={{ animationDelay: "80ms" }}>
-        <div className="sheet-workbench__head">
-          <h2>描述制表需求</h2>
-          <p>说明表格主题、字段与统计口径；当前可预览需求组织方式</p>
-        </div>
-        <section
-          className="sheet-prompt"
-          aria-label="制表需求输入"
-          aria-busy={isGenerating}
-          data-state={isGenerating ? "submitting" : submissionTone}
-        >
-          <span className="sheet-prompt__addon" aria-hidden="true">
-            <Plus size={18} weight="bold" />
-          </span>
-          <Input
-            aria-label="制表需求"
-            className="xs-focus-glow"
-            placeholder={tablePromptPlaceholder}
-            value={prompt}
-            disabled={isGenerating}
-            onChange={(event) => setPrompt(event.target.value)}
-            onPressEnter={handleGenerate}
-          />
-          <Button
-            type="primary"
-            icon={<Lightning size={18} />}
-            loading={isGenerating}
-            disabled={isGenerating || !prompt.trim()}
-            onClick={handleGenerate}
+      <div className="sheet-workbench">
+        <section className="xs-card sheet-console xs-page-enter" style={{ animationDelay: "80ms" }}>
+          <div className="sheet-console__head">
+            <span className="sheet-console__eyebrow">制表工作台</span>
+            <h2>描述制表需求</h2>
+            <p>说明表格主题、字段与统计口径；当前可预览需求组织方式</p>
+          </div>
+          <section
+            className="sheet-prompt xs-focus-glow"
+            aria-label="制表需求输入"
+            aria-busy={isGenerating}
+            data-state={isGenerating ? "submitting" : submissionTone}
           >
-            预览需求
-          </Button>
-        </section>
-        <div className="sheet-suggestions" aria-label="快捷制表示例">
-          <span>试试</span>
-          {tableSuggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
+            <Input.TextArea
+              aria-label="制表需求"
+              variant="borderless"
+              autoSize={{ minRows: 4, maxRows: 10 }}
+              placeholder={tablePromptPlaceholder}
+              value={prompt}
               disabled={isGenerating}
-              onClick={() => handleUseSuggestion(suggestion)}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      </section>
+              onChange={(event) => setPrompt(event.target.value)}
+              onPressEnter={(event) => {
+                if (event.shiftKey) {
+                  return;
+                }
+                event.preventDefault();
+                void handleGenerate();
+              }}
+            />
+            <div className="sheet-prompt__bar">
+              <span className="sheet-prompt__shortcut" aria-hidden="true">Enter 预览 · Shift + Enter 换行</span>
+              <Button
+                type="primary"
+                icon={<Lightning size={18} />}
+                loading={isGenerating}
+                disabled={isGenerating || !prompt.trim()}
+                onClick={handleGenerate}
+              >
+                预览需求
+              </Button>
+            </div>
+          </section>
+          <div className="sheet-suggestions" aria-label="快捷制表示例">
+            <span>试试</span>
+            {tableSuggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                disabled={isGenerating}
+                onClick={() => handleUseSuggestion(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
           tone={submissionTone}
@@ -172,7 +188,7 @@ export function TablePage() {
       </div>
       <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
         <h2 className="subsection-title">最近制表</h2>
-        <span className="section-title-meta">{recentTables.length} 个模板</span>
+        <span className="section-title-meta">{recentTables.length} 个模板 · 可一键复制为制表需求</span>
       </div>
       <XsAsyncPanel
         status={recentTablesStatus}
@@ -195,15 +211,27 @@ export function TablePage() {
                 <img src={sheetIconById[table.iconId]} alt="" />
               </span>
               <div className="sheet-row__body">
-                <h2 className="sheet-row__title" title={table.title}>
-                  {table.title}
-                </h2>
+                <div className="sheet-row__head">
+                  <h2 className="sheet-row__title" title={table.title}>
+                    {table.title}
+                  </h2>
+                  <span className={`sheet-row__tag sheet-row__tag--${templateTagTone[table.tag]}`}>
+                    {table.tag}
+                  </span>
+                </div>
                 <p className="sheet-row__meta">{table.description}</p>
               </div>
-              <Tag className="sheet-row__tag" bordered={false} color="blue">
-                {table.tag}
-              </Tag>
-              <Button disabled={isGenerating} onClick={() => handleCopyTemplate(table)}>
+              <Button
+                type="text"
+                className="sheet-row__copy"
+                icon={
+                  copiedTemplateId === table.id
+                    ? <Check size={16} aria-hidden="true" />
+                    : <CopySimple size={16} aria-hidden="true" />
+                }
+                disabled={isGenerating}
+                onClick={() => handleCopyTemplate(table)}
+              >
                 {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
               </Button>
             </article>

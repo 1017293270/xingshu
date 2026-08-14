@@ -19,7 +19,6 @@ import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import {
   loadOfficialDocumentWorkspace,
-  officialDocumentServiceState,
   uploadOfficialDocumentTemplate
 } from "@/services/officialDocumentService";
 import type {
@@ -155,31 +154,7 @@ export function OfficialDocumentHub() {
     isAdmin || template.status === "PUBLISHED"
   );
   const drafts = workspaceQuery.data?.drafts ?? [];
-  const runtimeCapabilities = workspaceQuery.data?.capabilities;
-  const wordEngineAvailable = runtimeCapabilities?.wordEngine.available === true;
-  const capabilityTone: XsStatusTone = !officialDocumentServiceState.configured
-    ? "warning"
-    : workspaceQuery.isError
-      ? "error"
-      : workspaceQuery.isPending
-        ? "loading"
-        : wordEngineAvailable ? "success" : "warning";
-  const capabilityLabel = !officialDocumentServiceState.configured
-    ? officialDocumentServiceState.label
-    : workspaceQuery.isError
-      ? "公文服务能力探测失败"
-      : workspaceQuery.isPending
-        ? "正在探测公文服务"
-        : wordEngineAvailable ? "结构化写作与 Word 引擎可用" : "Word 引擎不可用";
-  const capabilityMessage = !officialDocumentServiceState.configured
-    ? officialDocumentServiceState.message
-    : workspaceQuery.isError
-      ? operationErrorMessage(workspaceQuery.error)
-      : workspaceQuery.isPending
-        ? "正在读取 /v1/capabilities，不会仅凭 API 地址宣称引擎可用。"
-        : runtimeCapabilities?.wordEngine.detail
-          ?? runtimeCapabilities?.queryAssets.detail
-          ?? officialDocumentServiceState.message;
+  const wordEngineAvailable = workspaceQuery.data?.capabilities?.wordEngine.available === true;
   const needsReviewCount = templates.filter((template) =>
     ["NEEDS_REVIEW", "BLOCKED"].includes(template.status) || countBlockingRisks(template.currentVersion.analysis) > 0
   ).length;
@@ -251,9 +226,6 @@ export function OfficialDocumentHub() {
         </div>
       </header>
 
-      <div className="xs-page-enter" style={{ animationDelay: "40ms" }}>
-        <XsStatusBar tone={capabilityTone} label={capabilityLabel} message={capabilityMessage} announce={false} />
-      </div>
       {operationStatus ? (
         <XsStatusBar tone={operationTone} label="操作" message={operationStatus} transitionKey={`${operationTone}:${operationStatus}`} />
       ) : null}
