@@ -17,8 +17,7 @@ export const templateStatusLabel: Record<OfficialDocumentTemplateStatus, string>
   NEEDS_REVIEW: "待校准",
   PUBLISHED: "已发布",
   BLOCKED: "已阻断",
-  FAILED: "分析失败",
-  DEMO: "功能示例"
+  FAILED: "分析失败"
 };
 
 export const templateStatusColor: Record<OfficialDocumentTemplateStatus, string> = {
@@ -26,8 +25,7 @@ export const templateStatusColor: Record<OfficialDocumentTemplateStatus, string>
   NEEDS_REVIEW: "warning",
   PUBLISHED: "success",
   BLOCKED: "error",
-  FAILED: "error",
-  DEMO: "blue"
+  FAILED: "error"
 };
 
 export const riskLabel: Record<OfficialDocumentRiskSeverity, string> = {
@@ -52,16 +50,14 @@ export const draftStatusLabel: Record<OfficialDocumentDraftStatus, string> = {
   EDITING: "编辑中",
   VALIDATING: "校验中",
   READY: "可导出",
-  BLOCKED: "已阻断",
-  DEMO: "草稿示例"
+  BLOCKED: "已阻断"
 };
 
 export const draftStatusColor: Record<OfficialDocumentDraftStatus, string> = {
   EDITING: "blue",
   VALIDATING: "processing",
   READY: "success",
-  BLOCKED: "error",
-  DEMO: "blue"
+  BLOCKED: "error"
 };
 
 export const calibrationRoleLabel: Record<OfficialDocumentMappingRole, string> = {

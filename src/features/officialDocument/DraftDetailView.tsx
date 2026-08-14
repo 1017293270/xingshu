@@ -6,18 +6,16 @@ import {
   WarningCircle
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Drawer, Modal, Select, Tag } from "antd";
+import { Button, Drawer, Select, Tag } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import {
   createOfficialDocumentBinding,
-  detachOfficialDocumentBinding,
   downloadOfficialDocumentExport,
   exportOfficialDocumentDraft,
   loadOfficialDocumentWorkspace,
-  officialDocumentServiceState,
   refreshOfficialDocumentBindings
 } from "@/services/officialDocumentService";
 import type {
@@ -59,8 +57,8 @@ function DraftNotFound() {
     <div className="official-document-detail__empty xs-card xs-page-enter">
       <FileText size={30} aria-hidden="true" />
       <strong>未找到该公文草稿</strong>
-      <p>草稿可能已被移除，或当前只是一个已过期的本地预演条目。</p>
-      <Link to="/writing">返回智能写作列表</Link>
+      <p>草稿可能已被移除，或不属于当前登录用户。</p>
+      <Link to="/writing">返回公文写作</Link>
     </div>
   );
 }
@@ -84,7 +82,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const [bindingTargetSlot, setBindingTargetSlot] = useState("");
   const [isCreatingBinding, setIsCreatingBinding] = useState(false);
   const [isRefreshingBindings, setIsRefreshingBindings] = useState(false);
-  const [detachingBindingId, setDetachingBindingId] = useState<string>();
   const [isExporting, setIsExporting] = useState<OfficialDocumentExportFormat>();
   const [latestExports, setLatestExports] = useState<Record<string, OfficialDocumentExportRecord>>({});
 
@@ -269,38 +266,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
     }
   };
 
-  const handleDetachBinding = async (binding: DraftDataBinding) => {
-    if (!draft || detachingBindingId) return;
-    setDetachingBindingId(binding.id);
-    try {
-      const detached = await detachOfficialDocumentBinding({
-        draftId: draft.id,
-        bindingId: binding.id
-      });
-      updateWorkspaceCache((current) => ({
-        ...current,
-        drafts: current.drafts.map((item) => item.id === draft.id
-          ? {
-              ...item,
-              bindings: item.bindings.map((existing) => existing.id === binding.id
-                ? { ...detached, queryAssetName: existing.queryAssetName }
-                : existing)
-            }
-          : item)
-      }));
-      await workspaceQuery.refetch();
-      announce("success", detached.persisted
-        ? "该绑定已转为手工快照值；后续刷新不会覆盖。"
-        : "该绑定已转为本地手工值；当前预演没有改写任何真实文件。"
-      );
-    } catch (error) {
-      announce("error", operationErrorMessage(error));
-      throw error;
-    } finally {
-      setDetachingBindingId(undefined);
-    }
-  };
-
   const handleExport = async (format: OfficialDocumentExportFormat) => {
     if (!draft || isExporting || draft.status !== "READY") return;
     setIsExporting(format);
@@ -331,7 +296,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   return (
     <div className="official-document-detail">
       <nav className="official-document-detail__crumb xs-page-enter" aria-label="返回列表">
-        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />智能写作</Link>
+        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />公文写作</Link>
         <span aria-hidden="true">/</span>
         <span>公文草稿</span>
       </nav>
@@ -378,12 +343,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                   title={contentSaveState === "saved" ? undefined : "草稿内容保存完成后才能导出"}
                   onClick={() => void handleExport("DOCX")}
                 >导出 DOCX</Button>
-                <Button
-                  disabled={!canExport}
-                  loading={isExporting === "PDF"}
-                  title={contentSaveState === "saved" ? undefined : "草稿内容保存完成后才能导出"}
-                  onClick={() => void handleExport("PDF")}
-                >导出 PDF</Button>
               </div>
             </header>
 
@@ -420,7 +379,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                             <span className="official-document-binding__title">
                               <strong>{binding.queryAssetName ?? binding.queryAssetId}</strong>
                               <Tag bordered={false} color={binding.status === "ACTIVE" ? "success" : binding.status === "MANUAL" ? "default" : "warning"}>
-                                {binding.persisted ? binding.status : "本地预演"}
+                                {binding.status}
                               </Tag>
                             </span>
                             <small>{binding.outputKey} → {binding.targetSlotTag}</small>
@@ -429,23 +388,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                               <div><dt>snapshotId</dt><dd>{binding.snapshotId ?? "—"}</dd></div>
                               <div><dt>固定版本</dt><dd>{binding.queryVersionId}</dd></div>
                             </dl>
-                          </div>
-                          <div className="official-document-binding__actions">
-                            <Button
-                              type="link"
-                              size="small"
-                              disabled={!binding.persisted || binding.status !== "ACTIVE"}
-                              loading={detachingBindingId === binding.id}
-                              onClick={() => Modal.confirm({
-                                title: "转为普通文本？",
-                                content: "服务端将保留当前快照值并停止后续自动刷新；导出时继续写入当前冻结值。",
-                                okText: "转为普通文本",
-                                cancelText: "取消",
-                                onOk: () => handleDetachBinding(binding)
-                              })}
-                            >
-                              转为手工
-                            </Button>
                           </div>
                         </li>
                       ))}
@@ -500,7 +442,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                   || !bindingColumnIds.length}
                 onClick={() => void handleCreateBinding()}
               >
-                {officialDocumentServiceState.configured ? "创建绑定" : "建立本地预演"}
+                创建绑定
               </Button>
             </div>
           )}

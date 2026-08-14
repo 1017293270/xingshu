@@ -4,12 +4,10 @@ import type { QueryAsset } from "@/types/analytics";
 import type {
   CreateDraftDataBindingInput,
   CreateOfficialDocumentDraftInput,
-  DetachOfficialDocumentBindingInput,
   DraftDataBinding,
   OfficialDocumentAnalysis,
   OfficialDocumentDraft,
   OfficialDocumentDraftContent,
-  OfficialDocumentEditorSession,
   OfficialDocumentExportFormat,
   OfficialDocumentExportRecord,
   OfficialDocumentMappingProfile,
@@ -30,7 +28,6 @@ const productionDirectAccessRejected = configuredApiMode === "direct-development
 const configuredApiBaseUrl = productionDirectAccessRejected ? "" : requestedApiBaseUrl;
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_TEMPLATE_BYTES = 25 * 1024 * 1024;
-const DEMO_TIMESTAMP = "2026-08-03T08:00:00.000Z";
 
 type OfficialDocumentServiceErrorOptions = {
   status?: number;
@@ -65,11 +62,8 @@ export type OfficialDocumentService = {
   getDraftContent(draftId: string): Promise<OfficialDocumentDraftContent>;
   updateDraftContent(draftId: string, input: UpdateOfficialDocumentDraftContentInput): Promise<OfficialDocumentDraftContent>;
   getDraftPreview(draftId: string): Promise<Blob>;
-  createEditorSession(draftId: string): Promise<OfficialDocumentEditorSession>;
-  heartbeatEditorSession(draftId: string, sessionId: string): Promise<OfficialDocumentEditorSession>;
   createBinding(draftId: string, input: CreateDraftDataBindingInput): Promise<DraftDataBinding>;
   refreshBindings(draftId: string): Promise<DraftDataBinding[]>;
-  detachBinding(input: DetachOfficialDocumentBindingInput): Promise<DraftDataBinding>;
   exportDraft(draftId: string, format: OfficialDocumentExportFormat): Promise<OfficialDocumentExportRecord>;
   downloadExport(exportId: string): Promise<Blob>;
 };
@@ -199,15 +193,6 @@ type ApiDraftBinding = {
   status: DraftDataBinding["status"];
 };
 
-type ApiEditorSession = {
-  id: string;
-  draftId: string;
-  actorId: string;
-  expiresAt: string;
-  readOnly: boolean;
-  closedAt?: string | null;
-};
-
 type ApiDraftSnapshot = {
   id: string;
   templateId: string;
@@ -217,20 +202,9 @@ type ApiDraftSnapshot = {
   status: string;
   fileVersions?: Array<{ versionNumber: number; createdAt: string }>;
   bindings?: ApiDraftBinding[];
-  editorSession?: ApiEditorSession | null;
 };
 
 type ApiDraftContent = OfficialDocumentDraftContent;
-
-type ApiEditorSessionView = {
-  session: ApiEditorSession;
-  editor: {
-    documentServerApiUrl: string;
-    token: string;
-    config: Record<string, unknown>;
-    expiresAt: string;
-  };
-};
 
 type ApiFidelityReport = {
   passed: boolean;
@@ -261,7 +235,6 @@ type ApiCapabilityState = {
 
 type ApiCapabilitiesView = {
   wordEngine?: ApiCapabilityState;
-  onlyOffice?: ApiCapabilityState;
   queryAssets?: ApiCapabilityState;
   limits?: {
     acceptedFileTypes?: string[];
@@ -344,15 +317,6 @@ async function requestOfficialDocument<T>(baseUrl: string, path: string, options
   return payload as T;
 }
 
-function stableDemoId(value: string) {
-  let hash = 2166136261;
-  for (const character of value) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
 function stableUuid(value: string) {
   const words = [0, 1, 2, 3].map((salt) => {
     let hash = 2166136261 ^ salt;
@@ -381,273 +345,6 @@ function assertDocxTemplate(file: File) {
   if (file.size > MAX_TEMPLATE_BYTES) {
     throw new OfficialDocumentServiceError("DOCX 文件不能超过 25 MB", { code: "FILE_TOO_LARGE" });
   }
-}
-
-function demoAnalysis(versionId: string): OfficialDocumentAnalysis {
-  return {
-    templateVersionId: versionId,
-    sectionCount: 0,
-    structureNodes: [
-      {
-        id: `${versionId}-title`,
-        order: 1,
-        paragraphIndex: 0,
-        slotId: stableUuid(`${versionId}:paragraph:0`),
-        variantId: "title-default",
-        role: "TITLE",
-        roleLabel: "标题（示例槽位）",
-        preview: "待连接 Syncfusion DocIO 后从 Word 原稿识别",
-        editable: false,
-        dataBinding: false,
-        required: true,
-        styleSummary: ["本地预演，不代表真实提取结果"]
-      },
-      {
-        id: `${versionId}-body`,
-        order: 2,
-        paragraphIndex: 1,
-        slotId: stableUuid(`${versionId}:paragraph:1`),
-        variantId: "body-default",
-        role: "BODY",
-        roleLabel: "正文（示例槽位）",
-        preview: "上传文件的正文不会在未配置状态下读取",
-        editable: false,
-        dataBinding: false,
-        required: false,
-        styleSummary: ["需由 Word 引擎提取字体、段落和编号"]
-      },
-      {
-        id: `${versionId}-empty`,
-        order: 3,
-        paragraphIndex: 2,
-        slotId: stableUuid(`${versionId}:paragraph:2`),
-        variantId: "preserve-empty",
-        role: "PRESERVE",
-        roleLabel: "原样保留",
-        preview: "空段落（保留格式）",
-        empty: true,
-        editable: false,
-        dataBinding: false,
-        required: false,
-        styleSummary: ["空段落可能承载间距或分页格式"]
-      }
-    ],
-    risks: [
-      {
-        id: `${versionId}-engine`,
-        code: "ENGINE_NOT_CONFIGURED",
-        severity: "BLOCKING",
-        title: "Word 引擎未配置",
-        detail: "当前仅展示确定性本地预演，未读取、上传或解析该 DOCX，不能发布正式模板。"
-      }
-    ],
-    capability: {
-      engineName: "Syncfusion DocIO",
-      engineVersion: "未配置",
-      licenseMode: "UNAVAILABLE",
-      onlineEditorCompatible: null,
-      extractedFeatureCount: 0,
-      fontSubstitutions: [],
-      unsupportedWarnings: ["尚未执行真实格式提取"],
-      blockingReasons: ["公文服务未配置"]
-    }
-  };
-}
-
-const demoTemplateVersionId = "template-version-demo-1";
-
-const demoTemplates: OfficialDocumentTemplate[] = [
-  {
-    id: "template-demo-work-report",
-    name: "工作情况报告（功能示例）",
-    status: "DEMO",
-    source: "DEMO",
-    currentVersion: {
-      id: demoTemplateVersionId,
-      versionNo: 1,
-      fileName: "工作情况报告-示例.docx",
-      fileSize: 0,
-      createdAt: DEMO_TIMESTAMP,
-      analysis: demoAnalysis(demoTemplateVersionId)
-    },
-    updatedAt: DEMO_TIMESTAMP
-  }
-];
-
-const demoDrafts: OfficialDocumentDraft[] = [
-  {
-    id: "draft-demo-1",
-    title: "推进数据治理工作情况报告（草稿示例）",
-    status: "DEMO",
-    source: "DEMO",
-    templateId: demoTemplates[0].id,
-    templateVersionId: demoTemplateVersionId,
-    templateName: demoTemplates[0].name,
-    currentFileVersionNo: 1,
-    updatedAt: DEMO_TIMESTAMP,
-    bindings: []
-  }
-];
-
-const demoQueryBindingCandidates: QueryBindingCandidate[] = [
-  {
-    assetId: "query-asset-demo-revenue",
-    assetName: "本月经营收入（问数绑定示例）",
-    versionId: "query-version-demo-1",
-    versionLabel: "固定版本 v1（示例）",
-    source: "DEMO",
-    outputs: [
-      {
-        outputKey: "summary",
-        label: "经营指标摘要",
-        supportedRenderings: ["SCALAR", "FACT_SUMMARY"],
-        columns: [{ columnId: "amount", label: "经营收入" }]
-      }
-    ]
-  }
-];
-
-const unavailableRuntimeCapabilities: OfficialDocumentRuntimeCapabilities = {
-  wordEngine: { available: false, code: "ENGINE_NOT_CONFIGURED", detail: "Syncfusion DocIO 未配置" },
-  onlyOffice: { available: false, code: "ONLYOFFICE_DISABLED", detail: "ONLYOFFICE Docs 未配置" },
-  queryAssets: { available: false, code: "QUERY_ASSET_UNAVAILABLE", detail: "QueryAsset 适配器未配置" },
-  acceptedFileTypes: [".docx"],
-  bindingKinds: ["SCALAR", "FACT_SUMMARY", "TABLE"],
-  exportFormats: ["DOCX", "PDF"],
-  previewFormats: ["PDF"],
-  editingMode: "STRUCTURED"
-};
-
-function createDemoService(): OfficialDocumentService {
-  const unavailableMutation = (action: string) => {
-    throw new OfficialDocumentServiceError(`${action}需要已配置并授权的公文服务`, {
-      code: "ENGINE_NOT_CONFIGURED"
-    });
-  };
-
-  return {
-    state: {
-      configured: false,
-      mode: "demo",
-      label: "线上公文服务未接入",
-      message: "当前只展示功能预演，不会上传、解析、保存或生成真实公文。"
-    },
-    async loadWorkspace() {
-      return {
-        source: "DEMO",
-        capabilities: unavailableRuntimeCapabilities,
-        templates: demoTemplates,
-        drafts: demoDrafts,
-        queryBindingCandidates: demoQueryBindingCandidates
-      };
-    },
-    async getTemplateAnalysis(_templateId, versionId) {
-      return demoAnalysis(versionId);
-    },
-    async getTemplatePreview() {
-      return unavailableMutation("加载原稿 PDF 预览");
-    },
-    async uploadTemplate(file) {
-      assertDocxTemplate(file);
-      const fingerprint = stableDemoId(`${file.name}:${file.size}:${file.lastModified}`);
-      const versionId = `template-version-local-${fingerprint}`;
-      const timestamp = file.lastModified > 0 ? new Date(file.lastModified).toISOString() : DEMO_TIMESTAMP;
-      return {
-        source: "DEMO",
-        persisted: false,
-        template: {
-          id: `template-local-${fingerprint}`,
-          name: file.name.replace(/\.docx$/i, ""),
-          status: "DEMO",
-          source: "DEMO",
-          currentVersion: {
-            id: versionId,
-            versionNo: 1,
-            fileName: file.name,
-            fileSize: file.size,
-            createdAt: timestamp,
-            analysis: demoAnalysis(versionId)
-          },
-          updatedAt: timestamp
-        },
-        message: "已建立本地预演条目；文件内容未读取、未上传，也未执行格式提取。"
-      };
-    },
-    async updateTemplateMapping() {
-      return unavailableMutation("保存模板映射");
-    },
-    async publishTemplate() {
-      return unavailableMutation("发布模板");
-    },
-    async createDraft(input) {
-      const fingerprint = stableDemoId(`${input.templateVersionId}:${input.title}`);
-      const template = demoTemplates.find((item) => item.id === input.templateId);
-      return {
-        id: `draft-local-${fingerprint}`,
-        title: input.title,
-        status: "DEMO",
-        source: "DEMO",
-        templateId: input.templateId,
-        templateVersionId: input.templateVersionId,
-        templateName: template?.name ?? "本地预演模板",
-        currentFileVersionNo: 1,
-        updatedAt: DEMO_TIMESTAMP,
-        bindings: []
-      };
-    },
-    async getDraftContent() {
-      return {
-        revision: 0,
-        fixedValues: demoAnalysis(demoTemplateVersionId).structureNodes
-          .filter((node) => node.role === "TITLE" && node.slotId)
-          .map((node) => ({ slotId: node.slotId!, value: "示例公文标题" })),
-        blocks: [{
-          id: "demo-body-1",
-          order: 0,
-          role: "BODY",
-          variantId: "body-default",
-          text: "当前为显式演示模式。"
-        }]
-      };
-    },
-    async updateDraftContent(_draftId, input) {
-      return { revision: input.expectedRevision + 1, fixedValues: input.fixedValues, blocks: input.blocks };
-    },
-    async getDraftPreview() {
-      return unavailableMutation("生成草稿 PDF 预览");
-    },
-    async createEditorSession(draftId) {
-      return {
-        id: `editor-unavailable-${stableDemoId(draftId)}`,
-        draftId,
-        mode: "UNAVAILABLE",
-        message: "ONLYOFFICE 和公文服务未配置，不能创建真实编辑会话。"
-      };
-    },
-    async heartbeatEditorSession() {
-      return unavailableMutation("续期编辑会话");
-    },
-    async createBinding(draftId, input) {
-      return {
-        id: `binding-local-${stableDemoId(`${draftId}:${input.queryAssetId}:${input.outputKey}:${input.targetSlotTag}`)}`,
-        ...input,
-        status: "MANUAL",
-        persisted: false
-      };
-    },
-    async refreshBindings() {
-      return unavailableMutation("刷新问数绑定");
-    },
-    async detachBinding() {
-      return unavailableMutation("解除问数绑定");
-    },
-    async exportDraft() {
-      return unavailableMutation("正式导出");
-    },
-    async downloadExport() {
-      return unavailableMutation("下载正式导出文件");
-    }
-  };
 }
 
 function asArray<T>(payload: unknown, field: string): T[] {
@@ -684,11 +381,10 @@ function mapRuntimeCapabilities(payload: unknown): OfficialDocumentRuntimeCapabi
   };
   return {
     wordEngine: state(source.wordEngine, "ENGINE_CAPABILITY_UNKNOWN"),
-    onlyOffice: state(source.onlyOffice, "ONLYOFFICE_CAPABILITY_UNKNOWN"),
     queryAssets: state(source.queryAssets, "QUERY_ASSET_CAPABILITY_UNKNOWN"),
     acceptedFileTypes: supported(limits.acceptedFileTypes, [".docx"] as const, [".docx"]),
     bindingKinds: supported(limits.bindingKinds, ["SCALAR", "FACT_SUMMARY", "TABLE"] as const, ["SCALAR", "FACT_SUMMARY", "TABLE"]),
-    exportFormats: supported(limits.exportFormats, ["DOCX", "PDF"] as const, ["DOCX", "PDF"]),
+    exportFormats: supported(limits.exportFormats, ["DOCX"] as const, ["DOCX"]),
     previewFormats: supported(limits.previewFormats, ["PDF"] as const, ["PDF"]),
     editingMode: limits.editingMode === "WORD" ? "WORD" : "STRUCTURED"
   };
@@ -1005,21 +701,6 @@ function mapTemplate(view: ApiTemplateView): OfficialDocumentTemplate {
   };
 }
 
-function mapEditorSessionView(view: ApiEditorSessionView): OfficialDocumentEditorSession {
-  return {
-    id: view.session.id,
-    draftId: view.session.draftId,
-    mode: view.session.readOnly ? "READ_ONLY" : "EDIT",
-    leaseExpiresAt: view.session.expiresAt,
-    documentServerApiUrl: view.editor.documentServerApiUrl,
-    token: view.editor.token,
-    editorConfig: view.editor.config,
-    message: view.session.readOnly
-      ? "已创建只读 ONLYOFFICE 会话。"
-      : "已创建单人 ONLYOFFICE 编辑会话；保存后将自动执行格式复检。"
-  };
-}
-
 function mapExportRecord(record: ApiExportRecord): OfficialDocumentExportRecord {
   return {
     id: record.id,
@@ -1069,7 +750,6 @@ function mapDraft(snapshot: ApiDraftSnapshot, templateNames: Map<string, string>
     templateName: templateNames.get(snapshot.templateId) ?? "公文模板",
     currentFileVersionNo: currentFileVersion?.versionNumber ?? 1,
     updatedAt: currentFileVersion?.createdAt ?? snapshot.createdAt,
-    activeEditorLeaseExpiresAt: snapshot.editorSession?.closedAt ? undefined : snapshot.editorSession?.expiresAt,
     bindings: (snapshot.bindings ?? []).map(mapBinding)
   };
 }
@@ -1128,7 +808,9 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       ]);
       const templates = asArray<ApiTemplateView>(templatesPayload, "items").map(mapTemplate);
       const templateNames = new Map(templates.map((template) => [template.id, template.name]));
+      const currentUserId = readDataHubSession().user?.userId;
       const queryBindingCandidates = assets
+        .filter((asset) => currentUserId !== undefined && asset.ownerUserId === currentUserId)
         .map(mapQueryAsset)
         .filter((candidate): candidate is QueryBindingCandidate => Boolean(candidate));
       const queryAssetNames = new Map(queryBindingCandidates.map((candidate) => [candidate.assetId, candidate.assetName]));
@@ -1238,30 +920,6 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         { method: "POST", responseType: "blob", timeoutMs: 90_000 }
       );
     },
-    async createEditorSession(draftId) {
-      const actor = authenticatedActor();
-      const view = await requestOfficialDocument<ApiEditorSessionView>(
-        baseUrl,
-        `/v1/drafts/${encodeURIComponent(draftId)}/editor-sessions`,
-        {
-          method: "POST",
-          body: JSON.stringify({ actorName: actor.actorName, readOnly: false })
-        }
-      );
-      return mapEditorSessionView(view);
-    },
-    async heartbeatEditorSession(draftId, sessionId) {
-      const actor = authenticatedActor();
-      const view = await requestOfficialDocument<ApiEditorSessionView>(
-        baseUrl,
-        `/v1/drafts/${encodeURIComponent(draftId)}/editor-sessions/${encodeURIComponent(sessionId)}:heartbeat`,
-        {
-          method: "POST",
-          body: JSON.stringify({ actorName: actor.actorName })
-        }
-      );
-      return mapEditorSessionView(view);
-    },
     async createBinding(draftId, input) {
       const bindingId = crypto.randomUUID();
       const binding = await requestOfficialDocument<ApiDraftBinding>(
@@ -1290,14 +948,6 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         { method: "POST" }
       );
       return bindings.map(mapBinding);
-    },
-    async detachBinding(input) {
-      const binding = await requestOfficialDocument<ApiDraftBinding>(
-        baseUrl,
-        `/v1/drafts/${encodeURIComponent(input.draftId)}/bindings/${encodeURIComponent(input.bindingId)}:detach`,
-        { method: "POST" }
-      );
-      return mapBinding(binding);
     },
     async exportDraft(draftId, format) {
       const record = await requestOfficialDocument<ApiExportRecord>(
@@ -1343,11 +993,8 @@ function createUnconfiguredService(): OfficialDocumentService {
     getDraftContent: unavailable,
     updateDraftContent: unavailable,
     getDraftPreview: unavailable,
-    createEditorSession: unavailable,
-    heartbeatEditorSession: unavailable,
     createBinding: unavailable,
     refreshBindings: unavailable,
-    detachBinding: unavailable,
     exportDraft: unavailable,
     downloadExport: unavailable
   };
@@ -1355,7 +1002,7 @@ function createUnconfiguredService(): OfficialDocumentService {
 
 export function createOfficialDocumentService(baseUrl = configuredApiBaseUrl): OfficialDocumentService {
   if (baseUrl.trim()) return createHttpService(baseUrl.trim());
-  return configuredApiMode === "demo" ? createDemoService() : createUnconfiguredService();
+  return createUnconfiguredService();
 }
 
 export const officialDocumentService = createOfficialDocumentService();
@@ -1379,16 +1026,10 @@ export const updateOfficialDocumentDraftContent = (draftId: string, input: Updat
   officialDocumentService.updateDraftContent(draftId, input);
 export const getOfficialDocumentDraftPreview = (draftId: string) =>
   officialDocumentService.getDraftPreview(draftId);
-export const createOfficialDocumentEditorSession = (draftId: string) =>
-  officialDocumentService.createEditorSession(draftId);
-export const heartbeatOfficialDocumentEditorSession = (draftId: string, sessionId: string) =>
-  officialDocumentService.heartbeatEditorSession(draftId, sessionId);
 export const createOfficialDocumentBinding = (draftId: string, input: CreateDraftDataBindingInput) =>
   officialDocumentService.createBinding(draftId, input);
 export const refreshOfficialDocumentBindings = (draftId: string) =>
   officialDocumentService.refreshBindings(draftId);
-export const detachOfficialDocumentBinding = (input: DetachOfficialDocumentBindingInput) =>
-  officialDocumentService.detachBinding(input);
 export const exportOfficialDocumentDraft = (draftId: string, format: OfficialDocumentExportFormat) =>
   officialDocumentService.exportDraft(draftId, format);
 export const downloadOfficialDocumentExport = (exportId: string) =>

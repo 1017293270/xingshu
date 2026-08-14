@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import {
   createOfficialDocumentDraft,
   getOfficialDocumentTemplateAnalysis,
@@ -47,8 +48,8 @@ function TemplateNotFound() {
     <div className="official-document-detail__empty xs-card xs-page-enter">
       <FileDoc size={30} aria-hidden="true" />
       <strong>未找到该公文模板</strong>
-      <p>模板可能已被移除，或当前只是一个已过期的本地预演条目。</p>
-      <Link to="/writing">返回智能写作列表</Link>
+      <p>模板可能已被移除、尚未发布，或当前账号无权访问。</p>
+      <Link to="/writing">返回公文写作</Link>
     </div>
   );
 }
@@ -61,7 +62,8 @@ function CalibrationPanel({
   onLoadPreview,
   onCreateDraft,
   onSaveMapping,
-  onPublish
+  onPublish,
+  canManageTemplate
 }: {
   template: OfficialDocumentTemplate;
   analysis?: OfficialDocumentAnalysis;
@@ -71,10 +73,11 @@ function CalibrationPanel({
   onCreateDraft: () => void;
   onSaveMapping: (mappings: OfficialDocumentMappingDefinition[]) => Promise<boolean>;
   onPublish: () => Promise<boolean>;
+  canManageTemplate: boolean;
 }) {
   const blockingCount = countBlockingRisks(analysis);
-  const canCreateDraft = template.status === "PUBLISHED" || template.source === "DEMO";
-  const canCalibrate = template.source === "LIVE" && template.status === "NEEDS_REVIEW";
+  const canCreateDraft = template.status === "PUBLISHED";
+  const canCalibrate = canManageTemplate && template.source === "LIVE" && template.status === "NEEDS_REVIEW";
   const [calibrationNodes, setCalibrationNodes] = useState<OfficialDocumentStructureNode[]>([]);
   const [mappingSaved, setMappingSaved] = useState(false);
   const [isSavingMapping, setIsSavingMapping] = useState(false);
@@ -373,6 +376,7 @@ function CalibrationPanel({
 
 export function TemplateDetailView({ templateId }: { templateId: string }) {
   const navigate = useNavigate();
+  const canManageTemplate = useDataHubAuthStore((state) => state.user?.isAdmin === true);
   const location = useLocation();
   const workspaceKey = useOfficialDocumentWorkspaceKey();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
@@ -400,8 +404,10 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     hasData: workspaceQuery.data !== undefined
   });
   const template = useMemo(
-    () => workspaceQuery.data?.templates.find((item) => item.id === templateId),
-    [workspaceQuery.data, templateId]
+    () => workspaceQuery.data?.templates.find((item) =>
+      item.id === templateId && (canManageTemplate || item.status === "PUBLISHED")
+    ),
+    [canManageTemplate, workspaceQuery.data, templateId]
   );
   const embeddedAnalysis = template?.currentVersion.analysis;
   const analysisQuery = useQuery({
@@ -478,7 +484,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   };
 
   const openDraftModal = () => {
-    if (!template || (template.status !== "PUBLISHED" && template.source !== "DEMO")) return;
+    if (!template || template.status !== "PUBLISHED") return;
     setDraftTitle(`${template.name.replace(/（.*?）/g, "")} - 新草稿`);
     setDraftModalOpen(true);
   };
@@ -501,10 +507,8 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
       setDraftModalOpen(false);
       navigate(`/writing/drafts/${draft.id}`, {
         state: {
-          notice: draft.source === "LIVE"
-            ? "草稿已创建，已从模板样本文字初始化结构化正文。"
-            : "已建立本地草稿预演；未保存真实文件。",
-          noticeTone: draft.source === "LIVE" ? "success" : "warning"
+          notice: "草稿已创建，已从模板样本文字初始化结构化正文。",
+          noticeTone: "success"
         }
       });
     } catch (error) {
@@ -521,7 +525,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   return (
     <div className="official-document-detail">
       <nav className="official-document-detail__crumb xs-page-enter" aria-label="返回列表">
-        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />智能写作</Link>
+        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />公文写作</Link>
         <span aria-hidden="true">/</span>
         <span>模板库</span>
       </nav>
@@ -577,6 +581,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
               onCreateDraft={openDraftModal}
               onSaveMapping={handleSaveMapping}
               onPublish={handlePublishTemplate}
+              canManageTemplate={canManageTemplate}
             />
           </>
         )}
@@ -586,7 +591,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
         <Modal
           title="从模板创建公文草稿"
           open
-          okText={template.source === "DEMO" ? "创建本地预演" : "创建草稿"}
+          okText="创建草稿"
           cancelText="取消"
           confirmLoading={isCreatingDraft}
           okButtonProps={{ disabled: !draftTitle.trim() }}
@@ -597,7 +602,6 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
             <p>模板版本：{template.name} · v{template.currentVersion.versionNo}</p>
             <label htmlFor="official-document-draft-title">草稿名称</label>
             <Input id="official-document-draft-title" value={draftTitle} maxLength={120} onChange={(event) => setDraftTitle(event.target.value)} />
-            {template.source === "DEMO" ? <small>当前不会生成或保存真实 DOCX。</small> : null}
           </div>
         </Modal>
       ) : null}

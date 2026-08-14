@@ -3,6 +3,7 @@ import {
   buildDataHubKnowledgeDetailUrl,
   buildDataHubKnowledgeManageUrl,
   openDataHubUrl,
+  resolveDataHubAppOrigin,
   resolveDataHubKnowledgeAppLinks
 } from "./dataHubKnowledgeApp";
 
@@ -50,18 +51,47 @@ describe("dataHubKnowledgeApp URLs", () => {
     expect(buildDataHubKnowledgeDetailUrl("https://datahub.example.test", "/kb/{id}", "  ")).toBeNull();
   });
 
-  it("explains why add is disabled when the app origin is missing or unsafe", () => {
+  it("reuses the login DataHub origin instead of requiring a separate app URL", () => {
+    expect(resolveDataHubAppOrigin({
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
+    })).toBe("http://127.0.0.1:8090");
+    expect(resolveDataHubAppOrigin({
+      VITE_DATAHUB_API_BASE_URL: "https://datahub.example.test/api/"
+    })).toBe("https://datahub.example.test");
+    expect(resolveDataHubAppOrigin({
+      VITE_DATAHUB_BFF_PORT: "8090"
+    })).toBe("http://127.0.0.1:8090");
+    expect(resolveDataHubAppOrigin({
+      VITE_DATAHUB_APP_URL: "https://datahub-ui.example.test",
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
+    })).toBe("https://datahub-ui.example.test");
+  });
+
+  it("enables add from the login proxy target", () => {
+    expect(resolveDataHubKnowledgeAppLinks({
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090",
+      VITE_DATAHUB_KB_MANAGE_PATH: "/knowledge"
+    }, 7)).toMatchObject({
+      canAdd: true,
+      manageUrl: "http://127.0.0.1:8090/knowledge?space_id=7"
+    });
+    expect(resolveDataHubKnowledgeAppLinks({
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
+    }, 7).manageUrl).not.toContain("token");
+  });
+
+  it("explains why add is disabled when no login DataHub origin is available", () => {
     expect(resolveDataHubKnowledgeAppLinks({}, 7)).toMatchObject({
       manageUrl: null,
       canAdd: false,
-      addDisabledReason: "尚未配置 DataHub 前端地址"
+      addDisabledReason: "无法从当前登录配置确定 DataHub 地址"
     });
     expect(resolveDataHubKnowledgeAppLinks({
       VITE_DATAHUB_APP_URL: "javascript:alert(1)"
     }, 7)).toMatchObject({
       manageUrl: null,
       canAdd: false,
-      addDisabledReason: "DataHub 前端地址无效"
+      addDisabledReason: "DataHub 地址无效"
     });
   });
 

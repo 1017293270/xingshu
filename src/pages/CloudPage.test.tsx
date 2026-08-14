@@ -56,7 +56,7 @@ function disabledAppLinks() {
   return {
     manageUrl: null,
     canAdd: false,
-    addDisabledReason: "尚未配置 DataHub 前端地址",
+    addDisabledReason: "无法从当前登录配置确定 DataHub 地址",
     detailUrlFor: () => null
   };
 }
@@ -142,7 +142,7 @@ describe("CloudPage", () => {
 
     await screen.findByRole("article", { name: "知识库：企业制度知识库" });
     expect(screen.getByRole("button", { name: "添加知识库" })).toBeDisabled();
-    expect(screen.getByText("尚未配置 DataHub 前端地址")).toBeInTheDocument();
+    expect(screen.getByText("无法从当前登录配置确定 DataHub 地址")).toBeInTheDocument();
   });
 
   it("opens DataHub from add and from a knowledge-base card", async () => {

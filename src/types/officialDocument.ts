@@ -1,8 +1,8 @@
-export type OfficialDocumentDataSource = "LIVE" | "DEMO";
+export type OfficialDocumentDataSource = "LIVE";
 
 export type OfficialDocumentServiceState = {
   configured: boolean;
-  mode: "live" | "demo";
+  mode: "live";
   label: string;
   message: string;
 };
@@ -12,8 +12,7 @@ export type OfficialDocumentTemplateStatus =
   | "NEEDS_REVIEW"
   | "PUBLISHED"
   | "BLOCKED"
-  | "FAILED"
-  | "DEMO";
+  | "FAILED";
 
 export type OfficialDocumentRiskSeverity = "INFO" | "WARNING" | "BLOCKING";
 
@@ -146,7 +145,7 @@ export type DraftDataBinding = {
   persisted: boolean;
 };
 
-export type OfficialDocumentDraftStatus = "EDITING" | "VALIDATING" | "READY" | "BLOCKED" | "DEMO";
+export type OfficialDocumentDraftStatus = "EDITING" | "VALIDATING" | "READY" | "BLOCKED";
 
 export type OfficialDocumentDraft = {
   id: string;
@@ -158,7 +157,6 @@ export type OfficialDocumentDraft = {
   templateName: string;
   currentFileVersionNo: number;
   updatedAt: string;
-  activeEditorLeaseExpiresAt?: string;
   bindings: DraftDataBinding[];
 };
 
@@ -183,17 +181,6 @@ export type UpdateOfficialDocumentDraftContentInput = {
   expectedRevision: number;
   fixedValues: OfficialDocumentDraftContent["fixedValues"];
   blocks: OfficialDocumentDraftContent["blocks"];
-};
-
-export type OfficialDocumentEditorSession = {
-  id: string;
-  draftId: string;
-  mode: "EDIT" | "READ_ONLY" | "UNAVAILABLE";
-  leaseExpiresAt?: string;
-  documentServerApiUrl?: string;
-  token?: string;
-  editorConfig?: Record<string, unknown>;
-  message: string;
 };
 
 export type QueryBindingCandidate = {
@@ -221,11 +208,10 @@ export type OfficialDocumentCapabilityState = {
 
 export type OfficialDocumentRuntimeCapabilities = {
   wordEngine: OfficialDocumentCapabilityState;
-  onlyOffice: OfficialDocumentCapabilityState;
   queryAssets: OfficialDocumentCapabilityState;
   acceptedFileTypes: string[];
   bindingKinds: Array<"SCALAR" | "FACT_SUMMARY" | "TABLE">;
-  exportFormats: Array<"DOCX" | "PDF">;
+  exportFormats: Array<"DOCX">;
   previewFormats: Array<"PDF">;
   editingMode: "STRUCTURED" | "WORD";
 };
@@ -275,12 +261,7 @@ export type RefreshOfficialDocumentBindingsResult = {
   message: string;
 };
 
-export type DetachOfficialDocumentBindingInput = {
-  draftId: string;
-  bindingId: string;
-};
-
-export type OfficialDocumentExportFormat = "DOCX" | "PDF";
+export type OfficialDocumentExportFormat = "DOCX";
 
 export type OfficialDocumentFidelityReport = {
   passed: boolean;

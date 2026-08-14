@@ -24,7 +24,7 @@ export type XsNavigationItem = {
 export const primaryNavigation: XsNavigationItem[] = [
   { label: "历史对话", to: "/history", icon: ClockCounterClockwise },
   { label: "智能制表", to: "/table", icon: Table },
-  { label: "智能写作", to: "/writing", icon: NotePencil },
+  { label: "公文写作", to: "/writing", icon: NotePencil },
   { label: "我的看板", to: "/dashboard", icon: ChartBar },
   { label: "我的云盘", to: "/cloud", icon: Cloud }
 ];
@@ -43,7 +43,7 @@ export const routeTitles: Record<string, string> = {
   "/analysis": "智能编排",
   "/history": "历史对话",
   "/table": "智能制表",
-  "/writing": "智能写作",
+  "/writing": "公文写作",
   "/writing/templates": "公文模板",
   "/writing/drafts": "公文草稿",
   "/dashboard": "我的看板",
@@ -61,9 +61,7 @@ const routeTitlePrefixes = Object.keys(routeTitles)
   .sort((left, right) => right.length - left.length);
 
 export function resolveRouteTitle(pathname: string): string | undefined {
-  if (routeTitles[pathname]) {
-    return routeTitles[pathname];
-  }
+  if (routeTitles[pathname]) return routeTitles[pathname];
   const prefix = routeTitlePrefixes.find((route) => pathname.startsWith(`${route}/`));
   return prefix ? routeTitles[prefix] : undefined;
 }

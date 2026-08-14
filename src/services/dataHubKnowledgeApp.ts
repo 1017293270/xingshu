@@ -1,5 +1,8 @@
 export type DataHubKnowledgeAppEnv = {
   VITE_DATAHUB_APP_URL?: string;
+  VITE_DATAHUB_API_BASE_URL?: string;
+  VITE_DATAHUB_PROXY_TARGET?: string;
+  VITE_DATAHUB_BFF_PORT?: string;
   VITE_DATAHUB_KB_MANAGE_PATH?: string;
   VITE_DATAHUB_KB_DETAIL_PATH?: string;
 };
@@ -13,6 +16,39 @@ export type DataHubKnowledgeAppLinks = {
 
 function isHttpProtocol(protocol: string) {
   return protocol === "http:" || protocol === "https:";
+}
+
+function httpOriginFrom(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return isHttpProtocol(url.protocol) ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveDataHubAppOrigin(env: DataHubKnowledgeAppEnv): string {
+  const explicitApp = env.VITE_DATAHUB_APP_URL?.trim();
+  if (explicitApp) {
+    return explicitApp;
+  }
+
+  const apiBase = env.VITE_DATAHUB_API_BASE_URL?.trim();
+  if (apiBase && /^https?:\/\//i.test(apiBase)) {
+    return httpOriginFrom(apiBase) ?? "";
+  }
+
+  const proxyTarget = env.VITE_DATAHUB_PROXY_TARGET?.trim();
+  if (proxyTarget) {
+    return proxyTarget;
+  }
+
+  const bffPort = env.VITE_DATAHUB_BFF_PORT?.trim();
+  if (bffPort) {
+    return `http://127.0.0.1:${bffPort}`;
+  }
+
+  return "";
 }
 
 export function buildDataHubKnowledgeManageUrl(
@@ -71,14 +107,14 @@ export function buildDataHubKnowledgeDetailUrl(
     return null;
   }
 
-  return buildDataHubKnowledgeManageUrl(appUrl, applyKnowledgeBaseId(trimmedPath, trimmedId), spaceId);
+  return buildDataHubKnowledgeManageUrl(appUrl, applyKnowledgeBaseId(trimmedPath, kbId), spaceId);
 }
 
 export function resolveDataHubKnowledgeAppLinks(
   env: DataHubKnowledgeAppEnv,
   spaceId?: number | null
 ): DataHubKnowledgeAppLinks {
-  const appUrl = env.VITE_DATAHUB_APP_URL?.trim() ?? "";
+  const appUrl = resolveDataHubAppOrigin(env);
   const managePath = env.VITE_DATAHUB_KB_MANAGE_PATH?.trim() ?? "";
   const detailPath = env.VITE_DATAHUB_KB_DETAIL_PATH?.trim() ?? "";
   const manageUrl = buildDataHubKnowledgeManageUrl(appUrl, managePath, spaceId);
@@ -89,8 +125,8 @@ export function resolveDataHubKnowledgeAppLinks(
     addDisabledReason: manageUrl
       ? undefined
       : appUrl
-        ? "DataHub 前端地址无效"
-        : "尚未配置 DataHub 前端地址",
+        ? "DataHub 地址无效"
+        : "无法从当前登录配置确定 DataHub 地址",
     detailUrlFor: (kbId: string) => (
       detailPath ? buildDataHubKnowledgeDetailUrl(appUrl, detailPath, kbId, spaceId) : null
     )
@@ -102,5 +138,8 @@ export function getDataHubKnowledgeAppLinks(spaceId?: number | null) {
 }
 
 export function openDataHubUrl(url: string) {
+  // Token stays in Xingshu sessionStorage and Authorization headers.
+  // A new tab is a different origin, so the JWT cannot be injected into
+  // DataHub's localStorage, and it must not be copied into the URL.
   window.open(url, "_blank", "noopener,noreferrer");
 }

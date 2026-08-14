@@ -17,6 +17,31 @@ export type DataAssetKpi = {
   tone: Extract<XsTone, "blue" | "cyan" | "green" | "orange" | "purple">;
 };
 
+export type DataAssetOverviewRange = "7D" | "30D" | "6M";
+
+export type DataAssetOverview = {
+  updatedAt: string;
+  range: DataAssetOverviewRange;
+  kpis: {
+    assetCount: number;
+    dataVolumeBytes: number;
+    unstructuredCount: number;
+    tableCount: number;
+    dataSourceCount: number;
+    serviceCallCount: number;
+  };
+  typeDistribution: Array<{ type: string; count: number }>;
+  growth: Array<{ date: string; assetCount: number; dataVolumeBytes: number }>;
+  sourceDistribution: Array<{ type: string; count: number }>;
+  usageByScenario: Array<{ scenario: string; count: number }>;
+  hotAssets: Array<{
+    assetId: string;
+    assetName: string;
+    assetType: string;
+    callCount: number;
+  }>;
+};
+
 export type KnowledgeBaseStatIconId = "knowledge-total" | "document-total" | "parsed-complete" | "today-added";
 
 export type KnowledgeBaseStat = {

@@ -16,6 +16,7 @@ import { useNavigate } from "react-router";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsCountUpText } from "@/components/xs/XsCountUpText";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import {
   loadOfficialDocumentWorkspace,
   officialDocumentServiceState,
@@ -133,6 +134,7 @@ function DraftRow({
 
 export function OfficialDocumentHub() {
   const navigate = useNavigate();
+  const isAdmin = useDataHubAuthStore((state) => state.user?.isAdmin === true);
   const workspaceKey = useOfficialDocumentWorkspaceKey();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +151,9 @@ export function OfficialDocumentHub() {
     isError: workspaceQuery.isError,
     hasData: workspaceQuery.data !== undefined
   });
-  const templates = workspaceQuery.data?.templates ?? [];
+  const templates = (workspaceQuery.data?.templates ?? []).filter((template) =>
+    isAdmin || template.status === "PUBLISHED"
+  );
   const drafts = workspaceQuery.data?.drafts ?? [];
   const runtimeCapabilities = workspaceQuery.data?.capabilities;
   const wordEngineAvailable = runtimeCapabilities?.wordEngine.available === true;
@@ -190,10 +194,12 @@ export function OfficialDocumentHub() {
     setOperationStatus(message);
   };
 
-  const handleUploadClick = () => uploadInputRef.current?.click();
+  const handleUploadClick = () => {
+    if (isAdmin) uploadInputRef.current?.click();
+  };
 
   const handleCreateDraftClick = () => {
-    const template = templates.find((item) => item.status === "PUBLISHED" || item.source === "DEMO");
+    const template = templates.find((item) => item.status === "PUBLISHED");
     if (!template) {
       announce("warning", "还没有已发布模板，请先上传并完成模板校准。");
       document.getElementById("official-document-template-library")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -210,7 +216,7 @@ export function OfficialDocumentHub() {
     if (!file || isUploading) return;
 
     setIsUploading(true);
-    announce("loading", officialDocumentServiceState.configured ? "正在上传并创建模板分析任务" : "正在建立本地预演条目");
+    announce("loading", "正在上传并创建模板分析任务");
     try {
       const result = await uploadOfficialDocumentTemplate(file);
       updateWorkspaceCache((current) => ({
@@ -231,15 +237,17 @@ export function OfficialDocumentHub() {
     <section className="official-document-hub" aria-label="公文写作工作台">
       <header className="official-document-hub-head xs-page-enter">
         <div>
-          <span className="official-document-hub-head__crumb">智能写作 / 公文写作</span>
+          <span className="official-document-hub-head__crumb">公文写作 / 模板套版</span>
           <h2>公文工作台</h2>
           <p>模板生产 · 结构化起草 · 数据绑定 · 版式保真导出，全链路可追溯</p>
         </div>
         <div className="official-document-hub__actions">
           <Button icon={<Plus size={16} />} onClick={handleCreateDraftClick}>新建草稿</Button>
-          <Button type="primary" icon={<UploadSimple size={17} />} loading={isUploading} onClick={handleUploadClick}>
-            上传 DOCX 模板
-          </Button>
+          {isAdmin ? (
+            <Button type="primary" icon={<UploadSimple size={17} />} loading={isUploading} onClick={handleUploadClick}>
+              上传 DOCX 模板
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -276,10 +284,10 @@ export function OfficialDocumentHub() {
       <XsAsyncPanel
         status={workspaceStatus}
         empty={templates.length === 0 && drafts.length === 0}
-        emptyTitle="还没有公文模板"
-        emptyDescription="上传一份 DOCX 后开始模板分析。"
-        emptyActionLabel="上传 DOCX 模板"
-        onEmptyAction={handleUploadClick}
+        emptyTitle="还没有可用的公文模板"
+        emptyDescription={isAdmin ? "上传一份 DOCX 后开始模板分析。" : "请联系管理员上传并发布公文模板。"}
+        emptyActionLabel={isAdmin ? "上传 DOCX 模板" : undefined}
+        onEmptyAction={isAdmin ? handleUploadClick : undefined}
         errorTitle="公文工作台不可用"
         error={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "无法加载公文模板和草稿。"}
         onRetry={() => void workspaceQuery.refetch()}
@@ -339,14 +347,16 @@ export function OfficialDocumentHub() {
         </section>
       </XsAsyncPanel>
 
-      <input
-        ref={uploadInputRef}
-        hidden
-        type="file"
-        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        data-testid="official-document-template-file"
-        onChange={handleUpload}
-      />
+      {isAdmin ? (
+        <input
+          ref={uploadInputRef}
+          hidden
+          type="file"
+          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          data-testid="official-document-template-file"
+          onChange={handleUpload}
+        />
+      ) : null}
 
       <div className="official-document-guardrail xs-page-enter" style={{ animationDelay: "300ms" }}>
         <ShieldWarning size={19} aria-hidden="true" />

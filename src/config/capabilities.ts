@@ -17,10 +17,10 @@ export const productCapabilities = {
   },
   writing: {
     id: "writing",
-    label: "预览模式",
-    state: "preview",
-    provenance: "mock",
-    message: "场景、历史文档和生成结果均为演示数据，不会写入企业系统。"
+    label: "实时能力",
+    state: "live",
+    provenance: "datahub",
+    message: "模板、草稿、问数绑定和导出由公文服务实时处理。"
   },
   tables: {
     id: "tables",
@@ -38,9 +38,9 @@ export const productCapabilities = {
   },
   dataAssets: {
     id: "data-assets",
-    label: "演示数据",
-    state: "preview",
-    provenance: "mock",
-    message: "当前指标、知识库和图表来自演示数据，并非当前空间的实时资产。"
+    label: "实时能力",
+    state: "live",
+    provenance: "datahub",
+    message: "指标仅统计当前空间内由当前登录用户本人创建或上传的一级数据资产。"
   }
 } as const satisfies Record<string, CapabilityDescriptor>;

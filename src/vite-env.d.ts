@@ -2,6 +2,9 @@
 
 interface ImportMetaEnv {
   readonly VITE_DATAHUB_APP_URL?: string;
+  readonly VITE_DATAHUB_API_BASE_URL?: string;
+  readonly VITE_DATAHUB_PROXY_TARGET?: string;
+  readonly VITE_DATAHUB_BFF_PORT?: string;
   readonly VITE_DATAHUB_KB_MANAGE_PATH?: string;
   readonly VITE_DATAHUB_KB_DETAIL_PATH?: string;
 }
