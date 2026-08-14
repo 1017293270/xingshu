@@ -329,7 +329,12 @@ export type DataHubAskTurn = {
   };
 };
 
-export type DataHubExecutionStatus = "idle" | "running" | "done" | "error";
+export type DataHubExecutionStatus =
+  | "idle"
+  | "running"
+  | "done"
+  | "error"
+  | "cancelled";
 
 export type DataHubExecutionBlock = {
   type: DataHubSseEventType | string;
@@ -407,4 +412,12 @@ export type AskArtifactRef = {
   askRunId: string;
   resolvedQuestion: string;
   canFavorite: boolean;
+};
+
+export type DataHubKnowledgeBase = {
+  id: string;
+  title: string;
+  description?: string;
+  documentCount?: number;
+  updatedAt?: string;
 };

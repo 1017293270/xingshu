@@ -254,6 +254,41 @@ describe("dataHubClient", () => {
     await request;
   });
 
+  it("keeps the timeout active while the response body is still loading", async () => {
+    vi.useFakeTimers();
+    let resolveBody!: (value: string) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          text: () =>
+            new Promise<string>((resolve, reject) => {
+              resolveBody = resolve;
+              init?.signal?.addEventListener("abort", () => {
+                reject(new DOMException("The operation was aborted.", "AbortError"));
+              });
+            })
+        }) as Response
+      )
+    );
+
+    const pendingRequest = requestDataHub("/api/v1/chat/events/list", {
+      method: "POST",
+      timeoutMs: 10
+    });
+    const assertion = expect(pendingRequest).rejects.toMatchObject({
+      name: "DataHubServiceError",
+      code: "REQUEST_TIMEOUT"
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    resolveBody(JSON.stringify({ code: 200, message: "success", data: [] }));
+
+    await assertion;
+  });
+
   it("keeps caller aborts as cancelled service errors for the login UI", async () => {
     const abortController = new AbortController();
     vi.stubGlobal(

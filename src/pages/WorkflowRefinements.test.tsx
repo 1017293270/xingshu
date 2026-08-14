@@ -128,12 +128,13 @@ describe("workflow refinements", () => {
     ]);
 
     const { container } = renderPage(<WritingPage />);
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
 
     expect(container.querySelector(".writing-panel--compact")).toBeInTheDocument();
     expect(container.querySelector(".workflow-status-slot.writing-panel__status-slot")).toBeInTheDocument();
     expect(await screen.findByText("2026-07-10 07:25")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("添加写作附件"), {
+    fireEvent.change(screen.getByTestId("writing-attachment-input"), {
       target: {
         files: [
           new File(["销售额"], "销售数据.csv", { type: "text/csv" }),
@@ -173,9 +174,10 @@ describe("workflow refinements", () => {
     serviceMocks.createWritingDraft.mockReturnValue(request.promise);
 
     renderPage(<WritingPage />);
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
 
     const readyFile = new File(["销售额"], "销售数据.csv", { type: "text/csv", lastModified: 42 });
-    await user.upload(screen.getByLabelText("添加写作附件"), [
+    await user.upload(screen.getByTestId("writing-attachment-input"), [
       readyFile,
       new File(["binary"], "installer.exe", { type: "application/x-msdownload" })
     ]);
@@ -203,8 +205,8 @@ describe("workflow refinements", () => {
     expect(screen.getByRole("textbox", { name: "写作需求" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "报告总结" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "报告总结：快速生成数据报告" })).toBeDisabled();
-    expect(screen.getByLabelText("添加写作附件")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "附件" })).toBeDisabled();
+    expect(screen.getByTestId("writing-attachment-input")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加附件" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "移除附件 销售数据.csv" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("正在创建写作预览");
 
@@ -226,6 +228,7 @@ describe("workflow refinements", () => {
     serviceMocks.createWritingDraft.mockRejectedValue(new Error("offline"));
 
     renderPage(<WritingPage />);
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
     await user.type(screen.getByRole("textbox", { name: "写作需求" }), "撰写一份经营月报");
     await user.click(screen.getByRole("button", { name: "预览写作需求" }));
 

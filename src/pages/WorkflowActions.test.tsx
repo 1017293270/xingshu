@@ -362,6 +362,71 @@ describe("workflow page actions", () => {
     expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
   });
 
+  it("settles a stopped orchestration and freezes its total duration", async () => {
+    const stoppedAt = Date.parse("2026-08-04T14:01:15.000+08:00");
+    const now = vi.spyOn(Date, "now").mockReturnValue(stoppedAt - 75_000);
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("停止正在运行的智能编排", null, "agent");
+    now.mockReturnValue(stoppedAt);
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-running-ask-data";
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      timestamp: stoppedAt - 75_000
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      timestamp: stoppedAt - 70_000,
+      content: {
+        sessionId: childSessionId,
+        subagentId: "subagent-running-ask-data",
+        label: "问数智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "thinking",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "正在执行数据查询。",
+      isThinking: true,
+      timestamp: stoppedAt - 65_000
+    });
+    useUiStore.getState().bindAskDataController(
+      runId,
+      { abort: vi.fn() } as unknown as AbortController
+    );
+
+    renderPage(<AnalysisPage mode="agent" />);
+    await user.click(screen.getByRole("button", { name: "停止生成" }));
+
+    expect(screen.getByRole("heading", { name: "已停止生成" })).toBeInTheDocument();
+    const panel = screen
+      .getByText("智能编排执行")
+      .closest(".xs-datahub-execution");
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute("data-status", "cancelled");
+    expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
+    expect(within(panel as HTMLElement).getAllByLabelText("已停止").length).toBeGreaterThan(0);
+    expect(
+      within(panel as HTMLElement).getByText("1m 15s", { selector: "dd" })
+    ).toBeVisible();
+  });
+
   it("keeps a replayed root error consistent across the heading and execution panel", () => {
     useUiStore.getState().restoreAskDataHistory({
       sessionId: "history-error-session",
@@ -1309,16 +1374,14 @@ describe("workflow page actions", () => {
   it("selects writing type and scene prompts while marking unavailable writing actions", async () => {
     const user = userEvent.setup();
     renderPage(<WritingPage />);
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
 
     await user.click(screen.getByRole("button", { name: "方案策划" }));
 
     expect(screen.getByRole("textbox", { name: "写作需求" })).toHaveValue("请帮我撰写一份方案策划，包含背景、目标、步骤和交付物。");
     expect(screen.getByRole("status")).toHaveTextContent("已切换写作类型：方案策划");
 
-    expect(screen.getByRole("button", { name: /使用指南.*即将开放/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /写作历史.*即将开放/ })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: "附件" }));
+    await user.click(screen.getByRole("button", { name: "添加附件" }));
     expect(screen.getByRole("status")).toHaveTextContent("已打开写作附件选择");
 
     await user.click(screen.getByRole("button", { name: /方案策划：生成项目方案/ }));
@@ -1326,7 +1389,9 @@ describe("workflow page actions", () => {
   });
 
   it("marks unavailable writing document details instead of claiming they opened", async () => {
+    const user = userEvent.setup();
     renderPage(<WritingPage />);
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
 
     expect(
       await screen.findByRole("button", { name: /查看 数据资产管理平台产品介绍.*即将开放/ })

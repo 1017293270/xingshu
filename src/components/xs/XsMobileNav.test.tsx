@@ -53,6 +53,7 @@ describe("XsMobileNav", () => {
       "href",
       "/data-management"
     );
+    expect(within(dialog).getByText("企业成员")).toBeVisible();
     expect(within(dialog).getByRole("button", { name: "移动端账户菜单" })).toBeVisible();
   });
 

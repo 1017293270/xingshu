@@ -206,7 +206,7 @@
 }
 
 .xs-page-enter {
-  animation: xs-page-enter 560ms var(--xs-motion-ease-out) backwards;
+  animation: xs-page-enter var(--xs-motion-hero) var(--xs-motion-ease-out) backwards;
 }
 
 /* 内容卡片统一 hover 语言：上抬 2px + 软阴影 + 边框加深 */

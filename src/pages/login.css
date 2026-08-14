@@ -581,7 +581,7 @@
 /* ---------- 入场与氛围动效 ---------- */
 
 .login-enter {
-  animation: login-enter 560ms var(--xs-motion-ease-out) both;
+  animation: login-enter var(--xs-motion-hero) var(--xs-motion-ease-out) both;
 }
 
 @keyframes login-enter {

@@ -130,7 +130,7 @@ export function DashboardPage() {
       return undefined;
     }
 
-    const timer = window.setTimeout(() => setDashboardOnboardingOpen(true), 700);
+    const timer = window.setTimeout(() => setDashboardOnboardingOpen(true), 300);
     return () => window.clearTimeout(timer);
   }, [
     dashboardOnboardingOpen,

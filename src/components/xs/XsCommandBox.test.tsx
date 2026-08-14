@@ -77,6 +77,20 @@ describe("XsCommandBox", () => {
     expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
   });
 
+  it("keeps send disabled while background data is loading without showing stop", () => {
+    render(
+      <XsCommandBox
+        value="继续分析"
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        busy
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument();
+  });
+
   it("optionally submits with Enter while preserving Shift+Enter and IME composition", () => {
     const onSubmit = vi.fn();
 

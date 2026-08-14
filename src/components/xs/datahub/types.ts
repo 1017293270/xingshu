@@ -25,6 +25,7 @@ export type DataHubExecutionPanelProps = {
   onDrawerOpenChange?: (open: boolean) => void;
   selectedSubagentId?: string;
   onSelectedSubagentChange?: (sessionId?: string) => void;
+  showMainDocumentBlocks?: boolean;
   onCitationOpen?: (content: unknown, block: DataHubExecutionBlock) => void;
   renderBlock?: (context: DataHubExecutionRenderContext) => ReactNode;
 };
@@ -32,6 +33,7 @@ export type DataHubExecutionPanelProps = {
 export type DataHubAgentExecutionCardProps = {
   card: DataHubAgentExecutionCard;
   defaultExpanded?: boolean;
+  expandLatestActivity?: boolean;
   compact?: boolean;
   staggerIndex?: number;
   onCitationOpen?: (content: unknown, block: DataHubExecutionBlock) => void;

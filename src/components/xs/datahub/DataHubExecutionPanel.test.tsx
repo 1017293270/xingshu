@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { projectDataHubExecutionEvents } from "@/services/dataHubExecutionProjector";
 import type { DataHubStreamEvent } from "@/types/dataHub";
+import { formatExecutionTime } from "./display";
 import { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 
 const events: DataHubStreamEvent[] = [
@@ -380,8 +381,8 @@ describe("DataHubExecutionPanel", () => {
     expect(within(technicalDetails).getByText("模型推理")).toBeVisible();
     expect(within(technicalDetails).getByText("理解数据问题")).toBeVisible();
     expect(within(technicalDetails).getByText("已完成")).toBeVisible();
-    expect(within(technicalDetails).getByText("16:00:32")).toBeVisible();
-    expect(within(technicalDetails).getByText("16:00:35")).toBeVisible();
+    expect(within(technicalDetails).getByText(formatExecutionTime("2026-07-31T16:00:32.283+08:00"))).toBeVisible();
+    expect(within(technicalDetails).getByText(formatExecutionTime("2026-07-31T16:00:35.733+08:00"))).toBeVisible();
     expect(within(technicalDetails).getByText("3.5s")).toBeVisible();
     expect(within(activity).queryByText(/activity-model-1/)).not.toBeInTheDocument();
 
@@ -392,5 +393,108 @@ describe("DataHubExecutionPanel", () => {
     expect(
       within(drawer).queryByRole("list", { name: "问数智能体执行时间轴" })
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a flat root document agent as execution stages instead of an empty orchestration summary", async () => {
+    const user = userEvent.setup();
+    const onCitationOpen = vi.fn();
+    const documentEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "找文档智能体",
+        sessionId: "document-main",
+        chatId: "document-chat",
+        timestamp: "2026-08-04T12:18:46.000+08:00"
+      },
+      ...[
+        ["understand", "理解文档需求", 1_000],
+        ["locate", "定位相关文档", 33_000],
+        ["verify", "确认相关文档", 5_000],
+        ["result", "确认文档结果", 2_000]
+      ].map(([activityId, label, durationMs], index) => ({
+        type: "activity" as const,
+        agentName: "找文档智能体",
+        sessionId: "document-main",
+        chatId: "document-chat",
+        timestamp: `2026-08-04T12:18:${47 + index}.000+08:00`,
+        content: {
+          activityId,
+          kind: "model",
+          label,
+          status: "success",
+          durationMs,
+          summary: `${label}已完成`
+        }
+      })),
+      {
+        type: "document_url",
+        agentName: "找文档智能体",
+        sessionId: "document-main",
+        chatId: "document-chat",
+        timestamp: "2026-08-04T12:19:27.000+08:00",
+        content: {
+          docId: "doc-meishan-contract",
+          docKey: "meishan-contract.pdf",
+          kbId: "kb-contract",
+          docName: "眉山采购合同.pdf",
+          sourceAvailable: true
+        }
+      },
+      {
+        type: "done",
+        agentName: "找文档智能体",
+        sessionId: "document-main",
+        chatId: "document-chat",
+        timestamp: "2026-08-04T12:19:28.000+08:00",
+        content: {
+          mode: "agent",
+          summary: "已定位到 1 份相关文档。"
+        },
+        finished: true
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(documentEvents, {
+      mainSessionId: "document-main",
+      fallbackAgentName: "智能编排器"
+    });
+
+    render(
+      <DataHubExecutionPanel
+        projection={projection}
+        onCitationOpen={onCitationOpen}
+      />
+    );
+
+    expect(
+      screen.getByRole("list", { name: "找文档智能体执行时间轴" })
+    ).toBeVisible();
+    const understandActivity = screen.getByRole("region", {
+      name: "模型活动：理解文档需求"
+    });
+    expect(
+      within(understandActivity).getByText("理解文档需求", {
+        selector: ":scope > summary > strong"
+      })
+    ).toBeVisible();
+    expect(understandActivity).not.toHaveAttribute("open");
+    const locateActivity = screen.getByRole("region", {
+      name: "模型活动：定位相关文档"
+    });
+    expect(
+      within(locateActivity).getByText("定位相关文档", {
+        selector: ":scope > summary > strong"
+      })
+    ).toBeVisible();
+    expect(
+      screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "打开原文：眉山采购合同.pdf" })
+    );
+    expect(onCitationOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ docKey: "meishan-contract.pdf" }),
+      expect.objectContaining({ type: "document_url" })
+    );
   });
 });

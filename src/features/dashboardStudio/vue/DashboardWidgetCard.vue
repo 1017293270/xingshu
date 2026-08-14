@@ -17,6 +17,7 @@ const props = defineProps<{
   dragging?: boolean;
   resizing?: boolean;
   previewPosition?: DashboardWidgetPosition;
+  dragOffset?: { x: number; y: number };
   enterIndex?: number;
 }>();
 
@@ -27,6 +28,11 @@ const emit = defineEmits<{
 }>();
 
 const renderedPosition = computed(() => props.previewPosition ?? props.widget.position);
+// 拖拽预览只走 transform：布局位置保持 origin 不变，松手时一次性提交 candidate
+const dragTransform = computed(() => {
+  if (!props.dragOffset) return undefined;
+  return `translate(${props.dragOffset.x}px, ${props.dragOffset.y}px) scale(1.01)`;
+});
 const isChart = computed(() => ["line", "area", "bar", "pie", "radar", "funnel"].includes(props.widget.type));
 
 function selectWidget() {
@@ -75,6 +81,7 @@ function handleResizePointerDown(event: PointerEvent) {
       height: `${renderedPosition.h}px`,
       zIndex: widget.style.zIndex,
       opacity: widget.style.opacity,
+      transform: dragTransform,
       '--runtime-enter-index': Math.min(enterIndex ?? 0, 5)
     }"
     :tabindex="readonly ? undefined : 0"
@@ -128,10 +135,12 @@ function handleResizePointerDown(event: PointerEvent) {
 }
 .dashboard-widget-card__renderer { width:100%; height:100%; min-width:0; min-height:0; pointer-events:none; }
 .dashboard-widget-card__renderer--interactive { pointer-events:auto; }
+.dashboard-widget-card:not(.is-readonly) { touch-action:none; }
 .dashboard-widget-card:not(.is-readonly):hover { border-color:rgba(125,211,252,.7); }
 .dashboard-widget-card:focus-visible { border-color:#fbbf24; box-shadow:0 0 0 3px rgba(251,191,36,.28); }
 .dashboard-widget-card.is-selected { border-color:#38bdf8; box-shadow:0 0 0 1px rgba(56,189,248,.7),0 0 0 4px rgba(56,189,248,.18); }
 .dashboard-widget-card.is-dragging,.dashboard-widget-card.is-resizing { opacity:.86; transition:none; }
+.dashboard-widget-card.is-dragging { box-shadow:var(--xs-shadow-modal); will-change:transform; }
 .dashboard-widget-card.is-hidden { opacity:.38 !important; }
 .dashboard-widget-card.is-locked { cursor:default; }
 .dashboard-widget-card.is-readonly { border:0; cursor:default; }
@@ -147,7 +156,7 @@ function handleResizePointerDown(event: PointerEvent) {
 .dashboard-widget-card__corner--nw { top:-6px; left:-6px; }
 .dashboard-widget-card__corner--ne { top:-6px; right:-6px; }
 .dashboard-widget-card__corner--sw { bottom:-6px; left:-6px; }
-.dashboard-widget-card__resize-handle { right:-6px; bottom:-6px; padding:0; border-radius:2px; cursor:nwse-resize; pointer-events:auto; }
+.dashboard-widget-card__resize-handle { right:-6px; bottom:-6px; padding:0; border-radius:2px; cursor:nwse-resize; pointer-events:auto; touch-action:none; }
 @keyframes designer-widget-settle {
   0% { opacity:0; transform:scale(.985); }
   32% { opacity:1; transform:scale(1); box-shadow:0 0 0 2px rgba(56,189,248,.42),0 0 0 6px rgba(56,189,248,.14); }

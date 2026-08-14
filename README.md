@@ -15,9 +15,9 @@
 
 - `src/app/`：路由、Provider、应用外壳、鉴权保护和错误边界。
 - `src/pages/`：首页、问数、历史、制表、写作、看板、云盘、数据资产和登录等页面。
-- `src/features/`：首页、看板及看板工作室等领域功能。
+- `src/features/`：首页、看板、看板工作室和公文写作工作台等领域功能。
 - `src/components/xs/`：星数业务组件。
-- `src/services/`：HTTP、DataHub、Agent、看板和 mock 等服务适配层。
+- `src/services/`：HTTP、DataHub、Agent、看板、公文服务和 mock 等服务适配层。
 - `src/assets/`：品牌、图标和页面视觉资产。
 - `src/theme/`、`src/styles/`：品牌 token、Ant Design 主题与全局样式。
 - `src/**/*.test.ts(x)`：Vitest 单元与组件测试。
@@ -73,8 +73,13 @@ npm run test:visual
 - `VITE_DATAHUB_API_BASE_URL`
 - `VITE_DATAHUB_PROXY_TARGET`
 - `VITE_DATAHUB_BFF_PORT`
+- `VITE_DATAHUB_APP_URL`
+- `VITE_DATAHUB_KB_MANAGE_PATH`
+- `VITE_DATAHUB_KB_DETAIL_PATH`
 - `VITE_QUERY_ASSETS_ENABLED`
 - `VITE_DASHBOARD_EDITOR_URL`
+- `VITE_OFFICIAL_DOCUMENT_API_BASE_URL`
+- `VITE_OFFICIAL_DOCUMENT_API_MODE`
 
 前端页面和组件不得直接实现后端协议细节；统一通过 `src/services/` 适配。
 
@@ -84,4 +89,5 @@ npm run test:visual
 - `AGENTS.md`：视觉硬约束、架构边界、命令和变更规则。
 - `design-qa.md`：历史视觉与产品 QA 记录。
 - `docs/dashboard-generation-integration.md`：问数收藏与生产看板接入契约。
+- `docs/official-document-integration.md`：Syncfusion、结构化草稿、QueryAsset 与 PDF 导出的公文服务接入说明。
 - `docs/superpowers/`：历史设计与实施计划。

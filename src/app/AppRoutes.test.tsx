@@ -55,6 +55,8 @@ describe("AppRoutes", () => {
     expect(resolveRouteFallbackVariant("/ask-agent")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
     expect(resolveRouteFallbackVariant("/writing")).toBe("cards");
+    expect(resolveRouteFallbackVariant("/writing/templates/template-demo-work-report")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing/drafts/draft-demo-1")).toBe("workspace");
   });
 
   const routeCases: Array<[string, string | RegExp, string]> = [
@@ -65,7 +67,9 @@ describe("AppRoutes", () => {
     ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
-    ["/writing", "智能写作", "推荐写作场景"],
+    ["/writing", "智能写作", "公文写作工作台"],
+    ["/writing/templates/template-demo-work-report", "工作情况报告（功能示例）", "原稿版式预览"],
+    ["/writing/drafts/draft-demo-1", "推进数据治理工作情况报告（草稿示例）", "结构化公文编辑器"],
     ["/dashboard", "大屏库", "大屏库空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
@@ -304,6 +308,7 @@ describe("AppRoutes", () => {
   it("submits a writing prompt through the mock service", async () => {
     const user = userEvent.setup();
     renderRoute("/writing");
+    await user.click(screen.getByRole("tab", { name: /通用写作/ }));
 
     await user.clear(screen.getByRole("textbox", { name: "写作需求" }));
     await user.type(screen.getByRole("textbox", { name: "写作需求" }), "写一份数据资产月报");

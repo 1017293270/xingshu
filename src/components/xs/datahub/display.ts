@@ -12,7 +12,8 @@ export const executionStatusLabel = {
   idle: "等待执行",
   running: "运行中",
   done: "已完成",
-  error: "执行失败"
+  error: "执行失败",
+  cancelled: "已停止"
 } as const;
 
 export function asRecord(value: unknown): UnknownRecord | undefined {

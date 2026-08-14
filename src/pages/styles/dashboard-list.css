@@ -220,7 +220,8 @@
   transition:
     transform var(--xs-motion-base) var(--xs-motion-ease-out),
     box-shadow var(--xs-motion-base) var(--xs-motion-ease-out),
-    border-color var(--xs-motion-base) var(--xs-motion-ease-out);
+    border-color var(--xs-motion-base) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-base) var(--xs-motion-ease-out);
   animation: dashboard-card-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
 }
 
@@ -378,12 +379,18 @@
   transition:
     background var(--xs-motion-fast) var(--xs-motion-ease-out),
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    color var(--xs-motion-fast) var(--xs-motion-ease-out);
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    transform var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .dashboard-card__action:hover:not(.is-disabled) {
   border-color: var(--xs-primary);
   color: var(--xs-interactive-text);
+}
+
+.dashboard-card__action:not(.is-disabled):active {
+  background: #eef5ff;
+  transform: scale(0.96);
 }
 
 .dashboard-card__action.is-disabled {
@@ -433,6 +440,24 @@
   }
 }
 
+/* 对称退出：反向 fade+scale 播完再由 React 卸载（transform-origin 继承 top right） */
+.dashboard-card__menu[data-closing] {
+  pointer-events: none;
+  animation: dashboard-menu-exit 110ms var(--xs-motion-ease-out) forwards;
+}
+
+@keyframes dashboard-menu-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
 .dashboard-card__menu button {
   display: flex;
   align-items: center;
@@ -446,11 +471,16 @@
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+  transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .dashboard-card__menu button:hover:not(:disabled) {
   background: var(--xs-surface-soft);
   color: var(--xs-interactive-text);
+}
+
+.dashboard-card__menu button:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .dashboard-card__menu button:disabled {
@@ -604,11 +634,16 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .dashboard-card__version-list button:hover:not(:disabled) {
   border-color: var(--xs-primary);
   background: var(--xs-surface-soft);
+}
+
+.dashboard-card__version-list button:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .dashboard-card__version-list button:disabled {
@@ -722,7 +757,7 @@
   justify-items: center;
   padding: 72px 30px 64px;
   text-align: center;
-  animation: dashboard-list-empty-in 560ms var(--xs-motion-ease-out) backwards;
+  animation: dashboard-list-empty-in var(--xs-motion-hero) var(--xs-motion-ease-out) backwards;
 }
 
 .dashboard-list__state--empty p {

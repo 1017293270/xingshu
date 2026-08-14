@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,6 +61,24 @@ function renderHistoryRouteFlow() {
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/ask-data" element={<div aria-label="问数历史目标" />} />
           <Route path="/ask-knowledge" element={<div aria-label="问知历史目标" />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function renderHistoryClickFlow() {
+  useUiStore.getState().resetUiState();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0 } }
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/history"]}>
+        <Routes>
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/ask-data" element={<div aria-label="历史加载目标" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -151,14 +169,11 @@ describe("HistoryPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /员工报销流程说明/ }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已恢复历史对话：员工报销流程说明");
+    expect(screen.getByRole("status")).toHaveTextContent("已打开历史对话：员工报销流程说明");
   });
 
-  it("keeps recovery feedback on the selected data-hub conversation", async () => {
+  it("leaves the history list immediately while a slow conversation loads", async () => {
     const user = userEvent.setup();
-    let resolveReplay!: (
-      value: Awaited<ReturnType<typeof historyService.loadDataHubHistoryReplay>>
-    ) => void;
     vi.spyOn(historyService, "listHistorySessions").mockResolvedValue([
       {
         id: "session-42",
@@ -167,32 +182,18 @@ describe("HistoryPage", () => {
         summary: "来自 data-hub 的历史会话",
         category: "数据洞察",
         updatedAt: "2026-07-15 10:00",
-        source: "data-hub"
+        source: "data-hub",
+        chatMode: "ask"
       }
     ]);
-    vi.spyOn(historyService, "loadDataHubHistoryReplay").mockReturnValue(
-      new Promise((resolve) => {
-        resolveReplay = resolve;
-      })
-    );
-    renderHistoryPageWithIsolatedQuery();
+    vi.spyOn(historyService, "loadDataHubHistoryReplay").mockReturnValue(new Promise(() => {}));
+    renderHistoryClickFlow();
 
     const restoreButton = await screen.findByRole("button", { name: /恢复经营分析/ });
     await user.click(restoreButton);
 
-    expect(restoreButton).toHaveAttribute("aria-busy", "true");
-    expect(restoreButton).toBeDisabled();
-    expect(within(restoreButton).getByText("恢复中")).toBeInTheDocument();
-
-    resolveReplay({
-      sessionId: "session-42",
-      chatMode: "ask",
-      question: "分析经营数据",
-      events: [],
-      turns: []
-    });
-
-    await waitFor(() => expect(restoreButton).toHaveAttribute("aria-busy", "false"));
+    expect(await screen.findByLabelText("历史加载目标")).toBeInTheDocument();
+    expect(screen.queryByText("恢复中")).not.toBeInTheDocument();
   });
 
   it("routes restored knowledge history back to the shared rag workspace", async () => {

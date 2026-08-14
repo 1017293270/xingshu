@@ -1,6 +1,7 @@
 import {
   CheckCircle,
   CircleNotch,
+  StopCircle,
   WarningCircle
 } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
@@ -364,6 +365,15 @@ export function DataHubSubagentDag({
                     aria-hidden="true"
                   >
                     <WarningCircle size={9} weight="fill" />
+                  </span>
+                ) : null}
+                {status === "cancelled" ? (
+                  <span
+                    className="xs-datahub-subagent-dag__node-badge"
+                    data-status="cancelled"
+                    aria-hidden="true"
+                  >
+                    <StopCircle size={9} weight="fill" />
                   </span>
                 ) : null}
                 <span className="xs-datahub-subagent-dag__node-copy">

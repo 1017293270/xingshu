@@ -341,7 +341,7 @@
   font-size: 34px;
   line-height: 1.05;
   white-space: nowrap;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
 }
 
 .revenue-value .revenue-unit {

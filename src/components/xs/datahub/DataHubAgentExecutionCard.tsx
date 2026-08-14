@@ -381,6 +381,7 @@ function defaultBlockContent(
 export function DataHubAgentExecutionCard({
   card,
   defaultExpanded = true,
+  expandLatestActivity = true,
   compact = false,
   staggerIndex,
   onCitationOpen,
@@ -411,7 +412,7 @@ export function DataHubAgentExecutionCard({
   const latestActivityId = activityItems.at(-1)?.activity.id;
   const [expandedActivityId, setExpandedActivityId] = useState<
     string | undefined
-  >(runningActivityId ?? latestActivityId);
+  >(expandLatestActivity ? runningActivityId ?? latestActivityId : undefined);
   const tableItemKeys = displayItems.flatMap((item, index) =>
     item.kind === "block" && item.block.type === "table"
       ? [displayItemKey(card.id, item, index)]
@@ -424,10 +425,10 @@ export function DataHubAgentExecutionCard({
   const previousLatestTableKeyRef = useRef(latestTableKey);
 
   useEffect(() => {
-    if (runningActivityId) {
+    if (expandLatestActivity && runningActivityId) {
       setExpandedActivityId(runningActivityId);
     }
-  }, [runningActivityId]);
+  }, [expandLatestActivity, runningActivityId]);
 
   useEffect(() => {
     if (

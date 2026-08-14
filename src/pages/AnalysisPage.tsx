@@ -41,7 +41,8 @@ import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
   canAutoGenerateAiChart,
-  planAiChart
+  planAiChart,
+  resolveAiChartTables
 } from "@/services/aiChartPlannerService";
 import {
   createDataHubAskTurn
@@ -1001,16 +1002,20 @@ function DataHubDocumentLookupList({
 
 function DataHubResultLoading({
   activePhase,
-  taskName = "问数"
+  taskName = "问数",
+  title,
+  description
 }: {
   activePhase?: string;
   taskName?: string;
+  title?: string;
+  description?: string;
 }) {
   return (
     <div
       className="datahub-result-loading"
       role="status"
-      aria-label={`AI 正在生成${taskName}结果`}
+      aria-label={title || `AI 正在生成${taskName}结果`}
       aria-live="polite"
     >
       <div className="datahub-result-loading__head">
@@ -1018,8 +1023,8 @@ function DataHubResultLoading({
           <Brain size={20} weight="bold" />
         </span>
         <div>
-          <strong>AI 正在生成{taskName}结果</strong>
-          <span>{activePhase ? `当前步骤：${activePhase}` : `正在连接 data-hub ${taskName} Agent`}</span>
+          <strong>{title || `AI 正在生成${taskName}结果`}</strong>
+          <span>{description || (activePhase ? `当前步骤：${activePhase}` : `正在连接 data-hub ${taskName} Agent`)}</span>
         </div>
       </div>
       <div className="datahub-result-loading__skeleton" aria-hidden="true">
@@ -1246,6 +1251,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     ? storedAnalysisTurns.filter((turn) => turn.chatMode === mode)
     : [];
   const activeAskDataRunId = isActiveMode ? storedActiveAskDataRunId : null;
+  const isLoadingHistory = askDataStatus === "streaming" && activeAskDataRunId === null;
   const pageQuickQuestions = isKnowledgeMode
     ? knowledgeQuickQuestions
     : isDocumentLookupMode
@@ -1586,7 +1592,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const handleGenerateAiChart = useCallback(async (
     turnId: string,
     question: string,
-    tables: DataHubTableResult[]
+    tables: DataHubTableResult[],
+    answer?: string
   ) => {
     if (chartPlanInFlightRef.current.has(turnId)) {
       return;
@@ -1597,8 +1604,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     setWorkflowStatus("DataHub 正在使用编排 Agent 模型规划图表");
 
     try {
-      const plan = await planAiChart({ question, tables });
-      const spec = buildGeneratedChartSpec(plan, tables);
+      const chartTables = resolveAiChartTables({ question, tables, answer });
+      const plan = await planAiChart({ question, tables: chartTables });
+      const spec = buildGeneratedChartSpec(plan, chartTables);
 
       if (!plan.chartable || !spec) {
         const message = plan.reason || "当前结果暂不适合生成图表。";
@@ -1667,12 +1675,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
             )
           : [];
 
-      if (!canAutoGenerateAiChart({ question: turn.question, tables })) {
+      if (!canAutoGenerateAiChart({ question: turn.question, tables, answer: turnAsk.assistantContent })) {
         continue;
       }
 
       autoChartAttemptedRef.current.add(turn.id);
-      void handleGenerateAiChart(turn.id, turn.question, tables);
+      void handleGenerateAiChart(turn.id, turn.question, tables, turnAsk.assistantContent);
     }
   }, [
     aiChartStates,
@@ -1744,6 +1752,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   };
 
   const askDataStatusText = (() => {
+    if (isLoadingHistory) {
+      return "正在从 data-hub 加载历史对话";
+    }
     if (askDataStatus === "streaming") {
       return `正在调用 data-hub ${taskName}，已接收 ${askDataEvents.length} 个过程事件`;
     }
@@ -1861,10 +1872,14 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 globalSessionId: turn.sessionId || undefined,
                 chatId: turn.chatId,
                 fallbackAgentName: `${taskName}智能体`,
+                startedAt: turn.startedAt,
                 terminalStatus:
-                  displayStatus === "done" || displayStatus === "error"
+                  displayStatus === "done" ||
+                  displayStatus === "error" ||
+                  displayStatus === "cancelled"
                     ? displayStatus
-                    : undefined
+                    : undefined,
+                terminalTimestamp: turn.endedAt
               });
               const hasNativeAgentScope = turn.events.some(
                 (event) =>
@@ -1893,7 +1908,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const isWaitingForPlayback =
                 !isResultReady && (displayStatus === "streaming" || displayStatus === "done");
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
+              const isHistoryLoadingTurn = isLoadingHistory && isLatestTurn;
               const hasReasoning =
+                !isHistoryLoadingTurn &&
                 !isAgentMode &&
                 Boolean(
                   hasLegacyProcess ||
@@ -1903,7 +1920,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     (supportsTables && turnAsk.dataSources.length)
                 );
               const statusTitle =
-                displayStatus === "streaming" || (displayStatus === "done" && !isResultReady)
+                isHistoryLoadingTurn
+                  ? "正在加载历史对话"
+                  : displayStatus === "streaming" || (displayStatus === "done" && !isResultReady)
                   ? `正在${taskName}`
                   : displayStatus === "done"
                     ? `${taskName}完成`
@@ -1913,7 +1932,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         ? "已停止生成"
                         : `已完成${taskName}`;
               const statusDescription =
-                  displayStatus === "idle"
+                  isHistoryLoadingTurn
+                    ? "正在读取已保存的消息、过程与结果，请稍候。"
+                    : displayStatus === "idle"
                     ? `请发起${taskName}，星数会同步展示 data-hub 返回的真实过程与结果。`
                     : displayStatus === "done" && !isResultReady
                       ? `数据已返回，正在完成${taskName}过程并整理结果。`
@@ -2004,11 +2025,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         </div>
                       ) : null}
 
-                      {shouldShowExecutionPanel ? (
+                      {shouldShowExecutionPanel && !isHistoryLoadingTurn ? (
                         <DataHubExecutionPanel
                           projection={executionProjection}
                           title={isAgentMode ? "智能编排执行" : `${taskName} Agent 执行`}
                           defaultExpanded={expandExecutionPanelByDefault}
+                          showMainDocumentBlocks={isAgentMode}
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
                             if (!citation) {
@@ -2093,7 +2115,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               <Button
                                 icon={<MagicWand size={18} />}
                                 loading={isGeneratingAiChart}
-                                onClick={() => handleGenerateAiChart(turn.id, turn.question, chartTables)}
+                                onClick={() => handleGenerateAiChart(turn.id, turn.question, chartTables, turnAsk.assistantContent)}
                               >
                                 AI 生成图表
                               </Button>
@@ -2139,7 +2161,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             />
                           ) : null}
                           {isWaitingForPlayback ? (
-                            <DataHubResultLoading activePhase={playbackState?.activeTitle} taskName={taskName} />
+                            <DataHubResultLoading
+                              activePhase={playbackState?.activeTitle}
+                              taskName={taskName}
+                              title={isHistoryLoadingTurn ? "正在加载历史对话" : undefined}
+                              description={isHistoryLoadingTurn ? "历史内容加载完成后会在当前页面直接显示。" : undefined}
+                            />
                           ) : hasRenderableResult || displayStatus === "error" ? null : (
                             <div className="datahub-empty-state" role="status">
                               {isDocumentLookupMode
@@ -2233,7 +2260,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
             voiceInput.cancel();
             setWorkflowStatus("已取消语音输入");
           }}
-          onStop={handleStop}
+          onStop={isLoadingHistory ? undefined : handleStop}
           busy={askDataStatus === "streaming"}
           voiceState={voiceInput.state}
           modelMode={composerMode}

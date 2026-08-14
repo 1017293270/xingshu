@@ -14,6 +14,7 @@ type DataHubFixtureOptions = {
   buildAgentResponse?: (request: StreamRequest) => string;
   rejectScopedHistoryEnsure?: boolean;
   rejectAllHistoricalEnsure?: boolean;
+  historyResponseDelayMs?: number;
 };
 
 type FixtureState = {
@@ -218,7 +219,7 @@ function buildKnowledgeStream(request: StreamRequest) {
       ...root,
       type: "text",
       content:
-        "根据制度，**单笔差旅费超过 5000 元需复核**。\n\n<script>window.__unsafeHtmlExecuted = true</script>",
+        "根据制度，**单笔差旅费超过 5000 元需复核**。\n\n![制度截图](/fixtures/source/contract-preview.svg)\n\n<script>window.__unsafeHtmlExecuted = true</script>",
       replyId: "rag-answer",
       modelCallIndex: 2,
       finished: false
@@ -294,6 +295,75 @@ function buildDocumentLookupStream(request: StreamRequest) {
         documentSelectionMode: "single",
         documentResults: [document],
         summary: "已找到 1 份匹配文档。"
+      },
+      finished: true
+    }),
+    "data: [DONE]\n\n"
+  ].join("");
+}
+
+function buildFlatDocumentAgentStream(request: StreamRequest) {
+  const root = {
+    agentName: "找文档智能体",
+    sessionId: request.sessionId,
+    globalSessionId: request.globalSessionId,
+    chatId: request.chatId
+  };
+  const activities = [
+    ["understand", "理解文档需求", 1_000],
+    ["locate", "定位相关文档", 33_000],
+    ["verify", "确认相关文档", 5_000],
+    ["result", "确认文档结果", 2_000]
+  ] as const;
+  const document = {
+    docId: "doc-meishan-contract",
+    docKey: "meishan-contract.pdf",
+    kbId: "kb-contract",
+    docName: "眉山采购合同.pdf",
+    sourceAvailable: true
+  };
+
+  return [
+    sseEvent({ ...root, type: "agent_start", content: {}, finished: false }),
+    ...activities.map(([activityId, label, durationMs], index) =>
+      sseEvent({
+        ...root,
+        type: "activity",
+        content: {
+          activityId,
+          kind: "model",
+          label,
+          status: "success",
+          durationMs,
+          summary: `${label}已完成`
+        },
+        timestamp: `2026-08-04T12:18:${47 + index}.000+08:00`,
+        finished: false
+      })
+    ),
+    sseEvent({
+      ...root,
+      type: "text",
+      content: "已定位并确认一份直接匹配的合同文档。",
+      replyId: "document-agent-answer",
+      modelCallIndex: 1,
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "document_url",
+      content: document,
+      replyId: "document-agent-answer",
+      modelCallIndex: 1,
+      finished: false
+    }),
+    sseEvent({
+      ...root,
+      type: "done",
+      content: {
+        mode: "agent",
+        completion: "complete",
+        summary: "已定位到 1 份相关文档。"
       },
       finished: true
     }),
@@ -772,6 +842,21 @@ async function installDataHubFixture(
       body: "%PDF-1.4\n% Playwright sales policy source fixture\n"
     });
   });
+  await page.route("**/fixtures/source/contract-preview.svg", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240">',
+        '<rect width="720" height="240" rx="18" fill="#f3f8ff"/>',
+        '<rect x="32" y="30" width="656" height="180" rx="12" fill="#fff" stroke="#b9d3f7"/>',
+        '<text x="64" y="88" fill="#0d2a52" font-size="26" font-family="sans-serif">制度原文图片预览</text>',
+        '<text x="64" y="135" fill="#41658f" font-size="20" font-family="sans-serif">单笔差旅费超过 5000 元需复核</text>',
+        '<path d="M64 166h420" stroke="#8db7ef" stroke-width="10" stroke-linecap="round"/>',
+        "</svg>"
+      ].join("")
+    });
+  });
 
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
@@ -959,8 +1044,8 @@ async function installDataHubFixture(
           mode: "direct",
           url:
             docKey === "sales-policy-2026.pdf"
-              ? "http://127.0.0.1:4173/fixtures/source/sales-policy-2026.pdf"
-              : "http://127.0.0.1:4173/fixtures/source/finance-policy-v2.pdf"
+              ? `${url.origin}/fixtures/source/sales-policy-2026.pdf`
+              : `${url.origin}/fixtures/source/finance-policy-v2.pdf`
         })
       });
       return;
@@ -999,6 +1084,9 @@ async function installDataHubFixture(
     }
 
     if (path === "/api/v1/chat/messages/list" && request.method() === "POST") {
+      if (options.historyResponseDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.historyResponseDelayMs));
+      }
       const body = request.postDataJSON() as { sessionId: string };
       const messageBySession = {
         "history-rag-session": {
@@ -1039,6 +1127,9 @@ async function installDataHubFixture(
     }
 
     if (path === "/api/v1/chat/events/list" && request.method() === "POST") {
+      if (options.historyResponseDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.historyResponseDelayMs));
+      }
       const body = request.postDataJSON() as { sessionId: string };
       const sessionId = body.sessionId;
       const chatId =
@@ -1261,9 +1352,117 @@ async function scrollAnalysisWorkspaceToTop(page: Page) {
   });
 }
 
+async function installStoppableAgentStream(page: Page) {
+  await page.addInitScript(() => {
+    type StreamWindow = Window & { __agentStreamAborted?: boolean };
+
+    class StoppableStreamXhr {
+      responseText = "";
+      status = 200;
+      onprogress: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      onloadend: (() => void) | null = null;
+
+      open() {}
+
+      setRequestHeader() {}
+
+      send(body?: Document | XMLHttpRequestBodyInit | null) {
+        const request = JSON.parse(String(body)) as StreamRequest;
+        const root = {
+          agentName: "编排智能体",
+          sessionId: request.sessionId,
+          globalSessionId: request.globalSessionId,
+          chatId: request.chatId
+        };
+        const child = {
+          agentName: "问数智能体",
+          sessionId: "child-stoppable-agent",
+          globalSessionId: request.globalSessionId,
+          parentSessionId: request.sessionId,
+          chatId: request.chatId
+        };
+        const append = (value: Record<string, unknown>) => {
+          this.responseText += `data: ${JSON.stringify(value)}\n\n`;
+        };
+
+        globalThis.setTimeout(() => {
+          append({ ...root, type: "agent_start", content: {}, finished: false });
+          append({
+            ...child,
+            type: "subagent_exposed",
+            content: {
+              agentId: "ask-data",
+              sessionId: child.sessionId,
+              subagentId: "subagent-stoppable-agent",
+              label: child.agentName
+            },
+            subagentId: "subagent-stoppable-agent",
+            label: child.agentName,
+            finished: false
+          });
+          append({
+            ...child,
+            type: "activity",
+            content: {
+              activityId: "query-still-running",
+              kind: "tool",
+              label: "执行数据查询",
+              status: "running",
+              startedAt: new Date().toISOString()
+            },
+            finished: false
+          });
+          this.onprogress?.();
+        }, 30);
+      }
+
+      abort() {
+        (window as StreamWindow).__agentStreamAborted = true;
+        this.onabort?.();
+      }
+    }
+
+    Object.defineProperty(window, "XMLHttpRequest", {
+      configurable: true,
+      value: StoppableStreamXhr
+    });
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await installAuthenticatedSession(page);
   await page.setViewportSize({ width: 1672, height: 941 });
+});
+
+test("assistant mark preserves its intrinsic aspect ratio beside an agent response", async ({
+  page
+}, testInfo) => {
+  await installDataHubFixture(page);
+  await page.goto("/ask-agent");
+
+  await page.getByRole("textbox", { name: "命令输入" }).fill("检查助手标记比例");
+  await page.getByRole("button", { name: "发送" }).click();
+  const mark = page.locator(".analysis-response__mark");
+  await expect(mark).toBeVisible();
+
+  const ratios = await mark.evaluate((image) => {
+    const rect = image.getBoundingClientRect();
+    const element = image as HTMLImageElement;
+    return {
+      width: rect.width,
+      height: rect.height,
+      rendered: rect.width / rect.height,
+      intrinsic: element.naturalWidth / element.naturalHeight
+    };
+  });
+  expect(ratios).toMatchObject({ width: 42, height: 42 });
+  expect(ratios.rendered).toBeCloseTo(ratios.intrinsic, 2);
+  await page.locator(".analysis-response").screenshot({
+    path: testInfo.outputPath("assistant-mark-aspect-1672x941.png"),
+    animations: "disabled"
+  });
 });
 
 test("workspace model selector changes the strict DataHub chatMode request parameter", async ({
@@ -1358,6 +1557,9 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
 
   await expect(page.getByText("正在检索并复核制度原文。")).toBeVisible();
   await expect(page.getByText("单笔差旅费超过 5000 元需复核")).toBeVisible();
+  const answerImage = page.getByRole("img", { name: "制度截图" });
+  await expect(answerImage).toBeVisible();
+  await expect(answerImage.locator("xpath=..")).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("heading", { name: "引用文档" })).toBeVisible();
   await expect(page.locator(".knowledge-citation")).toHaveCount(1);
   await expect(page.getByText("财务报销制度（2026）")).toBeVisible();
@@ -1369,6 +1571,12 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "rag");
   expect(fixture.streamRequests[0].message).toBe("差旅费超过多少需要复核？");
+
+  const imagePopupPromise = page.waitForEvent("popup");
+  await answerImage.click();
+  const imagePopup = await imagePopupPromise;
+  await expect(imagePopup).toHaveURL(/\/fixtures\/source\/contract-preview\.svg$/);
+  await imagePopup.close();
 
   const popupPromise = page.waitForEvent("popup");
   await page.getByRole("button", { name: "打开原文" }).click();
@@ -1448,6 +1656,57 @@ test("document lookup renders the validated document once and opens it through D
   ).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/document-lookup-v2-flow-390x844.png",
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
+test("flat document agent renders its root stages and document link without a generic orchestration card", async ({
+  page
+}) => {
+  const fixture = await installDataHubFixture(page, {
+    buildAgentResponse: buildFlatDocumentAgentStream
+  });
+  await page.goto("/ask-agent");
+
+  await page
+    .getByRole("textbox", { name: "命令输入" })
+    .fill("帮我找下给眉山天府新区的合同");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(
+    page.getByRole("list", { name: "找文档智能体执行时间轴" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "模型活动：理解文档需求" })
+  ).toBeAttached();
+  await expect(
+    page.getByRole("region", { name: "模型活动：定位相关文档" })
+  ).toBeAttached();
+  await expect(
+    page.getByText("本次响应未返回独立的路由或任务拆解事件。")
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "打开原文：眉山采购合同.pdf" })
+  ).toBeVisible();
+  await expect(page.getByText("已定位并确认一份直接匹配的合同文档。")).toBeVisible();
+
+  expect(fixture.streamRequests).toHaveLength(1);
+  expectStrictStreamRequest(fixture.streamRequests[0], "agent");
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/agent-document-flat-v2-flow-1672x941.png",
+    animations: "disabled",
+    fullPage: true
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await page
+    .getByRole("button", { name: "打开原文：眉山采购合同.pdf" })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/agent-document-flat-v2-flow-390x844.png",
     animations: "disabled",
     fullPage: true
   });
@@ -1801,6 +2060,58 @@ test("persisted nested v2 events restore the same knowledge result", async ({ pa
   await expect(page.getByText("财务报销制度（2026）")).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
+});
+
+test("slow persisted history opens the workspace before replay completes", async ({
+  page
+}, testInfo) => {
+  await installDataHubFixture(page, { historyResponseDelayMs: 1_500 });
+  await page.goto("/history");
+
+  await page.getByRole("button", { name: /差旅费复核制度/ }).click();
+
+  await expect(page).toHaveURL(/\/ask-knowledge$/);
+  await expect(page.getByRole("status", { name: "正在加载历史对话" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
+  await page.screenshot({
+    path: testInfo.outputPath("slow-history-loading.png"),
+    fullPage: true
+  });
+  await expect(page.getByText("单笔差旅费超过 5000 元需复核")).toBeVisible();
+});
+
+test("stopping orchestration settles every running status and freezes total duration", async ({
+  page
+}, testInfo) => {
+  await installDataHubFixture(page);
+  await installStoppableAgentStream(page);
+  await page.goto("/ask-agent");
+
+  await page.getByRole("textbox", { name: "命令输入" }).fill("停止状态回归检查");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(
+    page.getByRole("button", { name: "打开 问数智能体执行详情" })
+  ).toBeVisible();
+  await page.waitForTimeout(1_100);
+  await page.getByRole("button", { name: "停止生成" }).click();
+
+  await expect(page.getByRole("heading", { name: "已停止生成" })).toBeVisible();
+  const panel = page.locator(".xs-datahub-execution");
+  await expect(panel).toHaveAttribute("data-status", "cancelled");
+  await expect(panel.getByLabel("运行中")).toHaveCount(0);
+  await expect(panel.getByLabel("已停止").first()).toBeVisible();
+  await expect(panel.locator(".xs-datahub-overview__metrics dd").last()).not.toHaveText("—");
+  expect(
+    await page.evaluate(() =>
+      Boolean((window as Window & { __agentStreamAborted?: boolean }).__agentStreamAborted)
+    )
+  ).toBe(true);
+
+  await page.screenshot({
+    path: testInfo.outputPath("agent-orchestration-cancelled-1672x941.png"),
+    animations: "disabled",
+    fullPage: true
+  });
 });
 
 test("persisted agent history restores the same root and child execution graph", async ({

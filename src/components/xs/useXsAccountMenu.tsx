@@ -13,7 +13,7 @@ export function useXsAccountMenu(onNavigate?: () => void) {
   const setOnboardingOpen = useUiStore((state) => state.setOnboardingOpen);
   const setDashboardOnboardingOpen = useUiStore((state) => state.setDashboardOnboardingOpen);
   const username = user?.username || "张三";
-  const userRole = user?.isAdmin ? "系统管理员" : "企业管理员";
+  const userRole = user?.isAdmin ? "系统管理员" : "企业成员";
 
   const accountMenuItems: MenuProps["items"] = [
     {

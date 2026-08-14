@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { ClockCounterClockwise, Eye, FileText, Paperclip, PaperPlaneTilt, X } from "@phosphor-icons/react";
+import { Eye, FileDoc, FileText, Paperclip, PaperPlaneTilt, X } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
@@ -7,6 +7,7 @@ import { productCapabilities } from "@/config/capabilities";
 import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import { OfficialDocumentHub } from "@/features/officialDocument/OfficialDocumentHub";
 import { createAttachmentQueue } from "@/services/attachmentService";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
 import { createWritingDraft, listWritingDocuments, listWritingScenes } from "@/services/writingService";
@@ -41,6 +42,7 @@ const scenePrompts: Record<WritingSceneIconId, string> = {
 };
 
 const writingTypes = ["报告总结", "方案策划", "文案创作", "工作汇报", "新闻稿"];
+type WritingWorkspaceMode = "official" | "general";
 
 export function WritingPage() {
   const sessionScope = useSessionQueryScope();
@@ -51,6 +53,7 @@ export function WritingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeWritingType, setActiveWritingType] = useState<string | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<WritingSceneIconId | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<WritingWorkspaceMode>("official");
   const [removingAttachmentIds, setRemovingAttachmentIds] = useState<Set<string>>(() => new Set());
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
@@ -220,13 +223,38 @@ export function WritingPage() {
     <PageFrame
       title="智能写作"
       subtitle="AI 帮你撰写各类文档、报告、方案等内容"
-      actions={
-        <>
-          <Button disabled title="即将开放" icon={<FileText size={18} />}>使用指南 · 即将开放</Button>
-          <Button disabled title="即将开放" icon={<ClockCounterClockwise size={18} />}>写作历史 · 即将开放</Button>
-        </>
-      }
     >
+      <div className="writing-mode-switch xs-page-enter" role="tablist" aria-label="写作模式">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workspaceMode === "official"}
+          onClick={() => setWorkspaceMode("official")}
+        >
+          <FileDoc size={18} aria-hidden="true" />
+          <span><strong>公文写作</strong><small>模板校准、结构化编辑与问数绑定</small></span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workspaceMode === "general"}
+          onClick={() => setWorkspaceMode("general")}
+        >
+          <FileText size={18} aria-hidden="true" />
+          <span><strong>通用写作</strong><small>组织报告、方案和文案需求</small></span>
+        </button>
+      </div>
+
+      {workspaceMode === "official" ? <OfficialDocumentHub /> : (
+        <>
+
+      <div className="section-title-row section-title-row--compact official-document-followup xs-page-enter" style={{ animationDelay: "60ms" }}>
+        <div>
+          <h2 className="subsection-title">通用写作需求预览</h2>
+          <p className="page-section-description">保留原有通用写作入口；当前只组织需求，不会上传附件或生成真实文档。</p>
+        </div>
+        <span className="section-title-meta">原有预览能力</span>
+      </div>
       <XsCapabilityStatus capability={productCapabilities.writing} />
       <section
         className="xs-card xs-page-enter xs-focus-glow writing-panel writing-panel--compact"
@@ -266,17 +294,16 @@ export function WritingPage() {
         <div className="writing-panel__actions-bar">
           <input
             ref={attachmentInputRef}
-            className="sr-only"
+            hidden
             type="file"
             multiple
             disabled={isSubmitting}
-            aria-label="添加写作附件"
+            data-testid="writing-attachment-input"
             accept=".csv,.doc,.docx,.json,.md,.pdf,.txt,.xls,.xlsx,image/*"
             onChange={handleAttachmentsChange}
           />
           <Button
             icon={<Paperclip size={16} />}
-            aria-label="附件"
             disabled={isSubmitting}
             onClick={handleOpenAttachmentPicker}
           >
@@ -398,6 +425,8 @@ export function WritingPage() {
           </table>
         </section>
       </XsAsyncPanel>
+        </>
+      )}
     </PageFrame>
   );
 }

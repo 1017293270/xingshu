@@ -6,6 +6,7 @@ export type AiChartType = "bar" | "line" | "pie";
 export type AiChartPlanRequest = {
   question: string;
   tables: DataHubTableResult[];
+  answer?: string;
 };
 
 export type AiChartPlanResult = {

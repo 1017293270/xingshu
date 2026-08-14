@@ -223,10 +223,21 @@ type DesignerConfirmation = {
   tone?: "default" | "danger";
 };
 const designerConfirmation = ref<DesignerConfirmation | null>(null);
+const designerConfirmationClosing = ref(false);
+let designerConfirmationCloseTimer: number | null = null;
 let resolveDesignerConfirmation: ((confirmed: boolean) => void) | null = null;
+
+function clearDesignerConfirmationCloseTimer() {
+  if (designerConfirmationCloseTimer !== null) {
+    window.clearTimeout(designerConfirmationCloseTimer);
+    designerConfirmationCloseTimer = null;
+  }
+}
 
 function requestDesignerConfirmation(options: DesignerConfirmation) {
   resolveDesignerConfirmation?.(false);
+  clearDesignerConfirmationCloseTimer();
+  designerConfirmationClosing.value = false;
   designerConfirmation.value = options;
   return new Promise<boolean>((resolve) => {
     resolveDesignerConfirmation = resolve;
@@ -236,8 +247,17 @@ function requestDesignerConfirmation(options: DesignerConfirmation) {
 function finishDesignerConfirmation(confirmed: boolean) {
   const resolve = resolveDesignerConfirmation;
   resolveDesignerConfirmation = null;
-  designerConfirmation.value = null;
   resolve?.(confirmed);
+  // 保留挂载约 150ms，让 backdrop/panel 反向淡出动画播完再卸载
+  if (designerConfirmation.value) {
+    designerConfirmationClosing.value = true;
+    clearDesignerConfirmationCloseTimer();
+    designerConfirmationCloseTimer = window.setTimeout(() => {
+      designerConfirmation.value = null;
+      designerConfirmationClosing.value = false;
+      designerConfirmationCloseTimer = null;
+    }, 150);
+  }
 }
 let canvasResizeObserver: ResizeObserver | null = null;
 let pendingHistoryOrigin: DashboardSchema | null = null;
@@ -664,6 +684,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("pointerup", finishCanvasPan);
   window.removeEventListener("pointercancel", finishCanvasPan);
   finishDesignerConfirmation(false);
+  clearDesignerConfirmationCloseTimer();
 });
 
 function bindingForWidget(widget: DashboardWidget) {
@@ -1044,6 +1065,8 @@ function autoScrollCanvas(clientX: number, clientY: number) {
   const bounds = viewport.getBoundingClientRect();
   const edge = 48;
   const speed = 18;
+  // 视口尚未布局(或尺寸小于边缘热区)时不存在有效的边缘区域，直接跳过
+  if (bounds.width < edge * 2 || bounds.height < edge * 2) return;
   if (clientX < bounds.left + edge) viewport.scrollLeft -= speed;
   if (clientX > bounds.right - edge) viewport.scrollLeft += speed;
   if (clientY < bounds.top + edge) viewport.scrollTop -= speed;
@@ -1086,6 +1109,7 @@ function handleWidgetPointerMove(event: PointerEvent) {
   const drag = pointerDrag.value;
   if (!drag || event.pointerId !== drag.pointerId) return;
   event.preventDefault();
+  autoScrollCanvas(event.clientX, event.clientY);
   const geometry = getDragGeometry(drag, event.clientX, event.clientY);
   pointerDrag.value = { ...drag, ...geometry };
 }
@@ -1112,6 +1136,7 @@ function finishWidgetPointerDrag(event: PointerEvent) {
     drag.candidate.h !== drag.origin.h;
   if (target && hasChanged) {
     target.position = drag.candidate;
+    markWidgetSettling(drag.widgetId);
   }
   pointerDrag.value = null;
   lastInteractionFinishedAt = performance.now();
@@ -1126,13 +1151,16 @@ function cancelWidgetPointerDrag(event: PointerEvent) {
 }
 
 function dragOffsetFor(widgetId: string) {
-  if (pointerDrag.value?.widgetId !== widgetId || pointerDrag.value.mode !== "move") return undefined;
-  return { x: pointerDrag.value.offsetX, y: pointerDrag.value.offsetY };
+  const drag = pointerDrag.value;
+  if (drag?.widgetId !== widgetId || drag.mode !== "move") return undefined;
+  // 用 candidate 与 origin 的差值做 transform 预览，保持与落位一致的 clamp 语义
+  return { x: drag.candidate.x - drag.origin.x, y: drag.candidate.y - drag.origin.y };
 }
 
 function previewPositionFor(widgetId: string) {
-  if (pointerDrag.value?.widgetId !== widgetId) return undefined;
-  return pointerDrag.value.candidate;
+  const drag = pointerDrag.value;
+  if (drag?.widgetId !== widgetId || drag.mode !== "resize") return undefined;
+  return drag.candidate;
 }
 
 function synchronizeWidgetModuleBinding(
@@ -2204,6 +2232,7 @@ async function exitDesigner() {
                   :dragging="pointerDrag?.widgetId === item.id && pointerDrag.mode === 'move'"
                   :resizing="pointerDrag?.widgetId === item.id && pointerDrag.mode === 'resize'"
                   :preview-position="previewPositionFor(item.id)"
+                  :drag-offset="dragOffsetFor(item.id)"
                   @select="selectedWidgetId = $event"
                   @pointerstart="startWidgetPointerDrag"
                   @resizestart="startWidgetResize"
@@ -2475,6 +2504,7 @@ async function exitDesigner() {
       :message="designerConfirmation.message"
       :confirm-label="designerConfirmation.confirmLabel"
       :tone="designerConfirmation.tone"
+      :closing="designerConfirmationClosing"
       @confirm="finishDesignerConfirmation(true)"
       @cancel="finishDesignerConfirmation(false)"
     />
@@ -2503,8 +2533,6 @@ async function exitDesigner() {
   --color-accent: #2563eb;
   --color-accent-soft: #dbeafe;
   --color-danger: #dc2626;
-  --motion-fast: 120ms;
-  --ease-enter: cubic-bezier(.16, 1, .3, 1);
   position: relative;
   display: flex;
   width: 100%;
@@ -3516,9 +3544,9 @@ textarea:focus-visible {
     width: min(292px, calc(100% - 28px));
     visibility: hidden;
     opacity: 0;
-    box-shadow: 0 18px 46px rgba(24, 77, 145, .18);
+    box-shadow: var(--xs-shadow-overlay);
     transform: translateX(-108%);
-    transition: opacity 160ms cubic-bezier(.2, 0, 0, 1), transform 160ms cubic-bezier(.2, 0, 0, 1);
+    transition: opacity 160ms cubic-bezier(.2, 0, 0, 1), transform 160ms cubic-bezier(.2, 0, 0, 1), visibility 0s linear 160ms;
   }
 
   .designer-palette {
@@ -3534,6 +3562,7 @@ textarea:focus-visible {
     visibility: visible;
     opacity: 1;
     transform: translateX(0);
+    transition: opacity 160ms cubic-bezier(.2, 0, 0, 1), transform 160ms cubic-bezier(.2, 0, 0, 1), visibility 0s;
   }
 
   .designer-palette__copy,
@@ -3787,7 +3816,7 @@ textarea:focus-visible {
   border: 1px solid var(--studio-border);
   border-radius: 10px;
   background: #fff;
-  transition: border-color .15s ease;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__module-list article:hover {
@@ -3824,7 +3853,7 @@ textarea:focus-visible {
   border-radius: 8px;
   color: var(--studio-text-3);
   background: transparent;
-  transition: color .15s ease, background .15s ease;
+  transition: color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__module-remove:hover {
@@ -3866,7 +3895,7 @@ textarea:focus-visible {
   color: var(--studio-text-2);
   background: #fff;
   font-size: 12px;
-  transition: border-color .15s ease, box-shadow .15s ease;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__filters select {
@@ -3895,7 +3924,7 @@ textarea:focus-visible {
   background: #f4f8ff;
   font-size: 12px;
   font-weight: 600;
-  transition: border-color .15s ease, background .15s ease;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__filters button:hover:not(:disabled) {
@@ -3920,7 +3949,7 @@ textarea:focus-visible {
   color: var(--studio-text-2);
   background: #fff;
   text-align: left;
-  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__list > button:hover {
@@ -4098,7 +4127,7 @@ textarea:focus-visible {
   background: #fff;
   font-size: 12px;
   font-weight: 600;
-  transition: border-color .15s ease, background .15s ease;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__actions button:hover:not(:disabled) {
@@ -4140,7 +4169,7 @@ textarea:focus-visible {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 31, 55, .36);
+  background: var(--xs-scrim-modal);
   backdrop-filter: blur(4px);
   animation: designer-modal-backdrop-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
 }
@@ -4155,7 +4184,7 @@ textarea:focus-visible {
   border: 1px solid #d5e4f8;
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 24px 70px rgba(23, 56, 100, .2);
+  box-shadow: var(--xs-shadow-modal);
   animation: designer-modal-enter 160ms cubic-bezier(.2, 0, 0, 1) backwards;
 }
 
@@ -4647,6 +4676,7 @@ textarea:focus-visible {
 
 .designer-canvas-scroll.is-pan-mode {
   cursor: grab;
+  touch-action: none;
 }
 
 .designer-canvas-scroll.is-panning {

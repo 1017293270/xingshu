@@ -44,6 +44,8 @@ export const routeTitles: Record<string, string> = {
   "/history": "历史对话",
   "/table": "智能制表",
   "/writing": "智能写作",
+  "/writing/templates": "公文模板",
+  "/writing/drafts": "公文草稿",
   "/dashboard": "我的看板",
   "/dashboard-editor": "看板编辑器",
   "/dashboard-view": "大屏浏览",
@@ -53,3 +55,19 @@ export const routeTitles: Record<string, string> = {
   "/login": "登录",
   "/welcome": "欢迎"
 };
+
+const routeTitlePrefixes = Object.keys(routeTitles)
+  .filter((route) => route !== "/")
+  .sort((left, right) => right.length - left.length);
+
+export function resolveRouteTitle(pathname: string): string | undefined {
+  if (routeTitles[pathname]) {
+    return routeTitles[pathname];
+  }
+  const prefix = routeTitlePrefixes.find((route) => pathname.startsWith(`${route}/`));
+  return prefix ? routeTitles[prefix] : undefined;
+}
+
+export function isNavigationItemActive(itemTo: string, pathname: string): boolean {
+  return itemTo === pathname || pathname.startsWith(`${itemTo}/`);
+}

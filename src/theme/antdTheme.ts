@@ -6,6 +6,7 @@ export const antdTheme: ThemeConfig = {
     colorPrimary: xingshuTokens.colorPrimary,
     colorBgLayout: xingshuTokens.colorBg,
     colorBgContainer: xingshuTokens.colorSurface,
+    colorBgMask: "rgba(8, 26, 58, 0.45)",
     colorText: xingshuTokens.colorText,
     colorTextSecondary: xingshuTokens.colorTextSecondary,
     colorTextTertiary: xingshuTokens.colorTextTertiary,

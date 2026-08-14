@@ -4,7 +4,7 @@
   overflow: hidden;
   padding: 0;
   border-radius: var(--xs-radius-card);
-  box-shadow: 0 32px 72px rgba(23, 84, 170, 0.18);
+  box-shadow: var(--xs-shadow-modal);
 }
 
 /* 视觉区：浅冰蓝渐变 + 星点氛围，切屏重挂载播放横移淡入 */

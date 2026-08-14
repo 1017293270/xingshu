@@ -80,7 +80,7 @@ function mapDataHubSession(session: DataHubChatSession): HistorySession {
     id: session.sessionId,
     sessionId: session.sessionId,
     title,
-    summary: "来自 data-hub 的历史会话，点击后恢复完整过程与结果。",
+    summary: "来自 data-hub 的历史会话，点击后查看完整过程与结果。",
     category: resolveHistoryCategory(session.chatMode, title),
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
     source: "data-hub",

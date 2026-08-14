@@ -9,7 +9,7 @@ import { useUiStore } from "@/stores/uiStore";
 import "./home-onboarding.css";
 
 const ONBOARDING_FLAG_KEY = "xingshu_onboarding_v1";
-const AUTO_OPEN_DELAY_MS = 700;
+const AUTO_OPEN_DELAY_MS = 300;
 
 const slides = [
   {

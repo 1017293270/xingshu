@@ -691,6 +691,76 @@ describe("dataHubExecutionProjector", () => {
     expect(projection.mainSession.cards.every((card) => card.status === "done")).toBe(true);
   });
 
+  it("settles cancelled root, child, cards, and running activities at the stop time", () => {
+    const cancelledAt = "2026-08-04T10:01:15.000+08:00";
+    const projection = projectDataHubExecutionEvents(
+      [
+        event("agent_start", {
+          timestamp: "2026-08-04T10:00:00.000+08:00"
+        }),
+        event("subagent_exposed", {
+          agentName: "问数智能体",
+          sessionId: "child-running",
+          parentSessionId: "main-session",
+          subagentId: "subagent-running",
+          label: "问数智能体",
+          content: {
+            sessionId: "child-running",
+            subagentId: "subagent-running",
+            label: "问数智能体"
+          },
+          timestamp: "2026-08-04T10:00:05.000+08:00"
+        }),
+        event("activity", {
+          agentName: "问数智能体",
+          sessionId: "child-running",
+          parentSessionId: "main-session",
+          content: {
+            activityId: "query-running",
+            kind: "tool",
+            label: "执行数据查询",
+            status: "running",
+            startedAt: "2026-08-04T10:00:10.000+08:00"
+          },
+          timestamp: "2026-08-04T10:00:10.000+08:00"
+        })
+      ],
+      {
+        terminalStatus: "cancelled",
+        terminalTimestamp: cancelledAt
+      }
+    );
+
+    expect(projection.mainSession).toMatchObject({
+      status: "cancelled",
+      finished: true,
+      updatedAt: cancelledAt
+    });
+    expect(projection.mainSession.cards[0]).toMatchObject({
+      status: "cancelled",
+      updatedAt: cancelledAt
+    });
+    expect(projection.subagentSessions[0]).toMatchObject({
+      status: "cancelled",
+      finished: true,
+      updatedAt: cancelledAt
+    });
+    expect(projection.subagentSessions[0].cards[0]).toMatchObject({
+      status: "cancelled",
+      updatedAt: cancelledAt,
+      blocks: [
+        {
+          timestamp: cancelledAt,
+          content: {
+            activityId: "query-running",
+            status: "cancelled",
+            completedAt: cancelledAt
+          }
+        }
+      ]
+    });
+  });
+
   it("settles a late child event after the root session has already completed", () => {
     const projection = projectDataHubExecutionEvents(
       [

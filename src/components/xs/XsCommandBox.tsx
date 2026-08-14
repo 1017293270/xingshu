@@ -177,7 +177,7 @@ export function XsCommandBox({
               onClick={onCancelVoice}
             />
           ) : null}
-          {busy ? (
+          {busy && onStop ? (
             <Button
               key="stop"
               danger
@@ -192,7 +192,8 @@ export function XsCommandBox({
               type="primary"
               className="xs-command-box__send xs-command-box__primary-action"
               aria-label="发送"
-              disabled={!canSubmit}
+              disabled={busy || !canSubmit}
+              loading={busy}
               icon={<PaperPlaneTilt size={18} weight="fill" />}
               onClick={onSubmit}
             />

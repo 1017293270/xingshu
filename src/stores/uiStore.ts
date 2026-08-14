@@ -17,6 +17,8 @@ export type AnalysisTurnState = {
   chatId: string;
   chatMode: DataHubChatMode;
   status: AskDataStatus;
+  startedAt?: number;
+  endedAt?: number;
   events: DataHubStreamEvent[];
   error: string;
 };
@@ -252,6 +254,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         chatId: createDataHubClientId("chat"),
         chatMode,
         status: "streaming",
+        startedAt: Date.now(),
         events: [],
         error: ""
       };
@@ -279,7 +282,11 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         return {};
       }
 
-      const analysisTurns = updateTurn(state.analysisTurns, runId, (turn) => ({ ...turn, status: "done" }));
+      const analysisTurns = updateTurn(state.analysisTurns, runId, (turn) => ({
+        ...turn,
+        status: "done",
+        endedAt: Date.now()
+      }));
       return state.activeAskDataRunId === runId
         ? { activeAskDataRunId: null, askDataStatus: "done", analysisTurns }
         : { analysisTurns };
@@ -297,6 +304,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       const analysisTurns = updateTurn(state.analysisTurns, runId, (turn) => ({
         ...turn,
         status: "error",
+        endedAt: Date.now(),
         error: message
       }));
       return state.activeAskDataRunId === runId
@@ -316,6 +324,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       const analysisTurns = updateTurn(state.analysisTurns, runId, (turn) => ({
         ...turn,
         status: "cancelled",
+        endedAt: Date.now(),
         error: ""
       }));
       return state.activeAskDataRunId === runId
@@ -380,7 +389,12 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       askDataError: activeTurn?.error || error,
       analysisTurns: restoredTurns,
       pendingAttachments: [],
-      sentStatus: `已恢复历史对话：${question}`
+      sentStatus:
+        status === "streaming"
+          ? `正在加载历史对话：${question}`
+          : status === "error"
+            ? `历史对话加载失败：${question}`
+            : `已加载历史对话：${question}`
     });
     abortAllAskDataControllers();
   },

@@ -12,13 +12,25 @@ import type {
 } from "@/types/dataHub";
 
 type UnknownRecord = Record<string, unknown>;
+type TerminalExecutionStatus = Exclude<
+  DataHubExecutionStatus,
+  "idle" | "running"
+>;
+
+function isTerminalExecutionStatus(
+  status: DataHubExecutionStatus
+): status is TerminalExecutionStatus {
+  return status === "done" || status === "error" || status === "cancelled";
+}
 
 export type DataHubExecutionProjectionOptions = {
   mainSessionId?: string;
   globalSessionId?: string;
   chatId?: string;
   fallbackAgentName?: string;
-  terminalStatus?: Extract<DataHubExecutionStatus, "done" | "error">;
+  startedAt?: number | string;
+  terminalStatus?: TerminalExecutionStatus;
+  terminalTimestamp?: number | string;
 };
 
 export type DataHubSubagentTreeEntry = {
@@ -116,7 +128,8 @@ export function createDataHubExecutionProjection(
     mainSession: createExecutionSession({
       sessionId: optionalString(options.mainSessionId),
       globalSessionId: optionalString(options.globalSessionId),
-      chatId: optionalString(options.chatId)
+      chatId: optionalString(options.chatId),
+      startedAt: options.startedAt
     }),
     subagentSessions: [],
     orphanedSubagentEvents: [],
@@ -322,13 +335,52 @@ function upsertExecutionCard(
 
 function completeCards(
   cards: DataHubAgentExecutionCard[],
-  status: Extract<DataHubExecutionStatus, "done" | "error">
+  status: TerminalExecutionStatus,
+  terminalTimestamp?: number | string
 ): DataHubAgentExecutionCard[] {
   return cards.map((card) =>
     card.status === "running"
       ? {
           ...card,
-          status
+          status,
+          ...(terminalTimestamp === undefined
+            ? {}
+            : { updatedAt: terminalTimestamp }),
+          blocks: card.blocks.map((block) => {
+            const activityId = activityIdFromPayload(block.content);
+            const record = isRecord(block.content) ? block.content : undefined;
+            if (!activityId || !record) {
+              return block;
+            }
+            const activityStatus = optionalString(record.status)?.toLowerCase();
+            if (
+              activityStatus &&
+              !["idle", "pending", "running", "processing"].includes(
+                activityStatus
+              )
+            ) {
+              return block;
+            }
+            const settledActivityStatus =
+              status === "done"
+                ? "success"
+                : status === "error"
+                  ? "failed"
+                  : "cancelled";
+            return {
+              ...block,
+              ...(terminalTimestamp === undefined
+                ? {}
+                : { timestamp: terminalTimestamp }),
+              content: {
+                ...record,
+                status: settledActivityStatus,
+                ...(terminalTimestamp === undefined
+                  ? {}
+                  : { completedAt: terminalTimestamp })
+              }
+            };
+          })
         }
       : card
   );
@@ -379,6 +431,9 @@ function nextSessionStatus(
   }
   if (session.status === "error") {
     return "error";
+  }
+  if (session.status === "cancelled") {
+    return "cancelled";
   }
   if (
     event.type === "done" ||
@@ -454,6 +509,7 @@ function projectSessionEvent(
     session.finished ||
     status === "done" ||
     status === "error" ||
+    status === "cancelled" ||
     event.type === "done" ||
     event.finished === true ||
     event.requestFinished === true;
@@ -469,8 +525,8 @@ function projectSessionEvent(
   if (executionCardEventTypes.has(event.type)) {
     cards = upsertExecutionCard(cards, event, eventAgentName);
   }
-  if (status === "done" || status === "error") {
-    cards = completeCards(cards, status);
+  if (status === "done" || status === "error" || status === "cancelled") {
+    cards = completeCards(cards, status, event.timestamp);
   }
 
   const nextSession: DataHubExecutionSession = {
@@ -612,7 +668,9 @@ export function reduceDataHubExecutionEvent(
   // 主会话到达终态时，本轮编排整体结束：仍未收尾的子会话（如真实流中
   // 缺少路由到自身的 done 事件）一并级联收尾，避免编排流程永远停在运行中。
   const mainReachedTerminal =
-    (nextMainSession.status === "done" || nextMainSession.status === "error") &&
+    (nextMainSession.status === "done" ||
+      nextMainSession.status === "error" ||
+      nextMainSession.status === "cancelled") &&
     mainSession.status !== nextMainSession.status;
 
   const subagentSessions = mainReachedTerminal
@@ -620,17 +678,18 @@ export function reduceDataHubExecutionEvent(
         if (
           session.finished ||
           session.status === "done" ||
-          session.status === "error"
+          session.status === "error" ||
+          session.status === "cancelled"
         ) {
           return session;
         }
-        const cascadeStatus = nextMainSession.status as "done" | "error";
+        const cascadeStatus = nextMainSession.status as TerminalExecutionStatus;
         return {
           ...session,
           status: cascadeStatus,
           finished: true,
           updatedAt: event.timestamp ?? session.updatedAt,
-          cards: completeCards(session.cards, cascadeStatus)
+          cards: completeCards(session.cards, cascadeStatus, event.timestamp)
         };
       })
     : projection.subagentSessions;
@@ -656,27 +715,35 @@ export function projectDataHubExecutionEvents(
     projection = reduceDataHubExecutionEvent(projection, event);
   }
 
-  const explicitMainStatus =
-    projection.mainSession.status === "done" ||
-    projection.mainSession.status === "error"
-      ? projection.mainSession.status
-      : undefined;
+  const explicitMainStatus = isTerminalExecutionStatus(
+    projection.mainSession.status
+  )
+    ? projection.mainSession.status
+    : undefined;
   const terminalStatus = explicitMainStatus ?? options.terminalStatus;
 
   if (terminalStatus) {
     const settleSession = (
       session: DataHubExecutionSession
     ): DataHubExecutionSession => {
-      const sessionTerminalStatus =
-        session.status === "done" || session.status === "error"
-          ? session.status
-          : terminalStatus;
+      const sessionAlreadyTerminal = isTerminalExecutionStatus(session.status);
+      const sessionTerminalStatus: TerminalExecutionStatus =
+        isTerminalExecutionStatus(session.status) ? session.status : terminalStatus;
 
       return {
         ...session,
         status: sessionTerminalStatus,
         finished: true,
-        cards: completeCards(session.cards, sessionTerminalStatus)
+        ...(!sessionAlreadyTerminal && options.terminalTimestamp !== undefined
+          ? { updatedAt: options.terminalTimestamp }
+          : {}),
+        cards: sessionAlreadyTerminal
+          ? session.cards
+          : completeCards(
+              session.cards,
+              sessionTerminalStatus,
+              options.terminalTimestamp
+            )
       };
     };
 

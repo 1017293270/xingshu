@@ -31,10 +31,10 @@ export const productCapabilities = {
   },
   cloud: {
     id: "cloud",
-    label: "预览模式",
-    state: "preview",
-    provenance: "mock",
-    message: "文件、容量和同步状态均为本地演示，不会上传或同步企业资料。"
+    label: "实时能力",
+    state: "live",
+    provenance: "datahub",
+    message: "知识库来自当前登录空间的 DataHub；新增请到 DataHub 平台完成。"
   },
   dataAssets: {
     id: "data-assets",

@@ -114,7 +114,7 @@ export function LoginPage() {
       setStatusMessage(`已进入 ${firstSpace.spaceName}`);
       setIsLoginComplete(true);
       if (import.meta.env.MODE !== "test") {
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
       }
       navigate(returnPath, { replace: true });
     } catch (error) {

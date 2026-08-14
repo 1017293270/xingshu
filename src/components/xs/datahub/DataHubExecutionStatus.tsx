@@ -2,6 +2,7 @@ import {
   CheckCircle,
   CircleNotch,
   Clock,
+  StopCircle,
   WarningCircle
 } from "@phosphor-icons/react";
 import type { DataHubExecutionStatus } from "@/types/dataHub";
@@ -21,6 +22,8 @@ export function DataHubExecutionStatus({
       ? CheckCircle
       : status === "error"
         ? WarningCircle
+        : status === "cancelled"
+          ? StopCircle
         : status === "running"
           ? CircleNotch
           : Clock;

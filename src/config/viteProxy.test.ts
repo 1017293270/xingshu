@@ -28,8 +28,10 @@ afterEach(() => {
 
 describe("Vite data-hub proxy", () => {
   it("fails closed when no DataHub proxy target is configured", async () => {
-    delete process.env.VITE_DATAHUB_PROXY_TARGET;
-    delete process.env.VITE_DATAHUB_BFF_PORT;
+    // Explicitly shadow any developer-local .env.local values so this test
+    // verifies the fail-closed branch in every workspace configuration.
+    process.env.VITE_DATAHUB_PROXY_TARGET = "";
+    process.env.VITE_DATAHUB_BFF_PORT = "";
 
     await expect(loadConfigFromFile(
       { command: "serve", mode: "development" },

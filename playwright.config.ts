@@ -28,6 +28,9 @@ export default defineConfig({
     env: {
       VITE_DASHBOARD_EDITOR_URL: "http://127.0.0.1:5174/workbenches",
       VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:65535",
+      VITE_DATAHUB_APP_URL: "http://127.0.0.1:65535",
+      VITE_DATAHUB_KB_MANAGE_PATH: "/knowledge",
+      VITE_DATAHUB_KB_DETAIL_PATH: "/knowledge/{id}",
       VITE_QUERY_ASSETS_ENABLED: "true"
     },
     url: "http://127.0.0.1:4173",

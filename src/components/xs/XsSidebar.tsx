@@ -8,7 +8,7 @@ import {
 import { Button, Dropdown, Layout, Menu, type MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { primaryNavigation, secondaryNavigation } from "./navigation";
+import { isNavigationItemActive, primaryNavigation, secondaryNavigation } from "./navigation";
 import { useXsAccountMenu } from "./useXsAccountMenu";
 import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import avatarSource from "@/assets/brand/zhangsan-avatar-source.png";
@@ -39,7 +39,9 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
   }, [collapsed]);
 
   const selectedKeys = useMemo(() => {
-    const match = [...primaryNavigation, ...secondaryNavigation].find((item) => item.to === location.pathname);
+    const match = [...primaryNavigation, ...secondaryNavigation].find((item) =>
+      isNavigationItemActive(item.to, location.pathname)
+    );
     return match ? [match.to] : [];
   }, [location.pathname]);
 

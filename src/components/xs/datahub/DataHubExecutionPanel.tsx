@@ -6,6 +6,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { buildDataHubSubagentTree } from "@/services/dataHubExecutionProjector";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
+import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 import { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
 import { DataHubSubagentDag, dataHubDagGhostVisible } from "./DataHubSubagentDag";
 import { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
@@ -55,6 +56,7 @@ export function DataHubExecutionPanel({
   onDrawerOpenChange,
   selectedSubagentId,
   onSelectedSubagentChange,
+  showMainDocumentBlocks = true,
   onCitationOpen,
   renderBlock
 }: DataHubExecutionPanelProps) {
@@ -91,6 +93,29 @@ export function DataHubExecutionPanel({
     projection.eventCount > 0 ||
     projection.mainSession.cards.length > 0 ||
     projection.subagentSessions.length > 0;
+  const orchestration = projection.mainSession.orchestration;
+  const hasOrchestrationStructure = Boolean(
+    projection.subagentSessions.length ||
+      orchestration.decompose ||
+      orchestration.routingEvents.length ||
+      orchestration.reactSteps.length ||
+      orchestration.toolCalls.length ||
+      orchestration.toolResults.length
+  );
+  const showDirectMainExecution =
+    projection.mainSession.cards.length > 0 && !hasOrchestrationStructure;
+  const directMainCards = projection.mainSession.cards.map((card) => {
+    const stageBlocks = card.blocks.filter(
+      (block) =>
+        block.type !== "text" &&
+        block.type !== "content" &&
+        (showMainDocumentBlocks ||
+          (block.type !== "document_url" && block.type !== "citation_document"))
+    );
+    return stageBlocks.length && stageBlocks.length !== card.blocks.length
+      ? { ...card, blocks: stageBlocks }
+      : card;
+  });
   // 提问后的首个事件到达前：用幽灵编排画布填充面板，避免空白空状态框
   const ghostVisible = dataHubDagGhostVisible(
     projection.mainSession,
@@ -146,7 +171,25 @@ export function DataHubExecutionPanel({
           {bodyMountedRef.current ? (
             <div className="xs-datahub-execution__body">
               {hasContent || ghostVisible ? (
-                <>
+                showDirectMainExecution ? (
+                  <div
+                    className="xs-datahub-execution__main-cards"
+                    aria-label="主智能体执行过程"
+                  >
+                    {directMainCards.map((card, index) => (
+                      <DataHubAgentExecutionCard
+                        key={card.id}
+                        card={card}
+                        compact
+                        expandLatestActivity={false}
+                        staggerIndex={index}
+                        onCitationOpen={onCitationOpen}
+                        renderBlock={renderBlock}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <>
                   {hasContent ? (
                     <DataHubOrchestrationOverview
                       session={projection.mainSession}
@@ -163,7 +206,8 @@ export function DataHubExecutionPanel({
                   {hasContent ? (
                     <DataHubExecutionTimeline session={projection.mainSession} />
                   ) : null}
-                </>
+                  </>
+                )
               ) : (
                 <div className="xs-datahub-execution__empty">
                   <TreeStructure size={28} weight="duotone" aria-hidden="true" />

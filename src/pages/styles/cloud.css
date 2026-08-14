@@ -1,4 +1,4 @@
-/* 我的云盘：企业级资料管理样式 */
+/* 我的云盘：当前空间知识库只读列表 */
 
 .cloud-workbench {
   display: grid;
@@ -53,7 +53,7 @@
 
 .cloud-workbench__metrics span,
 .cloud-lane p,
-.cloud-recent__row span {
+.cloud-lane span {
   color: var(--xs-text-3);
   font-size: 13px;
   font-weight: 650;
@@ -66,6 +66,14 @@
   font-size: 24px;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+}
+
+.cloud-add-hint {
+  max-width: 220px;
+  color: var(--xs-text-3);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .cloud-lane-grid {
@@ -82,6 +90,11 @@
   gap: 18px;
   min-height: 124px;
   padding: 20px 22px;
+}
+
+.cloud-lane.xs-card-button {
+  width: 100%;
+  appearance: none;
 }
 
 .cloud-lane__body {
@@ -101,8 +114,10 @@
 
 .cloud-lane__head h2 {
   margin: 0;
+  overflow: hidden;
   font-size: 16px;
   line-height: 1.4;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -118,152 +133,6 @@
 .cloud-lane p {
   margin: 0;
   line-height: 1.6;
-}
-
-.cloud-recent {
-  padding: 18px 20px 10px;
-}
-
-.cloud-recent .section-title-row {
-  margin-bottom: 6px;
-}
-
-.cloud-recent .ant-btn-link {
-  min-height: 32px;
-  color: var(--xs-interactive-text);
-}
-
-.cloud-recent__list {
-  display: grid;
-  border-top: 1px solid #edf2fb;
-}
-
-.cloud-recent__row {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1.4fr) minmax(96px, 0.4fr) minmax(128px, 0.5fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  border-bottom: 1px solid #edf2fb;
-  transition:
-    background-color var(--xs-motion-state) var(--xs-motion-ease-out),
-    opacity var(--xs-motion-state) var(--xs-motion-ease-out),
-    transform var(--xs-motion-state) var(--xs-motion-ease-out);
-  animation: cloud-row-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
-}
-
-.cloud-recent__row:last-child {
-  border-bottom: 0;
-}
-
-.cloud-recent__row:hover {
-  background: #f6faff;
-}
-
-.cloud-recent__file-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: var(--xs-text-3);
-  background: #f1f6fd;
-}
-
-.cloud-recent__file-icon[data-kind="pdf"] {
-  color: #d84a4f;
-  background: #fdeeee;
-}
-
-.cloud-recent__file-icon[data-kind="sheet"] {
-  color: #12805f;
-  background: #e8f6f0;
-}
-
-.cloud-recent__file-icon[data-kind="doc"] {
-  color: var(--xs-primary-2);
-  background: #eaf3ff;
-}
-
-.cloud-recent__row strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--xs-text);
-  font-size: 14px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cloud-recent__time {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.cloud-recent__row .ant-tag {
-  justify-self: end;
-  margin-inline-end: 0;
-}
-
-.cloud-status {
-  width: fit-content;
-  max-width: 100%;
-  margin: 16px 0 0;
-}
-
-.cloud-status .xs-status-bar__message {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  overflow: visible;
-  white-space: normal;
-}
-
-.cloud-status progress {
-  width: min(180px, 36vw);
-  height: 8px;
-  overflow: hidden;
-  appearance: none;
-  border: 0;
-  border-radius: 999px;
-  color: var(--xs-primary);
-  background: #dceaff;
-  accent-color: var(--xs-primary);
-}
-
-.cloud-status progress::-webkit-progress-bar {
-  border-radius: 999px;
-  background: #dceaff;
-}
-
-.cloud-status progress::-webkit-progress-value {
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--xs-primary), #52c8ff);
-  transition: background-color var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-.cloud-status progress::-moz-progress-bar {
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--xs-primary), #52c8ff);
-  transition: background-color var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-.cloud-status-slot {
-  min-height: 54px;
-}
-
-@keyframes cloud-row-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @media (max-width: 900px) {
@@ -286,29 +155,5 @@
 
   .cloud-workbench__metrics div {
     padding: 2px 18px;
-  }
-
-  .cloud-recent__row {
-    grid-template-columns: 34px minmax(0, 1fr);
-  }
-
-  .cloud-recent__row > span:not(.cloud-recent__file-icon),
-  .cloud-recent__row .ant-tag {
-    grid-column: 2;
-    justify-self: start;
-  }
-
-  .cloud-status {
-    width: 100%;
-  }
-
-  .cloud-status progress {
-    width: min(100%, 240px);
-  }
-}
-
-@media (pointer: coarse) {
-  .cloud-recent .ant-btn-link {
-    min-height: 44px;
   }
 }

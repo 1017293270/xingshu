@@ -12,11 +12,13 @@ import {
   asString,
   formatExecutionDuration,
   routeValue,
+  sessionElapsedMs,
   sessionDisplayName
 } from "./display";
 import { XsCountUpText } from "../XsCountUpText";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import type { DataHubOrchestrationOverviewProps } from "./types";
+import { useNow } from "./useNow";
 
 function sourceResultLabel(result: DataHubAdaptiveSourceResult) {
   if (result.datasourceName) {
@@ -81,6 +83,8 @@ export function DataHubOrchestrationOverview({
   const agentCountText = String(agentCount);
   const subagentCountText = String(subagentCount);
   const eventCountText = String(eventCount);
+  const now = useNow(1000, session.status === "running");
+  const totalDurationMs = sessionElapsedMs(session, now);
   const previousAgentCount = usePreviousValue(agentCountText);
   const previousSubagentCount = usePreviousValue(subagentCountText);
   const previousEventCount = usePreviousValue(eventCountText);
@@ -143,7 +147,7 @@ export function DataHubOrchestrationOverview({
             <Clock size={15} aria-hidden="true" />
             总耗时
           </dt>
-          <dd>{formatExecutionDuration(done?.totalDurationMs) || "—"}</dd>
+          <dd>{formatExecutionDuration(totalDurationMs) || "—"}</dd>
         </div>
       </dl>
 

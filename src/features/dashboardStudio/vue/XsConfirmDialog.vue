@@ -6,9 +6,11 @@ const props = withDefaults(defineProps<{
   message: string;
   confirmLabel?: string;
   tone?: "default" | "danger";
+  closing?: boolean;
 }>(), {
   confirmLabel: "确认",
-  tone: "default"
+  tone: "default",
+  closing: false
 });
 
 const emit = defineEmits<{
@@ -53,7 +55,7 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
 
 <template>
   <Teleport to="body">
-    <div class="xs-confirm-backdrop" role="presentation" @click.self="cancel">
+    <div class="xs-confirm-backdrop" role="presentation" :data-closing="props.closing || undefined" @click.self="cancel">
       <section
         ref="panel"
         class="xs-confirm-dialog"
@@ -88,8 +90,9 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(15, 36, 68, .28);
+  background: var(--xs-scrim-modal);
   backdrop-filter: blur(3px);
+  animation: xs-confirm-backdrop-enter 160ms var(--xs-motion-ease-out) backwards;
 }
 
 .xs-confirm-dialog {
@@ -99,7 +102,36 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
   border-radius: 14px;
   color: #102a4c;
   background: #fff;
-  box-shadow: 0 24px 64px rgba(15, 52, 96, .2);
+  box-shadow: var(--xs-shadow-modal);
+  animation: xs-confirm-dialog-enter 200ms var(--xs-motion-ease-out) backwards;
+}
+
+.xs-confirm-backdrop[data-closing] {
+  animation: xs-confirm-backdrop-exit 140ms cubic-bezier(.4, 0, .6, 1) both;
+}
+
+.xs-confirm-backdrop[data-closing] .xs-confirm-dialog {
+  animation: xs-confirm-dialog-exit 140ms cubic-bezier(.4, 0, .6, 1) both;
+}
+
+@keyframes xs-confirm-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes xs-confirm-dialog-enter {
+  from { opacity: 0; transform: scale(.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes xs-confirm-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes xs-confirm-dialog-exit {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(.96) translateY(6px); }
 }
 
 .xs-confirm-dialog h2 {

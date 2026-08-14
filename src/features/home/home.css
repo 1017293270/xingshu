@@ -38,7 +38,7 @@
   font-size: 40px;
   line-height: 1.2;
   font-weight: 750;
-  letter-spacing: 0;
+  letter-spacing: -0.015em;
 }
 
 .home-page__hero-name {
@@ -132,6 +132,12 @@
 .home-page .xs-command-box__send.ant-btn:not(:disabled):focus-visible {
   color: #ffffff;
   background: #0f63e8;
+}
+
+.home-page .xs-command-box__send.ant-btn:not(:disabled):active {
+  color: #ffffff;
+  background: #0a58d0;
+  transform: scale(0.94);
 }
 
 .home-page .xs-command-box__send.ant-btn:disabled {
@@ -441,51 +447,51 @@
 }
 
 .home-page__bg {
-  animation: home-bg-in 800ms var(--xs-motion-ease-out) backwards;
+  animation: home-bg-in var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
 }
 
 .home-page__hero {
-  animation: home-enter 480ms var(--xs-motion-ease-out) backwards;
+  animation: home-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
 }
 
 .home-page .xs-command-box {
-  animation: home-enter 480ms var(--xs-motion-ease-out) 100ms backwards;
+  animation: home-enter var(--xs-motion-enter) var(--xs-motion-ease-out) var(--xs-motion-stagger) backwards;
 }
 
 .home-page__apps > h2 {
-  animation: home-enter 480ms var(--xs-motion-ease-out) 160ms backwards;
+  animation: home-enter var(--xs-motion-enter) var(--xs-motion-ease-out) calc(var(--xs-motion-stagger) * 2) backwards;
 }
 
 .home-page__app-grid > .xs-app-card {
-  animation: home-enter 480ms var(--xs-motion-ease-out) backwards;
+  animation: home-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(1) {
-  animation-delay: 200ms;
+  animation-delay: var(--xs-motion-stagger);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(2) {
-  animation-delay: 230ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 2);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(3) {
-  animation-delay: 260ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 3);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(4) {
-  animation-delay: 290ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 4);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(5) {
-  animation-delay: 320ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 5);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(6) {
-  animation-delay: 350ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 6);
 }
 
 .home-page__app-grid > .xs-app-card:nth-child(7) {
-  animation-delay: 380ms;
+  animation-delay: calc(var(--xs-motion-stagger) * 7);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -45,7 +45,18 @@ export function DashboardCard({
 }: DashboardCardProps) {
   const published = record.status === "published";
   const [menuOpen, setMenuOpen] = useState(false);
+  // 关闭时保留挂载约 110ms，让反向 fade+scale 播完再卸载（与进入动画对称）
+  const [menuMounted, setMenuMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (menuOpen) {
+      setMenuMounted(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setMenuMounted(false), 110);
+    return () => window.clearTimeout(timer);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -105,8 +116,8 @@ export function DashboardCard({
               aria-label={`${record.schema.title} 更多操作`}
               onClick={() => setMenuOpen((open) => !open)}
             >⋯</button>
-            {menuOpen ? (
-              <ul className="dashboard-card__menu" role="menu">
+            {menuOpen || menuMounted ? (
+              <ul className="dashboard-card__menu" role="menu" data-closing={!menuOpen || undefined}>
                 <li role="none"><button type="button" role="menuitem" disabled={copying} onClick={runMenuAction(onCopy)}>复制</button></li>
                 <li role="none"><button type="button" role="menuitem" onClick={runMenuAction(onToggleVersions)}>版本</button></li>
                 <li role="none"><button type="button" role="menuitem" disabled={!published} onClick={runMenuAction(onShare)}>分享</button></li>

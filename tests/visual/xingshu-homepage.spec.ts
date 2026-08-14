@@ -22,6 +22,30 @@ function analyticsResponse(data: unknown) {
   return { code: 200, message: "visual analytics fixture", data };
 }
 
+const knowledgeBaseFixtures = [
+  {
+    id: "kb-policy",
+    title: "企业制度知识库",
+    description: "合同、制度、报告统一入库",
+    doc_count: 48,
+    updated_at: "今日 13:42"
+  },
+  {
+    id: "kb-legal",
+    title: "合同法务知识库",
+    description: "支持问答、写作与分析引用",
+    doc_count: 22,
+    updated_at: "今日 11:26"
+  },
+  {
+    id: "kb-hr",
+    title: "人力资源知识库",
+    description: "按部门空间隔离资料范围",
+    doc_count: 19,
+    updated_at: "昨日 17:08"
+  }
+];
+
 async function fulfillAnalyticsRoute(page: Page, route: Route) {
   const state = analyticsFixtures.get(page)!;
   const request = route.request();
@@ -91,7 +115,12 @@ async function fulfillAnalyticsRoute(page: Page, route: Route) {
 test.beforeEach(async ({ page }) => {
   analyticsFixtures.set(page, { records: new Map() });
   await page.route("**/api/**", async (route) => {
-    if (new URL(route.request().url()).pathname.startsWith("/api/analytics/")) {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/ai/rag/kb/list") {
+      await route.fulfill({ json: { code: 200, message: "visual knowledge fixture", data: knowledgeBaseFixtures } });
+      return;
+    }
+    if (path.startsWith("/api/analytics/")) {
       await fulfillAnalyticsRoute(page, route);
       return;
     }
@@ -157,7 +186,7 @@ const pages: SmokePage[] = [
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "智能写作", charts: 0 },
   { slug: "dashboard", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏", charts: 0 },
-  { slug: "cloud", path: "/cloud", heading: "我的云盘", charts: 0 },
+  { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
   {
     slug: "data-management",
@@ -322,7 +351,7 @@ test.describe("xingshu page visual smoke", () => {
   }
 });
 
-test("keeps cloud category card content comfortably separated", async ({ page }) => {
+test("keeps cloud knowledge-base card content comfortably separated", async ({ page }) => {
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 1672, height: 941 },
@@ -331,9 +360,10 @@ test("keeps cloud category card content comfortably separated", async ({ page })
     await page.setViewportSize(viewport);
     await page.goto("/cloud");
     await expect(page.getByRole("heading", { name: "我的云盘", level: 1 })).toBeVisible();
+    await expect(page.getByRole("button", { name: "知识库：企业制度知识库" })).toBeVisible();
     await settleResponsiveLayout(page);
 
-    const cards = page.getByRole("article", { name: /云盘资料：/ });
+    const cards = page.locator(".cloud-lane");
     await expect(cards).toHaveCount(3);
 
     const metrics = await cards.evaluateAll((elements) => elements.map((element) => {
@@ -1031,7 +1061,7 @@ test("mobile navigation reaches every product destination and account route", as
     { label: "智能制表", path: "/table", heading: "智能制表" },
     { label: "智能写作", path: "/writing", heading: "智能写作" },
     { label: "我的看板", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏" },
-    { label: "我的云盘", path: "/cloud", heading: "我的云盘" },
+    { label: "我的云盘", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
     {
       label: "数据资产管理",

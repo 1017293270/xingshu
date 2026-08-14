@@ -42,6 +42,13 @@ export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
   return "/ask-data";
 }
 
+function getHistoryFallbackMode(session: HistorySession): DataHubChatMode {
+  if (session.chatMode) return session.chatMode;
+  if (session.category === "知识快查") return "rag";
+  if (session.category === "文档处理") return "document_lookup";
+  return "ask";
+}
+
 function getHistoryIcon(category: HistoryCategory) {
   return historyIconByCategory[category];
 }
@@ -55,7 +62,7 @@ function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
     return "loading";
   }
 
-  if (message.startsWith("已恢复")) {
+  if (message.startsWith("已打开")) {
     return "success";
   }
 
@@ -72,7 +79,6 @@ export function HistoryPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [actionStatus, setActionStatus] = useState("");
-  const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
   const historyListRef = useRef<HTMLElement | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const historyQuery = useQuery({
@@ -116,20 +122,31 @@ export function HistoryPage() {
   }, [category, currentPage, deferredKeyword, pageSize, reducedMotion]);
 
   async function handleRestoreSession(session: HistorySession) {
-    if (restoringSessionId) {
-      return;
-    }
-
     if (!session.sessionId || session.source !== "data-hub") {
-      setActionStatus(`已恢复历史对话：${session.title}`);
+      setActionStatus(`已打开历史对话：${session.title}`);
       return;
     }
 
-    setRestoringSessionId(session.id);
-    setActionStatus(`正在恢复历史对话：${session.title}`);
+    const fallbackMode = getHistoryFallbackMode(session);
+    const initialRoute = getHistoryReplayRoute(fallbackMode);
+    restoreAskDataHistory({
+      sessionId: session.sessionId,
+      question: session.title,
+      events: [],
+      chatMode: fallbackMode,
+      status: "streaming"
+    });
+    navigate(initialRoute);
 
     try {
-      const replay = await loadDataHubHistoryReplay(session.sessionId, session.chatMode);
+      const replay = await loadDataHubHistoryReplay(session.sessionId, fallbackMode);
+      const currentState = useUiStore.getState();
+      if (
+        currentState.activeAnalysisSessionId !== session.sessionId ||
+        currentState.activeAskDataRunId !== null
+      ) {
+        return;
+      }
       restoreAskDataHistory({
         sessionId: replay.sessionId,
         question: replay.question,
@@ -138,11 +155,22 @@ export function HistoryPage() {
         chatMode: replay.chatMode,
         status: replay.turns.length > 0 || replay.events.length > 0 ? "done" : "idle"
       });
-      navigate(getHistoryReplayRoute(replay.chatMode));
+      const replayRoute = getHistoryReplayRoute(replay.chatMode);
+      if (replayRoute !== initialRoute) {
+        navigate(replayRoute, { replace: true });
+      }
     } catch (error) {
-      setActionStatus(error instanceof Error ? `恢复历史对话失败：${error.message}` : "恢复历史对话失败");
-    } finally {
-      setRestoringSessionId(null);
+      if (useUiStore.getState().activeAnalysisSessionId !== session.sessionId) {
+        return;
+      }
+      restoreAskDataHistory({
+        sessionId: session.sessionId,
+        question: session.title,
+        events: [],
+        chatMode: fallbackMode,
+        status: "error",
+        error: error instanceof Error ? `历史对话加载失败：${error.message}` : "历史对话加载失败"
+      });
     }
   }
 
@@ -206,8 +234,6 @@ export function HistoryPage() {
               key={session.id}
               type="button"
               aria-label={`${session.title}：${session.summary}`}
-              aria-busy={restoringSessionId === session.id}
-              disabled={restoringSessionId !== null}
               onClick={() => void handleRestoreSession(session)}
             >
               <span className="topic-icon" aria-hidden="true">
@@ -224,22 +250,9 @@ export function HistoryPage() {
                   {session.category}
                 </Tag>
                 <span className="history-card__time">{session.updatedAt}</span>
-                <span
-                  className="history-card__restore-state"
-                  data-active={restoringSessionId === session.id}
-                  aria-hidden="true"
-                >
-                  {restoringSessionId === session.id ? (
-                    <>
-                      <span className="history-card__restore-spinner" />
-                      恢复中
-                    </>
-                  ) : (
-                    <>
-                      打开
-                      <ArrowRight size={14} weight="bold" />
-                    </>
-                  )}
+                <span className="history-card__restore-state" aria-hidden="true">
+                  打开
+                  <ArrowRight size={14} weight="bold" />
                 </span>
               </div>
             </button>

@@ -279,9 +279,15 @@ describe("dashboard designer motion states", () => {
     fireEvent.pointerDown(firstWidget, { button: 0, pointerId: 9, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(window, { pointerId: 9, clientX: 137, clientY: 123 });
 
+    // 拖拽预览只走 transform，布局位置保持 origin，松手时才提交 candidate
+    await waitFor(() => expect(firstWidget.style.transform).toContain("translate(37px, 23px)"));
+    expect(firstWidget.style.left).toBe("64px");
+    expect(firstWidget.style.top).toBe("64px");
+    fireEvent.pointerUp(window, { pointerId: 9, clientX: 137, clientY: 123 });
+
     await waitFor(() => expect(firstWidget.style.left).toBe("101px"));
     expect(firstWidget.style.top).toBe("87px");
-    fireEvent.pointerUp(window, { pointerId: 9, clientX: 137, clientY: 123 });
+    expect(firstWidget.style.transform).toBe("");
 
     fireEvent.click(screen.getByRole("button", { name: "指标卡 320 × 180" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "指标卡" })).toHaveLength(2));

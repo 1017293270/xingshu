@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadDataHubCitationDocument } from "./dataHubKnowledgeService";
-import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
+import { DataHubServiceError } from "./dataHubClient";
+import {
+  DATA_HUB_KNOWLEDGE_BASE_LIST_PATH,
+  listDataHubKnowledgeBases,
+  loadDataHubCitationDocument,
+  normalizeDataHubKnowledgeBases
+} from "./dataHubKnowledgeService";
+import { readDataHubSession, writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
 import type { DataHubCitationDocument } from "@/types/dataHub";
 
 const citation: DataHubCitationDocument = {
@@ -127,5 +133,79 @@ describe("dataHubKnowledgeService", () => {
       loadDataHubCitationDocument({ ...citation, sourceAvailable: false })
     ).rejects.toThrow("当前文档未保留可读取的原文");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps knowledge-base list payloads with alternate field names", () => {
+    expect(normalizeDataHubKnowledgeBases({
+      items: [
+        { kb_id: "kb-1", kb_name: "制度库", desc: "合同与制度", doc_count: "12", updated_at: "2026-08-13 10:00" },
+        { id: "kb-1", title: "重复项应忽略" },
+        { kbId: 2, name: "合同法务", documentCount: 4, updateTime: "2026-08-12T08:00:00Z" },
+        { title: "缺少 id 的项" }
+      ]
+    })).toEqual([
+      {
+        id: "kb-1",
+        title: "制度库",
+        description: "合同与制度",
+        documentCount: 12,
+        updatedAt: "2026-08-13 10:00"
+      },
+      {
+        id: "2",
+        title: "合同法务",
+        description: undefined,
+        documentCount: 4,
+        updatedAt: "2026-08-12T08:00:00Z"
+      }
+    ]);
+  });
+
+  it("reads the current space knowledge bases from the pinned list endpoint", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer token-123");
+      expect(headers.get("X-Space-Id")).toBe("7");
+      return new Response(JSON.stringify({
+        code: 200,
+        message: "ok",
+        data: [{ id: "kb-policy", title: "企业制度知识库", docs: 48 }]
+      }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listDataHubKnowledgeBases()).resolves.toEqual([
+      {
+        id: "kb-policy",
+        title: "企业制度知识库",
+        description: undefined,
+        documentCount: 48,
+        updatedAt: undefined
+      }
+    ]);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `${DATA_HUB_KNOWLEDGE_BASE_LIST_PATH}?space_id=7`
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
+  });
+
+  it("does not call DataHub when the current space is missing", async () => {
+    writeDataHubSpaceId(null);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listDataHubKnowledgeBases()).rejects.toBeInstanceOf(DataHubServiceError);
+    await expect(listDataHubKnowledgeBases()).rejects.toThrow("当前空间信息不完整，暂无法读取知识库");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("clears the session when the knowledge-base list returns 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 }))
+    );
+
+    await expect(listDataHubKnowledgeBases()).rejects.toMatchObject({ status: 401 });
+    expect(readDataHubSession().token).toBeNull();
   });
 });

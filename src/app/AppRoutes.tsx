@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { XsRouteFallback, type XsRouteFallbackVariant } from "@/components/xs/XsRouteFallback";
-import { routeTitles } from "@/components/xs/navigation";
+import { resolveRouteTitle } from "@/components/xs/navigation";
 import { DataHubSessionExpiryHandler } from "./DataHubSessionExpiryHandler";
 import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -11,6 +11,12 @@ const AnalysisPage = lazy(() => import("@/pages/AnalysisPage").then((module) => 
 const HistoryPage = lazy(() => import("@/pages/HistoryPage").then((module) => ({ default: module.HistoryPage })));
 const TablePage = lazy(() => import("@/pages/TablePage").then((module) => ({ default: module.TablePage })));
 const WritingPage = lazy(() => import("@/pages/WritingPage").then((module) => ({ default: module.WritingPage })));
+const WritingTemplateDetailPage = lazy(() =>
+  import("@/pages/WritingTemplateDetailPage").then((module) => ({ default: module.WritingTemplateDetailPage }))
+);
+const WritingDraftDetailPage = lazy(() =>
+  import("@/pages/WritingDraftDetailPage").then((module) => ({ default: module.WritingDraftDetailPage }))
+);
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const DashboardEditorPage = lazy(() =>
   import("@/pages/DashboardEditorPage").then((module) => ({ default: module.DashboardEditorPage }))
@@ -31,7 +37,7 @@ function AppRouteTitle() {
   const location = useLocation();
 
   useEffect(() => {
-    document.title = `${routeTitles[location.pathname] || "星数"} · 星数`;
+    document.title = `${resolveRouteTitle(location.pathname) || "星数"} · 星数`;
   }, [location.pathname]);
 
   return null;
@@ -53,7 +59,9 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
     pathname === "/document-lookup" ||
     pathname === "/ask-agent" ||
     pathname === "/analysis" ||
-    pathname === "/dashboard-editor"
+    pathname === "/dashboard-editor" ||
+    pathname.startsWith("/writing/templates/") ||
+    pathname.startsWith("/writing/drafts/")
   ) {
     return "workspace";
   }
@@ -85,6 +93,8 @@ export function AppRoutes() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/table" element={<TablePage />} />
             <Route path="/writing" element={<WritingPage />} />
+            <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
+            <Route path="/writing/drafts/:draftId" element={<WritingDraftDetailPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />

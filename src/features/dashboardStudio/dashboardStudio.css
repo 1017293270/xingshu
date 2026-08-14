@@ -345,7 +345,7 @@
   box-shadow: 0 10px 26px rgba(8, 26, 58, .12);
   backdrop-filter: blur(12px);
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition: color var(--xs-motion-fast) var(--xs-motion-ease-out), background-color var(--xs-motion-fast) var(--xs-motion-ease-out), transform var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .dashboard-fullscreen-view__refresh {

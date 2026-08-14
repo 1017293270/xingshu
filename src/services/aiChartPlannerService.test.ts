@@ -4,7 +4,8 @@ import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
   createAiChartPlanRequestSummary,
-  planAiChart
+  planAiChart,
+  resolveAiChartTables
 } from "./aiChartPlannerService";
 
 function table(columns: DataHubTableResult["columns"], rows: Record<string, unknown>[]): DataHubTableResult {
@@ -332,5 +333,227 @@ describe("aiChartPlannerService", () => {
         [dataTable]
       )
     ).toEqual(null);
+  });
+
+  it("drops empty and total buckets so the chart matches the ranking rows", () => {
+    const rankingTable = table(
+      [
+        { key: "problem_type", title: "问题类型" },
+        { key: "count", title: "咨询数量", type: "number" }
+      ],
+      [
+        { problem_type: "", count: 3642 },
+        { problem_type: "合计", count: 3766 },
+        { problem_type: "身份证办理/补办/换领", count: 493 },
+        { problem_type: "居住证办理/续签/立等可取", count: 492 },
+        { problem_type: "医保参保/缴费/报销/异地备案", count: 174 }
+      ]
+    );
+
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "问题类型咨询量排行",
+        chartType: "bar",
+        allowedTypes: ["bar"],
+        title: "问题类型咨询数量排行",
+        tableIndex: 0,
+        dimensionKey: "problem_type",
+        metricKeys: ["count"]
+      },
+      [rankingTable]
+    );
+    const option = buildGeneratedChartOption(spec!, "bar");
+    const series = option.series as Array<{ data?: unknown[] }>;
+    const xAxis = option.xAxis as { data?: unknown[] };
+
+    expect(xAxis.data).toEqual([
+      "身份证办理/补办/换领",
+      "居住证办理/续签/立等可取",
+      "医保参保/缴费/报销/异地备案"
+    ]);
+    expect(series[0]?.data).toEqual([493, 492, 174]);
+  });
+
+  it("prefers a compact ranking table over an empty-dominated raw category table", async () => {
+    const rawTypeTable = table(
+      [
+        { key: "consult_type", title: "咨询类型" },
+        { key: "count", title: "咨询记录数", type: "number" }
+      ],
+      [
+        { consult_type: "", count: 3642 },
+        ...Array.from({ length: 26 }, (_, index) => ({
+          consult_type: `类型${index + 1}`,
+          count: index === 0 ? 48 : 3
+        }))
+      ]
+    );
+    const rankingTable = {
+      ...table(
+        [
+          { key: "rank", title: "排名", type: "number" },
+          { key: "problem_type", title: "问题类型" },
+          { key: "count", title: "咨询数量", type: "number" },
+          { key: "ratio", title: "占比", type: "number" }
+        ],
+        [
+          { rank: 1, problem_type: "身份证办理/补办/换领", count: 493, ratio: 13.09 },
+          { rank: 2, problem_type: "居住证办理/续签/立等可取", count: 492, ratio: 13.06 },
+          { rank: 3, problem_type: "医保参保/缴费/报销/异地备案", count: 174, ratio: 4.62 }
+        ]
+      ),
+      tableIndex: 1
+    };
+    const dataHubPlanner = vi.fn(async () => {
+      throw new Error("DataHub 模型返回的图表规划无效");
+    });
+
+    const plan = await planAiChart(
+      {
+        question: "咨询量最高的问题类型 TOP3",
+        tables: [rawTypeTable, rankingTable]
+      },
+      { dataHubPlanner }
+    );
+    const spec = buildGeneratedChartSpec(plan, [rawTypeTable, rankingTable]);
+    const option = buildGeneratedChartOption(spec!, "bar");
+    const series = option.series as Array<{ data?: unknown[] }>;
+
+    expect(plan.tableIndex).toBe(1);
+    expect(plan.dimensionKey).toBe("problem_type");
+    expect(plan.metricKeys).toEqual(["count"]);
+    expect(series[0]?.data).toEqual([493, 492, 174]);
+  });
+
+  it("overrides an AI plan that charts the empty-dominated raw table", () => {
+    const rawTypeTable = table(
+      [
+        { key: "consult_type", title: "咨询类型" },
+        { key: "count", title: "咨询记录数", type: "number" }
+      ],
+      [
+        { consult_type: "", count: 3642 },
+        { consult_type: "窗口咨询", count: 48 },
+        { consult_type: "电话咨询", count: 21 }
+      ]
+    );
+    const rankingTable = {
+      ...table(
+        [
+          { key: "problem_type", title: "问题类型" },
+          { key: "count", title: "咨询数量", type: "number" }
+        ],
+        [
+          { problem_type: "身份证办理/补办/换领", count: 493 },
+          { problem_type: "居住证办理/续签/立等可取", count: 492 },
+          { problem_type: "医保参保/缴费/报销/异地备案", count: 174 }
+        ]
+      ),
+      tableIndex: 1
+    };
+
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "结果表 1 包含 27 个咨询类型及其记录数，适合用柱状图对比各类型的咨询量。",
+        chartType: "bar",
+        allowedTypes: ["bar"],
+        title: "咨询类型咨询记录数排行",
+        tableIndex: 0,
+        dimensionKey: "consult_type",
+        metricKeys: ["count"]
+      },
+      [rawTypeTable, rankingTable]
+    );
+    const option = buildGeneratedChartOption(spec!, "bar");
+    const series = option.series as Array<{ data?: unknown[] }>;
+
+    expect(spec).toMatchObject({
+      tableIndex: 1,
+      dimensionKey: "problem_type",
+      metricKeys: ["count"]
+    });
+    expect(series[0]?.data).toEqual([493, 492, 174]);
+  });
+
+  it("charts the answer ranking when the only SQL table is empty-dominated", async () => {
+    const rawTypeTable = table(
+      [
+        { key: "consult_type", title: "咨询类型" },
+        { key: "count", title: "咨询记录数", type: "number" }
+      ],
+      [
+        { consult_type: "", count: 3642 },
+        ...Array.from({ length: 26 }, (_, index) => ({
+          consult_type: `类型${index + 1}`,
+          count: 4
+        }))
+      ]
+    );
+    const dataHubPlanner = vi.fn(async () => {
+      throw new Error("DataHub 模型返回的图表规划无效");
+    });
+
+    const plan = await planAiChart(
+      {
+        question: "咨询量最高的问题类型 TOP3",
+        tables: [rawTypeTable],
+        answer: [
+          "#### TOP3 问题类型（按大类分类 + 答案内容归类）",
+          "",
+          "| 排名 | 问题类型 | 咨询数量 | 占比 |",
+          "| --- | --- | --- | --- |",
+          "| 1 | 身份证办理/补办/换领 | 493 | 13.09% |",
+          "| 2 | 居住证办理/续签/立等可取 | 492 | 13.06% |",
+          "| 3 | 医保参保/缴费/报销/异地备案 | 174 | 4.62% |",
+          "",
+          "口径说明：咨询类型字段空值率约 96.7%。"
+        ].join("\n")
+      },
+      { dataHubPlanner }
+    );
+    const spec = buildGeneratedChartSpec(plan, resolveAiChartTables({
+      question: "咨询量最高的问题类型 TOP3",
+      tables: [rawTypeTable],
+      answer: [
+        "#### TOP3 问题类型（按大类分类 + 答案内容归类）",
+        "",
+        "| 排名 | 问题类型 | 咨询数量 | 占比 |",
+        "| --- | --- | --- | --- |",
+        "| 1 | 身份证办理/补办/换领 | 493 | 13.09% |",
+        "| 2 | 居住证办理/续签/立等可取 | 492 | 13.06% |",
+        "| 3 | 医保参保/缴费/报销/异地备案 | 174 | 4.62% |"
+      ].join("\n")
+    }));
+    const option = buildGeneratedChartOption(spec!, "bar");
+    const series = option.series as Array<{ data?: unknown[] }>;
+
+    expect(plan.dimensionKey).toBe("问题类型");
+    expect(series[0]?.data).toEqual([493, 492, 174]);
+  });
+
+  it("includes the dominant metric row in the AI sample instead of only the first three rows", () => {
+    const summary = createAiChartPlanRequestSummary({
+      question: "咨询类型分布",
+      tables: [
+        table(
+          [
+            { key: "consult_type", title: "咨询类型" },
+            { key: "count", title: "咨询记录数", type: "number" }
+          ],
+          [
+            { consult_type: "窗口咨询", count: 18 },
+            { consult_type: "电话咨询", count: 12 },
+            { consult_type: "网上咨询", count: 9 },
+            { consult_type: "", count: 3642 }
+          ]
+        )
+      ]
+    });
+
+    expect(summary.tables[0].sampleRows).toEqual(expect.arrayContaining([
+      { consult_type: "", count: 3642 }
+    ]));
   });
 });

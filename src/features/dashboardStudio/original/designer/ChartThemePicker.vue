@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chart-theme-picker { position: relative; min-width: 0; }
-.chart-theme-picker__trigger { display: grid; grid-template-columns: minmax(86px, auto) minmax(0, 1fr) 16px; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: white; color: var(--color-text); cursor: pointer; transition: border-color var(--motion-fast) var(--ease-enter), box-shadow var(--motion-fast) var(--ease-enter), background var(--motion-fast) var(--ease-enter); }
+.chart-theme-picker__trigger { display: grid; grid-template-columns: minmax(86px, auto) minmax(0, 1fr) 16px; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: white; color: var(--color-text); cursor: pointer; transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out); }
 .chart-theme-picker__trigger:hover:not(:disabled), .chart-theme-picker__trigger:focus-visible { border-color: color-mix(in srgb, var(--color-accent) 58%, var(--color-border)); background: color-mix(in srgb, var(--color-accent-soft) 34%, white); }
 .chart-theme-picker__trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-accent) 32%, transparent); outline-offset: 1px; }
 .chart-theme-picker__trigger:disabled { cursor: not-allowed; opacity: .58; }
@@ -85,7 +85,7 @@ onBeforeUnmount(() => {
 .chart-theme-picker__strip--option { max-width: 128px; }
 .chart-theme-picker__chip { width: 16px; height: 18px; }
 .chart-theme-picker__title, .chart-theme-picker__option-title { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 800; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.chart-theme-picker__chevron { color: var(--color-text-muted); font-size: 15px; font-weight: 900; line-height: 1; transition: transform var(--motion-fast) var(--ease-enter); }
+.chart-theme-picker__chevron { color: var(--color-text-muted); font-size: 15px; font-weight: 900; line-height: 1; transition: transform var(--xs-motion-fast) var(--xs-motion-ease-out); }
 .chart-theme-picker__trigger[aria-expanded="true"] .chart-theme-picker__chevron { transform: rotate(180deg); }
 .chart-theme-picker__menu { position: fixed; z-index: 24; display: grid; gap: 4px; padding: 6px; overflow: auto; border: 1px solid var(--color-border); border-radius: 8px; background: white; box-shadow: 0 18px 40px rgba(15,23,42,.16); }
 .chart-theme-picker__option { display: grid; grid-template-columns: minmax(96px, auto) minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; min-height: 34px; padding: 6px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--color-text); cursor: pointer; }
