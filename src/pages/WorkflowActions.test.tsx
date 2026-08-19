@@ -11,6 +11,15 @@ import { useUiStore } from "@/stores/uiStore";
 import { AnalysisPage } from "./AnalysisPage";
 import { TablePage } from "./TablePage";
 
+// listRecentTables 在测试模式下走空数据，最近制表列表要靠 mock 提供记录。
+const tableServiceMocks = vi.hoisted(() => ({
+  listRecentTables: vi.fn()
+}));
+
+vi.mock("@/services/tableService", () => ({
+  listRecentTables: tableServiceMocks.listRecentTables
+}));
+
 const phasePlaybackSettleForTest = 250;
 
 function renderPage(page: ReactElement) {
@@ -40,6 +49,16 @@ function renderPageWithLocation(page: ReactElement) {
 describe("workflow page actions", () => {
   beforeEach(() => {
     useUiStore.getState().resetUiState();
+    tableServiceMocks.listRecentTables.mockResolvedValue([
+      {
+        id: "ask-table-sales",
+        title: "客户销售排行榜表",
+        tag: "排行",
+        description: "2026-08-17 10:00",
+        iconId: "ranking",
+        prompt: "客户销售排行榜表：2024年Q1华东区TOP20"
+      }
+    ]);
   });
 
   afterEach(() => {

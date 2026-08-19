@@ -42,7 +42,7 @@ describe("dataHubAskDataService", () => {
     );
   });
 
-  it.each(["ask", "rag", "document_lookup", "agent"] as const)(
+  it.each(["ask", "rag", "document_lookup", "agent", "ask_table"] as const)(
     "keeps the strict five-field request for %s mode",
     (chatMode) => {
       const request = buildDataHubChatRequest({

@@ -1,6 +1,8 @@
 import {
   ArrowDown,
   ArrowUp,
+  CaretLeft,
+  CaretRight,
   Eye,
   FloppyDisk,
   Plus,
@@ -19,6 +21,7 @@ import type {
   OfficialDocumentDraftContent,
   OfficialDocumentStructureNode
 } from "@/types/officialDocument";
+import { OfficialDocumentAppActions } from "./OfficialDocumentAppShell";
 
 export type StructuredDraftSaveState = "loading" | "saving" | "saved" | "failed";
 
@@ -59,6 +62,7 @@ export function StructuredDraftEditor({
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [fieldsCollapsed, setFieldsCollapsed] = useState(false);
   const contentRef = useRef<OfficialDocumentDraftContent | undefined>(undefined);
   const revisionRef = useRef(0);
   const generationRef = useRef(0);
@@ -246,45 +250,76 @@ export function StructuredDraftEditor({
     if (!previewUrl) void refreshPreview();
   };
 
+  const saveLabel = saveState === "loading"
+    ? "加载中"
+    : saveState === "saving"
+      ? "保存中"
+      : saveState === "saved"
+        ? "已保存"
+        : "保存失败";
+
   if (!content) {
-    return <div className="structured-draft-editor__loading" role="status">正在加载结构化草稿…</div>;
+    return (
+      <div className="structured-draft-editor-frame">
+        <div className="structured-draft-editor__loading" role="status">正在加载结构化草稿…</div>
+      </div>
+    );
   }
 
   return (
-    <section className="structured-draft-editor" aria-label="结构化公文编辑器">
-      <aside className="structured-draft-editor__fields" aria-label="公文固定字段">
+    <div className="structured-draft-editor-frame">
+      <OfficialDocumentAppActions>
+        <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={openPreview}>PDF 预览</Button>
+      </OfficialDocumentAppActions>
+      <section
+        className="structured-draft-editor"
+        aria-label="结构化公文编辑器"
+        data-fields-collapsed={fieldsCollapsed}
+      >
+        <aside className="structured-draft-editor__fields" aria-label="公文固定字段">
         <div className="structured-draft-editor__panel-head">
-          <div><strong>固定字段</strong><small>标题、主送、落款与日期</small></div>
+          <div>
+            <strong>固定字段</strong>
+            {fieldsCollapsed ? null : <small>标题、主送、落款与日期</small>}
+          </div>
+          <Button
+            type="text"
+            size="small"
+            aria-label={fieldsCollapsed ? "展开固定字段" : "收起固定字段"}
+            icon={fieldsCollapsed ? <CaretRight size={16} /> : <CaretLeft size={16} />}
+            onClick={() => setFieldsCollapsed((current) => !current)}
+          />
         </div>
-        <div className="structured-draft-editor__fixed-fields">
-          {content.fixedValues.map((item) => {
-            const node = slotNodes.get(item.slotId);
-            return (
-              <label key={item.slotId}>
-                <span>{node?.roleLabel ?? "固定字段"}</span>
-                <Input.TextArea
-                  value={item.value}
-                  autoSize={{ minRows: 1, maxRows: 4 }}
-                  aria-label={node?.roleLabel ?? `固定字段 ${item.slotId}`}
-                  onChange={(event) => updateFixedValue(item.slotId, event.target.value)}
-                />
-              </label>
-            );
-          })}
-          {!content.fixedValues.length ? <div className="official-document-inline-empty">模板没有固定文字槽位。</div> : null}
-        </div>
-        <div className="structured-draft-editor__save-note"><FloppyDisk size={16} />结构化内容自动写入服务端，刷新页面不会丢失。</div>
+        {fieldsCollapsed ? null : (
+          <>
+            <div className="structured-draft-editor__fixed-fields">
+              {content.fixedValues.map((item) => {
+                const node = slotNodes.get(item.slotId);
+                return (
+                  <label key={item.slotId}>
+                    <span>{node?.roleLabel ?? "固定字段"}</span>
+                    <Input.TextArea
+                      value={item.value}
+                      autoSize={{ minRows: 1, maxRows: 4 }}
+                      aria-label={node?.roleLabel ?? `固定字段 ${item.slotId}`}
+                      onChange={(event) => updateFixedValue(item.slotId, event.target.value)}
+                    />
+                  </label>
+                );
+              })}
+              {!content.fixedValues.length ? <div className="official-document-inline-empty">模板没有固定文字槽位。</div> : null}
+            </div>
+            <div className="structured-draft-editor__save-note"><FloppyDisk size={16} />结构化内容自动写入服务端，刷新页面不会丢失。</div>
+          </>
+        )}
       </aside>
 
       <main className="structured-draft-editor__canvas">
         <header className="structured-draft-editor__canvas-head">
           <div><strong>结构化正文</strong><small>{content.blocks.length} 个节点 · 输入后 600ms 自动保存</small></div>
-          <div className="structured-draft-editor__canvas-actions">
-            <Tag bordered={false} color={saveState === "failed" ? "error" : saveState === "saved" ? "success" : "processing"}>
-              {saveState === "loading" ? "加载中" : saveState === "saving" ? "保存中" : saveState === "saved" ? "已保存" : "保存失败"}
-            </Tag>
-            <Button size="small" icon={<Eye size={15} />} loading={isPreviewing} onClick={openPreview}>PDF 预览</Button>
-          </div>
+          <Tag bordered={false} color={saveState === "failed" ? "error" : saveState === "saved" ? "success" : "processing"}>
+            {saveLabel}
+          </Tag>
         </header>
         {saveError ? <p className="structured-draft-editor__error">{saveError}</p> : null}
         <div className="structured-draft-editor__quick-add" aria-label="新增正文节点">
@@ -356,6 +391,7 @@ export function StructuredDraftEditor({
           </div>
         )}
       </Modal>
-    </section>
+      </section>
+    </div>
   );
 }

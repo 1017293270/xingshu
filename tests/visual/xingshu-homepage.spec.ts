@@ -202,6 +202,99 @@ test.beforeEach(async ({ page }) => {
       await fulfillAnalyticsRoute(page, route);
       return;
     }
+    if (path === "/api/v1/chat/sessions/list") {
+      await route.fulfill({
+        json: {
+          code: 200,
+          message: "visual test fixture",
+          data: [
+            {
+              sessionId: "ask-table-sales-ranking",
+              title: "客户销售排行榜表",
+              createdAt: "2026-08-14T10:00:00",
+              updatedAt: "2026-08-17T10:00:00"
+            },
+            {
+              sessionId: "ask-table-department-contacts",
+              title: "各部门人员通讯录",
+              createdAt: "2026-08-13T10:00:00",
+              updatedAt: "2026-08-16T10:00:00"
+            },
+            {
+              sessionId: "ask-table-monthly-expense",
+              title: "月度费用统计报表",
+              createdAt: "2026-08-12T10:00:00",
+              updatedAt: "2026-08-15T10:00:00"
+            },
+            {
+              sessionId: "ask-table-inventory-daily",
+              title: "库存表——日用百货",
+              createdAt: "2026-08-11T10:00:00",
+              updatedAt: "2026-08-14T10:00:00"
+            }
+          ]
+        },
+        status: 200
+      });
+      return;
+    }
+    if (path === "/api/v1/chat/messages/list" && route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { sessionId?: string };
+      await route.fulfill({
+        json: {
+          code: 200,
+          message: "visual test fixture",
+          data: [
+            {
+              id: 1,
+              sessionId: body.sessionId,
+              chatId: "chat-restore-1",
+              role: "user",
+              content: "客户销售排行榜表",
+              seqNum: 1,
+              createdAt: "2026-08-17T10:00:00"
+            }
+          ]
+        },
+        status: 200
+      });
+      return;
+    }
+    if (path === "/api/v1/chat/events/list" && route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { sessionId?: string };
+      await route.fulfill({
+        json: {
+          code: 200,
+          message: "visual test fixture",
+          data: [
+            {
+              id: 1,
+              sessionId: body.sessionId,
+              chatId: "chat-restore-1",
+              type: "table",
+              data: {
+                columns: [
+                  { name: "region", title: "区域" },
+                  { name: "customer", title: "客户" },
+                  { name: "sales", title: "销售额", type: "number" }
+                ],
+                rows: [
+                  { region: "华东", customer: "星海实业", sales: 1280 },
+                  { region: "华东", customer: "临港贸易", sales: 960 }
+                ],
+                totalRows: 2,
+                source: "cube",
+                groupLabel: "客户销售排行榜表"
+              },
+              seqNum: 2,
+              createdAt: "2026-08-17T10:00:01"
+            }
+          ]
+        },
+        status: 200
+      });
+      return;
+    }
     await route.fulfill({
       json: { code: 200, message: "visual test fixture", data: [] },
       status: 200
@@ -262,7 +355,7 @@ const pages: SmokePage[] = [
   { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
-  { slug: "writing", path: "/writing", heading: "公文写作", charts: 0 },
+  { slug: "writing", path: "/writing", heading: "公文写作", charts: 0, shell: false },
   { slug: "dashboard", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
@@ -500,13 +593,126 @@ test("fills the smart table composer from a recent template", async ({ page }) =
   await template.getByRole("button", { name: "复制制表要求" }).click();
 
   await expect(page.getByRole("textbox", { name: "制表需求" }))
-    .toHaveValue("客户销售排行榜表：2024年Q1华东区TOP20");
-  await expect(page.getByRole("button", { name: "预览需求" })).toBeEnabled();
+    .toHaveValue("客户销售排行榜表");
+  await expect(page.getByRole("button", { name: "生成表格" })).toBeEnabled();
   await settleResponsiveLayout(page);
   await expectNoHorizontalOverflow(page);
 
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/table-filled-react-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
+test("restores a recent table into the table agent workspace", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/table");
+  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+
+  await page.getByRole("link", { name: "打开制表结果：客户销售排行榜表" }).click();
+
+  await expect(page.getByRole("heading", { name: "问表智能体", level: 1 })).toBeVisible();
+  await expect(page.getByText("客户销售排行榜表").first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "客户" })).toBeVisible();
+  await expect(page.getByText("星海实业")).toBeVisible();
+  await settleResponsiveLayout(page);
+  await expectNoHorizontalOverflow(page);
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/table-session-react-1440x900.png",
+    animations: "disabled",
+    fullPage: true
+  });
+});
+
+test("renders a generated table result on the workbench", async ({ page }) => {
+  const captured: { request: { chatMode?: string; sessionId?: string; globalSessionId?: string; chatId?: string } | null } = {
+    request: null
+  };
+  await page.route("**/api/agentScore/chat/completions/stream", async (route) => {
+    captured.request = route.request().postDataJSON() as {
+      chatMode?: string;
+      sessionId?: string;
+      globalSessionId?: string;
+      chatId?: string;
+    };
+    const body = captured.request;
+    const root = {
+      agentName: "问数智能体",
+      sessionId: body.sessionId,
+      globalSessionId: body.globalSessionId,
+      chatId: body.chatId
+    };
+    const sse = (event: Record<string, unknown>) => `data: ${JSON.stringify(event)}\n\n`;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream; charset=utf-8",
+      headers: {
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive"
+      },
+      body: [
+        sse({
+          ...root,
+          type: "data_source_selected",
+          content: { datasourceId: 8, datasourceName: "经营分析库" },
+          finished: false
+        }),
+        sse({
+          ...root,
+          type: "text",
+          content: "已按华东区 Q1 口径汇总销售排行。",
+          finished: false
+        }),
+        sse({
+          ...root,
+          type: "table",
+          content: {
+            columns: [
+              { name: "region", title: "区域" },
+              { name: "customer", title: "客户" },
+              { name: "sales", title: "销售额", type: "number" }
+            ],
+            rows: [
+              { region: "华东", customer: "星海实业", sales: 1280 },
+              { region: "华东", customer: "临港贸易", sales: 960 }
+            ],
+            totalRows: 2,
+            source: "cube",
+            groupLabel: "华东区 Q1 销售排行"
+          },
+          finished: false
+        }),
+        sse({
+          ...root,
+          type: "done",
+          content: { mode: "ask" },
+          finished: true
+        }),
+        "data: [DONE]\n\n"
+      ].join("")
+    });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/table");
+  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "制表需求" }).fill("华东区Q1销售排行");
+  await page.getByRole("button", { name: "生成表格" }).click();
+
+  await expect(page.getByRole("heading", { name: "问表智能体", level: 1 })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "客户" })).toBeVisible();
+  expect(captured.request?.chatMode).toBe("ask_table");
+  expect(captured.request?.sessionId).toMatch(/^ask-table-/);
+  await expect(page.getByText("星海实业")).toBeVisible();
+  await expect(page.getByRole("button", { name: "导出结果" })).toBeVisible();
+  await settleResponsiveLayout(page);
+  await expectNoHorizontalOverflow(page);
+
+  await page.screenshot({
+    path: "outputs/xingshu-homepage-system/qa/react/table-result-react-1440x900.png",
     animations: "disabled",
     fullPage: true
   });
@@ -1293,6 +1499,11 @@ test("mobile navigation reaches every product destination and account route", as
       await ensureChartsReady(page, destination.charts);
     }
     await expect(drawer).toBeHidden();
+    if (destination.path === "/writing") {
+      await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
+      await page.getByRole("link", { name: "返回星数" }).click();
+      await expect(page).toHaveURL(/\/$/);
+    }
   }
 
   await page.getByRole("button", { name: "打开主导航" }).click();
@@ -1335,7 +1546,7 @@ test.describe("desktop content density", () => {
   const wideTrackCases = [
     { path: "/", selector: ".home-page__apps", minWidth: 1439, maxWidth: 1441 },
     { path: "/table", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
-    { path: "/writing", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
+    { path: "/writing", selector: ".official-document-app", minWidth: 2100, maxWidth: 2200 },
     { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/dashboard", selector: ".dashboard-list__header", minWidth: 1439, maxWidth: 1441 },
     { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },

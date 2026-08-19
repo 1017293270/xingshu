@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   readonly VITE_DATAHUB_KB_MANAGE_PATH?: string;
   readonly VITE_DATAHUB_KB_DETAIL_PATH?: string;
   readonly VITE_DATAHUB_UI_SAME_ORIGIN?: string;
+  readonly VITE_OFFICIAL_DOCUMENT_API_BASE_URL?: string;
+  readonly VITE_OFFICIAL_DOCUMENT_API_MODE?: string;
+  readonly VITE_OFFICIAL_DOCUMENT_PROXY_TARGET?: string;
 }
 
 declare module "*.vue" {

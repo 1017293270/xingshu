@@ -28,6 +28,12 @@
   margin: 0 0 18px;
 }
 
+/* 问表会话是一份可以一直往下读的文档，不是定高的 app 外壳：
+   定高会让结果表在矮视口下被裁掉且无法滚动到。 */
+.table-session-page .table-page__status-slot {
+  margin-top: 16px;
+}
+
 .history-page__chrome {
   flex: 0 0 auto;
 }
@@ -843,9 +849,30 @@
 }
 
 .datahub-table-scroll {
+  position: relative;
   width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-gutter: stable;
+}
+
+/* 容器可聚焦，键盘用户也能横向滚宽表 */
+.datahub-table-scroll:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: -2px;
+}
+
+/* 只有真的被裁切时才淡出边缘：窄表不加没意义的装饰 */
+.datahub-table-scroll[data-edge="end"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
+}
+
+.datahub-table-scroll[data-edge="start"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 44px), transparent);
+}
+
+.datahub-table-scroll[data-edge="both"] {
+  mask-image: linear-gradient(to right, transparent, #000 44px calc(100% - 44px), transparent);
 }
 
 .datahub-table-scroll .xs-table {
@@ -1085,7 +1112,8 @@
   }
 
   .analysis-page,
-  .history-page {
+  .history-page,
+  .table-session-page {
     width: 100%;
   }
 

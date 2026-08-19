@@ -6,10 +6,8 @@ export type TableTemplate = {
   tag: "排行" | "清单" | "统计";
   description: string;
   iconId: TableTemplateIconId;
-};
-
-export type TableGenerationResult = {
-  id: string;
-  status: "accepted";
-  prompt: string;
+  /** 复制到制表需求框的原文；缺省时使用标题。 */
+  prompt?: string;
+  /** 原始更新时间（ISO 串）；用于会话栏按日期分组，展示文案仍走 description。 */
+  updatedAt?: string;
 };

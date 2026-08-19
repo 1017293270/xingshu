@@ -216,8 +216,12 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 52px clamp(32px, 2.2vw, 48px) 56px;
+  padding: 24px clamp(32px, 2.2vw, 48px) 56px;
   scrollbar-gutter: stable;
+}
+
+.xs-shell__main:has(.home-page) {
+  padding-top: 52px;
 }
 
 .xs-shell__main h1[tabindex="-1"]:focus {

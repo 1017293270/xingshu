@@ -34,12 +34,17 @@ export type DataHubSpaceCreateInput = {
 
 export type DataHubChatMode = "ask" | "rag" | "document_lookup" | "agent";
 
+/** DataHub 问表模式。总记录接口用 sessionId 前缀 `ask-table-` 与问数会话隔离。 */
+export type DataHubAskTableChatMode = "ask_table";
+
+export type DataHubRequestChatMode = DataHubChatMode | DataHubAskTableChatMode;
+
 export type DataHubChatRequest = {
   message: string;
   sessionId: string;
   globalSessionId: string;
   chatId: string;
-  chatMode: DataHubChatMode;
+  chatMode: DataHubRequestChatMode;
 };
 
 export type DataHubChatSession = {
@@ -48,7 +53,7 @@ export type DataHubChatSession = {
   spaceId?: number;
   userId?: number;
   title?: string;
-  chatMode?: DataHubChatMode;
+  chatMode?: DataHubRequestChatMode;
   createdAt?: string;
   updatedAt?: string;
 };

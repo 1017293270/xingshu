@@ -3,12 +3,18 @@
   margin: 0 auto;
 }
 
+/* 制表走问数同款数据轨道：结果表要比常规内容页多拿到横向空间 */
+.xs-page.table-page,
+.xs-page.table-session-page {
+  width: min(100%, var(--xs-data-track));
+}
+
 .xs-page__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin: 24px 0 28px;
+  margin: 0 0 18px;
 }
 
 .xs-page__title h1 {
@@ -144,6 +150,147 @@
   color: var(--xs-text);
   background: #f7fbff;
   font-weight: 700;
+}
+
+/* ---------- 结果表：问数与制表共用的数据表呈现 ---------- */
+
+/* 单元格不折行：一行就是一条记录，折行会毁掉纵向扫读 */
+.xs-table--data {
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.xs-table--data th,
+.xs-table--data td {
+  max-width: 320px;
+  padding: 11px 14px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--xs-table-grid);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 表头带底色与更重的下边线：横向滚动时它是唯一的列定位锚点 */
+.xs-table--data thead th {
+  border-bottom: 1px solid var(--xs-border-strong);
+  color: var(--xs-text-2);
+  background: var(--xs-table-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* 数值列右对齐并走等宽表格数字，小数点与千分位在列内严格对齐 */
+.xs-table--data td[data-numeric="true"] {
+  color: var(--xs-table-numeric);
+  text-align: right;
+  font-family: var(--xs-font-mono);
+  font-size: 13px;
+}
+
+.xs-table--data thead th[data-numeric="true"] {
+  text-align: right;
+}
+
+.xs-table--data td[data-empty="true"] {
+  color: var(--xs-table-muted);
+}
+
+.xs-table--data tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.xs-table--data tbody tr:hover td {
+  background: #f7fbff;
+}
+
+/* 行号槽：帮人指认"第几行"，所以要在，但轻到不参与阅读 */
+.xs-table--data .xs-table__gutter {
+  width: 46px;
+  min-width: 46px;
+  padding-right: 4px;
+  padding-left: 16px;
+  color: var(--xs-table-muted);
+  text-align: right;
+  font-family: var(--xs-font-mono);
+  font-size: 12px;
+}
+
+.datahub-table-card {
+  overflow: hidden;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+}
+
+.datahub-result-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 20px;
+  padding: 13px 16px 12px;
+  border-bottom: 1px solid var(--xs-border);
+}
+
+.datahub-result-head h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--xs-text);
+  font-size: 15px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 口径条：一张表能不能被交出去，靠的就是来源、字段数、行数这三项 */
+.datahub-result-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+}
+
+.datahub-result-meta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.datahub-result-meta dt {
+  color: var(--xs-text-3);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.datahub-result-meta dd {
+  max-width: 260px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--xs-text-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datahub-result-meta dd[data-numeric="true"] {
+  color: var(--xs-table-numeric);
+  font-family: var(--xs-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.datahub-table-card__note {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--xs-table-grid);
+  color: var(--xs-text-3);
+  background: var(--xs-surface-soft);
+  font-size: 12px;
+  font-weight: 620;
 }
 
 .total-row td {

@@ -64,6 +64,13 @@
   /* 轻过冲缓动：仅用于用户操作触发的完成确认（落位、弹出徽标），峰值约 1.05-1.08 */
   --xs-motion-ease-spring: cubic-bezier(0.18, 0.89, 0.32, 1.08);
   --xs-motion-ease-ambient: cubic-bezier(.37, 0, .63, 1);
+  /* 数据字体：行数、时间戳、单元格数值统一走等宽表格数字，保证列内小数点纵向对齐 */
+  --xs-font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* 数据表配色：网格线比容器边框更浅，表头带底色，数值用更重的墨色代替加粗 */
+  --xs-table-grid: #E9F0FA;
+  --xs-table-head: #F4F9FF;
+  --xs-table-numeric: #0B2A5B;
+  --xs-table-muted: #62748F;
   --xs-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
 }
 
@@ -155,6 +162,8 @@ textarea {
     --xs-border: #9FB9E8;
     --xs-border-strong: #7FA3DE;
     --xs-text-3: #3E5578;
+    --xs-table-grid: #C6D9F2;
+    --xs-table-muted: #5D7395;
   }
 }
 

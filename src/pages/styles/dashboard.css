@@ -14,11 +14,7 @@
 }
 
 .dashboard-page .xs-page__head {
-  margin: 0 0 22px;
-}
-
-.dashboard-page .xs-page__title h1 {
-  font-size: 36px;
+  margin: 0 0 18px;
 }
 
 .dashboard-upcoming-actions,
@@ -648,10 +644,6 @@
   .dashboard-editor-shell__state {
     min-height: clamp(360px, 58dvh, 560px);
     padding: 18px;
-  }
-
-  .dashboard-page .xs-page__title h1 {
-    font-size: 30px;
   }
 
   .board-card {

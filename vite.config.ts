@@ -31,6 +31,33 @@ export function resolveDataHubProxyTarget({ command, env, mode, processEnv }: Pr
   return "http://127.0.0.1:65535";
 }
 
+export function resolveOfficialDocumentProxyTarget({ env, processEnv }: Pick<ProxyTargetInputs, "env" | "processEnv">) {
+  return (processEnv.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET ?? env.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET)?.trim() ?? "";
+}
+
+export function stripBrowserOriginHeaders(proxyReq: { removeHeader: (name: string) => void }) {
+  proxyReq.removeHeader("origin");
+  proxyReq.removeHeader("referer");
+}
+
+export function createOfficialDocumentBrowserProxy(target: string) {
+  if (!target) {
+    return {};
+  }
+
+  return {
+    "/api/official-document": {
+      target,
+      changeOrigin: true,
+      configure(proxy: { on: (event: string, listener: (proxyReq: { removeHeader: (name: string) => void }) => void) => void }) {
+        proxy.on("proxyReq", (proxyReq) => {
+          stripBrowserOriginHeaders(proxyReq);
+        });
+      }
+    }
+  };
+}
+
 export function createDataHubBrowserProxy(target: string) {
   return {
     "/api": {
@@ -62,6 +89,7 @@ export function createDataHubBrowserProxy(target: string) {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxyTarget = resolveDataHubProxyTarget({ command, env, mode, processEnv: process.env });
+  const officialDocumentProxyTarget = resolveOfficialDocumentProxyTarget({ env, processEnv: process.env }) || proxyTarget;
 
   return {
     plugins: [react(), vue()],
@@ -72,9 +100,13 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       proxy: {
-        // Keep browser requests same-origin. /api is the BFF. /platform and
-        // hashed /assets/* let “添加知识库” open DataHub’s UI on this origin
-        // so Xingshu can seed platform_token without putting JWT in the URL.
+        // Official-document must be registered before /api so Vite can strip
+        // browser Origin before the request reaches the Java CORS filter.
+        ...createOfficialDocumentBrowserProxy(officialDocumentProxyTarget),
+        // Keep remaining browser requests same-origin. /api is the BFF.
+        // /platform and hashed /assets/* let “添加知识库” open DataHub’s UI
+        // on this origin so Xingshu can seed platform_token without putting
+        // JWT in the URL.
         ...createDataHubBrowserProxy(proxyTarget)
       }
     },

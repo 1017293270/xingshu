@@ -1,65 +1,114 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { readFileSync } from "node:fs";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TablePage } from "./TablePage";
+import { TableSessionView } from "@/features/tableGeneration/TableSessionView";
+import type { DataHubAskDataStreamHandlers } from "@/services/dataHubAskDataService";
+import { useUiStore } from "@/stores/uiStore";
+import type { AgentMessageInput } from "@/types/agent";
+import type { DataHubStreamEvent } from "@/types/dataHub";
 
 const serviceMocks = vi.hoisted(() => ({
-  createTableFromPrompt: vi.fn(),
-  listRecentTables: vi.fn()
+  listRecentTables: vi.fn(),
+  streamAgentMessage: vi.fn(),
+  loadDataHubHistoryReplay: vi.fn()
 }));
 
 vi.mock("@/services/tableService", () => ({
-  createTableFromPrompt: serviceMocks.createTableFromPrompt,
   listRecentTables: serviceMocks.listRecentTables
 }));
 
-function renderPage(page: ReactElement) {
+vi.mock("@/services/agentService", () => ({
+  streamAgentMessage: serviceMocks.streamAgentMessage
+}));
+
+vi.mock("@/services/historyService", () => ({
+  loadDataHubHistoryReplay: serviceMocks.loadDataHubHistoryReplay
+}));
+
+function renderPage(page: ReactElement, initialEntries: string[] = ["/table"]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{page}</MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>
+          <Route path="/table" element={page} />
+          <Route path="/table/:sessionId" element={<TableSessionView />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
+function mockStream(run: (handlers: DataHubAskDataStreamHandlers, controller: AbortController) => void) {
+  serviceMocks.streamAgentMessage.mockImplementation((
+    _input: AgentMessageInput,
+    handlers: DataHubAskDataStreamHandlers
+  ) => {
+    const controller = new AbortController();
+    run(handlers, controller);
+    return controller;
   });
-
-  return { promise, resolve, reject };
 }
+
+const rankingTableEvent: DataHubStreamEvent = {
+  type: "table",
+  data: {
+    columns: [
+      { name: "region", title: "区域" },
+      { name: "sales", title: "销售额", type: "number" }
+    ],
+    rows: [{ region: "华东", sales: 128 }],
+    totalRows: 1,
+    source: "cube"
+  }
+};
 
 describe("workflow refinements", () => {
   beforeEach(() => {
-    serviceMocks.createTableFromPrompt.mockReset();
     serviceMocks.listRecentTables.mockReset();
+    serviceMocks.streamAgentMessage.mockReset();
+    serviceMocks.loadDataHubHistoryReplay.mockReset();
+    serviceMocks.listRecentTables.mockResolvedValue([]);
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue({
+      sessionId: "ask-table-demo",
+      chatMode: "ask",
+      question: "历史制表",
+      events: [],
+      turns: []
+    });
+    useUiStore.getState().resetUiState();
   });
 
-  it("keeps the full table title available and reports preview-only submission", async () => {
+  it("keeps the full table title available and opens the table agent after generate", async () => {
     const user = userEvent.setup();
-    const request = deferred<{ id: string; status: "accepted"; prompt: string }>();
     const fullTitle = "华东区域重点客户季度销售排行榜及同比环比趋势分析表";
     serviceMocks.listRecentTables.mockResolvedValue([
       {
-        id: "long-title",
+        id: "ask-table-long-title",
         title: fullTitle,
         tag: "排行",
         description: "完整标题不得被业务逻辑截断",
         iconId: "ranking"
       }
     ]);
-    serviceMocks.createTableFromPrompt.mockReturnValue(request.promise);
+    mockStream((handlers) => {
+      queueMicrotask(() => {
+        handlers.onEvent({
+          type: "data_source_selected",
+          data: { datasourceId: 8, datasourceName: "经营分析库" }
+        });
+        handlers.onEvent(rankingTableEvent);
+        handlers.onDone?.();
+      });
+    });
 
     const { container } = renderPage(<TablePage />);
 
@@ -71,36 +120,138 @@ describe("workflow refinements", () => {
     expect(title).toHaveAttribute("title", fullTitle);
 
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成销售排行");
-    await user.click(screen.getByRole("button", { name: "预览需求" }));
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
 
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "制表需求" }), { key: "Enter", code: "Enter" });
+    expect(useUiStore.getState().analysisTurns).toEqual([]);
+    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "生成销售排行", chatMode: "ask_table" }),
+      expect.any(Object)
+    );
 
-    expect(screen.getByRole("button", { name: /预览需求/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "复制制表要求" })).toBeDisabled();
-    expect(screen.getByRole("region", { name: "制表需求输入" })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("正在创建制表预览");
-    expect(serviceMocks.createTableFromPrompt).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("columnheader", { name: "区域" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("已生成 1 张结果表");
+    });
+    expect(screen.getByText("华东")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
+  });
 
-    request.resolve({ id: "generated", status: "accepted", prompt: "生成销售排行" });
+  it("disables follow-up actions while streaming and ignores a second enter", async () => {
+    const user = userEvent.setup();
+    mockStream((handlers) => {
+      queueMicrotask(() => {
+        handlers.onEvent({
+          type: "data_source_selected",
+          data: { datasourceId: 8, datasourceName: "经营分析库" }
+        });
+      });
+    });
+
+    renderPage(<TablePage />);
+    await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成销售排行");
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
+
+    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /继续制表/ })).toBeDisabled();
+    expect(screen.getByRole("region", { name: "继续制表" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("正在生成结果表");
+    expect(await screen.findByText("已定位数据源：经营分析库")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeEnabled();
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "继续追问" }), { key: "Enter", code: "Enter" });
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops an in-flight table generation", async () => {
+    const user = userEvent.setup();
+    mockStream(() => undefined);
+
+    renderPage(<TablePage />);
+    await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成库存表");
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
+    await user.click(await screen.findByRole("button", { name: "停止生成" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("已停止本次制表生成");
+    expect(screen.getByRole("button", { name: "继续制表" })).toBeDisabled();
+  });
+
+  it("shows an empty-result hint when ask-table finishes without a table", async () => {
+    const user = userEvent.setup();
+    mockStream((handlers) => {
+      queueMicrotask(() => {
+        handlers.onEvent({ type: "text", data: "当前空间没有可汇总的费用明细。" });
+        handlers.onDone?.();
+      });
+    });
+
+    renderPage(<TablePage />);
+    await user.type(screen.getByRole("textbox", { name: "制表需求" }), "月度费用统计报表");
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent("预览需求已记录，不会创建真实报表");
+      expect(screen.getByRole("status")).toHaveTextContent("未生成结果表，请补充字段、时间或统计口径");
     });
-    await waitFor(() => expect(screen.getByRole("button", { name: "预览需求" })).toBeEnabled());
+    expect(screen.getByText("当前空间没有可汇总的费用明细。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
   });
 
   it("shows an error state when table generation cannot be queued", async () => {
     const user = userEvent.setup();
-    serviceMocks.listRecentTables.mockResolvedValue([]);
-    serviceMocks.createTableFromPrompt.mockRejectedValue(new Error("offline"));
+    mockStream((handlers) => {
+      queueMicrotask(() => handlers.onError?.(new Error("offline")));
+    });
 
     renderPage(<TablePage />);
-
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成库存表");
-    await user.click(screen.getByRole("button", { name: "预览需求" }));
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("制表需求提交失败，请稍后重试");
-    expect(screen.getByRole("button", { name: "预览需求" })).toBeEnabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+    expect(screen.getByRole("button", { name: "继续制表" })).toBeDisabled();
+  });
+
+  it("opens a recent table record into the restored result workspace", async () => {
+    const user = userEvent.setup();
+    serviceMocks.listRecentTables.mockResolvedValue([
+      {
+        id: "ask-table-sales",
+        title: "客户销售排行榜表",
+        tag: "排行",
+        description: "2026-08-17 10:00",
+        iconId: "ranking",
+        prompt: "客户销售排行榜表"
+      }
+    ]);
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue({
+      sessionId: "ask-table-sales",
+      chatMode: "ask",
+      question: "客户销售排行榜表",
+      events: [rankingTableEvent],
+      turns: [
+        {
+          id: "turn-1",
+          question: "客户销售排行榜表",
+          sessionId: "ask-table-sales",
+          chatId: "chat-1",
+          chatMode: "ask",
+          status: "done",
+          events: [rankingTableEvent],
+          error: ""
+        }
+      ]
+    });
+
+    renderPage(<TablePage />);
+    await user.click(await screen.findByRole("link", { name: "打开制表结果：客户销售排行榜表" }));
+
+    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "区域" })).toBeInTheDocument();
+    expect(screen.getByText("华东")).toBeInTheDocument();
+    expect(serviceMocks.streamAgentMessage).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("已还原 1 张结果表");
+    });
   });
 
   it("keeps space between the table preview banner and the workbench", () => {
@@ -119,5 +270,4 @@ describe("workflow refinements", () => {
     expect(pageRule).toContain("overflow-x: clip");
     expect(pageRule).not.toContain("overflow-x: hidden");
   });
-
 });

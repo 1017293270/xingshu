@@ -2,6 +2,7 @@ import { Button, Input } from "antd";
 import { Check, CopySimple, Lightning } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
 import { productCapabilities } from "@/config/capabilities";
@@ -11,7 +12,9 @@ import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
 import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
-import { createTableFromPrompt, listRecentTables } from "@/services/tableService";
+import { tableSessionPath, queueTableSessionLaunch } from "@/features/tableGeneration/useTableGeneration";
+import { createAskTableSessionId } from "@/services/dataHubAskTable";
+import { listRecentTables } from "@/services/tableService";
 import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 import "./styles/workflows.css";
@@ -27,21 +30,16 @@ const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销�
 
 const tableSuggestions = ["华东区Q1销售排行", "各部门人员通讯录", "月度费用统计报表"];
 
-const templateTagTone: Record<TableTemplate["tag"], string> = {
-  排行: "blue",
-  清单: "cyan",
-  统计: "green"
-};
-
 export function TablePage() {
+  const navigate = useNavigate();
   const sessionScope = useSessionQueryScope();
   const [prompt, setPrompt] = useState("");
   const [submissionStatus, setSubmissionStatus] = useState("");
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
+  const [promptPulse, setPromptPulse] = useState<"idle" | "filled">("idle");
   const copiedTimerRef = useRef<number | null>(null);
-  const isGeneratingRef = useRef(false);
+  const filledTimerRef = useRef<number | null>(null);
   const recentTablesQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "recentTables"),
     queryFn: listRecentTables
@@ -58,42 +56,36 @@ export function TablePage() {
     if (copiedTimerRef.current !== null) {
       window.clearTimeout(copiedTimerRef.current);
     }
+    if (filledTimerRef.current !== null) {
+      window.clearTimeout(filledTimerRef.current);
+    }
   }, []);
 
-  const handleGenerate = async () => {
-    const trimmedPrompt = prompt.trim();
+  const pulsePrompt = () => {
+    setPromptPulse("filled");
+    if (filledTimerRef.current !== null) {
+      window.clearTimeout(filledTimerRef.current);
+    }
+    filledTimerRef.current = window.setTimeout(() => setPromptPulse("idle"), 260);
+  };
 
-    if (!trimmedPrompt || isGeneratingRef.current) {
+  const handleGenerate = () => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
       return;
     }
 
-    isGeneratingRef.current = true;
-    setIsGenerating(true);
-    setSubmissionTone("loading");
-    setSubmissionStatus("正在创建制表预览");
-
-    try {
-      const result = await createTableFromPrompt(trimmedPrompt);
-      if (result.status === "accepted") {
-        setSubmissionTone("info");
-        setSubmissionStatus(`预览需求已记录，不会创建真实报表：${result.prompt}`);
-      }
-    } catch {
-      setSubmissionTone("error");
-      setSubmissionStatus("制表需求提交失败，请稍后重试");
-    } finally {
-      isGeneratingRef.current = false;
-      setIsGenerating(false);
-    }
+    const sessionId = createAskTableSessionId();
+    queueTableSessionLaunch(sessionId, trimmedPrompt);
+    navigate(tableSessionPath(sessionId), {
+      state: { prompt: trimmedPrompt }
+    });
   };
 
   const handleCopyTemplate = (table: TableTemplate) => {
-    if (isGeneratingRef.current) {
-      return;
-    }
-
-    const nextPrompt = `${table.title}：${table.description}`;
+    const nextPrompt = table.prompt ?? `${table.title}：${table.description}`;
     setPrompt(nextPrompt);
+    pulsePrompt();
     setSubmissionTone("success");
     setSubmissionStatus(`已复制制表要求：${table.title}`);
     setCopiedTemplateId(table.id);
@@ -104,77 +96,71 @@ export function TablePage() {
   };
 
   const handleUseSuggestion = (suggestion: string) => {
-    if (isGeneratingRef.current) {
-      return;
-    }
-
     setPrompt(suggestion);
+    pulsePrompt();
     setSubmissionTone("info");
     setSubmissionStatus(`已填入制表示例：${suggestion}`);
   };
 
+  const promptState = promptPulse === "filled" ? "filled" : submissionTone;
+
   return (
     <PageFrame
       title="智能制表"
-      subtitle="用自然语言描述表格结构，AI 帮你生成企业表格"
+      subtitle="用自然语言描述表格结构，问表智能体帮你生成企业表格"
       className="table-page"
     >
       <XsCapabilityStatus capability={productCapabilities.tables} />
       <div className="sheet-workbench">
         <section className="xs-card sheet-console xs-page-enter" style={{ animationDelay: "80ms" }}>
           <div className="sheet-console__head">
-            <span className="sheet-console__eyebrow">制表工作台</span>
             <h2>描述制表需求</h2>
-            <p>说明表格主题、字段与统计口径；当前可预览需求组织方式</p>
+            <p>写清主题、字段与统计口径。生成后进入独立的问表会话，结果表会标注数据源、字段数与行数。</p>
           </div>
           <section
             className="sheet-prompt xs-focus-glow"
             aria-label="制表需求输入"
-            aria-busy={isGenerating}
-            data-state={isGenerating ? "submitting" : submissionTone}
+            data-state={promptState}
           >
             <Input.TextArea
               aria-label="制表需求"
               variant="borderless"
-              autoSize={{ minRows: 4, maxRows: 10 }}
+              autoSize={{ minRows: 3, maxRows: 10 }}
               placeholder={tablePromptPlaceholder}
               value={prompt}
-              disabled={isGenerating}
               onChange={(event) => setPrompt(event.target.value)}
               onPressEnter={(event) => {
                 if (event.shiftKey) {
                   return;
                 }
                 event.preventDefault();
-                void handleGenerate();
+                handleGenerate();
               }}
             />
             <div className="sheet-prompt__bar">
-              <span className="sheet-prompt__shortcut" aria-hidden="true">Enter 预览 · Shift + Enter 换行</span>
+              <div className="sheet-suggestions" role="group" aria-label="快捷制表示例">
+                <span>试试</span>
+                {tableSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => handleUseSuggestion(suggestion)}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+              <span className="sheet-prompt__shortcut" aria-hidden="true">Enter 生成 · Shift + Enter 换行</span>
               <Button
                 type="primary"
-                icon={<Lightning size={18} />}
-                loading={isGenerating}
-                disabled={isGenerating || !prompt.trim()}
+                icon={<Lightning size={18} weight="fill" aria-hidden="true" />}
+                disabled={!prompt.trim()}
                 onClick={handleGenerate}
               >
-                预览需求
+                生成表格
               </Button>
             </div>
           </section>
-          <div className="sheet-suggestions" aria-label="快捷制表示例">
-            <span>试试</span>
-            {tableSuggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                disabled={isGenerating}
-                onClick={() => handleUseSuggestion(suggestion)}
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
         </section>
       </div>
       <div className="workflow-status-slot table-page__status-slot">
@@ -186,59 +172,66 @@ export function TablePage() {
           reserveSpace
         />
       </div>
-      <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
-        <h2 className="subsection-title">最近制表</h2>
-        <span className="section-title-meta">{recentTables.length} 个模板 · 可一键复制为制表需求</span>
-      </div>
-      <XsAsyncPanel
-        status={recentTablesStatus}
-        empty={recentTables.length === 0}
-        emptyDescription="暂无最近制表记录。"
-        error="最近制表加载失败，请稍后重试。"
-        onRetry={() => void recentTablesQuery.refetch()}
-        loadingVariant="rows"
-        contentKey={recentTablesQuery.dataUpdatedAt}
-      >
-        <section className="sheet-list" aria-label="最近制表">
-          {recentTables.map((table, index) => (
-            <article
-              className="xs-page-enter sheet-row"
-              style={{ animationDelay: `${200 + index * 60}ms` }}
-              key={table.id}
-              aria-label={`${table.title} ${table.description}`}
-            >
-              <span className="sheet-icon" aria-hidden="true">
-                <img src={sheetIconById[table.iconId]} alt="" />
-              </span>
-              <div className="sheet-row__body">
-                <div className="sheet-row__head">
+      <section aria-label="最近制表">
+        <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
+          <h2 className="subsection-title">最近制表</h2>
+          <span className="section-title-meta">{recentTables.length} 条记录 · 点击打开当时的结果表</span>
+        </div>
+        <XsAsyncPanel
+          status={recentTablesStatus}
+          empty={recentTables.length === 0}
+          emptyDescription="暂无最近制表记录。"
+          error="最近制表加载失败，请稍后重试。"
+          onRetry={() => void recentTablesQuery.refetch()}
+          loadingVariant="rows"
+          contentKey={recentTablesQuery.dataUpdatedAt}
+        >
+          <div className="sheet-list">
+            {/* 列名条只是视觉上的表头，行本身已带完整可访问名称，不做假的 table 语义 */}
+            <div className="sheet-list__head" aria-hidden="true">
+              <span>表名</span>
+              <span>类型</span>
+              <span>更新时间</span>
+              <span>操作</span>
+            </div>
+            {recentTables.map((table, index) => (
+              <article
+                className="xs-page-enter sheet-row"
+                style={{ animationDelay: `${200 + index * 40}ms` }}
+                key={table.id}
+                aria-label={`${table.title} ${table.description}`}
+              >
+                <Link
+                  className="sheet-row__main"
+                  to={tableSessionPath(table.id)}
+                  aria-label={`打开制表结果：${table.title}`}
+                >
+                  <span className="sheet-icon" aria-hidden="true">
+                    <img src={sheetIconById[table.iconId]} alt="" />
+                  </span>
                   <h2 className="sheet-row__title" title={table.title}>
                     {table.title}
                   </h2>
-                  <span className={`sheet-row__tag sheet-row__tag--${templateTagTone[table.tag]}`}>
-                    {table.tag}
-                  </span>
-                </div>
-                <p className="sheet-row__meta">{table.description}</p>
-              </div>
-              <Button
-                type="text"
-                className="sheet-row__copy"
-                icon={
-                  copiedTemplateId === table.id
-                    ? <Check size={16} aria-hidden="true" />
-                    : <CopySimple size={16} aria-hidden="true" />
-                }
-                disabled={isGenerating}
-                onClick={() => handleCopyTemplate(table)}
-              >
-                {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
-              </Button>
-            </article>
-          ))}
-        </section>
-      </XsAsyncPanel>
-      <p className="page-disclaimer">当前为预览数据，不会生成或保存真实企业表格。</p>
+                  <span className="sheet-row__type">{table.tag}</span>
+                  <span className="sheet-row__time">{table.description}</span>
+                </Link>
+                <Button
+                  type="text"
+                  className="sheet-row__copy"
+                  icon={
+                    copiedTemplateId === table.id
+                      ? <Check size={15} aria-hidden="true" />
+                      : <CopySimple size={15} aria-hidden="true" />
+                  }
+                  onClick={() => handleCopyTemplate(table)}
+                >
+                  {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
+                </Button>
+              </article>
+            ))}
+          </div>
+        </XsAsyncPanel>
+      </section>
     </PageFrame>
   );
 }

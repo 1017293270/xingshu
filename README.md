@@ -81,6 +81,7 @@ npm run test:visual
 - `VITE_DASHBOARD_EDITOR_URL`
 - `VITE_OFFICIAL_DOCUMENT_API_BASE_URL`
 - `VITE_OFFICIAL_DOCUMENT_API_MODE`
+- `VITE_OFFICIAL_DOCUMENT_PROXY_TARGET`
 
 前端页面和组件不得直接实现后端协议细节；统一通过 `src/services/` 适配。
 

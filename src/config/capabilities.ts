@@ -24,10 +24,10 @@ export const productCapabilities = {
   },
   tables: {
     id: "tables",
-    label: "预览模式",
-    state: "preview",
-    provenance: "mock",
-    message: "模板、最近表格和生成结果均为演示数据，不会创建真实报表。"
+    label: "实时能力",
+    state: "live",
+    provenance: "datahub",
+    message: "结果表由当前登录空间的问表服务实时生成。"
   },
   dataAssets: {
     id: "data-assets",

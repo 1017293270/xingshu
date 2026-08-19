@@ -1,7 +1,9 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as officialDocumentService from "@/services/officialDocumentService";
 import type { OfficialDocumentDraft, OfficialDocumentStructureNode } from "@/types/officialDocument";
+import { OfficialDocumentAppShell } from "./OfficialDocumentAppShell";
 import { StructuredDraftEditor } from "./StructuredDraftEditor";
 
 const draft: OfficialDocumentDraft = {
@@ -70,6 +72,8 @@ describe("StructuredDraftEditor", () => {
       await Promise.resolve();
     });
     expect(screen.getByDisplayValue("原正文")).toBeInTheDocument();
+    expect(screen.getByText("已保存").closest(".structured-draft-editor__canvas-head")).not.toBeNull();
+    expect(screen.getByLabelText("结构化公文编辑器").querySelector(":scope > .ant-tag")).toBeNull();
 
     fireEvent.change(screen.getByLabelText("正文节点 1"), { target: { value: "更新后的正文" } });
     await act(async () => {
@@ -83,5 +87,33 @@ describe("StructuredDraftEditor", () => {
       blocks: [expect.objectContaining({ id: "body-1", order: 0, text: "更新后的正文" })]
     }));
     expect(screen.getByText("已保存")).toBeInTheDocument();
+  });
+
+  it("keeps the save chip in the canvas header and portals PDF preview to the app bar", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [{ slotId: "title-slot", value: "原标题" }],
+      blocks: [{ id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "原正文" }]
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/writing/drafts/draft-1"]}>
+        <OfficialDocumentAppShell>
+          <StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />
+        </OfficialDocumentAppShell>
+      </MemoryRouter>
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("已保存").closest(".structured-draft-editor__canvas-head")).not.toBeNull();
+    await waitFor(() => {
+      expect(document.querySelector(".official-document-app__bar .official-document-app__actions")).toContainElement(
+        screen.getByRole("button", { name: "PDF 预览" })
+      );
+    });
+    expect(screen.getByLabelText("结构化公文编辑器").querySelector(":scope > .ant-btn")).toBeNull();
   });
 });

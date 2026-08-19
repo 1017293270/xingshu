@@ -1,11 +1,11 @@
-import type { DataHubChatMode } from "@/types/dataHub";
+import type { DataHubRequestChatMode } from "@/types/dataHub";
 
 export type AgentMessageInput = {
   conversationId?: string;
   sessionId?: string;
   globalSessionId?: string;
   chatId?: string;
-  chatMode?: DataHubChatMode;
+  chatMode?: DataHubRequestChatMode;
   content: string;
 };
 

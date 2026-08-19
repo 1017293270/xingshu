@@ -3,6 +3,7 @@ import {
   adaptDataHubStreamEvent,
   getDataHubEventPayload
 } from "@/services/dataHubEventAdapter";
+import { isAskTableSession } from "@/services/dataHubAskTable";
 import { readDataHubSession } from "@/services/dataHubSession";
 import type {
   DataHubChatEvent,
@@ -81,10 +82,10 @@ function mapDataHubSession(session: DataHubChatSession): HistorySession {
     sessionId: session.sessionId,
     title,
     summary: "来自 data-hub 的历史会话，点击后查看完整过程与结果。",
-    category: resolveHistoryCategory(session.chatMode, title),
+    category: resolveHistoryCategory(session.chatMode === "ask_table" ? "ask" : session.chatMode, title),
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
     source: "data-hub",
-    chatMode: session.chatMode
+    chatMode: session.chatMode === "ask_table" ? undefined : session.chatMode
   };
 }
 
@@ -215,7 +216,7 @@ export async function listHistorySessions(): Promise<HistorySession[]> {
     spaceId: session.spaceId
   });
 
-  return sessions.map(mapDataHubSession);
+  return sessions.filter((item) => !isAskTableSession(item)).map(mapDataHubSession);
 }
 
 export async function filterHistorySessions(filter: HistoryFilter) {

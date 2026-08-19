@@ -1,4 +1,5 @@
 export { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
+export { DataHubResultTable } from "./DataHubResultTable";
 export { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 export { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 export { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";

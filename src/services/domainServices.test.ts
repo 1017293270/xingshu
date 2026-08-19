@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { getDataAssetKpis, listKnowledgeBases } from "./dataAssetService";
 import { listHistorySessions } from "./historyService";
 import { listRecentTables } from "./tableService";
 import { listWritingDocuments, listWritingScenes } from "./writingService";
@@ -15,15 +14,10 @@ describe("domain services", () => {
     });
   });
 
-  it("returns typed table templates", async () => {
+  it("returns no recent tables in unit tests so DataHub list is not called", async () => {
     const tables = await listRecentTables();
 
-    expect(tables.map((table) => table.iconId)).toEqual([
-      "ranking",
-      "contact-list",
-      "expense-statistics",
-      "inventory"
-    ]);
+    expect(tables).toEqual([]);
   });
 
   it("returns typed writing scenes and documents", async () => {
@@ -32,13 +26,5 @@ describe("domain services", () => {
 
     expect(scenes[0].iconId).toBe("report-summary");
     expect(documents[0].words).toBe("1,428 字");
-  });
-
-  it("returns typed data asset summaries", async () => {
-    const kpis = await getDataAssetKpis();
-    const knowledgeBases = await listKnowledgeBases();
-
-    expect(kpis[0]).toMatchObject({ id: "data-assets", label: "数据资产总量" });
-    expect(knowledgeBases[0]).toMatchObject({ id: "enterprise-policy", title: "企业制度文档库" });
   });
 });

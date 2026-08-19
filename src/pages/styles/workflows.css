@@ -5,31 +5,26 @@
 .sheet-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  gap: var(--xs-module-gap);
   margin: var(--xs-module-gap) 0 0;
 }
 
 .sheet-console {
   display: grid;
   align-content: start;
-  gap: 16px;
-  padding: 22px 24px 20px;
+  gap: 14px;
+  padding: 20px 22px 18px;
 }
 
-.sheet-console__eyebrow {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--xs-primary-2);
-  font-size: 12px;
-  font-weight: 760;
-  letter-spacing: 0.02em;
-}
-
-.sheet-console__head h2 {
+.sheet-console .sheet-console__head h2 {
   margin: 0;
-  font-size: 18px;
+  color: var(--xs-text);
+  font-size: 17px;
+  font-weight: 750;
 }
 
-.sheet-console__head p {
+.sheet-console .sheet-console__head p {
+  max-width: 66ch;
   margin: 5px 0 0;
   color: var(--xs-text-3);
   font-size: 13px;
@@ -41,64 +36,85 @@
   overflow: hidden;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface);
+}
+
+.sheet-prompt .ant-input,
+.sheet-prompt textarea.ant-input,
+.sheet-prompt .ant-input-textarea,
+.sheet-prompt .ant-input-outlined {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .sheet-prompt .ant-input {
-  padding: 14px 16px 6px;
-  background: transparent;
+  padding: 14px 16px 10px;
   color: var(--xs-text);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.65;
   resize: none;
 }
 
 .sheet-prompt .ant-input::placeholder {
-  color: #8698b4;
+  color: #8fa3c0;
 }
 
+.sheet-prompt .ant-input:focus,
+.sheet-prompt .ant-input:focus-within,
+.sheet-prompt textarea.ant-input:focus {
+  box-shadow: none;
+}
+
+/* 动作条：示例在左、快捷键与主按钮在右，输入框不再是一片空白 */
 .sheet-prompt__bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
-  padding: 8px 12px 12px 14px;
+  gap: 10px 14px;
+  padding: 10px 12px 10px 14px;
+  border-top: 1px solid var(--xs-border);
+  background: var(--xs-surface-soft);
 }
 
 .sheet-prompt__shortcut {
   color: var(--xs-text-3);
   font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
+  font-weight: 620;
 }
 
 .sheet-prompt .ant-btn {
-  flex: 0 0 auto;
-  height: 40px;
-  padding-inline: 20px;
-  border-radius: var(--xs-radius-control);
-  font-weight: 650;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--xs-radius-small);
+  font-size: 13px;
+  font-weight: 700;
   transition:
-    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
     transform var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out);
+    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.sheet-prompt .ant-btn-primary:not(:disabled) {
+  box-shadow: var(--xs-shadow-button);
 }
 
 .sheet-prompt .ant-btn:not(:disabled):active {
   transform: translateY(1px);
 }
 
-.sheet-prompt[data-state="submitting"] {
-  animation: sheet-submit-highlight var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+.sheet-prompt[data-state="filled"] {
+  animation: sheet-submit-highlight var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+}
+
+.sheet-prompt[data-state="streaming"] {
+  animation: sheet-streaming-glow var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
 }
 
 @keyframes sheet-submit-highlight {
   from {
-    border-color: rgba(22, 119, 255, 0.72);
-    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    border-color: var(--xs-primary);
+    box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.16);
   }
 
   to {
@@ -107,28 +123,41 @@
   }
 }
 
+@keyframes sheet-streaming-glow {
+  0%,
+  100% {
+    border-color: var(--xs-border);
+  }
+
+  50% {
+    border-color: #9fc8ff;
+  }
+}
+
+/* 快捷示例：填进输入框的一句话，所以做成低调的文本按钮而不是彩色标签 */
 .sheet-suggestions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  margin-right: auto;
 }
 
 .sheet-suggestions > span {
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
 }
 
 .sheet-suggestions button {
   min-height: 28px;
-  padding: 0 12px;
+  padding: 0 11px;
   border: 1px solid var(--xs-border);
-  border-radius: 8px;
+  border-radius: 999px;
   color: var(--xs-text-2);
-  background: var(--xs-surface-soft);
-  font-size: 13px;
-  font-weight: 600;
+  background: var(--xs-surface);
+  font-size: 12.5px;
+  font-weight: 620;
   cursor: pointer;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -146,6 +175,381 @@
 .sheet-suggestions button:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* ---------- 智能制表：结果区 ---------- */
+/* 这一页只有结果表配拥有卡片材质；轨迹、需求、追问框都是纸面上的排版层级 */
+
+.sheet-result {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sheet-result__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.sheet-result__empty--error {
+  color: var(--xs-danger);
+}
+
+/* 结果表位常驻：空态和加载中都保持一张"空表"的形状，加载动画发生在框里 */
+.table-placeholder {
+  overflow: hidden;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+}
+
+.table-placeholder[data-state="loading"] {
+  box-shadow: var(--xs-shadow-soft);
+}
+
+.table-placeholder__head {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--xs-border);
+}
+
+.table-placeholder .table-placeholder__head h2 {
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.table-placeholder__head p {
+  margin: 5px 0 0;
+  color: var(--xs-text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.table-placeholder__grid {
+  display: grid;
+}
+
+.table-placeholder__row {
+  display: grid;
+  grid-template-columns: 46px repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 24px;
+  padding: 0 16px;
+  min-height: 43px;
+  border-bottom: 1px solid var(--xs-table-grid);
+}
+
+.table-placeholder__row:last-child {
+  border-bottom: 0;
+}
+
+.table-placeholder__row--head {
+  min-height: 38px;
+  border-bottom: 1px solid var(--xs-border-strong);
+  background: var(--xs-table-head);
+}
+
+.table-placeholder__row > span {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--xs-table-grid);
+}
+
+.table-placeholder__row--head > span {
+  height: 8px;
+  background: #d8e5f7;
+}
+
+/* 每列宽度错开，读起来像真表格而不是一堆等长灰条 */
+.table-placeholder__row > span:nth-child(1) {
+  width: 60%;
+}
+
+.table-placeholder__row > span:nth-child(3) {
+  width: 72%;
+}
+
+.table-placeholder__row > span:nth-child(5) {
+  width: 55%;
+}
+
+.table-placeholder[data-state="loading"] .table-placeholder__row > span {
+  background: linear-gradient(90deg, #eef4fd, #dfeaf9, #eef4fd);
+  background-size: 200% 100%;
+  animation: table-placeholder-shimmer var(--xs-motion-skeleton) var(--xs-motion-ease-ambient) infinite;
+  animation-delay: calc(var(--row-index, 0) * 90ms);
+}
+
+@keyframes table-placeholder-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* 结论排在表之后：表是交付物，文字是脚注 */
+.sheet-result__answer {
+  color: var(--xs-text-2);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.sheet-result__answer > :first-child {
+  margin-top: 0;
+}
+
+.sheet-result__answer > :last-child {
+  margin-bottom: 0;
+}
+
+.sheet-result__tables {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* 结果表是这一页唯一被"抬起"的对象 */
+.sheet-result .datahub-table-card {
+  box-shadow: var(--xs-shadow-soft);
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll thead {
+  animation: sheet-table-in var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr {
+  animation: sheet-table-in var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(1) {
+  animation-delay: 40ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(2) {
+  animation-delay: 72ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(3) {
+  animation-delay: 104ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(4) {
+  animation-delay: 136ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(5) {
+  animation-delay: 168ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(6) {
+  animation-delay: 200ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(7) {
+  animation-delay: 232ms;
+}
+
+.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(n + 8) {
+  animation-delay: var(--xs-motion-stagger-max);
+}
+
+@keyframes sheet-table-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- 问表智能体：推演轨迹 ---------- */
+/* Agent 的可信度来自过程可复核：走了哪几步、命中哪个数据源、SQL 是什么、各用时多久 */
+
+/* 轨迹是佐证不是交付物：限宽让它读作一段机器日志，把整幅宽度留给结果表 */
+.agent-trace {
+  display: grid;
+  max-width: 760px;
+  border-left: 2px solid var(--xs-border-strong);
+}
+
+.agent-trace[data-streaming="true"] {
+  border-left-color: var(--xs-primary);
+}
+
+.agent-trace__toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 0 2px 12px;
+  border: 0;
+  color: var(--xs-text-2);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-trace__caret {
+  align-self: center;
+  flex: none;
+  color: var(--xs-text-3);
+  transition: transform var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.agent-trace__toggle[aria-expanded="true"] .agent-trace__caret {
+  transform: rotate(90deg);
+}
+
+.agent-trace__title {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-trace__summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-trace__panel {
+  padding: 4px 0 6px;
+}
+
+.agent-trace__steps {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 每步一行：序号 / 动作 / 说明 / 用时，四列对齐成可纵向扫读的执行记录 */
+.agent-trace__step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 5px 10px 5px 12px;
+  border-radius: 0 var(--xs-radius-small) var(--xs-radius-small) 0;
+}
+
+.agent-trace__step[data-status="running"] {
+  background: #eef6ff;
+}
+
+.agent-trace__index {
+  color: var(--xs-table-muted);
+  font-family: var(--xs-font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-trace__step[data-status="running"] .agent-trace__index {
+  color: var(--xs-primary-2);
+}
+
+.agent-trace__step[data-status="error"] .agent-trace__index {
+  color: var(--xs-danger);
+}
+
+.agent-trace__label {
+  color: var(--xs-text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.agent-trace__step[data-status="error"] .agent-trace__label {
+  color: var(--xs-danger);
+}
+
+.agent-trace__detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-trace__duration {
+  color: var(--xs-table-muted);
+  font-family: var(--xs-font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 正在跑的那一步用序号呼吸表示，不额外加 spinner */
+.agent-trace__step[data-pending="true"] .agent-trace__index {
+  animation: agent-trace-pulse var(--xs-motion-thinking) var(--xs-motion-ease-ambient) infinite;
+}
+
+@keyframes agent-trace-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.agent-trace__sql {
+  grid-column: 2 / -1;
+  margin-top: 2px;
+}
+
+.agent-trace__sql > summary {
+  width: max-content;
+  color: var(--xs-interactive-text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agent-trace__sql > pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-2);
+  background: var(--xs-surface);
+  font-family: var(--xs-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-result[data-state="done"] .datahub-table-scroll thead,
+  .sheet-result[data-state="done"] .datahub-table-scroll tbody tr {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .workflow-status-slot {
@@ -234,26 +638,56 @@
   font-weight: 650;
 }
 
-/* ---------- 智能制表：最近制表行式列表 ---------- */
+/* ---------- 智能制表：最近制表 ---------- */
+/* 制表工具的列表页本身就该是一张表：表头与行共用列宽，字段各就各位 */
 
 .sheet-list {
+  --sheet-col-gap: 14px;
+  --sheet-col-icon: 32px;
+  --sheet-col-type: 84px;
+  --sheet-col-time: 156px;
+  --sheet-col-action: 148px;
   display: grid;
-  gap: 0;
   overflow: hidden;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--xs-surface);
   box-shadow: var(--xs-shadow-soft);
+}
+
+.sheet-list__head {
+  display: grid;
+  grid-template-columns:
+    var(--sheet-col-icon) minmax(0, 1fr)
+    var(--sheet-col-type) var(--sheet-col-time) var(--sheet-col-action);
+  align-items: center;
+  gap: var(--sheet-col-gap);
+  padding: 0 16px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--xs-border-strong);
+  color: var(--xs-text-3);
+  background: var(--xs-table-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* 表名列跨过图标槽，让图标与表名读作同一个字段 */
+.sheet-list__head > span:first-child {
+  grid-column: 1 / 3;
+}
+
+.sheet-list__head > span:last-child {
+  text-align: right;
 }
 
 .sheet-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) var(--sheet-col-action);
   align-items: center;
-  gap: 14px;
-  min-height: 72px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #edf2fb;
+  gap: var(--sheet-col-gap);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--xs-table-grid);
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
@@ -263,125 +697,350 @@
 
 .sheet-row:hover,
 .sheet-row:focus-within {
-  background: #f6faff;
+  background: #f7fbff;
 }
 
-.sheet-row__body {
-  min-width: 0;
-}
-
-.sheet-row__head {
-  display: flex;
+.sheet-row__main {
+  display: grid;
+  grid-template-columns:
+    var(--sheet-col-icon) minmax(0, 1fr)
+    var(--sheet-col-type) var(--sheet-col-time);
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: var(--sheet-col-gap);
+  min-height: 54px;
+  color: inherit;
+  text-decoration: none;
 }
 
-.sheet-row__title {
+.sheet-row__main:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: -3px;
+  border-radius: var(--xs-radius-small);
+}
+
+.sheet-list .sheet-row__title {
+  min-width: 0;
   margin: 0;
   overflow: hidden;
   color: var(--xs-text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sheet-row__meta {
-  margin: 3px 0 0;
-  overflow: hidden;
+.sheet-row:hover .sheet-row__title {
+  color: var(--xs-interactive-text);
+}
+
+.sheet-row__type {
   color: var(--xs-text-3);
-  font-size: 12px;
-  font-weight: 620;
-  line-height: 1.5;
-  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+/* 时间沿用结果表的数值字体：同一套数字语言贯穿列表与结果 */
+.sheet-row__time {
+  color: var(--xs-text-3);
+  font-family: var(--xs-font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.sheet-row__tag {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  min-height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sheet-row__tag--blue {
-  color: var(--xs-interactive-text);
-  background: var(--xs-info-soft);
-}
-
-.sheet-row__tag--cyan {
-  color: #047fb3;
-  background: #e6f7ff;
-}
-
-.sheet-row__tag--green {
-  color: #0f7a5b;
-  background: var(--xs-success-soft);
-}
-
-.sheet-row__copy.ant-btn {
-  min-height: 34px;
-  padding-inline: 12px;
-  color: var(--xs-interactive-text);
-  font-size: 13px;
-  font-weight: 650;
-  transition:
-    color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.sheet-row__copy.ant-btn:not(:disabled):hover,
-.sheet-row__copy.ant-btn:not(:disabled):focus-visible {
-  color: var(--xs-interactive-text);
-  background: #eaf3ff;
-}
-
-/* 指针设备上按钮低调呈现，悬停整行时再强调 */
-@media (hover: hover) {
-  .sheet-row__copy.ant-btn:not(:disabled) {
-    opacity: 0.72;
-  }
-
-  .sheet-row:hover .sheet-row__copy.ant-btn:not(:disabled),
-  .sheet-row:focus-within .sheet-row__copy.ant-btn:not(:disabled) {
-    opacity: 1;
-  }
-}
-
 .sheet-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
+  display: grid;
+  place-items: center;
+  width: var(--sheet-col-icon);
+  height: var(--sheet-col-icon);
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff, #f1f7ff);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface-soft);
 }
 
 .sheet-icon img {
-  max-width: 32px;
-  max-height: 32px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.sheet-list .sheet-row__copy.ant-btn {
+  justify-self: end;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.sheet-list .sheet-row__copy.ant-btn:not(:disabled):hover,
+.sheet-list .sheet-row__copy.ant-btn:not(:disabled):focus-visible {
+  color: var(--xs-primary-2);
+  background: #eef6ff;
+}
+
+/* 按钮常驻但压低对比：表头写了"操作"，这一列就不能是空的 */
+.sheet-list .sheet-row__copy.ant-btn:not(:disabled) {
+  opacity: 0.62;
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.sheet-row:hover .sheet-row__copy.ant-btn:not(:disabled),
+.sheet-row:focus-within .sheet-row__copy.ant-btn:not(:disabled) {
+  opacity: 1;
+}
+
+/* 窄屏没有横向列位，回到堆叠卡片式行 */
+@media (max-width: 900px) {
+  .sheet-list__head {
+    display: none;
+  }
+
+  .sheet-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 12px 14px;
+  }
+
+  .sheet-row__main {
+    grid-template-columns: var(--sheet-col-icon) auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon title title"
+      "icon type  time";
+    align-items: center;
+    gap: 3px 12px;
+    min-height: 0;
+  }
+
+  .sheet-row__main .sheet-icon {
+    grid-area: icon;
+  }
+
+  .sheet-list .sheet-row__title {
+    grid-area: title;
+    white-space: normal;
+  }
+
+  .sheet-row__type {
+    grid-area: type;
+  }
+
+  .sheet-row__time {
+    grid-area: time;
+    justify-self: start;
+  }
+
+  .sheet-list .sheet-row__copy.ant-btn {
+    justify-self: start;
+    margin: 6px 0 0 44px;
+  }
+}
+
+/* ---------- 问表智能体：独立会话工作台 ---------- */
+/* 工作台是一张纸，不是卡片：左侧已有白色侧边栏，这里不再叠第二根白柱子 */
+
+.table-agent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--xs-module-gap);
+  margin-top: 22px;
+}
+
+.table-agent__stage {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.table-agent__turns {
+  display: grid;
+  align-content: start;
+  gap: 26px;
+  min-width: 0;
+}
+
+.table-agent__turn {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.table-agent__turn + .table-agent__turn {
+  padding-top: 26px;
+  border-top: 1px solid var(--xs-border);
+}
+
+/* 需求不是聊天气泡：它是这一轮结果表的口径声明，做成带序号的文档抬头 */
+.table-agent__request {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 16px;
+  min-width: 0;
+}
+
+.table-agent__request-body {
+  display: contents;
+}
+
+.table-agent__request-index {
+  grid-column: 1 / -1;
+}
+
+.table-agent__request-index {
+  color: var(--xs-primary-2);
+  font-family: var(--xs-font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.table-agent__user {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.table-agent__export.ant-btn {
+  flex: none;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-interactive-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.table-agent__export.ant-btn:not(:disabled):hover {
+  border-color: var(--xs-primary);
+  background: #f3f8ff;
+}
+
+/* 追问框留在文档流末尾：吸底会盖住结果表的行，而表才是这一页的交付物 */
+.table-agent__composer {
+  margin: 26px 0 0;
+  background: var(--xs-surface);
+}
+
+/* 会话栏移到右侧：左边已经有一根白色侧边栏，工作台要拿到页面左缘 */
+.table-agent__rail {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+/* 会话栏参考 Claude 的做法：按时间分组、每条只占一行、激活态是低饱和中性底，
+   不用品牌蓝色块——那是这一栏之前最"塑料"的地方 */
+.agent-rail {
+  display: grid;
+  gap: 16px;
+}
+
+.agent-rail__group {
+  display: grid;
+  gap: 1px;
+}
+
+.agent-rail .agent-rail__group-label {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  color: var(--xs-text-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.agent-rail__item {
+  overflow: hidden;
+  padding: 7px 8px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-2);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.45;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.agent-rail__item:hover {
+  color: var(--xs-text);
+  background: #eef3fa;
+}
+
+.agent-rail__item[data-active="true"] {
+  color: var(--xs-text);
+  background: #e6ecf5;
+  font-weight: 700;
+}
+
+/* 会话栏的加载态就是"什么都不显示"：≤8 条短导航项，
+   闪一块骨架比直接留白更吵，列表就绪后直接出现。 */
+.agent-rail__note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--xs-text-3);
+  font-size: 12.5px;
+  font-weight: 620;
+}
+
+.agent-rail__note > button {
+  padding: 0;
+  border: 0;
+  color: var(--xs-interactive-text);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-rail__note > button:hover {
+  text-decoration: underline;
 }
 
 @media (min-width: 1181px) {
-  .sheet-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .table-agent {
+    grid-template-columns: minmax(0, 1fr) 232px;
+    gap: 28px;
+    align-items: start;
   }
 
-  .sheet-row:nth-child(odd) {
-    border-right: 1px solid #edf2fb;
+  /* 会话栏靠一根细分隔线立住，不做成第二张白卡 */
+  .table-agent__rail {
+    position: sticky;
+    top: 8px;
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+    padding-left: 24px;
+    border-left: 1px solid var(--xs-border);
+  }
+}
+
+@media (max-width: 1180px) {
+  /* 窄屏会话栏退到底部，先看结果表 */
+  .table-agent__rail {
+    padding-top: 18px;
+    border-top: 1px solid var(--xs-border);
+  }
+}
+
+@media (max-width: 900px) {
+  .table-agent__user {
+    font-size: 17px;
   }
 
-  .sheet-row:nth-last-child(-n + 2) {
-    border-bottom: 0;
+  .table-agent__request {
+    flex-wrap: wrap;
   }
 }
 
@@ -673,22 +1332,6 @@
 @media (max-width: 900px) {
   .sheet-console {
     padding: 18px;
-  }
-
-  .sheet-prompt__bar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .sheet-row {
-    grid-template-columns: 44px minmax(0, 1fr);
-    row-gap: 10px;
-  }
-
-  .sheet-row__copy.ant-btn {
-    grid-column: 2;
-    justify-self: start;
-    padding-inline: 0;
   }
 
   .scene-row {

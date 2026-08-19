@@ -40,7 +40,7 @@ describe("TemplateDetailView", () => {
     );
 
     expect(await screen.findByText("未找到该公文模板")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    expect(screen.getByRole("link", { name: "返回模板库" })).toHaveAttribute("href", "/writing/templates");
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
   });
 });

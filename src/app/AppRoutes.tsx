@@ -10,7 +10,20 @@ const HomePage = lazy(() => import("@/features/home/HomePage").then((module) => 
 const AnalysisPage = lazy(() => import("@/pages/AnalysisPage").then((module) => ({ default: module.AnalysisPage })));
 const HistoryPage = lazy(() => import("@/pages/HistoryPage").then((module) => ({ default: module.HistoryPage })));
 const TablePage = lazy(() => import("@/pages/TablePage").then((module) => ({ default: module.TablePage })));
-const WritingPage = lazy(() => import("@/pages/WritingPage").then((module) => ({ default: module.WritingPage })));
+const TableSessionPage = lazy(() =>
+  import("@/pages/TableSessionPage").then((module) => ({ default: module.TableSessionPage }))
+);
+const OfficialDocumentAppLayout = lazy(() =>
+  import("@/features/officialDocument/OfficialDocumentAppShell").then((module) => ({
+    default: module.OfficialDocumentAppLayout
+  }))
+);
+const WritingTemplatesPage = lazy(() =>
+  import("@/pages/WritingTemplatesPage").then((module) => ({ default: module.WritingTemplatesPage }))
+);
+const WritingDraftsPage = lazy(() =>
+  import("@/pages/WritingDraftsPage").then((module) => ({ default: module.WritingDraftsPage }))
+);
 const WritingTemplateDetailPage = lazy(() =>
   import("@/pages/WritingTemplateDetailPage").then((module) => ({ default: module.WritingTemplateDetailPage }))
 );
@@ -63,12 +76,11 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
     pathname === "/ask-agent" ||
     pathname === "/analysis" ||
     pathname === "/dashboard-editor" ||
-    pathname.startsWith("/writing/templates/") ||
-    pathname.startsWith("/writing/drafts/")
+    pathname.startsWith("/table/")
   ) {
     return "workspace";
   }
-  if (pathname === "/dashboard-view") {
+  if (pathname === "/dashboard-view" || pathname === "/writing" || pathname.startsWith("/writing/")) {
     return "fullscreen";
   }
   return "cards";
@@ -95,14 +107,19 @@ export function AppRoutes() {
             <Route path="/analysis" element={<AnalysisPage mode="agent" />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/table" element={<TablePage />} />
-            <Route path="/writing" element={<WritingPage />} />
-            <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
-            <Route path="/writing/drafts/:draftId" element={<WritingDraftDetailPage />} />
+            <Route path="/table/:sessionId" element={<TableSessionPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />
             <Route path="/cloud/:kbId" element={<CloudKnowledgeDetailPage />} />
+          </Route>
+          <Route element={<ProtectedRoute><OfficialDocumentAppLayout /></ProtectedRoute>}>
+            <Route path="/writing" element={<Navigate to="/writing/templates" replace />} />
+            <Route path="/writing/templates" element={<WritingTemplatesPage />} />
+            <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
+            <Route path="/writing/drafts" element={<WritingDraftsPage />} />
+            <Route path="/writing/drafts/:draftId" element={<WritingDraftDetailPage />} />
           </Route>
           <Route
             path="/dashboard-editor"

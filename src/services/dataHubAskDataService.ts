@@ -5,14 +5,14 @@ import {
   readDataHubSession
 } from "@/services/dataHubSession";
 import { adaptDataHubStreamEvent } from "@/services/dataHubEventAdapter";
-import type { DataHubChatMode, DataHubChatRequest, DataHubStreamEvent } from "@/types/dataHub";
+import type { DataHubChatRequest, DataHubRequestChatMode, DataHubStreamEvent } from "@/types/dataHub";
 
 export type DataHubAskDataInput = {
   message: string;
   sessionId?: string;
   globalSessionId?: string;
   chatId?: string;
-  chatMode?: DataHubChatMode;
+  chatMode?: DataHubRequestChatMode;
 };
 
 export type DataHubAskDataStreamHandlers = {

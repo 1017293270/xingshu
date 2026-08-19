@@ -61,6 +61,9 @@ const routeTitlePrefixes = Object.keys(routeTitles)
   .sort((left, right) => right.length - left.length);
 
 export function resolveRouteTitle(pathname: string): string | undefined {
+  if (pathname.startsWith("/table/") && pathname !== "/table/") {
+    return "问表智能体";
+  }
   if (routeTitles[pathname]) return routeTitles[pathname];
   const prefix = routeTitlePrefixes.find((route) => pathname.startsWith(`${route}/`));
   return prefix ? routeTitles[prefix] : undefined;

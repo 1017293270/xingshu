@@ -5,13 +5,37 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "./providers";
 import { AppRoutes, resolveRouteFallbackVariant } from "./AppRoutes";
 import { expireDataHubSession } from "@/services/dataHubSession";
+import * as agentService from "@/services/agentService";
 import * as dataAssetService from "@/services/dataAssetService";
+import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 
 vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
   DashboardDesignerIsland: () => <div aria-label="星数大屏设计器">Vue 大屏工作区</div>
 }));
+
+vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/dataHubKnowledgeService")>();
+  return { ...actual, listDataHubKnowledgeBases: vi.fn() };
+});
+
+vi.mocked(listDataHubKnowledgeBases).mockResolvedValue([
+  {
+    id: "kb-policy",
+    title: "企业制度知识库",
+    description: "制度、流程与规范文件",
+    documentCount: 48,
+    updatedAt: "2026-08-13 10:00"
+  },
+  {
+    id: "kb-finance",
+    title: "财务审计知识库",
+    description: "财务报表与审计流程",
+    documentCount: 16,
+    updatedAt: "2026-08-12 18:20"
+  }
+]);
 
 const ROUTE_LOAD_TIMEOUT_MS = 4_000;
 
@@ -57,9 +81,12 @@ describe("AppRoutes", () => {
     expect(resolveRouteFallbackVariant("/document-lookup")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/ask-agent")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing")).toBe("cards");
-    expect(resolveRouteFallbackVariant("/writing/templates/template-demo-work-report")).toBe("workspace");
-    expect(resolveRouteFallbackVariant("/writing/drafts/draft-demo-1")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing/templates")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing/drafts")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing/templates/template-demo-work-report")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing/drafts/draft-demo-1")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/table/ask-table-demo")).toBe("workspace");
   });
 
   const routeCases: Array<[string, string | RegExp, string]> = [
@@ -153,6 +180,41 @@ describe("AppRoutes", () => {
       user: null,
       currentSpaceId: null
     });
+  });
+
+  it("opens official document writing as a fullscreen agent workspace", async () => {
+    renderRoute("/writing");
+
+    expect(
+      await screen.findByRole("heading", { name: "公文写作" }, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/");
+    expect(screen.getByLabelText("公文写作工作台")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开主导航" })).not.toBeInTheDocument();
+
+    const agentNavigation = screen.getByRole("navigation", { name: "公文写作导航" });
+    expect(within(agentNavigation).getByRole("link", { name: /模板库/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(await screen.findByLabelText("公文模板库")).toBeInTheDocument();
+    expect(screen.queryByLabelText("公文草稿箱")).not.toBeInTheDocument();
+  });
+
+  it("opens the draft box as a separate page inside the official document app", async () => {
+    renderRoute("/writing/drafts");
+
+    expect(
+      await screen.findByLabelText("公文草稿箱", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("公文模板库")).not.toBeInTheDocument();
+
+    const agentNavigation = screen.getByRole("navigation", { name: "公文写作导航" });
+    expect(within(agentNavigation).getByRole("link", { name: /草稿箱/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
   });
 
   it("keeps the shared sidebar on routed pages", async () => {
@@ -315,17 +377,46 @@ describe("AppRoutes", () => {
     expect(screen.queryByLabelText("AI 配置表单")).not.toBeInTheDocument();
   });
 
-  it("submits a table generation prompt through the mock service", async () => {
+  it("submits a table generation prompt through data-hub ask_table", async () => {
     const user = userEvent.setup();
+    const streamSpy = vi.spyOn(agentService, "streamAgentMessage").mockImplementation((_input, handlers) => {
+      queueMicrotask(() => {
+        handlers.onEvent({
+          type: "table",
+          data: {
+            columns: [{ name: "region", title: "区域" }],
+            rows: [{ region: "华南" }],
+            totalRows: 1,
+            source: "cube"
+          }
+        });
+        handlers.onDone?.();
+      });
+      return new AbortController();
+    });
+
     renderRoute("/table");
 
-    await user.clear(screen.getByRole("textbox", { name: "制表需求" }));
-    await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成华南区客户销售排行");
-    await user.click(screen.getByRole("button", { name: "预览需求" }));
+    const promptBox = await screen.findByRole("textbox", { name: "制表需求" });
+    await user.clear(promptBox);
+    await user.type(promptBox, "生成华南区客户销售排行");
+    await user.click(screen.getByRole("button", { name: "生成表格" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "预览需求已记录，不会创建真实报表：生成华南区客户销售排行"
+    expect(await screen.findByRole("columnheader", { name: "区域" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("已生成 1 张结果表");
+    });
+    expect(screen.getByText("华南")).toBeInTheDocument();
+    expect(useUiStore.getState().analysisTurns).toEqual([]);
+    expect(screen.getByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(streamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "生成华南区客户销售排行",
+        chatMode: "ask_table"
+      }),
+      expect.any(Object)
     );
+    expect(streamSpy.mock.calls[0]?.[0]?.sessionId).toMatch(/^ask-table-/);
   });
 
   it("opens data asset management from the data dashboard", async () => {
@@ -395,8 +486,8 @@ describe("AppRoutes", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "知识库搜索" }), "财务");
 
-    expect(await screen.findByRole("status")).toHaveTextContent("已筛选 1 个知识库");
+    expect(await screen.findByRole("status")).toHaveTextContent("已筛选 1 / 2 个知识库");
     expect(screen.getByText("财务审计知识库")).toBeInTheDocument();
-    expect(screen.queryByText("企业制度文档库")).not.toBeInTheDocument();
+    expect(screen.queryByText("企业制度知识库")).not.toBeInTheDocument();
   });
 });

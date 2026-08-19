@@ -1,8 +1,8 @@
 import {
-  ArrowLeft,
   Database,
   FileText,
   LinkSimple,
+  ListChecks,
   WarningCircle
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import {
   createOfficialDocumentBinding,
+  detachOfficialDocumentBinding,
   downloadOfficialDocumentExport,
   exportOfficialDocumentDraft,
   loadOfficialDocumentWorkspace,
@@ -25,6 +26,7 @@ import type {
 } from "@/types/officialDocument";
 import { StructuredDraftEditor, type StructuredDraftSaveState } from "./StructuredDraftEditor";
 import {
+  bindingsAreExportable,
   draftStatusColor,
   draftStatusLabel,
   formatDate,
@@ -35,6 +37,11 @@ import {
   type BindingSlotType,
   type QueryBindingOutput
 } from "./officialDocumentMeta";
+import {
+  OFFICIAL_DOCUMENT_DRAFTS_PATH,
+  OfficialDocumentAppActions,
+  useOfficialDocumentAppChrome
+} from "./OfficialDocumentAppShell";
 import "./official-document.css";
 
 const outputSupportsSlot = (output: QueryBindingOutput, slotType?: BindingSlotType) => (
@@ -58,7 +65,7 @@ function DraftNotFound() {
       <FileText size={30} aria-hidden="true" />
       <strong>未找到该公文草稿</strong>
       <p>草稿可能已被移除，或不属于当前登录用户。</p>
-      <Link to="/writing">返回公文写作</Link>
+      <Link to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>返回草稿箱</Link>
     </div>
   );
 }
@@ -82,8 +89,10 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const [bindingTargetSlot, setBindingTargetSlot] = useState("");
   const [isCreatingBinding, setIsCreatingBinding] = useState(false);
   const [isRefreshingBindings, setIsRefreshingBindings] = useState(false);
+  const [detachingBindingId, setDetachingBindingId] = useState<string>();
   const [isExporting, setIsExporting] = useState<OfficialDocumentExportFormat>();
   const [latestExports, setLatestExports] = useState<Record<string, OfficialDocumentExportRecord>>({});
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const workspaceQuery = useQuery({
     queryKey: workspaceKey,
@@ -113,7 +122,30 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
   useEffect(() => setContentSaveState("loading"), [draftId]);
 
-  const canExport = draft?.source === "LIVE" && draft.status === "READY" && contentSaveState === "saved";
+  useOfficialDocumentAppChrome({
+    stage: "draft",
+    context: draft?.title ?? "结构化起草",
+    contextDetail: draft
+      ? `${draft.templateName} · 文件版本 v${draft.currentFileVersionNo}`
+      : undefined
+  });
+
+  const bindingsReady = draft ? bindingsAreExportable(draft.bindings) : true;
+  const canExport = draft?.source === "LIVE"
+    && draft.status === "READY"
+    && contentSaveState === "saved"
+    && bindingsReady;
+  const exportDisabledReason = !draft
+    ? undefined
+    : contentSaveState !== "saved"
+      ? "草稿内容保存完成后才能导出"
+      : draft.status !== "READY"
+        ? "草稿通过服务端校验后才能导出"
+        : !bindingsReady
+          ? "问数绑定刷新成功后才能导出"
+          : draft.source !== "LIVE"
+            ? "正式服务不可用，不能导出"
+            : undefined;
   const latestExport = draft ? latestExports[draft.id] : undefined;
 
   const bindingSlots = useMemo(() => {
@@ -240,6 +272,30 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
     }
   };
 
+  const handleDetachBinding = async (binding: DraftDataBinding) => {
+    if (!draft || detachingBindingId) return;
+    setDetachingBindingId(binding.id);
+    try {
+      const detached = await detachOfficialDocumentBinding(draft.id, binding.id);
+      updateWorkspaceCache((current) => ({
+        ...current,
+        drafts: current.drafts.map((item) => item.id === draft.id
+          ? {
+              ...item,
+              bindings: item.bindings.map((existing) => existing.id === detached.id
+                ? { ...detached, queryAssetName: existing.queryAssetName }
+                : existing)
+            }
+          : item)
+      }));
+      announce("success", "问数绑定已转为普通文本，当前值保留在公文中。");
+    } catch (error) {
+      announce("error", operationErrorMessage(error));
+    } finally {
+      setDetachingBindingId(undefined);
+    }
+  };
+
   const handleRefreshBindings = async () => {
     if (!draft || isRefreshingBindings) return;
     setIsRefreshingBindings(true);
@@ -267,7 +323,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   };
 
   const handleExport = async (format: OfficialDocumentExportFormat) => {
-    if (!draft || isExporting || draft.status !== "READY") return;
+    if (!draft || isExporting || !canExport) return;
     setIsExporting(format);
     announce("loading", `正在生成 ${format} 并执行正式保真校验`);
     try {
@@ -295,13 +351,8 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
   return (
     <div className="official-document-detail">
-      <nav className="official-document-detail__crumb xs-page-enter" aria-label="返回列表">
-        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />公文写作</Link>
-        <span aria-hidden="true">/</span>
-        <span>公文草稿</span>
-      </nav>
-
       <XsAsyncPanel
+        className="official-document-canvas-panel"
         status={workspaceStatus}
         empty={false}
         errorTitle="公文草稿不可用"
@@ -312,40 +363,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
       >
         {!draft ? <DraftNotFound /> : (
           <>
-            <header className="official-document-detail-head xs-page-enter" style={{ animationDelay: "60ms" }}>
-              <span className="official-document-detail-head__paper-bar" aria-hidden="true" />
-              <div className="official-document-detail-head__body">
-                <span className="official-document-eyebrow">公文草稿 · 文件版本 v{draft.currentFileVersionNo}</span>
-                <h1>{draft.title}</h1>
-                <div className="official-document-detail-head__meta">
-                  <span>来源模板：{draft.templateName}</span>
-                  <span>更新于 {formatDate(draft.updatedAt)}</span>
-                  <Tag bordered={false} color={draftStatusColor[draft.status]}>
-                    {draftStatusLabel[draft.status]}
-                  </Tag>
-                  <Tag bordered={false} color="blue">{draft.bindings.length} 个问数绑定</Tag>
-                </div>
-              </div>
-              <div className="official-document-detail-head__actions">
-                <Button icon={<Database size={16} />} onClick={openBindingModal}>绑定问数数据</Button>
-                {draft.bindings.length ? (
-                  <Button
-                    disabled={draft.source !== "LIVE"}
-                    loading={isRefreshingBindings}
-                    onClick={() => void handleRefreshBindings()}
-                  >
-                    刷新绑定快照
-                  </Button>
-                ) : null}
-                <Button
-                  disabled={!canExport}
-                  loading={isExporting === "DOCX"}
-                  title={contentSaveState === "saved" ? undefined : "草稿内容保存完成后才能导出"}
-                  onClick={() => void handleExport("DOCX")}
-                >导出 DOCX</Button>
-              </div>
-            </header>
-
             {operationStatus ? (
               <XsStatusBar
                 tone={operationTone}
@@ -363,52 +380,113 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                 onStatus={announce}
                 onSaveStateChange={setContentSaveState}
               />
-
-              <aside className="official-document-draft-workspace__side">
-                <section className="official-document-bindings xs-card" aria-labelledby="binding-list-heading">
-                  <div className="official-document-section-title">
-                    <div><h4 id="binding-list-heading">问数快照绑定</h4><p>默认使用冻结快照，主动刷新才会更新。</p></div>
-                    <Button size="small" type="primary" icon={<Database size={15} />} onClick={openBindingModal}>新增绑定</Button>
-                  </div>
-                  {draft.bindings.length ? (
-                    <ul>
-                      {draft.bindings.map((binding) => (
-                        <li key={binding.id}>
-                          <span aria-hidden="true"><LinkSimple size={18} /></span>
-                          <div>
-                            <span className="official-document-binding__title">
-                              <strong>{binding.queryAssetName ?? binding.queryAssetId}</strong>
-                              <Tag bordered={false} color={binding.status === "ACTIVE" ? "success" : binding.status === "MANUAL" ? "default" : "warning"}>
-                                {binding.status}
-                              </Tag>
-                            </span>
-                            <small>{binding.outputKey} → {binding.targetSlotTag}</small>
-                            <dl>
-                              <div><dt>executionId</dt><dd>{binding.executionId ?? "—"}</dd></div>
-                              <div><dt>snapshotId</dt><dd>{binding.snapshotId ?? "—"}</dd></div>
-                              <div><dt>固定版本</dt><dd>{binding.queryVersionId}</dd></div>
-                            </dl>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <div className="official-document-inline-empty">暂无绑定。绑定问数资产后，数据将以冻结快照写入公文。</div>}
-                </section>
-
-                <section className="official-document-export-checks xs-card" aria-label="导出前检查">
-                  <div className="official-document-section-title"><div><h4>导出前检查</h4><p>内容保存、草稿状态和绑定快照满足条件后可正式导出。</p></div></div>
-                  <ul>
-                    <li data-ok={contentSaveState === "saved"}><span />结构化内容已保存</li>
-                    <li data-ok={draft.status === "READY"}><span />草稿通过服务端校验</li>
-                    <li data-ok={draft.bindings.every((binding) => ["ACTIVE", "MANUAL"].includes(binding.status))}><span />数据绑定无异常</li>
-                    <li data-ok={draft.source === "LIVE"}><span />正式服务与模板版本可追溯</li>
-                  </ul>
-                </section>
-              </aside>
             </div>
 
+            <OfficialDocumentAppActions>
+              <Button icon={<Database size={16} />} onClick={openBindingModal}>绑定问数数据</Button>
+              {draft.bindings.length ? (
+                <Button
+                  disabled={draft.source !== "LIVE"}
+                  loading={isRefreshingBindings}
+                  onClick={() => void handleRefreshBindings()}
+                >
+                  刷新绑定快照
+                </Button>
+              ) : null}
+              <Button icon={<ListChecks size={16} />} onClick={() => setInspectorOpen(true)}>
+                问数与导出
+                {draft.bindings.length ? <span className="official-document-app__action-count">{draft.bindings.length}</span> : null}
+              </Button>
+              <Button
+                disabled={!canExport}
+                loading={isExporting === "DOCX"}
+                title={exportDisabledReason}
+                onClick={() => void handleExport("DOCX")}
+              >导出 DOCX</Button>
+              <Button
+                disabled={!canExport}
+                loading={isExporting === "PDF"}
+                title={exportDisabledReason}
+                onClick={() => void handleExport("PDF")}
+              >导出 PDF</Button>
+            </OfficialDocumentAppActions>
+          </>
+        )}
+      </XsAsyncPanel>
+
+      {draft ? (
+        <Drawer
+          title="问数与导出"
+          width={520}
+          open={inspectorOpen}
+          destroyOnHidden={false}
+          extra={(
+            <div className="official-document-inspector-drawer__tags">
+              <Tag bordered={false} color={draftStatusColor[draft.status]}>{draftStatusLabel[draft.status]}</Tag>
+              <Tag bordered={false} color="blue">{draft.bindings.length} 个问数绑定</Tag>
+            </div>
+          )}
+          onClose={() => setInspectorOpen(false)}
+        >
+          <div className="official-document-draft-inspector">
+            <p className="official-document-draft-inspector__meta">
+              {draft.templateName} · 更新于 {formatDate(draft.updatedAt)}
+            </p>
+            <section className="official-document-bindings" aria-labelledby="binding-list-heading">
+              <div className="official-document-section-title">
+                <div><h4 id="binding-list-heading">问数快照绑定</h4><p>默认使用冻结快照，主动刷新才会更新。</p></div>
+                <Button size="small" type="primary" icon={<Database size={15} />} onClick={openBindingModal}>新增绑定</Button>
+              </div>
+              {draft.bindings.length ? (
+                <ul>
+                  {draft.bindings.map((binding) => (
+                    <li key={binding.id}>
+                      <span aria-hidden="true"><LinkSimple size={18} /></span>
+                      <div>
+                        <span className="official-document-binding__title">
+                          <strong>{binding.queryAssetName ?? binding.queryAssetId}</strong>
+                          <Tag bordered={false} color={binding.status === "ACTIVE" ? "success" : binding.status === "MANUAL" ? "default" : "warning"}>
+                            {binding.status}
+                          </Tag>
+                        </span>
+                        <small>{binding.outputKey} → {binding.targetSlotTag}</small>
+                        <dl>
+                          <div><dt>executionId</dt><dd>{binding.executionId ?? "—"}</dd></div>
+                          <div><dt>snapshotId</dt><dd>{binding.snapshotId ?? "—"}</dd></div>
+                          <div><dt>固定版本</dt><dd>{binding.queryVersionId}</dd></div>
+                        </dl>
+                      </div>
+                      {binding.status !== "MANUAL" ? (
+                        <div className="official-document-binding__actions">
+                          <Button
+                            size="small"
+                            disabled={binding.status !== "ACTIVE" || Boolean(detachingBindingId)}
+                            loading={detachingBindingId === binding.id}
+                            title={binding.status === "ACTIVE" ? undefined : "只有已经冻结有效快照的绑定才能转为普通文本"}
+                            onClick={() => void handleDetachBinding(binding)}
+                          >
+                            转为普通文本
+                          </Button>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : <div className="official-document-inline-empty">暂无绑定。绑定问数资产后，数据将以冻结快照写入公文。</div>}
+            </section>
+
+            <section className="official-document-export-checks" aria-label="导出前检查">
+              <div className="official-document-section-title"><div><h4>导出前检查</h4><p>内容保存、草稿状态和绑定快照满足条件后可正式导出。</p></div></div>
+              <ul>
+                <li data-ok={contentSaveState === "saved"}><span />结构化内容已保存</li>
+                <li data-ok={draft.status === "READY"}><span />草稿通过服务端校验</li>
+                <li data-ok={bindingsReady}><span />数据绑定无异常</li>
+                <li data-ok={draft.source === "LIVE"}><span />正式服务与模板版本可追溯</li>
+              </ul>
+            </section>
+
             {latestExport ? (
-              <section className="official-document-export-result xs-page-enter" style={{ animationDelay: "220ms" }} aria-label="最近一次正式导出">
+              <section className="official-document-export-result" aria-label="最近一次正式导出">
                 <div>
                   <strong>最近导出：{latestExport.format} · {latestExport.status}</strong>
                   <small>{latestExport.message ?? `SHA-256 ${latestExport.sha256 ?? "未生成"}`}</small>
@@ -418,9 +496,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                 </Tag>
               </section>
             ) : null}
-          </>
-        )}
-      </XsAsyncPanel>
+          </div>
+        </Drawer>
+      ) : null}
 
       {bindingModalOpen && draft ? (
         <Drawer

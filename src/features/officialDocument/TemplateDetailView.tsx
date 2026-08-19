@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   FileDoc,
   Plus,
   WarningCircle
@@ -10,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
-import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import {
   createOfficialDocumentDraft,
   getOfficialDocumentTemplateAnalysis,
@@ -28,19 +26,23 @@ import type {
   OfficialDocumentTemplate
 } from "@/types/officialDocument";
 import {
+  ANALYZING_POLL_INTERVAL_MS,
   calibrationRoleLabel,
   calibrationRoleOptions,
   countBlockingRisks,
-  formatDate,
+  hasAnalyzingTemplate,
   operationErrorMessage,
   riskColor,
   riskLabel,
   styleVariantId,
-  templateStatusColor,
-  templateStatusLabel,
   useOfficialDocumentWorkspaceKey,
   useUpdateOfficialDocumentWorkspaceCache
 } from "./officialDocumentMeta";
+import {
+  OFFICIAL_DOCUMENT_TEMPLATES_PATH,
+  OfficialDocumentAppActions,
+  useOfficialDocumentAppChrome
+} from "./OfficialDocumentAppShell";
 import "./official-document.css";
 
 function TemplateNotFound() {
@@ -49,7 +51,7 @@ function TemplateNotFound() {
       <FileDoc size={30} aria-hidden="true" />
       <strong>未找到该公文模板</strong>
       <p>模板可能已被移除、尚未发布，或当前账号无权访问。</p>
-      <Link to="/writing">返回公文写作</Link>
+      <Link to={OFFICIAL_DOCUMENT_TEMPLATES_PATH}>返回模板库</Link>
     </div>
   );
 }
@@ -62,8 +64,7 @@ function CalibrationPanel({
   onLoadPreview,
   onCreateDraft,
   onSaveMapping,
-  onPublish,
-  canManageTemplate
+  onPublish
 }: {
   template: OfficialDocumentTemplate;
   analysis?: OfficialDocumentAnalysis;
@@ -73,11 +74,10 @@ function CalibrationPanel({
   onCreateDraft: () => void;
   onSaveMapping: (mappings: OfficialDocumentMappingDefinition[]) => Promise<boolean>;
   onPublish: () => Promise<boolean>;
-  canManageTemplate: boolean;
 }) {
   const blockingCount = countBlockingRisks(analysis);
   const canCreateDraft = template.status === "PUBLISHED";
-  const canCalibrate = canManageTemplate && template.source === "LIVE" && template.status === "NEEDS_REVIEW";
+  const canCalibrate = template.source === "LIVE" && template.status === "NEEDS_REVIEW";
   const [calibrationNodes, setCalibrationNodes] = useState<OfficialDocumentStructureNode[]>([]);
   const [mappingSaved, setMappingSaved] = useState(false);
   const [isSavingMapping, setIsSavingMapping] = useState(false);
@@ -246,23 +246,23 @@ function CalibrationPanel({
 
   return (
     <div className="official-document-calibration">
+      <OfficialDocumentAppActions>
+        {template.source === "LIVE" ? (
+          <Button disabled={analysis?.capability.licenseMode !== "FILE"} loading={isLoadingPreview} onClick={onLoadPreview}>原稿 PDF 预览</Button>
+        ) : null}
+        {canCalibrate ? (
+          <>
+            <Button disabled={!mappingValid} loading={isSavingMapping} onClick={() => void saveMapping()}>保存角色映射</Button>
+            <Button type="primary" disabled={!mappingSaved || !mappingValid || blockingCount > 0} loading={isPublishing} onClick={() => void publishTemplate()}>发布模板</Button>
+          </>
+        ) : null}
+        <Button type={canCalibrate ? "default" : "primary"} icon={<Plus size={16} />} disabled={!canCreateDraft} onClick={onCreateDraft}>按模板新建草稿</Button>
+      </OfficialDocumentAppActions>
       <div className="official-document-toolbar xs-page-enter" style={{ animationDelay: "120ms" }}>
         <div className="official-document-calibration__summary">
           <Tag bordered={false} color={hasTitle ? "success" : "warning"}>标题 {hasTitle ? "已标记" : "未标记"}</Tag>
           <Tag bordered={false} color={hasBody ? "success" : "warning"}>正文 {hasBody ? "已标记" : "未标记"}</Tag>
           <Tag bordered={false} color={blockingCount > 0 ? "error" : "success"}>{blockingCount > 0 ? `${blockingCount} 项阻断` : "无阻断项"}</Tag>
-        </div>
-        <div className="official-document-toolbar__actions">
-          {template.source === "LIVE" ? (
-            <Button disabled={analysis?.capability.licenseMode !== "FILE"} loading={isLoadingPreview} onClick={onLoadPreview}>原稿 PDF 预览</Button>
-          ) : null}
-          {canCalibrate ? (
-            <>
-              <Button disabled={!mappingValid} loading={isSavingMapping} onClick={() => void saveMapping()}>保存角色映射</Button>
-              <Button type="primary" disabled={!mappingSaved || !mappingValid || blockingCount > 0} loading={isPublishing} onClick={() => void publishTemplate()}>发布模板</Button>
-            </>
-          ) : null}
-          <Button type={canCalibrate ? "default" : "primary"} icon={<Plus size={16} />} disabled={!canCreateDraft} onClick={onCreateDraft}>按模板新建草稿</Button>
         </div>
       </div>
 
@@ -323,7 +323,11 @@ function CalibrationPanel({
                 </li>
               ))}
             </ol>
-          ) : <div className="official-document-inline-empty">尚无结构结果，等待 Word 引擎完成分析。</div>}
+          ) : (
+            <div className="official-document-inline-empty">
+              {template.status === "ANALYZING" ? "正在分析模板结构…" : "尚无结构结果，等待 Word 引擎完成分析。"}
+            </div>
+          )}
         </section>
 
         <aside className="official-document-calibration-inspector">
@@ -376,7 +380,6 @@ function CalibrationPanel({
 
 export function TemplateDetailView({ templateId }: { templateId: string }) {
   const navigate = useNavigate();
-  const canManageTemplate = useDataHubAuthStore((state) => state.user?.isAdmin === true);
   const location = useLocation();
   const workspaceKey = useOfficialDocumentWorkspaceKey();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
@@ -391,11 +394,15 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   const [templatePreview, setTemplatePreview] = useState<{ versionId: string; url: string }>();
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftCreateError, setDraftCreateError] = useState("");
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   const workspaceQuery = useQuery({
     queryKey: workspaceKey,
-    queryFn: loadOfficialDocumentWorkspace
+    queryFn: loadOfficialDocumentWorkspace,
+    refetchInterval: (query) => (
+      hasAnalyzingTemplate(query.state.data?.templates ?? []) ? ANALYZING_POLL_INTERVAL_MS : false
+    )
   });
   const workspaceStatus = resolveXsAsyncStatus({
     isPending: workspaceQuery.isPending,
@@ -404,19 +411,29 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     hasData: workspaceQuery.data !== undefined
   });
   const template = useMemo(
-    () => workspaceQuery.data?.templates.find((item) =>
-      item.id === templateId && (canManageTemplate || item.status === "PUBLISHED")
-    ),
-    [canManageTemplate, workspaceQuery.data, templateId]
+    () => workspaceQuery.data?.templates.find((item) => item.id === templateId),
+    [workspaceQuery.data, templateId]
   );
   const embeddedAnalysis = template?.currentVersion.analysis;
   const analysisQuery = useQuery({
     queryKey: [...workspaceKey, "analysis", template?.id ?? "none", template?.currentVersion.id ?? "none"],
     queryFn: () => getOfficialDocumentTemplateAnalysis(template!.id, template!.currentVersion.id),
-    enabled: Boolean(template && !embeddedAnalysis && officialDocumentServiceState.configured)
+    enabled: Boolean(template && officialDocumentServiceState.configured && (
+      template.status === "ANALYZING" || !embeddedAnalysis
+    )),
+    refetchInterval: template?.status === "ANALYZING" ? ANALYZING_POLL_INTERVAL_MS : false
   });
-  const analysis = embeddedAnalysis ?? analysisQuery.data;
-  const blockingCount = countBlockingRisks(analysis);
+  const analysis = template?.status === "ANALYZING"
+    ? (analysisQuery.data ?? embeddedAnalysis)
+    : (embeddedAnalysis ?? analysisQuery.data);
+
+  useOfficialDocumentAppChrome({
+    stage: "template",
+    context: template?.name ?? "模板校准",
+    contextDetail: template
+      ? `${template.currentVersion.fileName} · 版本 v${template.currentVersion.versionNo}`
+      : undefined
+  });
 
   const announce = (tone: XsStatusTone, message: string) => {
     setOperationTone(tone);
@@ -486,6 +503,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   const openDraftModal = () => {
     if (!template || template.status !== "PUBLISHED") return;
     setDraftTitle(`${template.name.replace(/（.*?）/g, "")} - 新草稿`);
+    setDraftCreateError("");
     setDraftModalOpen(true);
   };
 
@@ -493,6 +511,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     const title = draftTitle.trim();
     if (!template || !title || isCreatingDraft) return;
     setIsCreatingDraft(true);
+    setDraftCreateError("");
     try {
       const createdDraft = await createOfficialDocumentDraft({
         templateId: template.id,
@@ -512,7 +531,9 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
         }
       });
     } catch (error) {
-      announce("error", operationErrorMessage(error));
+      const message = operationErrorMessage(error);
+      setDraftCreateError(message);
+      announce("error", message);
     } finally {
       setIsCreatingDraft(false);
     }
@@ -524,13 +545,8 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
 
   return (
     <div className="official-document-detail">
-      <nav className="official-document-detail__crumb xs-page-enter" aria-label="返回列表">
-        <Link to="/writing"><ArrowLeft size={15} aria-hidden="true" />公文写作</Link>
-        <span aria-hidden="true">/</span>
-        <span>模板库</span>
-      </nav>
-
       <XsAsyncPanel
+        className="official-document-canvas-panel"
         status={workspaceStatus}
         empty={false}
         errorTitle="公文模板不可用"
@@ -541,24 +557,6 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
       >
         {!template ? <TemplateNotFound /> : (
           <>
-            <header className="official-document-detail-head xs-page-enter" style={{ animationDelay: "60ms" }}>
-              <span className="official-document-detail-head__paper-bar" aria-hidden="true" />
-              <div className="official-document-detail-head__body">
-                <span className="official-document-eyebrow">公文模板 · 版本 v{template.currentVersion.versionNo}</span>
-                <h1>{template.name}</h1>
-                <div className="official-document-detail-head__meta">
-                  <span>{template.currentVersion.fileName}</span>
-                  <span>更新于 {formatDate(template.updatedAt)}</span>
-                  <Tag bordered={false} color={templateStatusColor[template.status]}>
-                    {templateStatusLabel[template.status]}
-                  </Tag>
-                  {blockingCount > 0 ? (
-                    <Tag bordered={false} color="error">{blockingCount} 项阻断</Tag>
-                  ) : null}
-                </div>
-              </div>
-            </header>
-
             {operationStatus ? (
               <XsStatusBar
                 tone={operationTone}
@@ -568,8 +566,8 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
               />
             ) : null}
 
-            {analysisQuery.isFetching ? (
-              <div className="official-document-analysis__loading" role="status">正在读取模板分析结果…</div>
+            {template.status === "ANALYZING" || analysisQuery.isFetching ? (
+              <div className="official-document-analysis__loading" role="status">正在分析模板结构…</div>
             ) : null}
 
             <CalibrationPanel
@@ -581,7 +579,6 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
               onCreateDraft={openDraftModal}
               onSaveMapping={handleSaveMapping}
               onPublish={handlePublishTemplate}
-              canManageTemplate={canManageTemplate}
             />
           </>
         )}
@@ -593,6 +590,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
           open
           okText="创建草稿"
           cancelText="取消"
+          zIndex={2000}
           confirmLoading={isCreatingDraft}
           okButtonProps={{ disabled: !draftTitle.trim() }}
           onOk={handleCreateDraft}
@@ -601,7 +599,19 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
           <div className="official-document-modal-copy">
             <p>模板版本：{template.name} · v{template.currentVersion.versionNo}</p>
             <label htmlFor="official-document-draft-title">草稿名称</label>
-            <Input id="official-document-draft-title" value={draftTitle} maxLength={120} onChange={(event) => setDraftTitle(event.target.value)} />
+            <Input
+              id="official-document-draft-title"
+              value={draftTitle}
+              maxLength={120}
+              status={draftCreateError ? "error" : undefined}
+              onChange={(event) => {
+                setDraftTitle(event.target.value);
+                if (draftCreateError) setDraftCreateError("");
+              }}
+            />
+            {draftCreateError ? (
+              <p role="alert" className="official-document-modal-copy__error">{draftCreateError}</p>
+            ) : null}
           </div>
         </Modal>
       ) : null}

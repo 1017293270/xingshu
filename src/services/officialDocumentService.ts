@@ -64,6 +64,7 @@ export type OfficialDocumentService = {
   getDraftPreview(draftId: string): Promise<Blob>;
   createBinding(draftId: string, input: CreateDraftDataBindingInput): Promise<DraftDataBinding>;
   refreshBindings(draftId: string): Promise<DraftDataBinding[]>;
+  detachBinding(draftId: string, bindingId: string): Promise<DraftDataBinding>;
   exportDraft(draftId: string, format: OfficialDocumentExportFormat): Promise<OfficialDocumentExportRecord>;
   downloadExport(exportId: string): Promise<Blob>;
 };
@@ -262,6 +263,37 @@ async function parseResponseBody(response: Response) {
   }
 }
 
+export function resolveOfficialDocumentErrorMessage(status: number, payload: unknown, statusText: string) {
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) {
+      const code = typeof record.code === "string" ? record.code : "";
+      if (code === "OBJECT_NOT_FOUND" || record.message.includes("文档对象不存在")) {
+        return "该模板的编译文件已丢失，无法创建草稿。请改用待校准模板，完成角色映射并发布后再试。";
+      }
+      if (code === "TEMPLATE_NOT_PUBLISHED") {
+        return "只能使用已发布模板创建草稿。请先在校准页保存角色映射并发布。";
+      }
+      return record.message.trim();
+    }
+  }
+
+  const raw = typeof payload === "string" ? payload.trim() : "";
+  if (/invalid cors request/i.test(raw)) {
+    return "当前页面地址未被公文服务允许。请通过星数同源代理访问，不要直连公文服务。";
+  }
+  if (raw && !/^(forbidden|unauthorized|bad request)$/i.test(raw)) {
+    return raw;
+  }
+  if (status === 403) {
+    return "没有完成该操作的权限";
+  }
+  if (status === 401) {
+    return "登录状态无效或已过期";
+  }
+  return statusText || "公文服务请求失败";
+}
+
 async function requestOfficialDocument<T>(baseUrl: string, path: string, options: RequestOptions = {}) {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, responseType = "json", headers: inputHeaders, ...init } = options;
   const headers = new Headers(inputHeaders);
@@ -281,6 +313,7 @@ async function requestOfficialDocument<T>(baseUrl: string, path: string, options
     response = await fetch(joinOfficialDocumentUrl(baseUrl, path), {
       ...init,
       headers,
+      credentials: "omit",
       signal: controller.signal
     });
   } catch (error) {
@@ -303,9 +336,7 @@ async function requestOfficialDocument<T>(baseUrl: string, path: string, options
   if (!response.ok) {
     const errorPayload = payload && typeof payload === "object" ? payload as Record<string, unknown> : undefined;
     const code = typeof errorPayload?.code === "string" ? errorPayload.code : undefined;
-    const message = typeof errorPayload?.message === "string"
-      ? errorPayload.message
-      : response.statusText || "公文服务请求失败";
+    const message = resolveOfficialDocumentErrorMessage(response.status, payload, response.statusText);
 
     if (response.status === 401) expireDataHubSession(session.token);
     throw new OfficialDocumentServiceError(
@@ -384,7 +415,7 @@ function mapRuntimeCapabilities(payload: unknown): OfficialDocumentRuntimeCapabi
     queryAssets: state(source.queryAssets, "QUERY_ASSET_CAPABILITY_UNKNOWN"),
     acceptedFileTypes: supported(limits.acceptedFileTypes, [".docx"] as const, [".docx"]),
     bindingKinds: supported(limits.bindingKinds, ["SCALAR", "FACT_SUMMARY", "TABLE"] as const, ["SCALAR", "FACT_SUMMARY", "TABLE"]),
-    exportFormats: supported(limits.exportFormats, ["DOCX"] as const, ["DOCX"]),
+    exportFormats: supported(limits.exportFormats, ["DOCX", "PDF"] as const, ["DOCX"]),
     previewFormats: supported(limits.previewFormats, ["PDF"] as const, ["PDF"]),
     editingMode: limits.editingMode === "WORD" ? "WORD" : "STRUCTURED"
   };
@@ -949,6 +980,14 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       );
       return bindings.map(mapBinding);
     },
+    async detachBinding(draftId, bindingId) {
+      const binding = await requestOfficialDocument<ApiDraftBinding>(
+        baseUrl,
+        `/v1/drafts/${encodeURIComponent(draftId)}/bindings/${encodeURIComponent(bindingId)}:detach`,
+        { method: "POST" }
+      );
+      return mapBinding(binding);
+    },
     async exportDraft(draftId, format) {
       const record = await requestOfficialDocument<ApiExportRecord>(
         baseUrl,
@@ -995,6 +1034,7 @@ function createUnconfiguredService(): OfficialDocumentService {
     getDraftPreview: unavailable,
     createBinding: unavailable,
     refreshBindings: unavailable,
+    detachBinding: unavailable,
     exportDraft: unavailable,
     downloadExport: unavailable
   };
@@ -1030,6 +1070,8 @@ export const createOfficialDocumentBinding = (draftId: string, input: CreateDraf
   officialDocumentService.createBinding(draftId, input);
 export const refreshOfficialDocumentBindings = (draftId: string) =>
   officialDocumentService.refreshBindings(draftId);
+export const detachOfficialDocumentBinding = (draftId: string, bindingId: string) =>
+  officialDocumentService.detachBinding(draftId, bindingId);
 export const exportOfficialDocumentDraft = (draftId: string, format: OfficialDocumentExportFormat) =>
   officialDocumentService.exportDraft(draftId, format);
 export const downloadOfficialDocumentExport = (exportId: string) =>

@@ -211,7 +211,7 @@ export type OfficialDocumentRuntimeCapabilities = {
   queryAssets: OfficialDocumentCapabilityState;
   acceptedFileTypes: string[];
   bindingKinds: Array<"SCALAR" | "FACT_SUMMARY" | "TABLE">;
-  exportFormats: Array<"DOCX">;
+  exportFormats: Array<"DOCX" | "PDF">;
   previewFormats: Array<"PDF">;
   editingMode: "STRUCTURED" | "WORD";
 };
@@ -261,7 +261,7 @@ export type RefreshOfficialDocumentBindingsResult = {
   message: string;
 };
 
-export type OfficialDocumentExportFormat = "DOCX";
+export type OfficialDocumentExportFormat = "DOCX" | "PDF";
 
 export type OfficialDocumentFidelityReport = {
   passed: boolean;

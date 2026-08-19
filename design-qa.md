@@ -189,3 +189,134 @@ focused region comparison evidence:
 - 本轮新增的逐页状态真实性、样式拆分、移动状态栏换行、工作流锁定与宽屏轨道已由当前构建的 in-app browser 和 208 个 Vitest 用例完成复核。
 
 final result: passed for current in-app product QA; Playwright axe/pixel-baseline execution pending explicit authorization
+
+---
+
+## 智能制表模块 视觉重构（2026-08-18）
+
+implementation screenshot path:
+- `outputs/ui-audit/table-list-1440.png` / `table-list-1672.png` / `table-list-1920.png` / `table-list-390.png`
+- `outputs/ui-audit/table-session-1440.png` / `table-session-1920.png` / `table-session-390.png`
+- `outputs/ui-audit/table-session-wide-1440.png`（12 列 46 行宽表，验证横向滚动、行号槽与行数截断提示）
+
+viewport:
+- Desktop: 1440 x 900 / 1672 x 1000 / 1920 x 1080
+- Mobile: 390 x 844 full page
+
+state:
+- `/table` 制表台（5 条最近制表记录），`/table/:sessionId` 问表会话（已还原结果表）。
+- 复现命令：`npm run dev` 后 `node scripts/screenshot-table-module.mjs`；脚本拦截全部 `/api/**`，不打真实后端。
+
+**设计主张**
+- 制表工具的列表页本身就该是一张表：`最近制表` 由双列卡片网格改为共享列宽的行式数据表（表名 / 类型 / 更新时间 / 操作）。
+- 口径条是本轮签名元素：结果表卡片头部常驻 `数据源 · 字段数 · 行数`，数据取自本轮已有的 `data_source_selected` 事件与表结构，此前被丢弃。
+- 数字层统一走 `--xs-font-mono` + `tabular-nums`：结果表数值列右对齐、列表更新时间、会话时间戳、需求轮次序号共用同一套数字语言。
+- 追问轮次以 `需求 01` 编号 + 品牌色竖线呈现，替换右对齐聊天气泡——每一轮的口径继承自上一轮，序号是信息而非装饰。
+
+**修复的实现缺陷**
+- `.datahub-table-scroll` 此前没有任何样式，宽结果表被 `.table-agent__stage` 的 `overflow: hidden` 直接裁掉且无滚动条。
+- `<table>` 的内联 `min-width` 覆盖了 `pages.css` 中的 `min-width: 100%`，宽屏下表格缩成内容宽、右侧留白。
+- 20 行预览截断此前对用户完全不可见，现补 `预览前 N 行，导出可获得全部 M 行`。
+- 会话页移除卡片内嵌套纵向滚动容器，改为文档滚动 + 桌面端会话栏 sticky；工作台在 DOM 中前置，窄屏先看到结果表。
+- `.sheet-suggestions` 是无 role 的 div 却带 `aria-label`（axe `aria-prohibited-attr`），补 `role="group"`。
+- `--xs-table-muted` 由 #94A7C3 提到 #62748F，行号与空值占位符满足 AA 4.5:1。
+
+**Verification**
+- `npx vitest run`：94 文件 / 555 用例通过。
+- `npm run test:visual:typecheck`：通过。
+- axe（wcag2a/2aa/21a/21aa，1440x1000）：`/table` 与 `/table/:sessionId` 各仅剩 1 项 `color-contrast`，均落在既有 `.ant-tag` 能力状态条上，与本轮改动无关且全站一致。
+
+**Findings**
+- [P2] `.ant-tag` 能力状态条对比度不足为存量问题，涉及全站状态栏组件，未在本轮制表范围内修改。
+- [P2] `vite.config.ts` 的 `server.proxy` 类型错误与 `CloudDocumentPreview.tsx` 的 lint error 均为本轮之前工作树中的既有问题，`npm run build` 因此仍不通过，与制表改动无关。
+
+final result: passed for 智能制表 module scope
+
+---
+
+## 问表智能体会话页 重构（2026-08-18，第二轮）
+
+implementation screenshot path:
+- `outputs/ui-audit/table-session-1440.png` / `table-session-1920.png` / `table-session-390.png`
+- `outputs/ui-audit/table-session-wide-1440.png`（12 列 46 行宽表）
+
+viewport:
+- Desktop: 1440 x 1480 / 1920 x 1320（会话页内容较长，用高视口整屏覆盖）
+- Mobile: 390 x 844
+
+state:
+- `/table/:sessionId` 已还原会话，含 5 步 ReAct 轨迹、SQL、耗时与结果表。
+- 复现命令：`npm run dev` 后 `XS_QA_BASE_URL=<dev地址> node scripts/screenshot-table-module.mjs`。
+
+**设计主张**
+- 这一页只有结果表配拥有卡片材质。工作台外壳的 `xs-card`、会话栏的 `xs-card` 全部去掉，改为纸面 + 排版层级；三层白托盘叠在近白底色上正是"塑料感"的来源。
+- 会话栏移到右侧并只用一根竖细线分隔。左侧已有白色侧边栏，再并一根白柱子会把 1440 下的工作区压到 830px。
+- 新增「推演轨迹」作为本轮签名元素：意图路由 → 定位数据源 → 加载语义模型 → 生成查询（可展开 SQL）→ 执行查询，每步带用时。数据全部来自本轮已在流式接收、此前被完全丢弃的 `react_step` / `tool_call` / `tool_result` / `routing_decompose` / `done` 事件。
+- 轨迹在流式时自动展开、最新一轮保持展开、历史轮次收起；agent 的过程本身就是交付物的一部分。
+- 页面标题层级去重：原先「问表智能体」在 h1 与会话栏各出现一次，现在只保留 h1。
+
+**修复的实现缺陷**
+- `pages.css` 把 `.table-session-page` 锁成 `height: calc(100vh - 44px)` 的定高外壳，并对 `.xs-shell__main` 施加 `overflow-y: hidden`。实测 1440x760 下 `scrollHeight === clientHeight`、`canScroll: false`——20 行结果表在矮视口下被裁掉且无法滚动到。改为文档流后 `scrollHeight 1647 > clientHeight 760`，追问框可滚动抵达。
+- SQL 此前会同时挂到 `generate_query` 与 `execute_query` 两步，重复展开同一条语句；现在只挂第一个查询步骤。
+- 「问题拆解 执行模式 SIMPLE」对使用者没有信息量，改为只有真的拆出子问题时才占一行。
+- 轨迹摘要原用等宽字体整段渲染，中英混排会撑开中文字距；改为常规字体 + `tabular-nums`。
+
+**Verification**
+- `npx vitest run`：95 文件 / 566 用例通过（新增 `agentTrace.test.ts` 11 例覆盖轨迹构建）。
+- `npm run test:visual:typecheck`：通过。
+- axe（wcag2a/2aa/21a/21aa，1440x1400）：`/table` 与 `/table/:sessionId` 各仅剩 1 项 `color-contrast`，均落在既有 `.ant-tag` 能力状态条上。
+
+**Findings**
+- [P2] `.xs-action-link--primary`（白字 + `--xs-primary` #1677FF）对比度约 3.5:1，未达 AA 4.5:1。本轮曾在会话页头部使用后被 axe 判为 serious，已改用常规 action link 规避；该共享类在其他页面仍存在同样问题，未在本轮范围内改动品牌色。
+- [P2] `.ant-tag` 能力状态条对比度不足为存量问题，涉及全站状态栏组件。
+- [P2] `vite.config.ts` 的 `server.proxy` 类型错误与 `CloudDocumentPreview.tsx` 的 lint error 为工作树既有问题，`npm run build` 仍不通过，与本轮改动无关。
+
+final result: passed for 问表智能体会话页 scope
+
+---
+
+## 问表智能体：会话栏与加载态（2026-08-18，第三轮）
+
+implementation screenshot path:
+- `outputs/ui-audit/table-session-idle-1440.png`（空态：常驻空表框）
+- `outputs/ui-audit/table-session-loading-1440.png`（还原中：微光发生在空表框内）
+- `outputs/ui-audit/table-session-1440.png` / `table-session-390.png`
+
+viewport:
+- Desktop: 1440 x 1000 / 1440 x 1480；Mobile: 390 x 844
+
+**设计主张**
+- 结果表位常驻。空态与加载态都保持一张"空表"的形状（表头带 + 6 行占位），而不是留一片空白；加载动画发生在这张空表里。此前拍平卡片后留下的"空荡"由此收敛。
+- 会话栏参考 Claude 的做法重做：按时间分组（当前会话 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 更早），每条只占一行并省略号截断，激活态改为低饱和中性底 `#e6ecf5`。原先每条都带一行等宽时间戳、激活态是饱和品牌蓝色块，是这一栏"塑料感"的主要来源；分组把重复的时间戳收敛成一个组标题。
+- 为支持分组，`TableTemplate` 新增 `updatedAt`（原始 ISO 串），展示文案仍走 `description`，不再从已格式化字符串反解日期。
+
+**修复的实现缺陷**
+- 会话栏加载态此前直接用 `XsAsyncPanel` 的通用 `rows` 骨架：180px 白卡 + 22px 内边距 + 5 条 54px 灰块，压在这根扁平细栏顶上完全不搭。改为贴合会话栏几何的单行占位条。
+- 通用骨架色（`#edf3fb`）是按白卡背景调的；会话栏是透明底叠在 `--xs-bg` 冰蓝页面色上，对比度不足，单独压深到 `#dfe9f7`。
+- `TablePlaceholder` 初版带 `role="status"`，与页面底部的 `XsStatusBar` 抢 live region，`getByRole("status")` 取到两个节点。改为只标记 `aria-busy`，播报统一由状态栏负责。
+- 生成中占位框的提示语原本直接复用 `progress`，与推演轨迹的进行中步骤重复同一句话；改为静态的"结果表就绪后会出现在这里"。
+
+**Verification**
+- `npx vitest run`：96 文件 / 571 用例通过（新增 `sessionGroups.test.ts` 6 例覆盖时间分组、当前会话、非法时间戳兜底）。
+- `npm run test:visual:typecheck`：通过。
+- axe（wcag2a/2aa/21a/21aa，1440x1200）：已还原态与空态各仅剩 1 项 `color-contrast`，均落在既有 `.ant-tag` 能力状态条上。
+
+final result: passed for 会话栏与加载态 scope
+
+---
+
+## 问表智能体：去掉冗余加载指示（2026-08-18，第四轮）
+
+**改动**
+- 页面底部状态栏在 loading 态不再转圈。`XsStatusBar` 新增 `spinner?: boolean`（默认 `true`，其他页面行为不变），问表会话页传 `spinner={false}`，改为与其他语气一致的标签 + 文案。空表框的微光已经表达了"在加载"，再叠一个 spinner 是重复指示。
+- 会话栏彻底去掉骨架屏。≤8 条短导航项闪一块微光比直接留白更吵；且 `railItems` 本来就会先带出"当前会话"一条，列表就绪后其余直接出现，属于渐进填充而非空屏。
+- 会话栏的错误态改为一行 `会话列表加载失败 + 重试` 文本按钮，不再套 `XsAsyncPanel` 的卡片式错误块。
+
+**Verification**
+- 制表相关范围：`src/features/tableGeneration`、`WorkflowRefinements`、`WorkflowActions`、`XsStatusBar`、`dataHubAskTable` 共 7 文件 / 57 用例全部通过。
+- `npm run test:visual:typecheck`：通过。
+
+**Findings**
+- [P1] 本轮全量 `npx vitest run` 有 3 例失败：`AppRoutes.test.tsx`（2）与 `DataAssetActions.test.tsx`（1）。涉及 `src/pages/DataManagementPage.tsx`（+147/−137）、`src/services/dataAssetService.ts`、`src/types/dataAsset.ts` 的工作树未提交改动，均不在本轮制表范围内，未做修改。
+
+final result: passed for 制表模块 scope；数据资产管理 3 例失败属并行改动，需由该改动的作者处理

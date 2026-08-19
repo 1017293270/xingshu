@@ -32,7 +32,7 @@ import { useLocation, useNavigate } from "react-router";
 import { XsChartCard } from "@/components/xs/XsChartCard";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
-import { DataHubExecutionPanel } from "@/components/xs/datahub";
+import { DataHubExecutionPanel, DataHubResultTable } from "@/components/xs/datahub";
 import { XsStreamingText } from "@/components/xs/XsStreamingText";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
@@ -58,7 +58,12 @@ import {
 } from "@/services/dataHubQueryAssetTargetService";
 import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
-import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
+import {
+  countDataHubTableRows,
+  downloadCsv,
+  buildDataHubTablesCsv,
+  sanitizeCsvBasename
+} from "@/services/dataHubTableExport";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { useUiStore } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
@@ -355,60 +360,6 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
           .slice(0, 3)
       : []
   };
-}
-
-function formatCell(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
-    return "-";
-  }
-
-  if (typeof value === "object") {
-    return JSON.stringify(value);
-  }
-
-  return String(value);
-}
-
-function getColumnMinWidth(column: DataHubTableResult["columns"][number]) {
-  return getDataHubColumnMinWidth(column);
-}
-
-function escapeCsvCell(value: unknown) {
-  const text = formatCell(value);
-
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
-  return text;
-}
-
-function buildDataHubTablesCsv(tables: DataHubTableResult[]) {
-  return tables
-    .map((table, index) => {
-      const title = table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : index + 1}`;
-      const header = table.columns
-        .map((column) => escapeCsvCell(formatDataHubColumnTitle(column.title, column.key)))
-        .join(",");
-      const rows = table.rows.map((row) => table.columns.map((column) => escapeCsvCell(row[column.key])).join(","));
-
-      return [escapeCsvCell(title), header, ...rows].join("\r\n");
-    })
-    .join("\r\n\r\n");
-}
-
-function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = filename;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function isNearScrollBottom(element: HTMLElement) {
@@ -1037,52 +988,6 @@ function DataHubResultLoading({
   );
 }
 
-function DataHubResultTable({ table }: { table: DataHubTableResult }) {
-  const previewRows = table.rows.slice(0, 20);
-  const tableMinWidth = Math.max(760, table.columns.reduce((sum, column) => sum + getColumnMinWidth(column), 0));
-
-  return (
-    <article className="xs-card xs-card--inner datahub-table-card">
-      <div className="datahub-result-head">
-        <h3>{table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : 1}`}</h3>
-        <span>{table.source || "data-hub"} / {table.totalRows} 行</span>
-      </div>
-      <div className="datahub-table-scroll">
-        <table className="xs-table" style={{ minWidth: tableMinWidth }}>
-          <thead>
-            <tr>
-              {table.columns.map((column) => {
-                const title = formatDataHubColumnTitle(column.title, column.key);
-
-                return (
-                  <th key={column.key} title={column.title} style={{ minWidth: getColumnMinWidth(column) }}>
-                    {title}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {previewRows.map((row, rowIndex) => (
-              <tr key={`${table.tableIndex}-${rowIndex}`}>
-                {table.columns.map((column) => {
-                  const cellText = formatCell(row[column.key]);
-
-                  return (
-                    <td key={column.key} title={cellText}>
-                      {cellText}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </article>
-  );
-}
-
 function chartTypeLabel(type: AiChartType) {
   if (type === "pie") {
     return "饼图";
@@ -1478,18 +1383,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   };
 
   const handleExport = (tables: DataHubTableResult[]) => {
-    const rowCount = tables.reduce((count, table) => count + table.rows.length, 0);
+    const rowCount = countDataHubTableRows(tables);
 
     if (rowCount === 0) {
       setWorkflowStatus("暂无可导出的问数表格");
       return;
     }
 
-    const safeQuestion = (lastVisibleTurn?.question || "问数结果")
-      .replace(/[\\/:*?"<>|]/g, "")
-      .trim()
-      .slice(0, 28);
-    downloadCsv(`${safeQuestion || "问数结果"}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv(tables));
+    const safeQuestion = sanitizeCsvBasename(lastVisibleTurn?.question || "问数结果") || "问数结果";
+    downloadCsv(`${safeQuestion}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv(tables));
     setWorkflowStatus(`已导出 ${rowCount} 行问数结果`);
   };
 

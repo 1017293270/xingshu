@@ -112,6 +112,16 @@ export function operationErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请稍后重试";
 }
 
+export const ANALYZING_POLL_INTERVAL_MS = 2000;
+
+export function hasAnalyzingTemplate(templates: OfficialDocumentWorkspaceSnapshot["templates"]) {
+  return templates.some((template) => template.status === "ANALYZING");
+}
+
+export function bindingsAreExportable(bindings: DraftDataBinding[]) {
+  return bindings.every((binding) => binding.status === "ACTIVE" || binding.status === "MANUAL");
+}
+
 export function countBlockingRisks(analysis?: OfficialDocumentAnalysis) {
   return analysis?.risks.filter((risk) => risk.severity === "BLOCKING").length ?? 0;
 }

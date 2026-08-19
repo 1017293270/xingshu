@@ -11,13 +11,16 @@ type XsStatusBarProps = {
   transitionKey?: string | number;
   reserveSpace?: boolean;
   announce?: boolean;
+  /** 页面本身已有加载表达（骨架、微光）时传 false，避免再叠一个转圈。 */
+  spinner?: boolean;
 };
 
-const toneTagColor: Record<Exclude<XsStatusTone, "loading">, string> = {
+const toneTagColor: Record<XsStatusTone, string> = {
   info: "blue",
   success: "success",
   warning: "warning",
-  error: "error"
+  error: "error",
+  loading: "blue"
 };
 
 const defaultLabel: Record<XsStatusTone, string> = {
@@ -35,7 +38,8 @@ export function XsStatusBar({
   className = "",
   transitionKey,
   reserveSpace = false,
-  announce = true
+  announce = true,
+  spinner = true
 }: XsStatusBarProps) {
   if (!message && !reserveSpace) {
     return null;
@@ -54,7 +58,7 @@ export function XsStatusBar({
       className={`xs-status-bar xs-status-bar--${tone} ${className}`.trim()}
       role={announce ? "status" : undefined}
     >
-      {tone === "loading" ? (
+      {tone === "loading" && spinner ? (
         <span className="xs-status-bar__loading">
           <Spin size="small" />
         </span>
