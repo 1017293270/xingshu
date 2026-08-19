@@ -139,7 +139,7 @@ docs/                   # 设计、实施和集成说明
 
 - 当前阶段不要在前端仓库内实现业务后端。
 - 所有接口调用必须经过 `src/services/`，页面和组件不得直接写 `fetch`、`axios`、SSE 或 WebSocket 细节。
-- 使用 `.env.example` 中的 `VITE_DATAHUB_API_BASE_URL`、`VITE_DATAHUB_PROXY_TARGET`、`VITE_DATAHUB_BFF_PORT`、`VITE_DATAHUB_APP_URL`、`VITE_DATAHUB_KB_MANAGE_PATH`、`VITE_DATAHUB_KB_DETAIL_PATH`、`VITE_DATAHUB_UI_SAME_ORIGIN`、`VITE_QUERY_ASSETS_ENABLED`、`VITE_DASHBOARD_EDITOR_URL` 区分环境；不得记录真实秘密值。
+- 使用 `.env.example` 中的 `VITE_DATAHUB_API_BASE_URL`、`VITE_DATAHUB_PROXY_TARGET`、`VITE_DATAHUB_BFF_PORT`、`VITE_DATAHUB_APP_URL`、`VITE_DATAHUB_KB_MANAGE_PATH`、`VITE_DATAHUB_KB_DETAIL_PATH`、`VITE_DATAHUB_UI_SAME_ORIGIN`、`VITE_QUERY_ASSETS_ENABLED`、`VITE_DASHBOARD_EDITOR_URL`、`VITE_RAG_IMAGE_PROXY_TARGET`、`VITE_RAG_IMAGE_ORIGIN` 区分环境；不得记录真实秘密值。
 - Agent 流式输出、文件上传、数据查询、看板指标、知识库列表都先定义 TypeScript 接口和 mock 数据，再接真实系统。
 - 不确定真实接口时，优先保留 adapter 方法名和类型，不在 UI 里硬编码临时字段。
 

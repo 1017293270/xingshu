@@ -35,7 +35,20 @@ export function resolveOfficialDocumentProxyTarget({ env, processEnv }: Pick<Pro
   return (processEnv.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET ?? env.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET)?.trim() ?? "";
 }
 
+export function resolveRagImageProxyTarget({ env, processEnv }: Pick<ProxyTargetInputs, "env" | "processEnv">) {
+  return (processEnv.VITE_RAG_IMAGE_PROXY_TARGET ?? env.VITE_RAG_IMAGE_PROXY_TARGET)?.trim() ?? "";
+}
+
+export const RAG_IMAGE_PROXY_PATH = "/data-source/rag-source/images";
+
 export function stripBrowserOriginHeaders(proxyReq: { removeHeader: (name: string) => void }) {
+  proxyReq.removeHeader("origin");
+  proxyReq.removeHeader("referer");
+}
+
+export function stripRagImageForwardHeaders(proxyReq: { removeHeader: (name: string) => void }) {
+  proxyReq.removeHeader("authorization");
+  proxyReq.removeHeader("cookie");
   proxyReq.removeHeader("origin");
   proxyReq.removeHeader("referer");
 }
@@ -52,6 +65,24 @@ export function createOfficialDocumentBrowserProxy(target: string) {
       configure(proxy: { on: (event: string, listener: (proxyReq: { removeHeader: (name: string) => void }) => void) => void }) {
         proxy.on("proxyReq", (proxyReq) => {
           stripBrowserOriginHeaders(proxyReq);
+        });
+      }
+    }
+  };
+}
+
+export function createRagImageBrowserProxy(target: string) {
+  if (!target) {
+    return {};
+  }
+
+  return {
+    [RAG_IMAGE_PROXY_PATH]: {
+      target,
+      changeOrigin: true,
+      configure(proxy: { on: (event: string, listener: (proxyReq: { removeHeader: (name: string) => void }) => void) => void }) {
+        proxy.on("proxyReq", (proxyReq) => {
+          stripRagImageForwardHeaders(proxyReq);
         });
       }
     }
@@ -90,6 +121,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxyTarget = resolveDataHubProxyTarget({ command, env, mode, processEnv: process.env });
   const officialDocumentProxyTarget = resolveOfficialDocumentProxyTarget({ env, processEnv: process.env }) || proxyTarget;
+  const ragImageProxyTarget = resolveRagImageProxyTarget({ env, processEnv: process.env });
 
   return {
     plugins: [react(), vue()],
@@ -103,6 +135,9 @@ export default defineConfig(({ command, mode }) => {
         // Official-document must be registered before /api so Vite can strip
         // browser Origin before the request reaches the Java CORS filter.
         ...createOfficialDocumentBrowserProxy(officialDocumentProxyTarget),
+        // Optional same-origin reverse proxy for MinerU images stored in MinIO.
+        // Leave VITE_RAG_IMAGE_PROXY_TARGET empty to skip; startup must not fail.
+        ...createRagImageBrowserProxy(ragImageProxyTarget),
         // Keep remaining browser requests same-origin. /api is the BFF.
         // /platform and hashed /assets/* let “添加知识库” open DataHub’s UI
         // on this origin so Xingshu can seed platform_token without putting

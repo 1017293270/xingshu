@@ -7,16 +7,61 @@ type XsSafeMarkdownProps = {
   className?: string;
 };
 
-function getSafeImageUrl(src: string | undefined) {
+type SafeImageUrlOptions = {
+  pageOrigin?: string;
+  publicOrigin?: string;
+};
+
+export const RAG_KNOWLEDGE_IMAGE_PATH_PREFIX = "/data-source/rag-source/images/";
+
+function pageOriginFallback() {
+  return typeof window === "undefined" ? "http://localhost" : window.location.origin;
+}
+
+function isHttpUrl(url: URL) {
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+function isRagKnowledgeImagePath(pathname: string) {
+  return (
+    pathname === RAG_KNOWLEDGE_IMAGE_PATH_PREFIX.slice(0, -1)
+    || pathname.startsWith(RAG_KNOWLEDGE_IMAGE_PATH_PREFIX)
+  );
+}
+
+function resolveRewriteOrigin(pageOrigin: string, publicOrigin?: string) {
+  const trimmed = publicOrigin?.trim();
+  if (!trimmed) {
+    return pageOrigin;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return isHttpUrl(url) ? url.origin : pageOrigin;
+  } catch {
+    return pageOrigin;
+  }
+}
+
+export function getSafeImageUrl(src: string | undefined, options: SafeImageUrlOptions = {}) {
   const value = src?.trim();
   if (!value) {
     return null;
   }
 
   try {
-    const baseUrl = typeof window === "undefined" ? "http://localhost" : window.location.origin;
-    const url = new URL(value, baseUrl);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+    const pageOrigin = options.pageOrigin?.trim() || pageOriginFallback();
+    const url = new URL(value, pageOrigin);
+    if (!isHttpUrl(url)) {
+      return null;
+    }
+
+    if (!isRagKnowledgeImagePath(url.pathname)) {
+      return url.toString();
+    }
+
+    const rewriteOrigin = resolveRewriteOrigin(pageOrigin, options.publicOrigin);
+    return new URL(`${url.pathname}${url.search}`, rewriteOrigin).toString();
   } catch {
     return null;
   }
@@ -24,7 +69,9 @@ function getSafeImageUrl(src: string | undefined) {
 
 function XsSafeMarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
   const [failed, setFailed] = useState(false);
-  const safeUrl = getSafeImageUrl(src);
+  const safeUrl = getSafeImageUrl(src, {
+    publicOrigin: import.meta.env.VITE_RAG_IMAGE_ORIGIN
+  });
   const accessibleAlt = alt?.trim() || "回答中的图片";
 
   if (!safeUrl) {

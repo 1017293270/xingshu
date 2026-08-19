@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_OFFICIAL_DOCUMENT_API_BASE_URL?: string;
   readonly VITE_OFFICIAL_DOCUMENT_API_MODE?: string;
   readonly VITE_OFFICIAL_DOCUMENT_PROXY_TARGET?: string;
+  readonly VITE_RAG_IMAGE_PROXY_TARGET?: string;
+  readonly VITE_RAG_IMAGE_ORIGIN?: string;
 }
 
 declare module "*.vue" {

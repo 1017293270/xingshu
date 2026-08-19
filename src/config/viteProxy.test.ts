@@ -1,12 +1,13 @@
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfigFromFile } from "vite";
-import { createOfficialDocumentBrowserProxy, stripBrowserOriginHeaders } from "../../vite.config";
+import { createOfficialDocumentBrowserProxy, createRagImageBrowserProxy, RAG_IMAGE_PROXY_PATH, stripBrowserOriginHeaders, stripRagImageForwardHeaders } from "../../vite.config";
 
 const originalAnalyticsTarget = process.env.VITE_ANALYTICS_PROXY_TARGET;
 const originalDataHubTarget = process.env.VITE_DATAHUB_PROXY_TARGET;
 const originalDataHubPort = process.env.VITE_DATAHUB_BFF_PORT;
 const originalOfficialDocumentTarget = process.env.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET;
+const originalRagImageTarget = process.env.VITE_RAG_IMAGE_PROXY_TARGET;
 
 afterEach(() => {
   if (originalAnalyticsTarget === undefined) {
@@ -31,6 +32,12 @@ afterEach(() => {
     delete process.env.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET;
   } else {
     process.env.VITE_OFFICIAL_DOCUMENT_PROXY_TARGET = originalOfficialDocumentTarget;
+  }
+
+  if (originalRagImageTarget === undefined) {
+    delete process.env.VITE_RAG_IMAGE_PROXY_TARGET;
+  } else {
+    process.env.VITE_RAG_IMAGE_PROXY_TARGET = originalRagImageTarget;
   }
 });
 
@@ -138,5 +145,58 @@ describe("Vite data-hub proxy", () => {
       }
     });
     expect(forwardedRemoved).toEqual(["origin", "referer"]);
+  });
+
+  it("does not proxy knowledge images unless a MinIO target is set", async () => {
+    process.env.VITE_DATAHUB_PROXY_TARGET = "http://127.0.0.1:8090";
+    process.env.VITE_RAG_IMAGE_PROXY_TARGET = "";
+
+    const loaded = await loadConfigFromFile(
+      { command: "serve", mode: "development" },
+      path.resolve(process.cwd(), "vite.config.ts")
+    );
+    const proxy = loaded?.config.server?.proxy;
+
+    expect(proxy?.[RAG_IMAGE_PROXY_PATH]).toBeUndefined();
+  });
+
+  it("proxies knowledge images to MinIO without forwarding browser credentials", async () => {
+    process.env.VITE_DATAHUB_PROXY_TARGET = "http://127.0.0.1:8090";
+    process.env.VITE_RAG_IMAGE_PROXY_TARGET = "http://127.0.0.1:9000";
+
+    const loaded = await loadConfigFromFile(
+      { command: "serve", mode: "development" },
+      path.resolve(process.cwd(), "vite.config.ts")
+    );
+    const proxy = loaded?.config.server?.proxy;
+
+    expect(proxy?.[RAG_IMAGE_PROXY_PATH]).toMatchObject({
+      target: "http://127.0.0.1:9000",
+      changeOrigin: true
+    });
+    expect(typeof (proxy?.[RAG_IMAGE_PROXY_PATH] as { configure?: unknown }).configure).toBe("function");
+
+    const removed: string[] = [];
+    stripRagImageForwardHeaders({
+      removeHeader(name) {
+        removed.push(name);
+      }
+    });
+    expect(removed).toEqual(["authorization", "cookie", "origin", "referer"]);
+
+    const listeners: Array<(proxyReq: { removeHeader: (name: string) => void }) => void> = [];
+    const ragProxy = createRagImageBrowserProxy("http://127.0.0.1:9000")[RAG_IMAGE_PROXY_PATH];
+    ragProxy.configure({
+      on(_event, listener) {
+        listeners.push(listener);
+      }
+    });
+    const forwardedRemoved: string[] = [];
+    listeners[0]?.({
+      removeHeader(name) {
+        forwardedRemoved.push(name);
+      }
+    });
+    expect(forwardedRemoved).toEqual(["authorization", "cookie", "origin", "referer"]);
   });
 });
