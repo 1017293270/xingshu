@@ -11,6 +11,8 @@ type CloudDocumentPreviewProps = {
   previewDocument: DataHubKnowledgeDocument | null;
   documents: DataHubKnowledgeDocument[];
   markdown?: string;
+  sourceUrl?: string;
+  sourceContentType?: string;
   loading: boolean;
   error?: string;
   onSelect: (document: DataHubKnowledgeDocument) => void;
@@ -38,8 +40,20 @@ function markdownFileName(title: string) {
   return trimmed.toLowerCase().endsWith(".md") ? trimmed : `${trimmed.replace(/\.[a-z0-9]{2,8}$/i, "")}.md`;
 }
 
+function sourceFileName(title: string, contentType?: string) {
+  const trimmed = title.trim() || "document";
+  if (contentType === "application/pdf") {
+    return trimmed.toLowerCase().endsWith(".pdf") ? trimmed : `${trimmed.replace(/\.[a-z0-9]{2,8}$/i, "")}.pdf`;
+  }
+  return markdownFileName(trimmed);
+}
+
 export function canBrowseKnowledgeDocument(document: DataHubKnowledgeDocument) {
-  return Boolean(document.docKey?.trim()) && document.markdownAvailable !== false;
+  return Boolean(document.docKey?.trim());
+}
+
+export function isInlinePdfPreview(contentType?: string) {
+  return contentType === "application/pdf";
 }
 
 export function CloudDocumentPreview({
@@ -47,6 +61,8 @@ export function CloudDocumentPreview({
   previewDocument,
   documents,
   markdown,
+  sourceUrl,
+  sourceContentType,
   loading,
   error,
   onSelect,
@@ -68,12 +84,15 @@ export function CloudDocumentPreview({
   const next = currentIndex >= 0 && currentIndex < openable.length - 1
     ? openable[currentIndex + 1]
     : undefined;
+  const pdfPreview = isInlinePdfPreview(sourceContentType) && Boolean(sourceUrl);
   const markdownUrl = useMemo(() => {
-    if (!markdown) {
+    if (pdfPreview || !markdown) {
       return undefined;
     }
     return URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
-  }, [markdown]);
+  }, [markdown, pdfPreview]);
+  const downloadUrl = pdfPreview ? sourceUrl : markdownUrl;
+  const downloadName = sourceFileName(previewDocument?.title ?? "document", pdfPreview ? sourceContentType : undefined);
 
   useEffect(() => () => {
     if (markdownUrl) {
@@ -138,11 +157,14 @@ export function CloudDocumentPreview({
   }
 
   const meta = [
-    "Markdown 预览",
+    pdfPreview ? "原文预览" : "Markdown 预览",
     formatFileSize(previewDocument.sizeBytes),
     previewDocument.chunkCount != null ? `${previewDocument.chunkCount.toLocaleString("zh-CN")} 个切片` : undefined
   ].filter(Boolean).join(" · ");
   const position = currentIndex >= 0 ? `${currentIndex + 1} / ${openable.length}` : undefined;
+  const pdfViewerUrl = pdfPreview && sourceUrl
+    ? `${sourceUrl}#toolbar=0&navpanes=0`
+    : undefined;
 
   return createPortal(
     <div
@@ -209,11 +231,11 @@ export function CloudDocumentPreview({
                 onClick={() => next && onSelect(next)}
                 icon={<CaretRight size={16} />}
               />
-              {markdownUrl ? (
+              {downloadUrl ? (
                 <a
                   className="cloud-preview__download"
-                  href={markdownUrl}
-                  download={markdownFileName(previewDocument.title)}
+                  href={downloadUrl}
+                  download={downloadName}
                 >
                   <DownloadSimple size={16} aria-hidden="true" />
                   下载
@@ -231,26 +253,36 @@ export function CloudDocumentPreview({
             </div>
           </header>
 
-          <div className="cloud-preview__stage" tabIndex={0} aria-label="Markdown 预览内容">
+          <div
+            className={`cloud-preview__stage${pdfPreview ? " cloud-preview__stage--pdf" : ""}`}
+            tabIndex={0}
+            aria-label={pdfPreview ? "原文预览内容" : "Markdown 预览内容"}
+          >
             {loading ? (
               <div className="cloud-preview__state" role="status">
                 <Spin />
-                <strong>正在载入 Markdown</strong>
-                <p>读取已解析文本，比打开 PDF 原文更快。</p>
+                <strong>正在载入原文</strong>
+                <p>在星数内打开文件，不会跳转到外部站点。</p>
               </div>
             ) : error ? (
               <div className="cloud-preview__state" role="alert">
-                <strong>Markdown 暂时无法预览</strong>
+                <strong>原文暂时无法预览</strong>
                 <p>{error}</p>
               </div>
+            ) : pdfViewerUrl ? (
+              <iframe
+                className="cloud-preview__pdf"
+                src={pdfViewerUrl}
+                title={`${previewDocument.title} 原文预览`}
+              />
             ) : markdown ? (
               <article className="cloud-preview__markdown" aria-label={`${previewDocument.title} Markdown 预览`}>
                 <XsSafeMarkdown content={markdown} />
               </article>
             ) : (
               <div className="cloud-preview__state">
-                <strong>没有可浏览的 Markdown</strong>
-                <p>当前文档还没有完成解析。</p>
+                <strong>没有可浏览的原文</strong>
+                <p>当前文档还没有可预览的 PDF 或解析文本。</p>
               </div>
             )}
           </div>

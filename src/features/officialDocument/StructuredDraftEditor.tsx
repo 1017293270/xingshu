@@ -8,8 +8,8 @@ import {
   Plus,
   Trash
 } from "@phosphor-icons/react";
-import { Button, Input, Modal, Select, Tag } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Dropdown, Input, Modal, Select, Tag } from "antd";
+import { type ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getOfficialDocumentDraftContent,
   getOfficialDocumentDraftPreview,
@@ -37,12 +37,49 @@ const roleLabels = Object.fromEntries(roleOptions.map((option) => [option.value,
   string
 >;
 
+const rolePlaceholders: Record<OfficialDocumentDraftBlockRole, string> = {
+  HEADING_1: "输入一级标题",
+  HEADING_2: "输入二级标题",
+  HEADING_3: "输入三级标题",
+  BODY: "输入正文"
+};
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "草稿保存失败";
 }
 
 function normalizeOrders(blocks: OfficialDocumentDraftContent["blocks"]) {
   return blocks.map((block, order) => ({ ...block, order }));
+}
+
+function AddNodeTypeMenu({
+  children,
+  onSelect
+}: {
+  children: ReactElement;
+  onSelect: (role: OfficialDocumentDraftBlockRole) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dropdown
+      trigger={["click"]}
+      open={open}
+      mouseEnterDelay={0}
+      mouseLeaveDelay={0}
+      destroyOnHidden
+      getPopupContainer={() => document.body}
+      onOpenChange={setOpen}
+      menu={{
+        items: roleOptions.map((option) => ({ key: option.value, label: option.label })),
+        onClick: ({ key }) => {
+          setOpen(false);
+          onSelect(key as OfficialDocumentDraftBlockRole);
+        }
+      }}
+    >
+      {children}
+    </Dropdown>
+  );
 }
 
 export function StructuredDraftEditor({
@@ -63,6 +100,9 @@ export function StructuredDraftEditor({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [fieldsCollapsed, setFieldsCollapsed] = useState(false);
+  const [justAddedId, setJustAddedId] = useState<string>();
+  const [addNotice, setAddNotice] = useState("");
+  const pendingFocusIdRef = useRef<string>();
   const contentRef = useRef<OfficialDocumentDraftContent | undefined>(undefined);
   const revisionRef = useRef(0);
   const generationRef = useRef(0);
@@ -80,7 +120,6 @@ export function StructuredDraftEditor({
 
   const scheduleSave = () => {
     if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current);
-    setSaveState("saving");
     setSaveError("");
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = undefined;
@@ -169,6 +208,25 @@ export function StructuredDraftEditor({
     onSaveStateChange?.(saveState);
   }, [onSaveStateChange, saveState]);
 
+  useLayoutEffect(() => {
+    const id = pendingFocusIdRef.current;
+    if (!id) return;
+    pendingFocusIdRef.current = undefined;
+    const field = document.getElementById(`draft-block-${id}`);
+    if (!(field instanceof HTMLElement)) return;
+    field.focus({ preventScroll: true });
+    field.closest("article")?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
+  }, [content]);
+
+  useEffect(() => {
+    if (!justAddedId) return;
+    const timer = window.setTimeout(() => {
+      setJustAddedId((current) => (current === justAddedId ? undefined : current));
+      setAddNotice("");
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [justAddedId]);
+
   const updateFixedValue = (slotId: string, value: string) => commit((current) => ({
     ...current,
     fixedValues: current.fixedValues.map((item) => item.slotId === slotId ? { ...item, value } : item)
@@ -179,19 +237,25 @@ export function StructuredDraftEditor({
     blocks: normalizeOrders(current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block))
   }));
 
-  const addBlock = (afterIndex?: number, role: OfficialDocumentDraftBlockRole = "BODY") => commit((current) => {
-    const blocks = [...current.blocks];
-    const insertionIndex = afterIndex === undefined ? blocks.length : afterIndex + 1;
-    const sample = templateNodes.find((node) => node.role === role);
-    blocks.splice(insertionIndex, 0, {
-      id: crypto.randomUUID(),
-      order: insertionIndex,
-      role,
-      variantId: sample?.variantId ?? "",
-      text: ""
+  const addBlock = (afterIndex?: number, role: OfficialDocumentDraftBlockRole = "BODY") => {
+    const id = crypto.randomUUID();
+    pendingFocusIdRef.current = id;
+    setJustAddedId(id);
+    setAddNotice(`已加入${roleLabels[role]}`);
+    commit((current) => {
+      const blocks = [...current.blocks];
+      const insertionIndex = afterIndex === undefined ? blocks.length : afterIndex + 1;
+      const sample = templateNodes.find((node) => node.role === role);
+      blocks.splice(insertionIndex, 0, {
+        id,
+        order: insertionIndex,
+        role,
+        variantId: sample?.variantId ?? "",
+        text: ""
+      });
+      return { ...current, blocks: normalizeOrders(blocks) };
     });
-    return { ...current, blocks: normalizeOrders(blocks) };
-  });
+  };
 
   const removeBlock = (index: number) => commit((current) => ({
     ...current,
@@ -322,34 +386,47 @@ export function StructuredDraftEditor({
           </Tag>
         </header>
         {saveError ? <p className="structured-draft-editor__error">{saveError}</p> : null}
-        <div className="structured-draft-editor__quick-add" aria-label="新增正文节点">
-          {roleOptions.map((option) => (
-            <Button key={option.value} size="small" icon={<Plus size={14} />} onClick={() => addBlock(undefined, option.value)}>
-              {option.label}
-            </Button>
-          ))}
+        <div className="structured-draft-editor__quick-add">
+          <AddNodeTypeMenu onSelect={(role) => addBlock(undefined, role)}>
+            <Button size="small" icon={<Plus size={14} />}>新增节点</Button>
+          </AddNodeTypeMenu>
+          {addNotice ? (
+            <span className="structured-draft-editor__add-notice" role="status">{addNotice}</span>
+          ) : null}
         </div>
         <div className="structured-draft-editor__blocks">
           {content.blocks.map((block, index) => (
-            <article key={block.id} data-role={block.role.toLocaleLowerCase()}>
+            <article
+              key={block.id}
+              data-role={block.role.toLocaleLowerCase()}
+              data-just-added={block.id === justAddedId ? "true" : undefined}
+            >
               <div className="structured-draft-editor__block-tools">
                 <Select
-                  aria-label={`节点 ${index + 1} 角色`}
+                  aria-label={`节点 ${index + 1} 类型`}
+                  size="small"
                   value={block.role}
                   options={roleOptions}
+                  popupMatchSelectWidth={false}
+                  getPopupContainer={() => document.body}
+                  classNames={{ popup: { root: "structured-draft-editor__role-dropdown" } }}
                   onChange={(role) => changeRole(block.id, role)}
                 />
                 <span>节点 {index + 1}</span>
                 <Button type="text" size="small" aria-label="上移节点" disabled={index === 0} icon={<ArrowUp size={15} />} onClick={() => moveBlock(index, -1)} />
                 <Button type="text" size="small" aria-label="下移节点" disabled={index === content.blocks.length - 1} icon={<ArrowDown size={15} />} onClick={() => moveBlock(index, 1)} />
-                <Button type="text" size="small" aria-label="在下方新增节点" icon={<Plus size={15} />} onClick={() => addBlock(index, block.role)} />
+                <AddNodeTypeMenu onSelect={(role) => addBlock(index, role)}>
+                  <Button type="text" size="small" aria-label="在下方新增节点" icon={<Plus size={15} />} />
+                </AddNodeTypeMenu>
                 <Button danger type="text" size="small" aria-label="删除节点" icon={<Trash size={15} />} onClick={() => removeBlock(index)} />
               </div>
               {block.role === "BODY" ? (
                 <Input.TextArea
                   id={`draft-block-${block.id}`}
                   value={block.text}
+                  autoFocus={block.id === justAddedId}
                   autoSize={{ minRows: 4, maxRows: 16 }}
+                  placeholder={rolePlaceholders[block.role]}
                   aria-label={`正文节点 ${index + 1}`}
                   onChange={(event) => updateBlock(block.id, { text: event.target.value })}
                 />
@@ -357,6 +434,8 @@ export function StructuredDraftEditor({
                 <Input
                   id={`draft-block-${block.id}`}
                   value={block.text}
+                  autoFocus={block.id === justAddedId}
+                  placeholder={rolePlaceholders[block.role]}
                   aria-label={`${roleLabels[block.role]}节点 ${index + 1}`}
                   onChange={(event) => updateBlock(block.id, { text: event.target.value })}
                 />

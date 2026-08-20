@@ -27,6 +27,7 @@ const configuredApiMode = (import.meta.env.VITE_OFFICIAL_DOCUMENT_API_MODE ?? "g
 const productionDirectAccessRejected = configuredApiMode === "direct-development" && !import.meta.env.DEV;
 const configuredApiBaseUrl = productionDirectAccessRejected ? "" : requestedApiBaseUrl;
 const DEFAULT_TIMEOUT_MS = 20_000;
+const EXPORT_TIMEOUT_MS = 90_000;
 const MAX_TEMPLATE_BYTES = 25 * 1024 * 1024;
 
 type OfficialDocumentServiceErrorOptions = {
@@ -269,10 +270,25 @@ export function resolveOfficialDocumentErrorMessage(status: number, payload: unk
     if (typeof record.message === "string" && record.message.trim()) {
       const code = typeof record.code === "string" ? record.code : "";
       if (code === "OBJECT_NOT_FOUND" || record.message.includes("文档对象不存在")) {
-        return "该模板的编译文件已丢失，无法创建草稿。请改用待校准模板，完成角色映射并发布后再试。";
+        return "该模板的编译文件已丢失，无法创建草稿。请重新上传模板后再试。";
       }
       if (code === "TEMPLATE_NOT_PUBLISHED") {
-        return "只能使用已发布模板创建草稿。请先在校准页保存角色映射并发布。";
+        return "模板还不能起草。请重新打开模板并点击“按模板新建草稿”。";
+      }
+      if (code === "DRAFT_NOT_READY" || record.message.includes("READY 状态")) {
+        return "这篇草稿还不能导出。内容保存完成后即可导出 Word";
+      }
+      if (code === "LIBREOFFICE_UNAVAILABLE" || record.message.includes("LibreOffice")) {
+        return "PDF 暂时不能生成，请先导出 Word";
+      }
+      if (code === "SYNCFUSION_GENERATE_FAILED") {
+        return "按模板生成 Word 失败。请检查正文后重试";
+      }
+      if (code === "FIDELITY_CHECK_FAILED") {
+        return "导出文件没有通过版式检查。请先导出 Word，或调整正文后再试";
+      }
+      if (code === "COMPILED_TEMPLATE_HASH_MISMATCH") {
+        return "模板文件已变更，请重新打开模板并创建草稿后再导出";
       }
       return record.message.trim();
     }
@@ -390,10 +406,12 @@ function asArray<T>(payload: unknown, field: string): T[] {
 function capabilityDetail(value: unknown) {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
-    const reasons = (value as Record<string, unknown>).blockingReasons;
-    if (Array.isArray(reasons) && reasons.length > 0 && reasons.every((reason) => typeof reason === "string")) {
-      return reasons.join("；");
-    }
+    const record = value as Record<string, unknown>;
+    const parts = [record.blockingReasons, record.warnings]
+      .filter((item): item is unknown[] => Array.isArray(item))
+      .flat()
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    if (parts.length > 0) return parts.join("；");
   }
   return undefined;
 }
@@ -407,8 +425,8 @@ function mapRuntimeCapabilities(payload: unknown): OfficialDocumentRuntimeCapabi
     detail: capabilityDetail(value?.details)
   });
   const supported = <T extends string>(values: string[] | undefined, allowed: readonly T[], fallback: T[]) => {
-    const result = (values ?? []).filter((value): value is T => allowed.includes(value as T));
-    return result.length > 0 ? result : fallback;
+    if (values === undefined) return fallback;
+    return values.filter((value): value is T => allowed.includes(value as T));
   };
   return {
     wordEngine: state(source.wordEngine, "ENGINE_CAPABILITY_UNKNOWN"),
@@ -602,7 +620,7 @@ function mapAnalysis(
       slotType: mapping?.slotType,
       endParagraphIndex: mapping?.endParagraphIndex,
       role: role as OfficialDocumentAnalysis["structureNodes"][number]["role"],
-      roleLabel: role === "UNKNOWN" ? `段落 ${paragraph.index + 1}（待校准）` : officialRoleLabels[role],
+      roleLabel: role === "UNKNOWN" ? `段落 ${paragraph.index + 1}` : officialRoleLabels[role],
       preview: paragraph.text?.trim() || "空段落（保留格式）",
       empty: !paragraph.text?.trim(),
       editable: role !== "PRESERVE",
@@ -657,7 +675,7 @@ function mapAnalysis(
       id: `engine-blocking:${index}`,
       code: "ENGINE_BLOCKING_REASON",
       severity: "BLOCKING",
-      title: "Word 引擎阻断",
+      title: "Word 引擎错误",
       detail: reason
     });
   }
@@ -994,7 +1012,8 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         `/v1/drafts/${encodeURIComponent(draftId)}/exports`,
         {
           method: "POST",
-          body: JSON.stringify({ format })
+          body: JSON.stringify({ format }),
+          timeoutMs: EXPORT_TIMEOUT_MS
         }
       );
       return mapExportRecord(record);
@@ -1003,7 +1022,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       return requestOfficialDocument<Blob>(
         baseUrl,
         `/v1/exports/${encodeURIComponent(exportId)}/download`,
-        { responseType: "blob" }
+        { responseType: "blob", timeoutMs: EXPORT_TIMEOUT_MS }
       );
     }
   };

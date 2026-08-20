@@ -150,8 +150,8 @@ describe("data asset actions", () => {
     expect(screen.queryByText("解析完成")).not.toBeInTheDocument();
     expect(screen.queryByText("今日新增")).not.toBeInTheDocument();
 
-    // 详情不再是禁用占位，而是站内知识库详情页
-    expect(screen.getByRole("link", { name: "查看 企业制度知识库 详情" })).toHaveAttribute(
+    // 详情不再是禁用占位，而是站内知识库详情页；卡片本身就是入口
+    expect(screen.getByRole("link", { name: "知识库：企业制度知识库" })).toHaveAttribute(
       "href",
       "/cloud/kb-policy"
     );
@@ -162,7 +162,7 @@ describe("data asset actions", () => {
     renderRoute("/data-management");
 
     await screen.findByRole("heading", { name: "数据资产管理" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
-    expect(screen.getByRole("button", { name: "新增知识库" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加知识库" })).toBeDisabled();
     expect(screen.getByText("无法从当前登录配置确定 DataHub 地址")).toBeInTheDocument();
   });
 

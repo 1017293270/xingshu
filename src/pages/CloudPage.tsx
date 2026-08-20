@@ -1,14 +1,5 @@
 import { Button, Input, Segmented } from "antd";
-import {
-  ArrowRight,
-  ArrowsClockwise,
-  ClockCounterClockwise,
-  Database,
-  MagnifyingGlass,
-  Plus,
-  Rows,
-  SquaresFour
-} from "@phosphor-icons/react";
+import { ArrowRight, ArrowsClockwise, MagnifyingGlass, Plus, Rows, SquaresFour } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -16,18 +7,23 @@ import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsCountUpText } from "@/components/xs/XsCountUpText";
 import { XsIconTile } from "@/components/xs/XsIconTile";
+import { XsKnowledgeCard } from "@/components/xs/XsKnowledgeCard";
+import { xsKnowledgeToneFor } from "@/components/xs/knowledgeTone";
+import { XsStatCard } from "@/components/xs/XsStatCard";
+import { xsEnterStep } from "@/components/xs/motion";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
-import cloudDriveIcon from "@/assets/cloud-icons/cloud-drive.png";
-import documentTotalIcon from "@/assets/data-management-icons/metric-document-total.png";
-import recentUpdateIcon from "@/assets/data-management-icons/metric-recent-update.png";
+import {
+  XsGlyphCloudDrive,
+  XsGlyphDocumentTotal,
+  XsGlyphKnowledgeTotal,
+  XsGlyphRecentUpdate
+} from "@/components/xs/XsMetricGlyphs";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
 import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { PageFrame } from "./PageFrame";
 import "./styles/cloud.css";
-
-const knowledgeBaseTones = ["blue", "cyan", "green"] as const;
 
 type CloudSortKey = "updated" | "documents" | "name";
 type CloudViewMode = "grid" | "list";
@@ -126,73 +122,14 @@ function ShareBar({ share, layout = "stacked" }: { share: number; layout?: "stac
   );
 }
 
-function KnowledgeBaseCard({
-  knowledgeBase,
-  index,
-  documentTotal
-}: {
-  knowledgeBase: DataHubKnowledgeBase;
-  index: number;
-  documentTotal?: number;
-}) {
-  const tone = knowledgeBaseTones[index % knowledgeBaseTones.length];
-  const share = documentShare(knowledgeBase, documentTotal);
-  const updatedAt = formatKnowledgeUpdatedAt(knowledgeBase.updatedAt);
-  return (
-    <Link
-      to={`/cloud/${encodeURIComponent(knowledgeBase.id)}`}
-      className="xs-card xs-card-lift xs-page-enter cloud-kb-card xs-card-link"
-      style={{ animationDelay: `${160 + Math.min(index, 7) * 60}ms` }}
-      aria-label={`知识库：${knowledgeBase.title}`}
-    >
-      <div className="cloud-kb-card__head">
-        <XsIconTile icon={Database} label={knowledgeBase.title} tone={tone} />
-        <div className="cloud-kb-card__heading">
-          <h2>{knowledgeBase.title}</h2>
-          <p>{knowledgeBaseDescription(knowledgeBase)}</p>
-        </div>
-      </div>
-      <div className="cloud-kb-card__stats">
-        <span className="cloud-kb-card__count">
-          {knowledgeBase.documentCount != null ? (
-            <>
-              <strong>{knowledgeBase.documentCount.toLocaleString("zh-CN")}</strong>
-              <small>份文档</small>
-            </>
-          ) : (
-            <small>文档数待同步</small>
-          )}
-        </span>
-        {share != null ? <ShareBar share={share} /> : null}
-      </div>
-      <div className="cloud-kb-card__foot">
-        {updatedAt ? (
-          <span className="cloud-kb-card__time">
-            <ClockCounterClockwise size={14} aria-hidden="true" />
-            <time dateTime={knowledgeBase.updatedAt}>{updatedAt}</time>
-          </span>
-        ) : (
-          <span className="cloud-kb-card__time">更新时间待同步</span>
-        )}
-        <span className="cloud-kb-card__open">
-          查看文档
-          <ArrowRight size={14} aria-hidden="true" />
-        </span>
-      </div>
-    </Link>
-  );
-}
-
 function KnowledgeBaseRow({
   knowledgeBase,
-  index,
   documentTotal
 }: {
   knowledgeBase: DataHubKnowledgeBase;
-  index: number;
   documentTotal?: number;
 }) {
-  const tone = knowledgeBaseTones[index % knowledgeBaseTones.length];
+  const tone = xsKnowledgeToneFor(knowledgeBase.id);
   const share = documentShare(knowledgeBase, documentTotal);
   const updatedAt = formatKnowledgeUpdatedAt(knowledgeBase.updatedAt);
   return (
@@ -202,7 +139,7 @@ function KnowledgeBaseRow({
       aria-label={`知识库：${knowledgeBase.title}`}
     >
       <span className="cloud-kb-row__name">
-        <XsIconTile icon={Database} label={knowledgeBase.title} tone={tone} />
+        <XsIconTile glyph={XsGlyphKnowledgeTotal} label={knowledgeBase.title} tone={tone} />
         <span className="cloud-kb-row__text">
           <strong>{knowledgeBase.title}</strong>
           <small>{knowledgeBaseDescription(knowledgeBase)}</small>
@@ -294,6 +231,7 @@ export function CloudPage() {
       title="我的云盘"
       subtitle="集中查看当前空间已入库的知识库与文档规模"
       className="cloud-page"
+      track="data"
       actions={(
         <>
           <Button
@@ -320,59 +258,60 @@ export function CloudPage() {
     >
       <div aria-label="我的云盘内容">
         {showMetrics ? (
-          <section className="cloud-kpis" aria-label="云盘概览指标">
-            <article className="xs-card xs-card-lift cloud-kpi xs-page-enter" style={{ animationDelay: "60ms" }}>
-              <div>
-                <span className="cloud-kpi__label">知识库</span>
-                <strong className="cloud-kpi__value">
+          <section className="xs-stat-row" aria-label="云盘概览指标">
+            <XsStatCard
+              label="知识库总数"
+              value={(
+                <XsCountUpText
+                  value={String(overview.knowledgeBaseCount)}
+                  previousValue={
+                    previousOverviewRef.current
+                      ? String(previousOverviewRef.current.knowledgeBaseCount)
+                      : undefined
+                  }
+                />
+              )}
+              caption="当前空间已入库"
+              glyph={XsGlyphCloudDrive}
+              tone="blue"
+              step={1}
+            />
+            {overview.documentTotal != null ? (
+              <XsStatCard
+                label="文档总数"
+                value={(
                   <XsCountUpText
-                    value={String(overview.knowledgeBaseCount)}
+                    value={overview.documentTotal.toLocaleString("zh-CN")}
                     previousValue={
-                      previousOverviewRef.current
-                        ? String(previousOverviewRef.current.knowledgeBaseCount)
+                      previousOverviewRef.current?.documentTotal != null
+                        ? previousOverviewRef.current.documentTotal.toLocaleString("zh-CN")
                         : undefined
                     }
                   />
-                </strong>
-                <small className="cloud-kpi__caption">当前空间已入库</small>
-              </div>
-              <XsIconTile imageSrc={cloudDriveIcon} label="知识库总数" tone="blue" />
-            </article>
-            {overview.documentTotal != null ? (
-              <article className="xs-card xs-card-lift cloud-kpi xs-page-enter" style={{ animationDelay: "100ms" }}>
-                <div>
-                  <span className="cloud-kpi__label">文档总数</span>
-                  <strong className="cloud-kpi__value">
-                    <XsCountUpText
-                      value={overview.documentTotal.toLocaleString("zh-CN")}
-                      previousValue={
-                        previousOverviewRef.current?.documentTotal != null
-                          ? previousOverviewRef.current.documentTotal.toLocaleString("zh-CN")
-                          : undefined
-                      }
-                    />
-                  </strong>
-                  <small className="cloud-kpi__caption">可被问答与写作引用</small>
-                </div>
-                <XsIconTile imageSrc={documentTotalIcon} label="文档总数" tone="cyan" />
-              </article>
+                )}
+                caption="可被问答与写作引用"
+                glyph={XsGlyphDocumentTotal}
+                tone="cyan"
+                step={2}
+              />
             ) : null}
             {overview.latestUpdatedAt ? (
-              <article className="xs-card xs-card-lift cloud-kpi xs-page-enter" style={{ animationDelay: "140ms" }}>
-                <div>
-                  <span className="cloud-kpi__label">最近更新</span>
-                  <strong className="cloud-kpi__value cloud-kpi__value--time">{overview.latestUpdatedAt}</strong>
-                  <small className="cloud-kpi__caption">来自 DataHub 同步时间</small>
-                </div>
-                <XsIconTile imageSrc={recentUpdateIcon} label="最近更新" tone="green" />
-              </article>
+              <XsStatCard
+                label="最近更新"
+                value={overview.latestUpdatedAt}
+                valueType="text"
+                caption="来自 DataHub 同步时间"
+                glyph={XsGlyphRecentUpdate}
+                tone="green"
+                step={3}
+              />
             ) : null}
           </section>
         ) : null}
 
         {showToolbar ? (
           <>
-            <section className="cloud-toolbar xs-page-enter" style={{ animationDelay: "180ms" }} aria-label="知识库筛选">
+            <section className="cloud-toolbar xs-page-enter" style={xsEnterStep(4)} aria-label="知识库筛选">
               <Input
                 aria-label="知识库搜索"
                 allowClear
@@ -458,23 +397,27 @@ export function CloudPage() {
                 <span>最近更新</span>
                 <span />
               </div>
-              {visibleKnowledgeBases.map((knowledgeBase, index) => (
+              {visibleKnowledgeBases.map((knowledgeBase) => (
                 <KnowledgeBaseRow
                   key={knowledgeBase.id}
                   knowledgeBase={knowledgeBase}
-                  index={index}
                   documentTotal={overview.documentTotal}
                 />
               ))}
             </section>
           ) : (
-            <section className="cloud-kb-grid" aria-label="知识库列表">
-              {visibleKnowledgeBases.map((knowledgeBase, index) => (
-                <KnowledgeBaseCard
+            <section className="xs-card-grid" aria-label="知识库列表">
+              {visibleKnowledgeBases.map((knowledgeBase) => (
+                <XsKnowledgeCard
                   key={knowledgeBase.id}
-                  knowledgeBase={knowledgeBase}
-                  index={index}
-                  documentTotal={overview.documentTotal}
+                  id={knowledgeBase.id}
+                  title={knowledgeBase.title}
+                  description={knowledgeBaseDescription(knowledgeBase)}
+                  documentCount={knowledgeBase.documentCount}
+                  updatedAt={formatKnowledgeUpdatedAt(knowledgeBase.updatedAt)}
+                  updatedAtValue={knowledgeBase.updatedAt}
+                  share={documentShare(knowledgeBase, overview.documentTotal)}
+                  tone={xsKnowledgeToneFor(knowledgeBase.id)}
                 />
               ))}
             </section>

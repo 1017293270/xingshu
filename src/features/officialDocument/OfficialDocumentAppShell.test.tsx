@@ -83,11 +83,11 @@ describe("OfficialDocumentAppShell", () => {
     expect(screen.getByText("Agent 应用")).toBeInTheDocument();
   });
 
-  it("updates the top-bar context for template calibration and draft canvas", async () => {
+  it("updates the top-bar context for template structure and draft canvas", async () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={["/writing/templates/template-1"]}>
         <OfficialDocumentAppShell>
-          <ChromeProbe stage="template" context="季度工作通知" contextDetail="版本 v2" actionLabel="发布模板" />
+          <ChromeProbe stage="template" context="季度工作通知" contextDetail="版本 v2" actionLabel="按模板新建草稿" />
         </OfficialDocumentAppShell>
       </MemoryRouter>
     );
@@ -99,11 +99,11 @@ describe("OfficialDocumentAppShell", () => {
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("季度工作通知");
     });
-    expect(screen.getByText("模板校准")).toBeInTheDocument();
+    expect(screen.getByText("模板结构")).toBeInTheDocument();
     expect(screen.getByText("版本 v2")).toBeInTheDocument();
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__actions")).toContainElement(
-        screen.getByRole("button", { name: "发布模板" })
+        screen.getByRole("button", { name: "按模板新建草稿" })
       );
     });
 

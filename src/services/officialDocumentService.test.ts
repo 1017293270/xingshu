@@ -196,6 +196,6 @@ describe("officialDocumentService HTTP client", () => {
     expect(resolveOfficialDocumentErrorMessage(404, {
       code: "OBJECT_NOT_FOUND",
       message: "文档对象不存在"
-    }, "Not Found")).toBe("该模板的编译文件已丢失，无法创建草稿。请改用待校准模板，完成角色映射并发布后再试。");
+    }, "Not Found")).toBe("该模板的编译文件已丢失，无法创建草稿。请重新上传模板后再试。");
   });
 });

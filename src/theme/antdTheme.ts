@@ -24,7 +24,12 @@ export const antdTheme: ThemeConfig = {
     Button: {
       borderRadius: xingshuTokens.radiusControl,
       controlHeight: xingshuTokens.controlHeight,
-      primaryShadow: xingshuTokens.shadowButton
+      primaryShadow: xingshuTokens.shadowButton,
+      // 实心按钮用更深的品牌蓝：#1677FF 配白字只有 3.4:1，达不到 WCAG AA 正文对比度。
+      // 品牌主色仍用于边框、链接、选中态。
+      colorPrimary: xingshuTokens.colorPrimaryStrong,
+      colorPrimaryHover: xingshuTokens.colorPrimarySolidHover,
+      colorPrimaryActive: xingshuTokens.colorPrimarySolidActive
     },
     Card: {
       borderRadiusLG: xingshuTokens.radiusCard

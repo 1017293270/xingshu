@@ -4,9 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
-import { productCapabilities } from "@/config/capabilities";
 import { TablePlaceholder } from "@/features/tableGeneration/TablePlaceholder";
 import { TableResultStage } from "@/features/tableGeneration/TableResultStage";
 import { groupTableSessions } from "@/features/tableGeneration/sessionGroups";
@@ -121,6 +119,7 @@ export function TableSessionView() {
   return (
     <PageFrame
       className="table-session-page"
+      track="data"
       title="问表智能体"
       subtitle="每次制表都是独立会话，可还原当时的结果表，也可以继续追问"
       actions={
@@ -136,7 +135,6 @@ export function TableSessionView() {
         </>
       }
     >
-      <XsCapabilityStatus capability={productCapabilities.tables} />
       <div className="table-agent">
         <section className="table-agent__stage" aria-label="制表工作台">
           <div className="table-agent__turns">

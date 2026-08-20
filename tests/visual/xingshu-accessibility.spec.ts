@@ -52,7 +52,8 @@ const accessibilityRoutes: AccessibilityRoute[] = [
     authenticated: true,
     ready: async (page) => {
       await expect(page.getByRole("heading", { name: "数据资产管理", level: 1 })).toBeVisible();
-      await expect(page.getByText("财务审计知识库", { exact: false }).first()).toBeVisible();
+      // 该用例把所有 /api 都挡成空数据，页面稳定态是筛选栏 + 空状态，不是知识库卡片
+      await expect(page.getByRole("region", { name: "知识库筛选" })).toBeVisible();
     }
   }
 ];

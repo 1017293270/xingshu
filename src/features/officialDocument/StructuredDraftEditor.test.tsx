@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as officialDocumentService from "@/services/officialDocumentService";
@@ -115,5 +116,36 @@ describe("StructuredDraftEditor", () => {
       );
     });
     expect(screen.getByLabelText("结构化公文编辑器").querySelector(":scope > .ant-btn")).toBeNull();
+  });
+
+  it("asks for a node type before inserting a new block", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [{ id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "原正文" }]
+    });
+    const save = vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByLabelText("正文节点 1")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "新增节点" }));
+    await user.click(await screen.findByRole("menuitem", { name: "二级标题" }));
+
+    const added = await screen.findByLabelText("二级标题节点 2");
+    expect(added).toHaveFocus();
+    expect(added).toHaveAttribute("placeholder", "输入二级标题");
+    expect(screen.getByText("已加入二级标题")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith("draft-1", expect.objectContaining({
+        blocks: [
+          expect.objectContaining({ id: "body-1", role: "BODY" }),
+          expect.objectContaining({ role: "HEADING_2", text: "" })
+        ]
+      }));
+    });
   });
 });

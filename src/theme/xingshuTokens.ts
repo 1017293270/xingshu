@@ -7,6 +7,8 @@ export const xingshuTokens = {
   colorBorderStrong: "#C7D9F6",
   colorPrimary: "#1677FF",
   colorPrimaryStrong: "#2563EB",
+  colorPrimarySolidHover: "#1D4ED8",
+  colorPrimarySolidActive: "#1E40AF",
   colorCyan: "#00C2FF",
   colorSuccess: "#16A37A",
   colorWarning: "#FFB020",

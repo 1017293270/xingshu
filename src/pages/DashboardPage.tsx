@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Input, Modal, Pagination, Segmented } from "antd";
+import { Button, Input, Modal, Pagination, Segmented } from "antd";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import dashboardEmptyIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
+import { XsEmptyState } from "@/components/xs/XsEmptyState";
+import { xsEnterStep } from "@/components/xs/motion";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { DashboardCard } from "@/features/dashboard/DashboardCard";
 import { hasCompletedDashboardOnboarding } from "@/features/dashboard/DashboardOnboarding";
@@ -20,6 +21,7 @@ import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import type { DashboardRecord, DashboardVersion } from "@/types/dashboardStudio";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
+import { PageFrame } from "./PageFrame";
 import "./styles/page-shell.css";
 import "./styles/dashboard-list.css";
 
@@ -147,39 +149,35 @@ export function DashboardPage() {
   );
 
   return (
-    <main className="dashboard-list">
-      <header className="dashboard-list__header xs-page-enter">
-        <div className="dashboard-list__title-group">
-          <h1>大屏库</h1>
-          <p>查询数据按当前登录账号权限实时加载，布局与查询版本独立发布。</p>
-        </div>
-        <div className="dashboard-list__header-actions">
+    <PageFrame
+      className="dashboard-list"
+      title="大屏库"
+      subtitle="查询数据按当前登录账号权限实时加载，布局与查询版本独立发布。"
+      actions={(
+        <>
           {queryAssetFeatureEnabled ? (
-            <button
-              className="dashboard-list__secondary-action"
-              type="button"
-              disabled={createMutation.isPending}
-              onClick={() => requestCreate("favorites")}
-            >
+            <Button disabled={createMutation.isPending} onClick={() => requestCreate("favorites")}>
               从收藏问数创建
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="dashboard-list__primary-action"
-            type="button"
+          <Button
+            type="primary"
             disabled={createMutation.isPending}
             data-testid="create-dashboard-button"
             onClick={() => requestCreate("blank")}
-          >{createMutation.isPending ? "创建中" : "新建大屏"}</button>
-        </div>
-      </header>
+          >
+            {createMutation.isPending ? "创建中" : "新建大屏"}
+          </Button>
+        </>
+      )}
+    >
 
       {operationError ? (
         <p className="dashboard-list__alert dashboard-list__alert--error" role="alert">{operationError}</p>
       ) : null}
 
       {records.length > 0 && !dashboardsQuery.isLoading && !dashboardsQuery.isError ? (
-        <section className="dashboard-list__toolbar xs-page-enter" aria-label="筛选大屏">
+        <section className="dashboard-list__toolbar xs-page-enter" style={xsEnterStep(1)} aria-label="筛选大屏">
           <Input
             allowClear
             prefix={<MagnifyingGlass size={18} />}
@@ -208,7 +206,7 @@ export function DashboardPage() {
       ) : null}
 
       {dashboardsQuery.isLoading ? (
-        <section className="dashboard-list__grid xs-page-enter" aria-busy="true" aria-label="正在加载大屏库">
+        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-busy="true" aria-label="正在加载大屏库">
           {[1, 2, 3, 4, 5, 6].map((item) => (
             <div key={item} className="dashboard-card dashboard-card--skeleton" aria-hidden="true">
               <div className="dashboard-card__preview dashboard-list__skeleton" />
@@ -220,46 +218,39 @@ export function DashboardPage() {
           ))}
         </section>
       ) : dashboardsQuery.isError ? (
-        <section className="dashboard-list__state dashboard-list__state--error" role="alert">
-          <p className="dashboard-list__eyebrow">加载失败</p>
-          <h2>大屏库暂不可用</h2>
-          <p>{dashboardsQuery.error instanceof Error ? dashboardsQuery.error.message : "请稍后重试"}</p>
-          <button type="button" onClick={() => void dashboardsQuery.refetch()}>重试</button>
-        </section>
+        <XsEmptyState
+          tone="error"
+          title="大屏库暂不可用"
+          description={dashboardsQuery.error instanceof Error ? dashboardsQuery.error.message : "请稍后重试"}
+          actionLabel="重试"
+          onAction={() => void dashboardsQuery.refetch()}
+        />
       ) : records.length === 0 ? (
-        <section className="dashboard-list__state dashboard-list__state--empty" aria-label="大屏库空状态">
-          <div className="dashboard-list__empty-visual" aria-hidden="true">
-            <span className="dashboard-list__empty-orbit dashboard-list__empty-orbit--outer" />
-            <span className="dashboard-list__empty-orbit dashboard-list__empty-orbit--inner" />
-            <img src={dashboardEmptyIcon} alt="" />
-          </div>
-          <p className="dashboard-list__eyebrow">暂无大屏</p>
-          <h2>创建第一个大屏</h2>
-          <p>可从空白画布开始，也可在问数结果中收藏并一键生成。</p>
-          <div className="dashboard-list__state-actions">
-            {queryAssetFeatureEnabled ? (
-              <button className="dashboard-list__secondary-action" type="button" onClick={() => requestCreate("favorites")}>
-                选择收藏问数
-              </button>
-            ) : null}
-            <button className="dashboard-list__primary-action" type="button" onClick={() => requestCreate("blank")}>
-              新建大屏
-            </button>
-          </div>
-        </section>
+        <XsEmptyState
+          ariaLabel="大屏库空状态"
+          eyebrow="暂无大屏"
+          title="创建第一个大屏"
+          description="可从空白画布开始，也可在问数结果中收藏并一键生成。"
+          secondaryActionLabel={queryAssetFeatureEnabled ? "选择收藏问数" : undefined}
+          onSecondaryAction={queryAssetFeatureEnabled ? () => requestCreate("favorites") : undefined}
+          actionLabel="新建大屏"
+          onAction={() => requestCreate("blank")}
+        />
       ) : filteredRecords.length === 0 ? (
-        <section className="dashboard-list__state" role="status">
-          <p className="dashboard-list__eyebrow">无匹配结果</p>
-          <h2>没有找到符合条件的大屏</h2>
-          <p>调整关键词或发布状态后重试。</p>
-          <button type="button" onClick={() => {
+        <XsEmptyState
+          ariaLabel="大屏库筛选无结果"
+          eyebrow="无匹配结果"
+          title="没有找到符合条件的大屏"
+          description="调整关键词或发布状态后重试。"
+          actionLabel="清除筛选"
+          onAction={() => {
             setSearchQuery("");
             setStatusFilter("all");
-          }}>清除筛选</button>
-        </section>
+          }}
+        />
       ) : (
         <>
-        <section className="dashboard-list__grid xs-page-enter" aria-label="大屏库">
+        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-label="大屏库">
           {visibleRecords.map((record) => (
             <DashboardCard
               key={record.id}
@@ -339,6 +330,6 @@ export function DashboardPage() {
       >
         <p>归档“{archiveCandidate?.schema.title}”？它会从大屏库中移除。</p>
       </Modal>
-    </main>
+    </PageFrame>
   );
 }

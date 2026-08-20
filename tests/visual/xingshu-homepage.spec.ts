@@ -363,7 +363,7 @@ const pages: SmokePage[] = [
     slug: "data-management",
     path: "/data-management",
     heading: "数据资产管理",
-    readyText: "财务审计知识库",
+    readyText: "企业制度知识库",
     charts: 0
   }
 ];
@@ -371,6 +371,16 @@ const pages: SmokePage[] = [
 async function settleResponsiveLayout(page: Page) {
   await page.evaluate(async () => {
     await document.fonts.ready;
+    // 入场动画和侧栏折叠都会改变元素的实测矩形：等有限时长的动画跑完再量，
+    // 否则量到的是缩放/位移中途的值（轨道环这类无限循环动画要排除）。
+    const finite = document
+      .getAnimations()
+      .filter((animation) => {
+        const timing = animation.effect?.getTiming();
+        return timing?.iterations !== Infinity;
+      })
+      .map((animation) => animation.finished.catch(() => undefined));
+    await Promise.all(finite);
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
     });
@@ -534,21 +544,24 @@ test("keeps cloud knowledge-base card content comfortably separated", async ({ p
     await expect(page.getByRole("link", { name: "知识库：企业制度知识库" })).toBeVisible();
     await settleResponsiveLayout(page);
 
-    const cards = page.locator(".cloud-kb-card");
+    const cards = page.locator(".xs-kb-card");
     await expect(cards).toHaveCount(3);
 
     const metrics = await cards.evaluateAll((elements) => elements.map((element) => {
       const cardRect = element.getBoundingClientRect();
       const iconRect = element.querySelector(".xs-icon-tile")!.getBoundingClientRect();
-      const bodyRect = element.querySelector(".cloud-kb-card__heading")!.getBoundingClientRect();
-      const headingRect = element.querySelector(".cloud-kb-card__heading h2")!.getBoundingClientRect();
-      const descriptionRect = element.querySelector(".cloud-kb-card__heading p")!.getBoundingClientRect();
-      const footRect = element.querySelector(".cloud-kb-card__foot")!.getBoundingClientRect();
+      const bodyRect = element.querySelector(".xs-kb-card__heading")!.getBoundingClientRect();
+      const headingRect = element.querySelector(".xs-kb-card__heading h2")!.getBoundingClientRect();
+      const descriptionRect = element.querySelector(".xs-kb-card__heading p")!.getBoundingClientRect();
+      const footRect = element.querySelector(".xs-kb-card__foot")!.getBoundingClientRect();
 
       return {
+        cardTop: cardRect.top,
         cardHeight: cardRect.height,
         iconBodyGap: bodyRect.left - iconRect.right,
         headingDescriptionGap: descriptionRect.top - headingRect.bottom,
+        descriptionHeight: descriptionRect.height,
+        footTop: footRect.top,
         footBottomGap: cardRect.bottom - footRect.bottom
       };
     }));
@@ -557,7 +570,21 @@ test("keeps cloud knowledge-base card content comfortably separated", async ({ p
       expect(metric.cardHeight).toBeGreaterThanOrEqual(180);
       expect(metric.iconBodyGap).toBeGreaterThanOrEqual(14);
       expect(metric.headingDescriptionGap).toBeGreaterThanOrEqual(6);
+      expect(metric.descriptionHeight).toBeGreaterThanOrEqual(28);
       expect(metric.footBottomGap).toBeGreaterThanOrEqual(16);
+    }
+
+    const rows = new Map<number, typeof metrics>();
+    for (const metric of metrics) {
+      const rowKey = Math.round(metric.cardTop);
+      const row = rows.get(rowKey) ?? [];
+      row.push(metric);
+      rows.set(rowKey, row);
+    }
+
+    for (const row of rows.values()) {
+      const footTops = row.map((metric) => metric.footTop);
+      expect(Math.max(...footTops) - Math.min(...footTops)).toBeLessThanOrEqual(1);
     }
   }
 });
@@ -568,10 +595,10 @@ test("switches the cloud drive between card and list views", async ({ page }) =>
   await expect(page.getByRole("link", { name: "知识库：企业制度知识库" })).toBeVisible();
   await settleResponsiveLayout(page);
 
-  await expect(page.locator(".cloud-kb-card")).toHaveCount(3);
+  await expect(page.locator(".xs-kb-card")).toHaveCount(3);
   await page.locator(".cloud-toolbar__view").getByText("列表").click();
   await expect(page.locator(".cloud-kb-row")).toHaveCount(3);
-  await expect(page.locator(".cloud-kb-card")).toHaveCount(0);
+  await expect(page.locator(".xs-kb-card")).toHaveCount(0);
   await settleResponsiveLayout(page);
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/cloud-list-react-1440x900.png",
@@ -1126,6 +1153,7 @@ test("home page matches the reference welcome workbench composition", async ({ p
   await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
   await expect(page.getByText("我是您的数据管家，有什么可以帮您？")).toBeVisible();
   await expect(page.getByRole("button", { name: "选择模型，当前编排模型" })).toBeVisible();
+  await settleResponsiveLayout(page);
 
   const metrics = await page.evaluate(() => {
     const hero = document.querySelector(".home-page__hero");
@@ -1264,7 +1292,7 @@ test("home model selector exposes all modes and recommendation cards open their 
 test("centers collapsed sidebar icons in their tiles", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/history");
-  await expect(page.getByRole("heading", { name: "历史对话" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "历史对话", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "收起侧边栏" }).click();
   await expect(page.locator(".xs-sidebar--collapsed")).toBeVisible();
   await expect(page.getByRole("button", { name: "展开侧边栏" })).toBeVisible();
@@ -1309,7 +1337,7 @@ test("centers collapsed sidebar icons in their tiles", async ({ page }) => {
 test("navigates from collapsed sidebar icons", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/history");
-  await expect(page.getByRole("heading", { name: "历史对话" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "历史对话", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "收起侧边栏" }).click();
   await expect(page.locator(".xs-sidebar--collapsed")).toBeVisible();
   await expect.poll(async () => {
@@ -1478,7 +1506,7 @@ test("mobile navigation reaches every product destination and account route", as
       label: "数据资产管理",
       path: "/data-management",
       heading: "数据资产管理",
-      readyText: "财务审计知识库"
+      readyText: "企业制度知识库"
     }
   ];
 
@@ -1545,10 +1573,11 @@ test("reduced motion keeps feedback visible while suppressing nonessential motio
 test.describe("desktop content density", () => {
   const wideTrackCases = [
     { path: "/", selector: ".home-page__apps", minWidth: 1439, maxWidth: 1441 },
-    { path: "/table", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
+    { path: "/table", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
+    { path: "/cloud", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/writing", selector: ".official-document-app", minWidth: 2100, maxWidth: 2200 },
     { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
-    { path: "/dashboard", selector: ".dashboard-list__header", minWidth: 1439, maxWidth: 1441 },
+    { path: "/dashboard", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
     { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/data-management", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 }
   ];
@@ -1571,7 +1600,11 @@ test.describe("desktop content density", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto("/table");
-    await expect(page.locator(".sheet-list")).toHaveCSS("grid-template-columns", /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/);
+    // 最近制表是单列表格式列表：密度体现在列位，不是卡片分栏
+    await expect(page.locator(".sheet-list__head")).toHaveCSS(
+      "grid-template-columns",
+      /\d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+    );
 
     await page.route("**/api/v1/chat/sessions/list", (route) =>
       route.fulfill({

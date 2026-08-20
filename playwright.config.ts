@@ -19,6 +19,8 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     colorScheme: "light",
     locale: "zh-CN",
+    // 断言里的时间戳按 +08:00 写死，不钉时区的话换台机器就会红
+    timezoneId: "Asia/Shanghai",
     screenshot: "only-on-failure",
     serviceWorkers: "block",
     trace: "retain-on-failure"

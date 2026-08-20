@@ -87,13 +87,13 @@ describe("DraftLibraryView", () => {
     expect(screen.queryByRole("list", { name: "公文模板列表" })).not.toBeInTheDocument();
   });
 
-  it("warns instead of navigating when no published template exists", async () => {
+  it("warns instead of navigating when no usable template exists", async () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(populatedWorkspace);
     renderDraftBox();
 
     await screen.findByRole("list", { name: "公文草稿列表" });
     screen.getByRole("button", { name: /新建草稿/ }).click();
 
-    expect(await screen.findByText(/还没有已发布模板/)).toBeInTheDocument();
+    expect(await screen.findByText(/还没有可用模板/)).toBeInTheDocument();
   });
 });

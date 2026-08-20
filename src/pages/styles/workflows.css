@@ -19,7 +19,7 @@
 .sheet-console .sheet-console__head h2 {
   margin: 0;
   color: var(--xs-text);
-  font-size: 17px;
+  font-size: var(--xs-fs-card);
   font-weight: 750;
 }
 
@@ -27,7 +27,7 @@
   max-width: 66ch;
   margin: 5px 0 0;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.6;
 }
 
@@ -51,7 +51,7 @@
 .sheet-prompt .ant-input {
   padding: 14px 16px 10px;
   color: var(--xs-text);
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   line-height: 1.65;
   resize: none;
 }
@@ -80,7 +80,7 @@
 
 .sheet-prompt__shortcut {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
 }
 
@@ -88,7 +88,7 @@
   height: 34px;
   padding: 0 16px;
   border-radius: var(--xs-radius-small);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
   transition:
     transform var(--xs-motion-feedback) var(--xs-motion-ease-out),
@@ -145,7 +145,7 @@
 
 .sheet-suggestions > span {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
 }
 
@@ -156,7 +156,7 @@
   border-radius: 999px;
   color: var(--xs-text-2);
   background: var(--xs-surface);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
   cursor: pointer;
   transition:
@@ -169,7 +169,7 @@
 .sheet-suggestions button:not(:disabled):focus-visible {
   color: var(--xs-primary-2);
   border-color: #9fc8ff;
-  background: #f3f8ff;
+  background: var(--xs-bg);
 }
 
 .sheet-suggestions button:disabled {
@@ -192,7 +192,7 @@
   gap: 8px;
   margin: 0;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 620;
 }
 
@@ -220,14 +220,14 @@
 .table-placeholder .table-placeholder__head h2 {
   margin: 0;
   color: var(--xs-text-2);
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   font-weight: 750;
 }
 
 .table-placeholder__head p {
   margin: 5px 0 0;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.6;
 }
 
@@ -299,7 +299,7 @@
 /* 结论排在表之后：表是交付物，文字是脚注 */
 .sheet-result__answer {
   color: var(--xs-text-2);
-  font-size: 13.5px;
+  font-size: var(--xs-fs-label);
   line-height: 1.7;
 }
 
@@ -415,7 +415,7 @@
 
 .agent-trace__title {
   flex: none;
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
 }
 
@@ -423,7 +423,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -453,13 +453,13 @@
 }
 
 .agent-trace__step[data-status="running"] {
-  background: #eef6ff;
+  background: var(--xs-info-soft);
 }
 
 .agent-trace__index {
   color: var(--xs-table-muted);
   font-family: var(--xs-font-mono);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -473,7 +473,7 @@
 
 .agent-trace__label {
   color: var(--xs-text);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
 }
 
@@ -485,7 +485,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -493,7 +493,7 @@
 .agent-trace__duration {
   color: var(--xs-table-muted);
   font-family: var(--xs-font-mono);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -522,7 +522,7 @@
 .agent-trace__sql > summary {
   width: max-content;
   color: var(--xs-interactive-text);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
   cursor: pointer;
 }
@@ -537,7 +537,7 @@
   color: var(--xs-text-2);
   background: var(--xs-surface);
   font-family: var(--xs-font-mono);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -596,13 +596,13 @@
 
 .writing-mode-switch strong {
   color: inherit;
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
   line-height: 1.35;
 }
 
 .writing-mode-switch small {
   color: #7185a1;
-  font-size: 11px;
+  font-size: var(--xs-fs-caption);
   line-height: 1.4;
 }
 
@@ -629,12 +629,12 @@
 }
 
 .section-title-row--compact h2.subsection-title {
-  font-size: 17px;
+  font-size: var(--xs-fs-card);
 }
 
 .section-title-meta {
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 650;
 }
 
@@ -667,7 +667,7 @@
   border-bottom: 1px solid var(--xs-border-strong);
   color: var(--xs-text-3);
   background: var(--xs-table-head);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -697,7 +697,7 @@
 
 .sheet-row:hover,
 .sheet-row:focus-within {
-  background: #f7fbff;
+  background: var(--xs-surface-soft);
 }
 
 .sheet-row__main {
@@ -723,7 +723,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--xs-text);
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -736,7 +736,7 @@
 
 .sheet-row__type {
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
 }
 
@@ -744,7 +744,7 @@
 .sheet-row__time {
   color: var(--xs-text-3);
   font-family: var(--xs-font-mono);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -771,14 +771,14 @@
   padding: 0 10px;
   border-radius: var(--xs-radius-small);
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
 }
 
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):hover,
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):focus-visible {
   color: var(--xs-primary-2);
-  background: #eef6ff;
+  background: var(--xs-info-soft);
 }
 
 /* 按钮常驻但压低对比：表头写了"操作"，这一列就不能是空的 */
@@ -892,7 +892,7 @@
 .table-agent__request-index {
   color: var(--xs-primary-2);
   font-family: var(--xs-font-mono);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -900,7 +900,7 @@
 .table-agent__user {
   margin: 0;
   color: var(--xs-text);
-  font-size: 19px;
+  font-size: var(--xs-fs-section);
   font-weight: 750;
   line-height: 1.45;
 }
@@ -911,13 +911,13 @@
   padding: 0 13px;
   border-radius: var(--xs-radius-small);
   color: var(--xs-interactive-text);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
 }
 
 .table-agent__export.ant-btn:not(:disabled):hover {
   border-color: var(--xs-primary);
-  background: #f3f8ff;
+  background: var(--xs-bg);
 }
 
 /* 追问框留在文档流末尾：吸底会盖住结果表的行，而表才是这一页的交付物 */
@@ -949,7 +949,7 @@
   margin: 0 0 4px;
   padding: 0 8px;
   color: var(--xs-text-3);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -959,7 +959,7 @@
   padding: 7px 8px;
   border-radius: var(--xs-radius-small);
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 620;
   line-height: 1.45;
   text-decoration: none;
@@ -990,7 +990,7 @@
   margin: 0;
   padding: 0 8px;
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
 }
 
@@ -999,7 +999,7 @@
   border: 0;
   color: var(--xs-interactive-text);
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1036,7 +1036,7 @@
 
 @media (max-width: 900px) {
   .table-agent__user {
-    font-size: 17px;
+    font-size: var(--xs-fs-card);
   }
 
   .table-agent__request {
@@ -1058,13 +1058,13 @@
 
 .writing-panel__intro h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--xs-fs-card);
 }
 
 .writing-panel__intro p {
   margin: 4px 0 0;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.55;
 }
 
@@ -1077,7 +1077,7 @@
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   color: var(--xs-text);
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
   line-height: 1.65;
   outline: none;
   transition:
@@ -1099,7 +1099,7 @@
 
 .writing-panel__types-label {
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 650;
 }
 
@@ -1111,7 +1111,7 @@
 
 .writing-panel__controls .ant-btn {
   min-height: 30px;
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   transition:
     color var(--xs-motion-feedback) var(--xs-motion-ease-out),
     border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
@@ -1121,7 +1121,7 @@
 .writing-panel__controls .ant-btn.is-active {
   color: var(--xs-primary-2);
   border-color: #9fc8ff;
-  background: #edf5ff;
+  background: var(--xs-bg-2);
 }
 
 .writing-panel__actions-bar {
@@ -1165,8 +1165,8 @@
   border: 1px solid #d6e8ff;
   border-radius: 10px;
   color: var(--xs-text-2);
-  background: #f7fbff;
-  font-size: 13px;
+  background: var(--xs-surface-soft);
+  font-size: var(--xs-fs-label);
   transition:
     opacity var(--xs-motion-state) var(--xs-motion-ease-out),
     transform var(--xs-motion-state) var(--xs-motion-ease-out);
@@ -1235,7 +1235,7 @@
 
 .scene-card.is-active {
   border-color: #9fc8ff;
-  background: #f7fbff;
+  background: var(--xs-surface-soft);
   box-shadow: 0 12px 28px rgba(22, 119, 255, 0.1);
 }
 
@@ -1258,14 +1258,14 @@
 
 .scene-card strong {
   color: var(--xs-text);
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   font-weight: 700;
 }
 
 .scene-card div > span {
   margin-top: 3px;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.5;
 }
 
@@ -1314,7 +1314,7 @@
 }
 
 .doc-table .xs-table tbody tr:hover {
-  background: #f6faff;
+  background: var(--xs-surface-soft);
 }
 
 .doc-table .ant-btn-text {

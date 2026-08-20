@@ -26,32 +26,82 @@
 
 /* ---------- 问候区：与命令框、推荐应用共享同一左轴 ---------- */
 
+/* 首屏问候区自己拿留白，主区 padding 保持与其他页面一致的 24px */
 .home-page__hero {
   width: min(100%, var(--xs-page-track));
-  margin: 96px auto 56px;
+  margin: 108px auto 56px;
   text-align: center;
 }
 
 .home-page__hero h1 {
   margin: 0 0 12px;
   color: var(--xs-text);
-  font-size: 40px;
-  line-height: 1.2;
-  font-weight: 750;
-  letter-spacing: -0.015em;
+  font-size: var(--xs-fs-display);
+  line-height: var(--xs-lh-tight);
+  font-weight: var(--xs-fw-display);
+  letter-spacing: var(--xs-ls-display);
 }
 
+/* 保持 inline：inline-block 会让无障碍名计算在"您好，"和名字之间插入空格，
+   把 h1 的可访问名变成"您好， 张三"，按名字定位的用例会全部找不到。 */
 .home-page__hero-name {
+  display: inline;
   color: var(--xs-interactive-text);
-  font-weight: 780;
+  font-weight: var(--xs-fw-display);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .home-page__hero-name {
+    background-image: linear-gradient(
+      105deg,
+      var(--xs-interactive-text) 0 38%,
+      var(--xs-primary-2) 45%,
+      #7eb6ff 50%,
+      var(--xs-primary-2) 55%,
+      var(--xs-interactive-text) 62% 100%
+    );
+    background-size: 260% 100%;
+    /* 背景位置只能停在 0%~100% 之间：超出这个范围时 260% 宽的渐变会移出文字盒，
+       没被覆盖到的那部分字因为 text-fill 是透明的就直接不见了。
+       两端的色标本身就是正常字色，所以整段字任何时刻都被涂满，只有高光在移动。 */
+    background-position: 100% 50%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: home-name-ripple 5.6s var(--xs-motion-ease-ambient) 720ms infinite;
+  }
+}
+
+/* 强制高对比模式会丢掉背景图，透明的字会整个消失：这里把字色还原成系统前景色 */
+@media (forced-colors: active) {
+  .home-page__hero-name {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+    color: CanvasText;
+    animation: none;
+  }
+}
+
+@keyframes home-name-ripple {
+  0%,
+  14% {
+    background-position: 100% 50%;
+  }
+
+  42%,
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .home-page__hero p {
   margin: 0;
   color: var(--xs-text-2);
-  font-size: 16px;
+  font-size: var(--xs-fs-body);
   line-height: 1.55;
-  font-weight: 500;
+  font-weight: var(--xs-fw-regular);
 }
 
 /* ---------- 主命令输入框：全页唯一一级焦点 ---------- */
@@ -74,7 +124,6 @@
 .home-page .xs-command-box__input {
   height: 112px;
   padding: 26px 34px 16px;
-  font-size: 18px;
   line-height: 1.6;
 }
 
@@ -101,7 +150,7 @@
 .home-page .xs-command-model-select {
   height: 44px;
   padding: 0 14px;
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
 }
 
 .home-page .xs-command-box__actions .ant-btn {
@@ -121,7 +170,7 @@
 .home-page .xs-command-box__send.ant-btn {
   width: 44px;
   height: 44px;
-  color: #ffffff;
+  color: var(--xs-surface);
   border: 0;
   border-radius: 12px;
   background: #176ff2;
@@ -130,12 +179,12 @@
 
 .home-page .xs-command-box__send.ant-btn:not(:disabled):hover,
 .home-page .xs-command-box__send.ant-btn:not(:disabled):focus-visible {
-  color: #ffffff;
+  color: var(--xs-surface);
   background: #0f63e8;
 }
 
 .home-page .xs-command-box__send.ant-btn:not(:disabled):active {
-  color: #ffffff;
+  color: var(--xs-surface);
   background: #0a58d0;
   transform: scale(0.94);
 }
@@ -151,7 +200,7 @@
   width: min(100%, var(--xs-page-track));
   margin: 14px auto 0;
   color: var(--xs-primary-2);
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
   font-weight: 650;
 }
 
@@ -165,8 +214,8 @@
 .home-page__apps h2 {
   margin: 0 0 18px;
   color: var(--xs-text);
-  font-size: 20px;
-  font-weight: 750;
+  font-size: var(--xs-fs-section);
+  font-weight: var(--xs-fw-display);
   letter-spacing: 0;
 }
 
@@ -200,7 +249,7 @@
 .home-page .xs-app-card--selected,
 .home-page .xs-app-card--selected:hover {
   border-color: rgba(22, 119, 255, 0.55);
-  background: #f6faff;
+  background: var(--xs-surface-soft);
   box-shadow:
     0 0 0 3px rgba(22, 119, 255, 0.08),
     0 10px 24px rgba(26, 83, 164, 0.08);
@@ -227,25 +276,20 @@
   text-align: left;
 }
 
+/* 应用图标是填色方块，比线性图标更满：只覆盖字形尺寸，底板尺寸仍走 token */
 .home-page .xs-app-card .xs-icon-tile {
-  width: 52px;
-  height: 52px;
-  border: 1px solid #e1ecfa;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff, #f2f8ff);
   box-shadow: 0 4px 10px rgba(26, 83, 164, 0.05);
 }
 
 .home-page .xs-app-card .xs-icon-tile__image {
-  width: 42px;
-  height: 42px;
+  --xs-icon-glyph-size: 42px;
 }
 
 .home-page .xs-app-card__title {
   color: var(--xs-text);
-  font-size: 17px;
+  font-size: var(--xs-fs-card);
   line-height: 1.3;
-  font-weight: 750;
+  font-weight: var(--xs-fw-display);
 }
 
 .home-page .xs-app-card__desc {
@@ -254,8 +298,8 @@
   margin-top: 6px;
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -269,7 +313,7 @@
   color: #7c90ad;
   border: 1px solid #e0ebfa;
   border-radius: 10px;
-  background: #f7faff;
+  background: var(--xs-surface-soft);
   box-shadow: none;
   opacity: 1;
 }
@@ -294,15 +338,7 @@
   }
 
   .home-page__hero {
-    margin: clamp(56px, 10.5vh, 124px) auto clamp(30px, 4.2vh, 46px);
-  }
-
-  .home-page__hero h1 {
-    font-size: clamp(34px, 2.7vw, 40px);
-  }
-
-  .home-page__hero p {
-    font-size: clamp(15px, 1.15vw, 17px);
+    margin: clamp(72px, 12vh, 124px) auto clamp(30px, 4.2vh, 46px);
   }
 
   .home-page .xs-command-box__input {
@@ -354,18 +390,10 @@
     margin: 40px auto 32px;
   }
 
-  .home-page__hero h1 {
-    font-size: 30px;
-  }
-
-  .home-page__hero p {
-    font-size: 15px;
-  }
-
   .home-page .xs-command-box__input {
     height: 118px;
     padding: 20px;
-    font-size: 16px;
+    font-size: var(--xs-fs-input);
   }
 
   .home-page .xs-command-box__toolbar {
@@ -401,13 +429,11 @@
   }
 
   .home-page .xs-app-card .xs-icon-tile {
-    width: 56px;
-    height: 56px;
+    --xs-icon-tile-size: 56px;
   }
 
   .home-page .xs-app-card .xs-icon-tile__image {
-    width: 46px;
-    height: 46px;
+    --xs-icon-glyph-size: 46px;
   }
 
   .home-page .xs-app-card__desc {
@@ -499,8 +525,15 @@
   .home-page__hero,
   .home-page .xs-command-box,
   .home-page__apps > h2,
-  .home-page__app-grid > .xs-app-card {
+  .home-page__app-grid > .xs-app-card,
+  .home-page__hero-name {
     animation: none;
+  }
+
+  .home-page__hero-name {
+    background: none;
+    -webkit-text-fill-color: unset;
+    color: var(--xs-interactive-text);
   }
 
   .home-page .xs-app-card,
@@ -511,5 +544,14 @@
   .home-page .xs-app-card:has(.xs-app-card__arrow:focus-visible),
   .home-page .xs-app-card:hover .xs-app-card__arrow {
     transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .home-page__hero-name {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: unset;
+    color: CanvasText;
   }
 }

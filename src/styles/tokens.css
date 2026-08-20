@@ -58,6 +58,9 @@
   --xs-motion-thinking: 800ms;
   --xs-motion-skeleton: 1200ms;
   --xs-motion-ambient: 2400ms;
+  /* 品牌轨道环 idle：外圈慢、内圈快，全站只有这一组数字 */
+  --xs-motion-orbit-outer: 24s;
+  --xs-motion-orbit-inner: 16s;
   /* hero 级入场（登录/欢迎/列表首屏），仅用于每屏一次的主入场 */
   --xs-motion-hero: 560ms;
   --xs-motion-ease-out: cubic-bezier(.2, 0, 0, 1);
@@ -72,6 +75,45 @@
   --xs-table-numeric: #0B2A5B;
   --xs-table-muted: #62748F;
   --xs-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+  /* ---------- 排版比例尺 ----------
+     字号按角色定义，页面样式只允许引用这些变量，不再自定字号。
+     display 只用于登录/欢迎/首页问候；title 是所有一级页面标题的唯一字号。 */
+  --xs-fs-display: 40px;
+  --xs-fs-title: 34px;
+  --xs-fs-metric: 30px;
+  --xs-fs-section: 20px;
+  --xs-fs-card: 17px;
+  --xs-fs-body: 15px;
+  --xs-fs-label: 13px;
+  --xs-fs-caption: 12px;
+  /* 控件与输入：antd 控件文本 14，主命令输入与登录主按钮 16（唯一一级焦点） */
+  --xs-fs-control: 14px;
+  --xs-fs-control-lg: 16px;
+  --xs-fs-input: 16px;
+  /* 行内小数值：卡片里的份数、条数 */
+  --xs-fs-metric-sm: 22px;
+  /* 字重四档：正文 400、次要强调 600、强调 700、标题与数值 760 */
+  --xs-fw-regular: 400;
+  --xs-fw-medium: 600;
+  --xs-fw-bold: 700;
+  --xs-fw-display: 760;
+  /* 光学字距：只有大字号需要收紧，全大写标签需要放开 */
+  --xs-ls-display: -0.015em;
+  --xs-ls-title: -0.012em;
+  --xs-ls-metric: -0.01em;
+  --xs-ls-caps: 0.06em;
+  --xs-lh-tight: 1.2;
+  --xs-lh-body: 1.6;
+}
+
+/* 小屏统一降档：改这里就等于改全站响应式排版，不在页面里各自 clamp */
+@media (max-width: 900px) {
+  :root {
+    --xs-fs-display: 30px;
+    --xs-fs-title: 26px;
+    --xs-fs-metric: 24px;
+    --xs-fs-section: 18px;
+  }
 }
 
 * {
@@ -137,6 +179,8 @@ textarea {
   .xs-route-fallback__title,
   .xs-route-fallback__body > span,
   .xs-async-panel__skeleton > span:not(.sr-only),
+  .xs-async-panel__refresh::after,
+  .xs-upload-dialog__progress[data-mode="indeterminate"] > span,
   .ant-spin {
     animation: xs-loading-pulse 1600ms var(--xs-motion-ease-ambient) infinite !important;
   }

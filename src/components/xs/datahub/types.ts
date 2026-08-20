@@ -20,6 +20,11 @@ export type DataHubExecutionPanelProps = {
   className?: string;
   emptyDescription?: string;
   defaultExpanded?: boolean;
+  /**
+   * 问数 / 问知 / 找文档是单智能体主路径。即使嵌套了数据源选择一类辅助子智能体，
+   * 也继续展示主智能体线性步骤，而不是切到编排 DAG。
+   */
+  preferDirectMainExecution?: boolean;
   drawerOpen?: boolean;
   defaultDrawerOpen?: boolean;
   onDrawerOpenChange?: (open: boolean) => void;

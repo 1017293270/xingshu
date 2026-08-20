@@ -147,4 +147,37 @@ describe("DraftDetailView", () => {
     await user.click(screen.getByRole("button", { name: /问数与导出/ }));
     expect(await screen.findByRole("button", { name: "转为普通文本" })).toBeEnabled();
   });
+
+  it("allows Word export while a structured draft is still marked editing", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue(workspaceWithDraft({
+      ...liveDraft([]),
+      status: "EDITING"
+    }));
+
+    renderDraftDetail("draft-ready");
+
+    expect(await screen.findByText("已保存")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeEnabled();
+    });
+  });
+
+  it("keeps Word export available when PDF rendering is unavailable", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue({
+      ...workspaceWithDraft(liveDraft([])),
+      capabilities: {
+        ...emptyWorkspace.capabilities,
+        exportFormats: ["DOCX"],
+        wordEngine: { available: true, detail: "LIBREOFFICE_UNAVAILABLE: PDF preview/export is disabled" }
+      }
+    });
+
+    renderDraftDetail("draft-ready");
+
+    expect(await screen.findByText("已保存")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeEnabled();
+    });
+    expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
+  });
 });

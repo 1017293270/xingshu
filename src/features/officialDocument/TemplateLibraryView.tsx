@@ -1,16 +1,17 @@
-import { Cpu, FileDoc, UploadSimple } from "@phosphor-icons/react";
+import { FileDoc, UploadSimple } from "@phosphor-icons/react";
 import { Button, Tag } from "antd";
-import { useRef, useState, type ChangeEvent } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import { XsUploadDialog } from "@/components/xs/XsUploadDialog";
 import { uploadOfficialDocumentTemplate } from "@/services/officialDocumentService";
 import type { OfficialDocumentTemplateStatus } from "@/types/officialDocument";
 import {
   countBlockingRisks,
   formatDate,
   formatFileSize,
-  operationErrorMessage,
+  templateIsUsable,
   templateStatusColor,
   templateStatusLabel,
   useUpdateOfficialDocumentWorkspaceCache
@@ -28,14 +29,13 @@ import { OfficialDocumentAppActions, useOfficialDocumentAppChrome } from "./Offi
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
 import "./official-document-workspace.css";
 
-type TemplateFilter = "ALL" | OfficialDocumentTemplateStatus;
+type TemplateFilter = "ALL" | "USABLE" | Exclude<OfficialDocumentTemplateStatus, "NEEDS_REVIEW" | "PUBLISHED">;
 
 const templateFilters: Array<{ key: TemplateFilter; label: string }> = [
   { key: "ALL", label: "全部" },
-  { key: "PUBLISHED", label: "已发布" },
-  { key: "NEEDS_REVIEW", label: "待校准" },
+  { key: "USABLE", label: "可用" },
   { key: "ANALYZING", label: "分析中" },
-  { key: "BLOCKED", label: "已阻断" },
+  { key: "BLOCKED", label: "有错误" },
   { key: "FAILED", label: "分析失败" }
 ];
 
@@ -55,74 +55,48 @@ export function TemplateLibraryView() {
   useOfficialDocumentAppChrome({ stage: "library", context: "模板库" });
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const { query, status } = useOfficialDocumentWorkspace();
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const [operationStatus, setOperationStatus] = useState(
-    () => (location.state as { notice?: string } | null)?.notice ?? ""
-  );
-  const [operationTone, setOperationTone] = useState<XsStatusTone>(
-    () => (location.state as { noticeTone?: XsStatusTone } | null)?.noticeTone ?? "info"
-  );
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>("ALL");
   const [keyword, setKeyword] = useState("");
 
+  const routeState = location.state as { notice?: string; noticeTone?: XsStatusTone } | null;
+  const operationStatus = routeState?.notice ?? "";
+  const operationTone: XsStatusTone = routeState?.noticeTone ?? "info";
   const templates = query.data?.templates ?? [];
-  const wordEngineAvailable = query.data?.capabilities?.wordEngine.available === true;
-  const needsReviewCount = templates.filter((template) => (
-    ["NEEDS_REVIEW", "BLOCKED"].includes(template.status)
-    || countBlockingRisks(template.currentVersion.analysis) > 0
-  )).length;
+  const usableCount = templates.filter((template) => templateIsUsable(template.status)).length;
   const searchKeyword = keyword.trim().toLocaleLowerCase();
   const visibleTemplates = templates.filter((template) => (
-    (templateFilter === "ALL" || template.status === templateFilter)
+    (templateFilter === "ALL"
+      || (templateFilter === "USABLE" && templateIsUsable(template.status))
+      || template.status === templateFilter)
     && (!searchKeyword || template.name.toLocaleLowerCase().includes(searchKeyword))
   ));
 
-  const announce = (tone: XsStatusTone, message: string) => {
-    setOperationTone(tone);
-    setOperationStatus(message);
-  };
-
   const handleUploadClick = () => {
-    uploadInputRef.current?.click();
+    setUploadOpen(true);
   };
 
-  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || isUploading) return;
-
-    setIsUploading(true);
-    announce("loading", "正在上传并创建模板分析任务");
-    try {
-      const result = await uploadOfficialDocumentTemplate(file);
-      updateWorkspaceCache((current) => ({
-        ...current,
-        templates: [result.template, ...current.templates.filter((item) => item.id !== result.template.id)]
-      }));
-      navigate(`/writing/templates/${result.template.id}`, {
-        state: { notice: result.message, noticeTone: result.persisted ? "success" : "warning" }
-      });
-    } catch (error) {
-      announce("error", operationErrorMessage(error));
-    } finally {
-      setIsUploading(false);
-    }
+  // 失败时把错误抛回弹窗：弹窗保持打开、就地显示原因，用户换个文件就能重试。
+  const handleUpload = async (file: File) => {
+    const result = await uploadOfficialDocumentTemplate(file);
+    updateWorkspaceCache((current) => ({
+      ...current,
+      templates: [result.template, ...current.templates.filter((item) => item.id !== result.template.id)]
+    }));
+    navigate(`/writing/templates/${result.template.id}`, {
+      state: { notice: result.message, noticeTone: result.persisted ? "success" : "warning" }
+    });
   };
 
   return (
     <section className="official-document-view" aria-label="公文模板库">
       <OfficialDocumentAppActions>
-        <span className="official-document-engine-chip" data-state={wordEngineAvailable ? "ready" : "unavailable"}>
-          <Cpu size={14} aria-hidden="true" />
-          排版引擎 {wordEngineAvailable ? "可用" : "不可用"}
-        </span>
-        <Button type="primary" icon={<UploadSimple size={17} />} loading={isUploading} onClick={handleUploadClick}>
+        <Button type="primary" icon={<UploadSimple size={17} />} onClick={handleUploadClick}>
           上传 DOCX 模板
         </Button>
       </OfficialDocumentAppActions>
 
-      <OfficialDocumentViewHead description="原始 Word 模板不可覆盖，每次发布生成不可变版本。选择模板进入校准页处理角色映射与发布。" />
+      <OfficialDocumentViewHead description="上传 DOCX 后，结构分析完成即可起草。角色或问数槽位有误时，打开模板直接改。" />
 
       {operationStatus ? (
         <XsStatusBar
@@ -137,7 +111,7 @@ export function TemplateLibraryView() {
         status={status}
         empty={templates.length === 0}
         emptyTitle="还没有可用的公文模板"
-        emptyDescription="上传一份 DOCX 后开始模板分析、校准角色并发布。"
+        emptyDescription="上传一份 DOCX，分析完成后即可起草。"
         emptyActionLabel="上传 DOCX 模板"
         onEmptyAction={handleUploadClick}
         errorTitle="模板库不可用"
@@ -157,12 +131,14 @@ export function TemplateLibraryView() {
               label: filter.label,
               count: filter.key === "ALL"
                 ? templates.length
-                : templates.filter((template) => template.status === filter.key).length
+                : filter.key === "USABLE"
+                  ? usableCount
+                  : templates.filter((template) => template.status === filter.key).length
             }))}
             filterLabel="模板状态筛选"
             activeFilter={templateFilter}
             onFilterChange={setTemplateFilter}
-            summary={needsReviewCount > 0 ? `${needsReviewCount} 个模板待校准` : "全部模板结构可用"}
+            summary={`${usableCount} 个模板可用`}
             onRefresh={() => void query.refetch()}
             isRefreshing={query.isFetching}
           />
@@ -196,7 +172,7 @@ export function TemplateLibraryView() {
                       {template.status === "ANALYZING" ? (
                         <span>正在分析结构</span>
                       ) : blockingCount > 0 ? (
-                        <em>{blockingCount} 项阻断</em>
+                        <em>{blockingCount} 项错误</em>
                       ) : (
                         <span>{pageCount ? `${pageCount} 页 · 结构可用` : "结构可用"}</span>
                       )}
@@ -217,13 +193,18 @@ export function TemplateLibraryView() {
         </div>
       </XsAsyncPanel>
 
-      <input
-        ref={uploadInputRef}
-        hidden
-        type="file"
-        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        data-testid="official-document-template-file"
-        onChange={handleUpload}
+      <XsUploadDialog
+        open={uploadOpen}
+        title="上传 DOCX 模板"
+        description="上传后自动做安全检查和结构分析，完成即可起草。"
+        accept={[".docx"]}
+        acceptMimeTypes={["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}
+        maxBytes={25 * 1024 * 1024}
+        submitLabel="上传并分析"
+        hint="模板里的角色与问数槽位可在分析完成后调整"
+        inputTestId="official-document-template-file"
+        onUpload={handleUpload}
+        onClose={() => setUploadOpen(false)}
       />
     </section>
   );

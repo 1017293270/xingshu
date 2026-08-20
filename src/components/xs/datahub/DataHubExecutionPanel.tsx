@@ -51,6 +51,7 @@ export function DataHubExecutionPanel({
   className = "",
   emptyDescription = "本次响应没有可展示的编排事件。",
   defaultExpanded = true,
+  preferDirectMainExecution = false,
   drawerOpen,
   defaultDrawerOpen = false,
   onDrawerOpenChange,
@@ -103,15 +104,18 @@ export function DataHubExecutionPanel({
       orchestration.toolResults.length
   );
   const showDirectMainExecution =
-    projection.mainSession.cards.length > 0 && !hasOrchestrationStructure;
+    projection.mainSession.cards.length > 0 &&
+    (preferDirectMainExecution || !hasOrchestrationStructure);
   const directMainCards = projection.mainSession.cards.map((card) => {
-    const stageBlocks = card.blocks.filter(
-      (block) =>
-        block.type !== "text" &&
-        block.type !== "content" &&
-        (showMainDocumentBlocks ||
-          (block.type !== "document_url" && block.type !== "citation_document"))
-    );
+    const stageBlocks = card.blocks.filter((block) => {
+      if (block.type === "text" || block.type === "content" || block.type === "table") {
+        return false;
+      }
+      return (
+        showMainDocumentBlocks ||
+        (block.type !== "document_url" && block.type !== "citation_document")
+      );
+    });
     return stageBlocks.length && stageBlocks.length !== card.blocks.length
       ? { ...card, blocks: stageBlocks }
       : card;
@@ -172,6 +176,7 @@ export function DataHubExecutionPanel({
             <div className="xs-datahub-execution__body">
               {hasContent || ghostVisible ? (
                 showDirectMainExecution ? (
+                  <>
                   <div
                     className="xs-datahub-execution__main-cards"
                     aria-label="主智能体执行过程"
@@ -188,6 +193,14 @@ export function DataHubExecutionPanel({
                       />
                     ))}
                   </div>
+                  {preferDirectMainExecution && hasOrchestrationStructure ? (
+                    <DataHubSubagentDag
+                      mainSession={projection.mainSession}
+                      nodes={resolvedSubagentTree}
+                      onSelect={openDrawer}
+                    />
+                  ) : null}
+                  </>
                 ) : (
                   <>
                   {hasContent ? (

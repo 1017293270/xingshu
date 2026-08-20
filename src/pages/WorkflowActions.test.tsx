@@ -210,6 +210,179 @@ describe("workflow page actions", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it("renders native ask-data activity, answer and table instead of an empty orchestration canvas", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("本月收入是多少？", null, "ask");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "ask-datasource-child";
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "问数智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    store.appendAskDataEvent(runId, {
+      type: "activity",
+      agentName: "问数智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        activityId: "model:understand",
+        kind: "model",
+        action: "model_analysis",
+        label: "理解数据问题",
+        status: "success",
+        summary: "问题分析完成"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "数据源选择智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        agentId: "datasource-selection",
+        sessionId: childSessionId,
+        subagentId: "subagent-ds",
+        label: "数据源选择智能体"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "问数智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "本月收入为 **128 万元**。",
+      replyId: "ask-answer",
+      modelCallIndex: 2
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      agentName: "问数智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        columns: [
+          { name: "month", title: "月份" },
+          { name: "revenue", title: "收入", type: "number" }
+        ],
+        rows: [{ month: "7月", revenue: 128 }],
+        totalRows: 1,
+        source: "cube"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {},
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="ask" />);
+
+    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
+    expect(screen.getByText("问数 Agent 执行")).toBeInTheDocument();
+    expect(screen.getByLabelText("主智能体执行过程")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "模型活动：理解数据问题" })).toBeInTheDocument();
+    expect(screen.getByText("128 万元")).toBeInTheDocument();
+    expect(screen.getByText("月份")).toBeInTheDocument();
+    expect(screen.getByText("7月")).toBeInTheDocument();
+    expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
+    expect(screen.queryByText("本次问数未返回可展示的结构化结果。")).not.toBeInTheDocument();
+    expect(screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")).not.toBeInTheDocument();
+  });
+
+  it("renders native knowledge activity, answer and citations in the agent card surface", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("差旅费超过多少需要复核？", null, "rag");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+
+    store.appendAskDataEvent(runId, {
+      type: "agent_start",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId
+    });
+    store.appendAskDataEvent(runId, {
+      type: "activity",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        activityId: "tool:retrieve",
+        kind: "tool",
+        action: "retrieve_knowledge",
+        label: "检索知识证据",
+        status: "success",
+        summary: "检索到 3 条候选证据"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "根据制度，**单笔差旅费超过 5000 元需复核**。",
+      replyId: "rag-answer",
+      modelCallIndex: 2
+    });
+    store.appendAskDataEvent(runId, {
+      type: "citation_document",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        docId: "doc-2026-policy",
+        docKey: "finance-policy-v2.pdf",
+        kbId: "kb-finance",
+        docName: "财务报销制度（2026）",
+        sourceAvailable: true,
+        fragments: ["单笔差旅费超过 5000 元时，需要部门负责人复核。"]
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        mode: "rag",
+        askKnowledge: true,
+        summary: "根据制度，单笔差旅费超过 5000 元需复核。"
+      },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="rag" />);
+
+    expect(screen.getByRole("heading", { name: "问知完成" })).toBeInTheDocument();
+    expect(screen.getByText("问知 Agent 执行")).toBeInTheDocument();
+    expect(screen.getByLabelText("主智能体执行过程")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "模型活动：检索知识证据" })).toBeInTheDocument();
+    expect(screen.getByText("单笔差旅费超过 5000 元需复核")).toBeInTheDocument();
+    expect(screen.getByText("财务报销制度（2026）")).toBeInTheDocument();
+    expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
+  });
+
   it("shows the favorite-question action when the feature is enabled", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("各项目咨询数排名前5名", null);
@@ -1315,9 +1488,11 @@ describe("workflow page actions", () => {
   });
 
   it("follows streaming output, pauses only for an upward user gesture, and resumes from the bottom button", () => {
+    let now = 0;
     const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      callback(0);
-      return 1;
+      now += 16;
+      callback(now);
+      return now;
     });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
     const store = useUiStore.getState();

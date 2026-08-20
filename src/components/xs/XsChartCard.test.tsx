@@ -63,6 +63,27 @@ describe("XsChartCard", () => {
     expect(within(dataTable).getByRole("cell", { name: "—" })).toBeVisible();
   });
 
+  /** 定高看板里页脚是纯开销，控件要能上提到标题行——但两个落点必须是同一组控件。 */
+  it("moves the data disclosure into the heading row without losing it", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <XsChartCard
+        title="收入趋势"
+        summary="7 月收入较 6 月增长 12%"
+        option={{ series: [{ type: "line", data: [120, 134] }] }}
+        table={table}
+        controlsPlacement="head"
+      />
+    );
+
+    expect(container.querySelector(".xs-chart-card__footer")).toBeNull();
+    const head = container.querySelector(".xs-chart-card__head")!;
+    expect(within(head as HTMLElement).getByText("查看数据")).toBeVisible();
+
+    await user.click(screen.getByText("查看数据"));
+    expect(screen.getByRole("table", { name: "收入趋势数据" })).toBeVisible();
+  });
+
   it("opens a focused full-screen chart view and closes it", async () => {
     const user = userEvent.setup();
     render(

@@ -22,6 +22,11 @@ export type XsChartCardProps = {
   contained?: boolean;
   maxTableRows?: number;
   motionPreset?: "inherit" | "subtle" | "none";
+  /**
+   * 「全屏查看 / 查看数据」放哪：默认独占卡片页脚；`head` 挪进标题行右侧。
+   * 定高卡片里页脚是纯开销（1px 上边线 + 40px 行高 + 间距），只有一屏看板需要 `head`。
+   */
+  controlsPlacement?: "footer" | "head";
 };
 
 function formatCell(value: unknown) {
@@ -55,7 +60,8 @@ export function XsChartCard({
   ariaLabel,
   contained = true,
   maxTableRows = 50,
-  motionPreset = "inherit"
+  motionPreset = "inherit",
+  controlsPlacement = "footer"
 }: XsChartCardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -106,6 +112,48 @@ export function XsChartCard({
     window.requestAnimationFrame(() => fullscreenTriggerRef.current?.focus());
   };
 
+  const controls = (
+    <div className="xs-chart-card__controls">
+      <button
+        ref={fullscreenTriggerRef}
+        type="button"
+        className="xs-chart-card__fullscreen-trigger"
+        aria-label={`全屏查看${title}`}
+        onClick={() => setIsFullscreen(true)}
+      >
+        <ArrowsOutSimple size={16} aria-hidden="true" />
+        全屏查看
+      </button>
+      <details className="xs-chart-card__data">
+        <summary>查看数据</summary>
+        <div className="xs-chart-card__table-scroll">
+          <table className="xs-table">
+            <caption>{tableCaption}</caption>
+            <thead>
+              <tr>
+                {table.columns.map((column) => (
+                  <th key={column.key} scope="col" title={column.title}>
+                    {formatDataHubColumnTitle(column.title, column.key)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {table.columns.map((column) => (
+                    <td key={column.key}>{formatCell(row[column.key])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  );
+  const controlsInHead = controlsPlacement === "head";
+
   return (
     <>
       <article className={`${contained ? "xs-card " : ""}xs-chart-card ${className}`.trim()} aria-label={ariaLabel}>
@@ -114,7 +162,12 @@ export function XsChartCard({
             <Heading>{title}</Heading>
             <p className="xs-chart-card__summary">{summary}</p>
           </div>
-          {action ? <div className="xs-chart-card__action">{action}</div> : null}
+          {action || controlsInHead ? (
+            <div className="xs-chart-card__action">
+              {action}
+              {controlsInHead ? controls : null}
+            </div>
+          ) : null}
         </header>
 
         {beforeChart}
@@ -140,44 +193,7 @@ export function XsChartCard({
         )}
         {afterChart}
 
-        <div className="xs-chart-card__footer">
-          <button
-            ref={fullscreenTriggerRef}
-            type="button"
-            className="xs-chart-card__fullscreen-trigger"
-            aria-label={`全屏查看${title}`}
-            onClick={() => setIsFullscreen(true)}
-          >
-            <ArrowsOutSimple size={16} aria-hidden="true" />
-            全屏查看
-          </button>
-          <details className="xs-chart-card__data">
-            <summary>查看数据</summary>
-            <div className="xs-chart-card__table-scroll">
-              <table className="xs-table">
-                <caption>{tableCaption}</caption>
-                <thead>
-                  <tr>
-                    {table.columns.map((column) => (
-                      <th key={column.key} scope="col" title={column.title}>
-                        {formatDataHubColumnTitle(column.title, column.key)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {table.columns.map((column) => (
-                        <td key={column.key}>{formatCell(row[column.key])}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        </div>
+        {controlsInHead ? null : <div className="xs-chart-card__footer">{controls}</div>}
       </article>
       {isFullscreen
         ? createPortal(

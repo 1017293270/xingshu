@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from "react";
+import { xsEnterStep } from "@/components/xs/motion";
 import "./styles/page-shell.css";
 import "./pages.css";
 
@@ -8,13 +9,27 @@ type PageFrameProps = PropsWithChildren<{
   actions?: ReactNode;
   className?: string;
   hideHeader?: boolean;
+  /** 内容轨道：常规内容页 page，数据密集页（结果表、资产、云盘）data。 */
+  track?: "page" | "data";
 }>;
 
-export function PageFrame({ title, subtitle, actions, className = "", hideHeader = false, children }: PageFrameProps) {
+export function PageFrame({
+  title,
+  subtitle,
+  actions,
+  className = "",
+  hideHeader = false,
+  track = "page",
+  children
+}: PageFrameProps) {
+  const classes = ["xs-page", track === "data" ? "xs-page--track-data" : "", className]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`xs-page ${className}`}>
+    <div className={classes}>
       {hideHeader ? null : (
-        <header className="xs-page__head xs-page-enter">
+        <header className="xs-page__head xs-page-enter" style={xsEnterStep(0)}>
           <div className="xs-page__title">
             <h1>{title}</h1>
             {subtitle ? <p>{subtitle}</p> : null}

@@ -27,6 +27,7 @@ import type {
 import { StructuredDraftEditor, type StructuredDraftSaveState } from "./StructuredDraftEditor";
 import {
   bindingsAreExportable,
+  draftStatusAllowsExport,
   draftStatusColor,
   draftStatusLabel,
   formatDate,
@@ -131,21 +132,27 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   });
 
   const bindingsReady = draft ? bindingsAreExportable(draft.bindings) : true;
-  const canExport = draft?.source === "LIVE"
-    && draft.status === "READY"
+  const statusAllowsExport = draft ? draftStatusAllowsExport(draft.status) : false;
+  const pdfExportAvailable = (workspaceQuery.data?.capabilities.exportFormats ?? ["DOCX", "PDF"]).includes("PDF")
+    && !(workspaceQuery.data?.capabilities.wordEngine.detail ?? "").includes("LIBREOFFICE");
+  const canExportDocx = draft?.source === "LIVE"
+    && statusAllowsExport
     && contentSaveState === "saved"
     && bindingsReady;
+  const canExportPdf = canExportDocx && pdfExportAvailable;
   const exportDisabledReason = !draft
     ? undefined
     : contentSaveState !== "saved"
       ? "草稿内容保存完成后才能导出"
-      : draft.status !== "READY"
+      : !statusAllowsExport
         ? "草稿通过服务端校验后才能导出"
         : !bindingsReady
           ? "问数绑定刷新成功后才能导出"
           : draft.source !== "LIVE"
             ? "正式服务不可用，不能导出"
             : undefined;
+  const pdfDisabledReason = exportDisabledReason
+    ?? (canExportDocx && !pdfExportAvailable ? "PDF 暂时不能生成，请先导出 Word" : undefined);
   const latestExport = draft ? latestExports[draft.id] : undefined;
 
   const bindingSlots = useMemo(() => {
@@ -323,14 +330,14 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   };
 
   const handleExport = async (format: OfficialDocumentExportFormat) => {
-    if (!draft || isExporting || !canExport) return;
+    if (!draft || isExporting || (format === "PDF" ? !canExportPdf : !canExportDocx)) return;
     setIsExporting(format);
-    announce("loading", `正在生成 ${format} 并执行正式保真校验`);
+    announce("loading", format === "PDF" ? "正在生成 PDF" : "正在生成 Word");
     try {
       const record = await exportOfficialDocumentDraft(draft.id, format);
       setLatestExports((current) => ({ ...current, [draft.id]: record }));
       if (record.status !== "GENERATED") {
-        announce("error", record.message ?? "正式导出被保真门禁阻断");
+        announce("error", record.message ?? "导出未完成，请稍后重试");
         return;
       }
       const blob = await downloadOfficialDocumentExport(record.id);
@@ -341,7 +348,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
       anchor.download = `${safeTitle || "official-document"}.${format.toLocaleLowerCase()}`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      announce("success", `${format} 已生成并通过保真校验，下载已开始。`);
+      announce("success", format === "PDF" ? "PDF 已生成，下载已开始。" : "Word 已生成，下载已开始。");
     } catch (error) {
       announce("error", operationErrorMessage(error));
     } finally {
@@ -372,7 +379,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
               />
             ) : null}
 
-            <div className="official-document-draft-workspace xs-page-enter" style={{ animationDelay: "120ms" }}>
+            <div className="official-document-draft-workspace xs-page-enter" style={{ animationDelay: "128ms" }}>
               <StructuredDraftEditor
                 key={draft.id}
                 draft={draft}
@@ -398,15 +405,15 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                 {draft.bindings.length ? <span className="official-document-app__action-count">{draft.bindings.length}</span> : null}
               </Button>
               <Button
-                disabled={!canExport}
+                disabled={!canExportDocx}
                 loading={isExporting === "DOCX"}
                 title={exportDisabledReason}
                 onClick={() => void handleExport("DOCX")}
               >导出 DOCX</Button>
               <Button
-                disabled={!canExport}
+                disabled={!canExportPdf}
                 loading={isExporting === "PDF"}
-                title={exportDisabledReason}
+                title={pdfDisabledReason}
                 onClick={() => void handleExport("PDF")}
               >导出 PDF</Button>
             </OfficialDocumentAppActions>
@@ -479,7 +486,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
               <div className="official-document-section-title"><div><h4>导出前检查</h4><p>内容保存、草稿状态和绑定快照满足条件后可正式导出。</p></div></div>
               <ul>
                 <li data-ok={contentSaveState === "saved"}><span />结构化内容已保存</li>
-                <li data-ok={draft.status === "READY"}><span />草稿通过服务端校验</li>
+                <li data-ok={draftStatusAllowsExport(draft.status)}><span />草稿内容可导出</li>
                 <li data-ok={bindingsReady}><span />数据绑定无异常</li>
                 <li data-ok={draft.source === "LIVE"}><span />正式服务与模板版本可追溯</li>
               </ul>
@@ -527,7 +534,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
           onClose={() => setBindingModalOpen(false)}
         >
           <div className="official-document-binding-form">
-            <p>将已保存的 QueryAsset 固定到查询版本，并写入发布模板中的数据槽位。</p>
+            <p>将已保存的 QueryAsset 固定到查询版本，并写入模板中的数据槽位。</p>
             {!bindingCandidates.length ? (
               <div className="official-document-binding-form__empty"><Database size={20} /><span>没有可绑定的已保存 QueryAsset。</span></div>
             ) : null}
@@ -571,7 +578,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
               id="official-document-binding-slot"
               aria-label="目标绑定槽位"
               value={bindingTargetSlot || undefined}
-              placeholder="请选择已发布模板中的问数槽位"
+              placeholder="请选择模板中的问数槽位"
               options={bindingSlots}
               onChange={handleBindingTargetChange}
             />
@@ -584,7 +591,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
             {!bindingSlots.length ? (
               <div className="official-document-binding-form__empty">
                 <WarningCircle size={20} />
-                <span>当前草稿没有可用绑定槽位。请先在模板校准中勾选“允许问数绑定”并发布模板。</span>
+                <span>当前草稿没有可用绑定槽位。新建草稿前，请在模板结构中勾选“允许问数绑定”。</span>
               </div>
             ) : null}
             <small>绑定数据按快照写入；手工改写前必须先解除绑定。</small>

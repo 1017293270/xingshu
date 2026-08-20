@@ -1,17 +1,19 @@
 import { Button, Input, Segmented, Space } from "antd";
-import { Database, MagnifyingGlass, Plus } from "@phosphor-icons/react";
+import { MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useState } from "react";
-import { Link } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
-import { productCapabilities } from "@/config/capabilities";
-import metricKnowledge from "@/assets/data-management-icons/metric-knowledge-total.png";
-import metricDocument from "@/assets/data-management-icons/metric-document-total.png";
-import metricRecent from "@/assets/data-management-icons/metric-recent-update.png";
+import {
+  XsGlyphDocumentTotal,
+  XsGlyphKnowledgeTotal,
+  XsGlyphRecentUpdate
+} from "@/components/xs/XsMetricGlyphs";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsCountUpText } from "@/components/xs/XsCountUpText";
-import { XsIconTile } from "@/components/xs/XsIconTile";
+import { XsKnowledgeCard } from "@/components/xs/XsKnowledgeCard";
+import { xsKnowledgeToneFor } from "@/components/xs/knowledgeTone";
+import { XsStatCard } from "@/components/xs/XsStatCard";
+import { xsEnterStep } from "@/components/xs/motion";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
 import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
@@ -19,8 +21,6 @@ import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { PageFrame } from "./PageFrame";
 import "./styles/data-assets.css";
-
-const knowledgeBaseTones = ["blue", "cyan", "green"] as const;
 
 const assetTabs = [
   { label: "知识库管理", value: "知识库管理" },
@@ -134,7 +134,7 @@ export function DataManagementPage() {
             disabled={!appLinks.canAdd}
             onClick={handleAddKnowledgeBase}
           >
-            新增知识库
+            添加知识库
           </Button>
           <span
             id="knowledge-add-availability"
@@ -145,9 +145,9 @@ export function DataManagementPage() {
         </Space>
       )}
       className="data-management-page"
+      track="data"
     >
-      <XsCapabilityStatus capability={productCapabilities.dataAssets} />
-      <nav className="asset-tabs xs-page-enter" style={{ animationDelay: "60ms" }} aria-label="资产管理类型">
+      <nav className="asset-tabs xs-page-enter" style={xsEnterStep(1)} aria-label="资产管理类型">
         <Segmented
           aria-label="资产管理类型"
           aria-describedby="asset-tabs-availability"
@@ -158,7 +158,7 @@ export function DataManagementPage() {
           当前仅开放知识库管理；数据源、数据表、数据接口和指标管理即将开放。
         </p>
       </nav>
-      <section className="asset-filter xs-page-enter" style={{ animationDelay: "120ms" }} aria-label="知识库筛选">
+      <section className="asset-filter xs-page-enter" style={xsEnterStep(2)} aria-label="知识库筛选">
         <Input
           aria-label="知识库搜索"
           allowClear
@@ -178,31 +178,32 @@ export function DataManagementPage() {
         />
       </section>
       {showMetrics ? (
-        <section className="manage-stats" aria-label="知识库统计">
-          <article className="xs-card xs-card-lift stat-card data-stat-card--enter">
-            <div>
-              <span>知识库总数</span>
-              <strong><XsCountUpText value={overview.knowledgeBaseCount.toLocaleString("zh-CN")} durationMs={650} /></strong>
-            </div>
-            <XsIconTile imageSrc={metricKnowledge} label="知识库总数" tone="blue" />
-          </article>
+        <section className="xs-stat-row" aria-label="知识库统计">
+          <XsStatCard
+            label="知识库总数"
+            value={<XsCountUpText value={overview.knowledgeBaseCount.toLocaleString("zh-CN")} durationMs={650} />}
+            glyph={XsGlyphKnowledgeTotal}
+            tone="blue"
+            step={3}
+          />
           {overview.documentTotal != null ? (
-            <article className="xs-card xs-card-lift stat-card data-stat-card--enter" style={{ animationDelay: "40ms" }}>
-              <div>
-                <span>文档总数</span>
-                <strong><XsCountUpText value={overview.documentTotal.toLocaleString("zh-CN")} durationMs={650} /></strong>
-              </div>
-              <XsIconTile imageSrc={metricDocument} label="文档总数" tone="cyan" />
-            </article>
+            <XsStatCard
+              label="文档总数"
+              value={<XsCountUpText value={overview.documentTotal.toLocaleString("zh-CN")} durationMs={650} />}
+              glyph={XsGlyphDocumentTotal}
+              tone="cyan"
+              step={4}
+            />
           ) : null}
           {overview.latestUpdatedAt ? (
-            <article className="xs-card xs-card-lift stat-card data-stat-card--enter" style={{ animationDelay: "80ms" }}>
-              <div>
-                <span>最近更新</span>
-                <strong><time dateTime={overview.latestUpdatedAt}>{overview.latestUpdatedAt}</time></strong>
-              </div>
-              <XsIconTile imageSrc={metricRecent} label="最近更新" tone="green" />
-            </article>
+            <XsStatCard
+              label="最近更新"
+              value={<time dateTime={overview.latestUpdatedAt}>{overview.latestUpdatedAt}</time>}
+              valueType="text"
+              glyph={XsGlyphRecentUpdate}
+              tone="green"
+              step={5}
+            />
           ) : null}
         </section>
       ) : null}
@@ -226,41 +227,19 @@ export function DataManagementPage() {
         preserveContentWhileRefreshing
         staggerLimit={8}
       >
-        <section className="kb-grid" aria-label="知识库列表">
-          {visibleKnowledgeBases.map((knowledgeBase, index) => {
-            const updatedAt = formatKnowledgeUpdatedAt(knowledgeBase.updatedAt);
-            return (
-              <article
-                className={`xs-card xs-card-lift kb-card${index < 8 ? " kb-card--enter" : ""}`}
-                style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
-                key={knowledgeBase.id}
-                aria-label={`知识库：${knowledgeBase.title}`}
-              >
-                <XsIconTile
-                  icon={Database}
-                  label={knowledgeBase.title}
-                  tone={knowledgeBaseTones[index % knowledgeBaseTones.length]}
-                />
-                <h2>{knowledgeBase.title}</h2>
-                <p>{knowledgeBaseDescription(knowledgeBase)}</p>
-                <div>
-                  <strong>
-                    {knowledgeBase.documentCount != null
-                      ? `${knowledgeBase.documentCount.toLocaleString("zh-CN")} 篇文档`
-                      : "文档数待同步"}
-                  </strong>
-                  {updatedAt ? <time dateTime={updatedAt}>更新于 {updatedAt}</time> : <span>更新时间待同步</span>}
-                </div>
-                <Link
-                  className="xs-mini-link"
-                  aria-label={`查看 ${knowledgeBase.title} 详情`}
-                  to={`/cloud/${encodeURIComponent(knowledgeBase.id)}`}
-                >
-                  查看详情
-                </Link>
-              </article>
-            );
-          })}
+        <section className="xs-card-grid" aria-label="知识库列表">
+          {visibleKnowledgeBases.map((knowledgeBase) => (
+            <XsKnowledgeCard
+              key={knowledgeBase.id}
+              id={knowledgeBase.id}
+              title={knowledgeBase.title}
+              description={knowledgeBaseDescription(knowledgeBase)}
+              documentCount={knowledgeBase.documentCount}
+              updatedAt={formatKnowledgeUpdatedAt(knowledgeBase.updatedAt)}
+              updatedAtValue={knowledgeBase.updatedAt}
+              tone={xsKnowledgeToneFor(knowledgeBase.id)}
+            />
+          ))}
         </section>
       </XsAsyncPanel>
     </PageFrame>

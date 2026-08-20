@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
@@ -98,20 +99,20 @@ describe("TemplateLibraryView", () => {
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
   });
 
-  it("lets a signed-in member see unpublished templates and upload", async () => {
+  it("lets a signed-in member see analyzed templates as usable and upload", async () => {
     loadOfficialDocumentWorkspace.mockResolvedValue({
       ...emptyWorkspace,
       templates: [
         {
           id: "template-review",
-          name: "待校准通知",
+          name: "请示通知",
           status: "NEEDS_REVIEW",
           source: "LIVE",
           updatedAt: "2026-08-16T09:38:00Z",
           currentVersion: {
             id: "version-review",
             versionNo: 1,
-            fileName: "待校准通知.docx",
+            fileName: "请示通知.docx",
             fileSize: 12 * 1024,
             createdAt: "2026-08-16T09:00:00Z"
           }
@@ -120,9 +121,26 @@ describe("TemplateLibraryView", () => {
     });
     renderLibrary();
 
-    const row = await screen.findByRole("button", { name: "打开模板 待校准通知" });
-    expect(within(row).getByText("待校准")).toBeInTheDocument();
+    const row = await screen.findByRole("button", { name: "打开模板 请示通知" });
+    expect(within(row).getByText("可用")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /待校准/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /可用/ })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "上传 DOCX 模板" }).length).toBeGreaterThan(0);
+  });
+
+  it("opens the drag-and-drop upload dialog from the toolbar button", async () => {
+    loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
+    renderLibrary();
+
+    await screen.findByText("还没有可用的公文模板");
+    expect(screen.queryByText("把文件拖到这里")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "上传 DOCX 模板" })[0]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("把文件拖到这里")).toBeInTheDocument();
+    expect(within(dialog).getByText("支持 .docx · 单个文件最大 25 MB")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "上传并分析" })).toBeDisabled();
   });
 
   it("lists templates only and keeps drafts on their own page", async () => {
@@ -131,7 +149,7 @@ describe("TemplateLibraryView", () => {
 
     const list = await screen.findByRole("list", { name: "公文模板列表" });
     const row = within(list).getByRole("button", { name: "打开模板 季度工作通知" });
-    expect(within(row).getByText("已发布")).toBeInTheDocument();
+    expect(within(row).getByText("可用")).toBeInTheDocument();
     expect(within(row).getByText("v2 · 季度工作通知.docx")).toBeInTheDocument();
 
     expect(screen.queryByRole("list", { name: "公文草稿列表" })).not.toBeInTheDocument();

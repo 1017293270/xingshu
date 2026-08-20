@@ -318,6 +318,22 @@ describe("dataHubClient", () => {
     });
   });
 
+  it("does not force JSON content-type for FormData bodies", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 200, message: "success", data: { ok: true } })));
+    vi.stubGlobal("fetch", fetchMock);
+    const body = new FormData();
+    body.append("audio", new Blob(["voice"], { type: "audio/webm" }), "voice.webm");
+
+    await requestDataHub("/api/ai/voice/transcribe", {
+      method: "POST",
+      body
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).get("Content-Type")).toBeNull();
+    expect(init.body).toBe(body);
+  });
+
   it("clears session explicitly", () => {
     writeDataHubAuth({ token: "token-123", userId: 1, username: "demo", isAdmin: false });
     writeDataHubSpaceId(9);

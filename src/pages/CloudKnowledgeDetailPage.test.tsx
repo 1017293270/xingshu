@@ -6,7 +6,8 @@ import { AppProviders } from "@/app/providers";
 import {
   listDataHubKnowledgeBases,
   listDataHubKnowledgeDocuments,
-  loadDataHubKnowledgeMarkdown
+  loadDataHubKnowledgeMarkdown,
+  loadDataHubKnowledgeSource
 } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeDocument } from "@/types/dataHub";
@@ -18,13 +19,15 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
     ...actual,
     listDataHubKnowledgeBases: vi.fn(),
     listDataHubKnowledgeDocuments: vi.fn(),
-    loadDataHubKnowledgeMarkdown: vi.fn()
+    loadDataHubKnowledgeMarkdown: vi.fn(),
+    loadDataHubKnowledgeSource: vi.fn()
   };
 });
 
 const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
 const listDocuments = vi.mocked(listDataHubKnowledgeDocuments);
 const loadMarkdown = vi.mocked(loadDataHubKnowledgeMarkdown);
+const loadSource = vi.mocked(loadDataHubKnowledgeSource);
 
 const sampleDocuments: DataHubKnowledgeDocument[] = [
   {
@@ -83,6 +86,7 @@ describe("CloudKnowledgeDetailPage", () => {
     listKnowledgeBases.mockReset();
     listDocuments.mockReset();
     loadMarkdown.mockReset();
+    loadSource.mockReset();
     listKnowledgeBases.mockResolvedValue([
       {
         id: "kb-policy",
@@ -94,6 +98,11 @@ describe("CloudKnowledgeDetailPage", () => {
     listDocuments.mockResolvedValue(sampleDocuments);
     loadMarkdown.mockResolvedValue({
       markdown: "# 采购合同\n\n甲方委托乙方提供咨询服务。"
+    });
+    loadSource.mockResolvedValue({
+      url: "blob:xingshu-contract-pdf",
+      contentType: "application/pdf",
+      revoke: vi.fn()
     });
   });
 
@@ -114,7 +123,7 @@ describe("CloudKnowledgeDetailPage", () => {
     expect(screen.getByRole("button", { name: "打开 采购合同.pdf 原文" })).toBeEnabled();
   });
 
-  it("opens a contract as Markdown in an in-app preview even when source_available is false", async () => {
+  it("opens a contract PDF inside the Xingshu preview and never jumps outside", async () => {
     const user = userEvent.setup();
     const open = vi.spyOn(window, "open");
     renderDetailPage();
@@ -122,32 +131,63 @@ describe("CloudKnowledgeDetailPage", () => {
     await user.click(await screen.findByRole("button", { name: "打开 采购合同.pdf 原文" }));
 
     const dialog = await screen.findByRole("dialog", { name: "采购合同.pdf" });
-    expect(loadMarkdown).toHaveBeenCalledWith("kb-policy", expect.objectContaining({
+    expect(loadSource).toHaveBeenCalledWith("kb-policy", expect.objectContaining({
       docKey: "采购合同.pdf",
       sourceAvailable: false
     }));
+    expect(loadMarkdown).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
+    const frame = dialog.querySelector("iframe");
+    expect(frame).toHaveAttribute("title", "采购合同.pdf 原文预览");
+    expect(frame).toHaveAttribute("src", "blob:xingshu-contract-pdf#toolbar=0&navpanes=0");
+    expect(within(dialog).queryByRole("article", { name: "采购合同.pdf Markdown 预览" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "合同管理办法.pdf" })).toBeInTheDocument();
+  });
+
+  it("falls back to Markdown inside the same dialog when the original is not a PDF", async () => {
+    const user = userEvent.setup();
+    loadSource.mockRejectedValue(new Error("原文暂不可用"));
+    renderDetailPage();
+
+    await user.click(await screen.findByRole("button", { name: "打开 采购合同.pdf 原文" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "采购合同.pdf" });
+    expect(loadMarkdown).toHaveBeenCalledWith("kb-policy", expect.objectContaining({
+      docKey: "采购合同.pdf"
+    }));
     expect(dialog.querySelector("iframe")).toBeNull();
     expect(within(dialog).getByRole("article", { name: "采购合同.pdf Markdown 预览" }))
       .toHaveTextContent("甲方委托乙方提供咨询服务。");
-    expect(within(dialog).getByRole("button", { name: "合同管理办法.pdf" })).toBeInTheDocument();
   });
 
   it("lets the reader switch to the next knowledge document", async () => {
     const user = userEvent.setup();
-    loadMarkdown
-      .mockResolvedValueOnce({ markdown: "# 合同管理办法\n\n制度正文。" })
-      .mockResolvedValueOnce({ markdown: "# 采购合同\n\n合同正文。" });
+    loadSource
+      .mockResolvedValueOnce({
+        url: "blob:xingshu-policy-pdf",
+        contentType: "application/pdf",
+        revoke: vi.fn()
+      })
+      .mockResolvedValueOnce({
+        url: "blob:xingshu-contract-pdf",
+        contentType: "application/pdf",
+        revoke: vi.fn()
+      });
     renderDetailPage();
 
     await user.click(await screen.findByRole("button", { name: "打开 合同管理办法.pdf 原文" }));
-    expect(await screen.findByRole("article", { name: "合同管理办法.pdf Markdown 预览" }))
-      .toHaveTextContent("制度正文。");
+    expect(await screen.findByTitle("合同管理办法.pdf 原文预览")).toHaveAttribute(
+      "src",
+      "blob:xingshu-policy-pdf#toolbar=0&navpanes=0"
+    );
 
     await user.click(screen.getByRole("button", { name: "下一份文档" }));
-    expect(await screen.findByRole("article", { name: "采购合同.pdf Markdown 预览" }))
-      .toHaveTextContent("合同正文。");
-    expect(loadMarkdown).toHaveBeenCalledTimes(2);
+    expect(await screen.findByTitle("采购合同.pdf 原文预览")).toHaveAttribute(
+      "src",
+      "blob:xingshu-contract-pdf#toolbar=0&navpanes=0"
+    );
+    expect(loadSource).toHaveBeenCalledTimes(2);
+    expect(loadMarkdown).not.toHaveBeenCalled();
   });
 
   it("closes the in-app preview without jumping to DataHub", async () => {

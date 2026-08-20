@@ -1,13 +1,54 @@
 import { existsSync, readFileSync } from "node:fs";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
 import { AppProviders } from "@/app/providers";
 import { XsShell } from "@/components/xs";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import { HomePage } from "./HomePage";
+
+const transcribeVoiceMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/voiceTranscriptionService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/voiceTranscriptionService")>();
+  return {
+    ...actual,
+    transcribeVoice: transcribeVoiceMock
+  };
+});
+
+class MockMediaRecorder {
+  static isTypeSupported(type: string) {
+    return type.startsWith("audio/webm");
+  }
+
+  state: RecordingState = "inactive";
+  ondataavailable: ((event: BlobEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  start() {
+    this.state = "recording";
+  }
+
+  stop() {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["voice"], { type: "audio/webm" }) } as BlobEvent);
+    this.onstop?.();
+  }
+}
+
+function stubSupportedVoiceInput() {
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: {
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] }))
+    }
+  });
+  vi.stubGlobal("MediaRecorder", MockMediaRecorder as unknown as typeof MediaRecorder);
+}
 
 function CurrentLocation() {
   const location = useLocation();
@@ -50,6 +91,14 @@ function renderHomePage(username = "张三") {
 }
 
 describe("HomePage", () => {
+  afterEach(() => {
+    transcribeVoiceMock.mockReset();
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: undefined
+    });
+  });
   it("keeps runtime brand PNG assets in an auditable registry", () => {
     const registryPath = "src/assets/iconRegistry.ts";
 
@@ -70,6 +119,16 @@ describe("HomePage", () => {
       "@media (prefers-reduced-motion: reduce) {\n  .xs-app-card:hover,\n  .xs-app-card--selected"
     );
     expect(xsCss).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.xs-app-card[\s\S]*?transform: none;/);
+  });
+
+  it("gives the greeting name a ripple highlight and stills it under reduced motion", () => {
+    const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
+
+    expect(homeCss).toContain("@keyframes home-name-ripple");
+    expect(homeCss).toMatch(/\.home-page__hero-name \{[\s\S]*?animation: home-name-ripple/);
+    expect(homeCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.home-page__hero-name \{[\s\S]*?animation: none;/
+    );
   });
 
   it("keeps programmatic route focus from drawing a full-width frame around page headings", () => {
@@ -278,5 +337,52 @@ describe("HomePage", () => {
 
     await user.click(screen.getByRole("button", { name: "语音" }));
     expect(screen.getByRole("status")).toHaveTextContent("当前浏览器不支持语音输入");
+  });
+
+  it("fills the command box with a transcribed utterance and does not auto-submit", async () => {
+    transcribeVoiceMock.mockResolvedValue("本月销售额是多少");
+    stubSupportedVoiceInput();
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole("button", { name: "语音" }));
+    await user.click(await screen.findByRole("button", { name: "停止语音录入" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("本月销售额是多少");
+    });
+    expect(transcribeVoiceMock).toHaveBeenCalledWith(expect.any(Blob), expect.any(AbortSignal));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(useUiStore.getState().analysisTurns).toHaveLength(0);
+  });
+
+  it("appends transcribed speech to the existing draft", async () => {
+    transcribeVoiceMock.mockResolvedValue("本月销售额");
+    stubSupportedVoiceInput();
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.type(screen.getByRole("textbox", { name: "命令输入" }), "请分析");
+    await user.click(screen.getByRole("button", { name: "语音" }));
+    await user.click(await screen.findByRole("button", { name: "停止语音录入" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("请分析 本月销售额");
+    });
+  });
+
+  it("shows the transcription failure in the status region", async () => {
+    transcribeVoiceMock.mockRejectedValue(new Error("无法识别语音内容"));
+    stubSupportedVoiceInput();
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole("button", { name: "语音" }));
+    await user.click(await screen.findByRole("button", { name: "停止语音录入" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("无法识别语音内容");
+    });
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("");
   });
 });

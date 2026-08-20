@@ -1,82 +1,26 @@
-.data-dashboard-page,
-.data-management-page {
-  width: min(100%, var(--xs-data-track));
-}
-
 .data-card h2 {
-  padding-right: 56px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.data-dashboard-grid,
-.data-bottom-grid {
+/* 五张面板（四图 + 热门资产表）同属一个栅格：奇数张排两列必然落单，
+   所以排行表在底部通栏收口。分成两个 section 就没法让它跨列。 */
+.data-dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 18px;
 }
 
-.data-kpis,
-.manage-stats {
-  display: grid;
-  gap: 18px;
-}
-
-.data-kpis {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 18px 0 18px;
-}
-
-.manage-stats {
-  margin: 18px 0 34px;
-}
-
-.stat-card {
-  display: grid;
-  grid-template-columns: 68px 1fr;
-  align-items: center;
-  gap: 16px;
-  padding: 22px;
-}
-
-.data-stat-card--enter {
-  animation: data-stat-card-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
-}
-
-@keyframes data-stat-card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.stat-card span,
-.stat-card small {
-  display: block;
-  color: var(--xs-text-3);
-  font-weight: 600;
-}
-
-.stat-card strong {
-  display: block;
-  margin: 8px 0 4px;
-  color: var(--xs-text);
-  font-size: 28px;
-  font-variant-numeric: tabular-nums;
+.data-card--hot {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  gap: var(--xs-module-gap);
 }
 
 .data-card {
   padding: 22px;
-}
-
-.data-bottom-grid {
-  margin-top: 18px;
 }
 
 .source-bars {
@@ -90,7 +34,7 @@
   padding: 12px 14px;
   border-radius: 10px;
   color: var(--xs-text-2);
-  background: #f5f9ff;
+  background: var(--xs-surface-soft);
 }
 
 .asset-tabs {
@@ -129,7 +73,7 @@
 .asset-tabs__availability {
   margin: 8px 2px 0;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   line-height: 1.5;
 }
 
@@ -144,55 +88,6 @@
 .asset-filter .ant-input-affix-wrapper,
 .asset-filter .ant-input {
   min-height: 42px;
-}
-
-.manage-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.manage-stats .stat-card {
-  grid-template-columns: 1fr 64px;
-}
-
-.asset-image-tile {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  background: #f3f8ff;
-}
-
-.asset-image-tile img {
-  max-width: 38px;
-  max-height: 38px;
-}
-
-.kb-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.kb-card {
-  padding: 24px;
-}
-
-.kb-card--enter {
-  animation: kb-card-enter var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
-}
-
-@keyframes kb-card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .data-dashboard-page time {
@@ -212,39 +107,8 @@
   transform: translateX(2px);
 }
 
-.kb-card h2 {
-  margin-top: 18px;
-}
-
-.kb-card p {
-  color: var(--xs-text-3);
-  line-height: 1.6;
-}
-
-.kb-card div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 20px;
-  color: var(--xs-text-3);
-}
-
-@media (max-width: 1180px) {
-  .manage-stats,
-  .data-kpis,
-  .kb-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 900px) {
-  .data-dashboard-page,
-  .data-management-page {
-    width: 100%;
-  }
-
-  .data-dashboard-grid,
-  .data-bottom-grid {
+  .data-dashboard-grid {
     display: block;
   }
 
@@ -252,37 +116,6 @@
     display: flex;
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .manage-stats,
-  .data-kpis,
-  .kb-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .data-kpis.data-kpis--mobile-2x2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .data-kpis--mobile-2x2 .stat-card {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 14px;
-  }
-
-  .data-kpis--mobile-2x2 .xs-icon-tile {
-    width: 44px;
-    height: 44px;
-  }
-
-  .data-kpis--mobile-2x2 .stat-card strong {
-    margin-top: 5px;
-    font-size: 24px;
-  }
-
-  .stat-card {
-    grid-template-columns: 1fr;
   }
 
   .asset-tabs {

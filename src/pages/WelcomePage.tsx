@@ -43,14 +43,14 @@ export function WelcomePage() {
 
         <section className="welcome-page__content" aria-labelledby="welcome-title">
           <div className="welcome-page__copy">
-            <p className="welcome-page__eyebrow xs-page-enter">XINGSHU AGENT HUB</p>
-            <h1 id="welcome-title" className="xs-page-enter" style={{ animationDelay: "70ms" }}>
+            <p className="welcome-page__eyebrow xs-hero-enter">XINGSHU AGENT HUB</p>
+            <h1 id="welcome-title" className="xs-hero-enter" style={{ animationDelay: "70ms" }}>
               欢迎来到星数
             </h1>
-            <p className="welcome-page__lead xs-page-enter" style={{ animationDelay: "140ms" }}>
+            <p className="welcome-page__lead xs-hero-enter" style={{ animationDelay: "140ms" }}>
               可信数据智能，连接企业知识、经营数据与 Agent 应用。
             </p>
-            <div className="welcome-page__actions xs-page-enter" style={{ animationDelay: "220ms" }} aria-label="欢迎页操作">
+            <div className="welcome-page__actions xs-hero-enter" style={{ animationDelay: "220ms" }} aria-label="欢迎页操作">
               <Link className="welcome-page__button welcome-page__button--primary" to="/">
                 <span>进入星数</span>
                 <img className="welcome-page__button-icon" src={arrowIcon} alt="" data-icon-source="image2" />
@@ -64,7 +64,7 @@ export function WelcomePage() {
               {capabilityItems.map((item, index) => {
                 return (
                   <article
-                    className="welcome-page__capability xs-page-enter"
+                    className="welcome-page__capability xs-hero-enter"
                     style={{ animationDelay: `${300 + index * 70}ms` }}
                     key={item.title}
                   >
@@ -81,7 +81,7 @@ export function WelcomePage() {
             </div>
           </div>
 
-          <div className="welcome-page__visual xs-page-enter" style={{ animationDelay: "260ms" }} aria-label="星数可信数据智能主视觉">
+          <div className="welcome-page__visual xs-hero-enter" style={{ animationDelay: "260ms" }} aria-label="星数可信数据智能主视觉">
             <img src={welcomeHero} alt="星数可信数据智能主视觉" />
           </div>
         </section>

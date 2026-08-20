@@ -12,6 +12,7 @@ import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.webp";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { DataHubChatMode } from "@/types/dataHub";
@@ -62,7 +63,7 @@ const recommendedApps: XsAppCardData[] = [
   {
     id: "writing",
     title: "公文写作",
-    description: "套用已发布模板并绑定问数结果",
+    description: "套用上传模板并绑定问数结果",
     prompt: "从共享模板库创建一份公文",
     routeTo: "/writing",
     imageSrc: appWritingIcon,
@@ -120,7 +121,15 @@ export function HomePage() {
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
   const voiceInput = useVoiceInput({
-    onAudioReady: () => setSentStatus("语音录入完成；转写服务尚未接入"),
+    onAudioReady: async (audio, signal) => {
+      setSentStatus("正在转写语音");
+      const text = await transcribeVoice(audio, signal);
+      if (signal.aborted) {
+        return;
+      }
+      setDraft(appendVoiceTranscript(useUiStore.getState().homeDraft, text));
+      setSentStatus("");
+    },
     onError: setSentStatus
   });
   const commandPlaceholder = useTypingPlaceholder(!draft.trim());
@@ -203,7 +212,7 @@ export function HomePage() {
         submitOnEnter
         placeholder={commandPlaceholder}
         onVoice={() => {
-          setSentStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
+          setSentStatus(voiceInput.state === "recording" ? "正在转写语音" : "正在听取语音");
           voiceInput.toggle();
         }}
         onCancelVoice={() => {

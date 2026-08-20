@@ -1,11 +1,11 @@
+/* 内容轨道只有两条：常规内容页走 page，数据密集页（结果表、资产、云盘）走 data。
+   同一导航分组内必须用同一条，否则切换页面时标题会横向跳。 */
 .xs-page {
   width: min(100%, var(--xs-page-track));
   margin: 0 auto;
 }
 
-/* 制表走问数同款数据轨道：结果表要比常规内容页多拿到横向空间 */
-.xs-page.table-page,
-.xs-page.table-session-page {
+.xs-page--track-data {
   width: min(100%, var(--xs-data-track));
 }
 
@@ -20,21 +20,24 @@
 .xs-page__title h1 {
   margin: 0;
   color: var(--xs-text);
-  font-size: 34px;
-  line-height: 1.2;
-  font-weight: 760;
+  font-size: var(--xs-fs-title);
+  line-height: var(--xs-lh-tight);
+  font-weight: var(--xs-fw-display);
+  letter-spacing: var(--xs-ls-title);
 }
 
-.xs-page__title p,
 .xs-page__actions,
 .page-disclaimer {
   color: var(--xs-text-3);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-page__title p {
   margin: 8px 0 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-page__actions {
@@ -45,13 +48,18 @@
   gap: 10px;
 }
 
+/* 按钮三档：页面主动作 44、页内次级 36、行内文字动作 32。
+   高度和圆角只在这里定义，页面不再自设按钮尺寸。 */
 .xs-page .ant-btn,
-.xs-action-link,
-.xs-mini-link {
-  min-height: 32px;
+.xs-action-link {
+  min-height: 44px;
+  border-radius: var(--xs-radius-control);
+  font-weight: var(--xs-fw-bold);
 }
 
-.xs-page summary {
+.xs-page .ant-btn-sm,
+.xs-page summary,
+.xs-mini-link {
   min-height: 32px;
 }
 
@@ -59,20 +67,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 15px;
+  gap: 8px;
+  padding: 0 18px;
   border: 1px solid var(--xs-border);
-  border-radius: 8px;
+  background: var(--xs-surface);
   color: var(--xs-interactive-text);
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--xs-fs-control);
+  transition:
+    border-color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.xs-action-link:hover {
+  border-color: var(--xs-border-strong);
+  background: var(--xs-surface-soft);
 }
 
 .xs-action-link--primary {
   border-color: var(--xs-primary);
-  color: #fff;
+  color: var(--xs-surface);
   background: var(--xs-primary);
-  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
+  box-shadow: var(--xs-shadow-button);
+}
+
+.xs-action-link--primary:hover {
+  border-color: var(--xs-primary-2);
+  background: var(--xs-primary-2);
 }
 
 .xs-card {
@@ -105,7 +127,7 @@
   align-items: center;
   margin: 8px 0 2px;
   color: var(--xs-interactive-text);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
   text-decoration: none;
 }
@@ -128,80 +150,71 @@
 .xs-card h2 {
   margin: 0;
   color: var(--xs-text);
-  font-size: 22px;
-  font-weight: 750;
+  font-size: var(--xs-fs-section);
+  font-weight: var(--xs-fw-display);
 }
+
+/* ---------- 表格：排行表、结果表、清单表共用一套呈现 ----------
+   表头带底色与更重的下边线（横向滚动时它是唯一的列定位锚点），
+   数值列右对齐走等宽表格数字，网格线比容器边框更浅。 */
 
 .xs-table {
   width: 100%;
   border-collapse: collapse;
   color: var(--xs-text-2);
-  font-size: 14px;
+  font-size: var(--xs-fs-label);
+  font-variant-numeric: tabular-nums;
 }
 
 .xs-table th,
 .xs-table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid #edf2fb;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--xs-table-grid);
   text-align: left;
 }
 
-.xs-table th {
-  color: var(--xs-text);
-  background: #f7fbff;
-  font-weight: 700;
-}
-
-/* ---------- 结果表：问数与制表共用的数据表呈现 ---------- */
-
-/* 单元格不折行：一行就是一条记录，折行会毁掉纵向扫读 */
-.xs-table--data {
-  font-size: 13.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.xs-table--data th,
-.xs-table--data td {
-  max-width: 320px;
-  padding: 11px 14px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--xs-table-grid);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* 表头带底色与更重的下边线：横向滚动时它是唯一的列定位锚点 */
-.xs-table--data thead th {
+.xs-table thead th {
   border-bottom: 1px solid var(--xs-border-strong);
   color: var(--xs-text-2);
   background: var(--xs-table-head);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
-/* 数值列右对齐并走等宽表格数字，小数点与千分位在列内严格对齐 */
-.xs-table--data td[data-numeric="true"] {
+.xs-table td[data-numeric="true"],
+.xs-table td.xs-table__numeric {
   color: var(--xs-table-numeric);
   text-align: right;
   font-family: var(--xs-font-mono);
-  font-size: 13px;
+  font-weight: var(--xs-fw-medium);
 }
 
-.xs-table--data thead th[data-numeric="true"] {
+.xs-table thead th[data-numeric="true"],
+.xs-table thead th.xs-table__numeric {
   text-align: right;
 }
 
-.xs-table--data td[data-empty="true"] {
+.xs-table td[data-empty="true"] {
   color: var(--xs-table-muted);
 }
 
-.xs-table--data tbody tr:last-child td {
+.xs-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.xs-table--data tbody tr:hover td {
-  background: #f7fbff;
+.xs-table tbody tr:hover td {
+  background: var(--xs-surface-soft);
+}
+
+/* 结果表：一行就是一条记录，单元格不折行，折行会毁掉纵向扫读 */
+.xs-table--data th,
+.xs-table--data td {
+  max-width: 320px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* 行号槽：帮人指认"第几行"，所以要在，但轻到不参与阅读 */
@@ -213,7 +226,7 @@
   color: var(--xs-table-muted);
   text-align: right;
   font-family: var(--xs-font-mono);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
 }
 
 .datahub-table-card {
@@ -238,7 +251,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--xs-text);
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,7 +275,7 @@
 
 .datahub-result-meta dt {
   color: var(--xs-text-3);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
 }
 
@@ -271,7 +284,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--xs-text-2);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -289,7 +302,7 @@
   border-top: 1px solid var(--xs-table-grid);
   color: var(--xs-text-3);
   background: var(--xs-surface-soft);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
 }
 
@@ -305,8 +318,8 @@
   padding: 0 10px;
   border-radius: 999px;
   color: var(--xs-primary-2);
-  background: #eaf3ff;
-  font-size: 12px;
+  background: var(--xs-info-soft);
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
 }
 
@@ -352,7 +365,15 @@
   }
 }
 
+/* 模块入场统一走 enter(260ms) + 32ms 阶梯，最多 5 档（约 420ms 全屏稳定）。
+   hero(560ms) 按 token 注释只留给登录/欢迎的每屏一次主入场。 */
 .xs-page-enter {
+  animation: xs-page-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+  animation-delay: calc(min(var(--xs-enter-step, 0), 5) * var(--xs-motion-stagger));
+}
+
+/* 首屏主入场：仅登录页与欢迎页使用，每屏一次，节奏 70ms */
+.xs-hero-enter {
   animation: xs-page-enter var(--xs-motion-hero) var(--xs-motion-ease-out) backwards;
 }
 

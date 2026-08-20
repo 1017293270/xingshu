@@ -27,6 +27,7 @@ import type {
 } from "@/types/officialDocument";
 import {
   ANALYZING_POLL_INTERVAL_MS,
+  buildOfficialDocumentMappings,
   calibrationRoleLabel,
   calibrationRoleOptions,
   countBlockingRisks,
@@ -35,6 +36,7 @@ import {
   riskColor,
   riskLabel,
   styleVariantId,
+  templateIsUsable,
   useOfficialDocumentWorkspaceKey,
   useUpdateOfficialDocumentWorkspaceCache
 } from "./officialDocumentMeta";
@@ -50,7 +52,7 @@ function TemplateNotFound() {
     <div className="official-document-detail__empty xs-card xs-page-enter">
       <FileDoc size={30} aria-hidden="true" />
       <strong>未找到该公文模板</strong>
-      <p>模板可能已被移除、尚未发布，或当前账号无权访问。</p>
+      <p>模板可能已被移除，或当前账号无权访问。</p>
       <Link to={OFFICIAL_DOCUMENT_TEMPLATES_PATH}>返回模板库</Link>
     </div>
   );
@@ -62,26 +64,18 @@ function CalibrationPanel({
   previewUrl,
   isLoadingPreview,
   onLoadPreview,
-  onCreateDraft,
-  onSaveMapping,
-  onPublish
+  onCreateDraft
 }: {
   template: OfficialDocumentTemplate;
   analysis?: OfficialDocumentAnalysis;
   previewUrl?: string;
   isLoadingPreview: boolean;
   onLoadPreview: () => void;
-  onCreateDraft: () => void;
-  onSaveMapping: (mappings: OfficialDocumentMappingDefinition[]) => Promise<boolean>;
-  onPublish: () => Promise<boolean>;
+  onCreateDraft: (mappings: OfficialDocumentMappingDefinition[]) => void;
 }) {
   const blockingCount = countBlockingRisks(analysis);
-  const canCreateDraft = template.status === "PUBLISHED";
-  const canCalibrate = template.source === "LIVE" && template.status === "NEEDS_REVIEW";
+  const canEditStructure = template.source === "LIVE" && template.status === "NEEDS_REVIEW";
   const [calibrationNodes, setCalibrationNodes] = useState<OfficialDocumentStructureNode[]>([]);
-  const [mappingSaved, setMappingSaved] = useState(false);
-  const [isSavingMapping, setIsSavingMapping] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
   const [bodyRegionStart, setBodyRegionStart] = useState<number>();
   const [bodyRegionEnd, setBodyRegionEnd] = useState<number>();
   const [selectedNodeId, setSelectedNodeId] = useState("");
@@ -95,7 +89,7 @@ function CalibrationPanel({
         ...node,
         role,
         roleLabel: calibrationRoleLabel[role],
-        variantId: node.variantId ?? styleVariantId(node, role),
+        variantId: styleVariantId({ ...node, role }, role),
         editable: role !== "PRESERVE",
         dataBinding: role === "PRESERVE" ? false : node.dataBinding,
         required: role === "PRESERVE" ? false : node.required
@@ -115,7 +109,6 @@ function CalibrationPanel({
     const lastBlock = blockNodes.at(-1);
     setBodyRegionStart(storedBodyRegion?.paragraphIndex ?? firstBody?.paragraphIndex);
     setBodyRegionEnd(storedBodyRegion?.endParagraphIndex ?? lastBlock?.paragraphIndex ?? firstBody?.paragraphIndex);
-    setMappingSaved(Boolean(analysis?.mappingProfile?.mappings.length));
   }, [analysis, template.currentVersion.id]);
 
   const mappedParagraphs = calibrationNodes.filter((node) => node.paragraphIndex !== undefined);
@@ -173,12 +166,10 @@ function CalibrationPanel({
         }
       : node
     ));
-    setMappingSaved(false);
   };
 
   const updateNodeFlag = (nodeId: string, flag: "dataBinding" | "required", checked: boolean) => {
     setCalibrationNodes((current) => current.map((node) => node.id === nodeId ? { ...node, [flag]: checked } : node));
-    setMappingSaved(false);
   };
 
   const updateTableBinding = (nodeId: string, checked: boolean) => {
@@ -193,56 +184,19 @@ function CalibrationPanel({
         }
       : node
     ));
-    setMappingSaved(false);
   };
 
-  const saveMapping = async () => {
-    if (!mappingValid || isSavingMapping) return;
-    const paragraphMappings: OfficialDocumentMappingDefinition[] = mappedParagraphs.map((node) => ({
-      slotId: node.slotId!,
-      nodeId: node.id,
-      paragraphIndex: node.paragraphIndex!,
-      role: node.role as OfficialDocumentMappingRole,
-      variantId: node.variantId ?? styleVariantId(node, node.role as OfficialDocumentMappingRole),
-      dataBinding: node.dataBinding,
-      required: node.required,
-      slotType: (node.role === "PRESERVE"
-        ? "PRESERVE"
-        : node.dataBinding
-          ? "DATA_TEXT"
-          : node.paragraphIndex === bodyRegionStart
-            ? "BODY_REGION"
-            : ["BODY", "HEADING_1", "HEADING_2", "HEADING_3"].includes(node.role)
-              ? "BODY_REGION"
-            : "FIXED_TEXT") as OfficialDocumentMappingDefinition["slotType"],
-      endParagraphIndex: node.paragraphIndex === bodyRegionStart ? bodyRegionEnd : node.paragraphIndex,
-      metadata: {}
-    }));
-    const tableMappings: OfficialDocumentMappingDefinition[] = mappedTables.map((node) => ({
-      slotId: node.slotId!,
-      nodeId: node.id,
-      paragraphIndex: node.tableIndex!,
-      role: "BODY",
-      variantId: node.variantId ?? `table-${node.tableIndex! + 1}`,
-      dataBinding: true,
-      required: false,
-      slotType: "DATA_TABLE",
-      endParagraphIndex: node.tableIndex,
-      metadata: { target: "table" }
-    }));
-    const mappings = [...paragraphMappings, ...tableMappings];
-    setIsSavingMapping(true);
-    const saved = await onSaveMapping(mappings);
-    setMappingSaved(saved);
-    setIsSavingMapping(false);
-  };
-
-  const publishTemplate = async () => {
-    if (!mappingSaved || !mappingValid || blockingCount > 0 || isPublishing) return;
-    setIsPublishing(true);
-    await onPublish();
-    setIsPublishing(false);
-  };
+  const canCreateDraft = template.source === "LIVE" && (
+    template.status === "PUBLISHED"
+    || (canEditStructure && mappingValid && blockingCount === 0)
+  );
+  const createDraftDisabledReason = template.status === "ANALYZING"
+    ? "模板结构分析完成后即可新建草稿"
+    : blockingCount > 0
+      ? "存在错误，暂时不能起草"
+      : !mappingValid
+        ? "请先确认标题、正文和正文区域"
+        : undefined;
 
   return (
     <div className="official-document-calibration">
@@ -250,23 +204,25 @@ function CalibrationPanel({
         {template.source === "LIVE" ? (
           <Button disabled={analysis?.capability.licenseMode !== "FILE"} loading={isLoadingPreview} onClick={onLoadPreview}>原稿 PDF 预览</Button>
         ) : null}
-        {canCalibrate ? (
-          <>
-            <Button disabled={!mappingValid} loading={isSavingMapping} onClick={() => void saveMapping()}>保存角色映射</Button>
-            <Button type="primary" disabled={!mappingSaved || !mappingValid || blockingCount > 0} loading={isPublishing} onClick={() => void publishTemplate()}>发布模板</Button>
-          </>
-        ) : null}
-        <Button type={canCalibrate ? "default" : "primary"} icon={<Plus size={16} />} disabled={!canCreateDraft} onClick={onCreateDraft}>按模板新建草稿</Button>
+        <Button
+          type="primary"
+          icon={<Plus size={16} />}
+          disabled={!canCreateDraft}
+          title={createDraftDisabledReason}
+          onClick={() => onCreateDraft(canEditStructure ? buildOfficialDocumentMappings(calibrationNodes, bodyRegionStart, bodyRegionEnd) : [])}
+        >
+          按模板新建草稿
+        </Button>
       </OfficialDocumentAppActions>
-      <div className="official-document-toolbar xs-page-enter" style={{ animationDelay: "120ms" }}>
+      <div className="official-document-toolbar xs-page-enter" style={{ animationDelay: "128ms" }}>
         <div className="official-document-calibration__summary">
           <Tag bordered={false} color={hasTitle ? "success" : "warning"}>标题 {hasTitle ? "已标记" : "未标记"}</Tag>
           <Tag bordered={false} color={hasBody ? "success" : "warning"}>正文 {hasBody ? "已标记" : "未标记"}</Tag>
-          <Tag bordered={false} color={blockingCount > 0 ? "error" : "success"}>{blockingCount > 0 ? `${blockingCount} 项阻断` : "无阻断项"}</Tag>
+          <Tag bordered={false} color={blockingCount > 0 ? "error" : "success"}>{blockingCount > 0 ? `${blockingCount} 项错误` : "无错误"}</Tag>
         </div>
       </div>
 
-      <div className="official-document-calibration-workspace xs-page-enter" style={{ animationDelay: "180ms" }}>
+      <div className="official-document-calibration-workspace xs-page-enter" style={{ animationDelay: "160ms" }}>
         <section className="official-document-calibration-preview" aria-label="原稿版式预览">
           <div className="official-document-workspace-panel-head">
             <div><h4>原稿 PDF 预览</h4><p>只读 · LibreOffice 实际渲染</p></div>
@@ -299,13 +255,13 @@ function CalibrationPanel({
             </div>
           </div>
           <div className="official-document-static-preserve-note">
-            红头若位于页眉、文本框、形状或图片中，会随原稿静态保留，但当前不会进入可编辑结构节点。
+            分析完成后即可新建草稿。角色识别有误或需要写入问数时，在这里改完再创建。红头若位于页眉、文本框、形状或图片中，会随原稿静态保留。
           </div>
           {bodyRegionNodes.length ? (
             <div className="official-document-body-region" aria-label="正文区域范围">
               <div><strong>正文区域</strong><small>范围内标题和正文会初始化为草稿节点。</small></div>
-              <label><span>起点</span><Select aria-label="正文区域起点" value={bodyRegionStart} options={bodyRegionStartOptions} disabled={!canCalibrate} onChange={(value) => { setBodyRegionStart(value); if (bodyRegionEnd === undefined || bodyRegionEnd < value) setBodyRegionEnd(value); setMappingSaved(false); }} /></label>
-              <label><span>终点</span><Select aria-label="正文区域终点" value={bodyRegionEnd} options={bodyRegionEndOptions} disabled={!canCalibrate} onChange={(value) => { setBodyRegionEnd(value); setMappingSaved(false); }} /></label>
+              <label><span>起点</span><Select aria-label="正文区域起点" value={bodyRegionStart} options={bodyRegionStartOptions} disabled={!canEditStructure} onChange={(value) => { setBodyRegionStart(value); if (bodyRegionEnd === undefined || bodyRegionEnd < value) setBodyRegionEnd(value); }} /></label>
+              <label><span>终点</span><Select aria-label="正文区域终点" value={bodyRegionEnd} options={bodyRegionEndOptions} disabled={!canEditStructure} onChange={(value) => { setBodyRegionEnd(value); }} /></label>
             </div>
           ) : null}
           {visibleCalibrationNodes.length ? (
@@ -337,7 +293,7 @@ function CalibrationPanel({
               <label>
                 <span>公文角色</span>
                 {selectedNode.paragraphIndex !== undefined ? (
-                  <Select aria-label={`段落 ${selectedNode.paragraphIndex + 1} 公文角色`} value={selectedNode.role === "UNKNOWN" ? "PRESERVE" : selectedNode.role} options={calibrationRoleOptions} disabled={!canCalibrate} onChange={(role: OfficialDocumentMappingRole) => updateNodeRole(selectedNode.id, role)} />
+                  <Select aria-label={`段落 ${selectedNode.paragraphIndex + 1} 公文角色`} value={selectedNode.role === "UNKNOWN" ? "PRESERVE" : selectedNode.role} options={calibrationRoleOptions} disabled={!canEditStructure} onChange={(role: OfficialDocumentMappingRole) => updateNodeRole(selectedNode.id, role)} />
                 ) : <strong>{selectedNode.roleLabel}</strong>}
               </label>
               <div className="official-document-inspector-preview"><span>原文</span><p>当前节点：{selectedNode.preview || "该节点没有可展示文本"}</p></div>
@@ -348,18 +304,18 @@ function CalibrationPanel({
               <div className="official-document-inspector-flags">
                 {selectedNode.paragraphIndex !== undefined ? (
                   <>
-                    <Checkbox checked={selectedNode.dataBinding} disabled={!canCalibrate || selectedNode.role === "PRESERVE" || selectedNode.paragraphIndex === bodyRegionStart} onChange={(event) => updateNodeFlag(selectedNode.id, "dataBinding", event.target.checked)}>允许问数绑定</Checkbox>
-                    <Checkbox checked={selectedNode.required} disabled={!canCalibrate || selectedNode.role === "PRESERVE"} onChange={(event) => updateNodeFlag(selectedNode.id, "required", event.target.checked)}>必填槽位</Checkbox>
+                    <Checkbox checked={selectedNode.dataBinding} disabled={!canEditStructure || selectedNode.role === "PRESERVE" || selectedNode.paragraphIndex === bodyRegionStart} onChange={(event) => updateNodeFlag(selectedNode.id, "dataBinding", event.target.checked)}>允许问数绑定</Checkbox>
+                    <Checkbox checked={selectedNode.required} disabled={!canEditStructure || selectedNode.role === "PRESERVE"} onChange={(event) => updateNodeFlag(selectedNode.id, "required", event.target.checked)}>必填槽位</Checkbox>
                   </>
                 ) : selectedNode.tableIndex !== undefined ? (
-                  <Checkbox checked={selectedNode.dataBinding} disabled={!canCalibrate} onChange={(event) => updateTableBinding(selectedNode.id, event.target.checked)}>作为问数二维表槽位</Checkbox>
+                  <Checkbox checked={selectedNode.dataBinding} disabled={!canEditStructure} onChange={(event) => updateTableBinding(selectedNode.id, event.target.checked)}>作为问数二维表槽位</Checkbox>
                 ) : null}
               </div>
             </div>
           ) : <div className="official-document-inline-empty">请选择一个结构节点。</div>}
 
           <section className="official-document-calibration-risks" aria-labelledby="risk-heading">
-            <div className="official-document-section-title"><div><h4 id="risk-heading">格式保真与发布风险</h4><p>阻断项清零后才允许发布。</p></div></div>
+            <div className="official-document-section-title"><div><h4 id="risk-heading">格式保真风险</h4><p>存在错误时暂时不能起草。</p></div></div>
             {analysis?.risks.length ? (
               <ul className="official-document-risks">
                 {analysis.risks.map((risk) => (
@@ -384,6 +340,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   const workspaceKey = useOfficialDocumentWorkspaceKey();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const previewObjectUrlRef = useRef<string | undefined>(undefined);
+  const pendingMappingsRef = useRef<OfficialDocumentMappingDefinition[]>([]);
   const [operationStatus, setOperationStatus] = useState(
     () => (location.state as { notice?: string } | null)?.notice ?? ""
   );
@@ -429,7 +386,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
 
   useOfficialDocumentAppChrome({
     stage: "template",
-    context: template?.name ?? "模板校准",
+    context: template?.name ?? "模板结构",
     contextDetail: template
       ? `${template.currentVersion.fileName} · 版本 v${template.currentVersion.versionNo}`
       : undefined
@@ -451,7 +408,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
   const handleLoadPreview = async () => {
     if (!template || isLoadingPreview || analysis?.capability.licenseMode !== "FILE") return;
     setIsLoadingPreview(true);
-    announce("loading", `正在用固定 ${analysis?.capability.engineName ?? "Word"} 版本生成原稿 PDF 预览`);
+    announce("loading", "正在生成浏览");
     try {
       const blob = await getOfficialDocumentTemplatePreview(template.id, template.currentVersion.id);
       const signature = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
@@ -460,7 +417,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
       const url = URL.createObjectURL(blob);
       previewObjectUrlRef.current = url;
       setTemplatePreview({ versionId: template.currentVersion.id, url });
-      announce("success", "原稿 PDF 预览已生成，可对照结构树完成人工校准。");
+      announce("success", "原稿 PDF 预览已生成，可对照结构树检查版式。");
     } catch (error) {
       announce("error", operationErrorMessage(error));
     } finally {
@@ -468,40 +425,9 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     }
   };
 
-  const handleSaveMapping = async (mappings: OfficialDocumentMappingDefinition[]) => {
-    if (!template) return false;
-    announce("loading", "正在保存人工角色映射");
-    try {
-      const profile = await updateOfficialDocumentTemplateMapping({
-        templateId: template.id,
-        templateVersionId: template.currentVersion.id,
-        mappings
-      });
-      await workspaceQuery.refetch();
-      announce("success", `角色映射 v${profile.versionNo} 已保存；确认风险后可发布模板。`);
-      return true;
-    } catch (error) {
-      announce("error", operationErrorMessage(error));
-      return false;
-    }
-  };
-
-  const handlePublishTemplate = async () => {
-    if (!template) return false;
-    announce("loading", "正在编译模板并执行格式保真校验");
-    try {
-      await publishOfficialDocumentTemplate(template.id, template.currentVersion.id);
-      await workspaceQuery.refetch();
-      announce("success", "模板已发布；现在可以基于该不可变版本创建草稿。");
-      return true;
-    } catch (error) {
-      announce("error", operationErrorMessage(error));
-      return false;
-    }
-  };
-
-  const openDraftModal = () => {
-    if (!template || template.status !== "PUBLISHED") return;
+  const openDraftModal = (mappings: OfficialDocumentMappingDefinition[]) => {
+    if (!template || !templateIsUsable(template.status)) return;
+    pendingMappingsRef.current = mappings;
     setDraftTitle(`${template.name.replace(/（.*?）/g, "")} - 新草稿`);
     setDraftCreateError("");
     setDraftModalOpen(true);
@@ -513,6 +439,26 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     setIsCreatingDraft(true);
     setDraftCreateError("");
     try {
+      if (template.status === "NEEDS_REVIEW") {
+        const mappings = pendingMappingsRef.current;
+        if (!mappings.length) {
+          setDraftCreateError("模板结构还不完整，无法创建草稿");
+          return;
+        }
+        announce("loading", "正在根据模板结构生成可起草版本");
+        await updateOfficialDocumentTemplateMapping({
+          templateId: template.id,
+          templateVersionId: template.currentVersion.id,
+          mappings
+        });
+        await publishOfficialDocumentTemplate(template.id, template.currentVersion.id);
+        updateWorkspaceCache((current) => ({
+          ...current,
+          templates: current.templates.map((item) => item.id === template.id
+            ? { ...item, status: "PUBLISHED" as const }
+            : item)
+        }));
+      }
       const createdDraft = await createOfficialDocumentDraft({
         templateId: template.id,
         templateVersionId: template.currentVersion.id,
@@ -577,8 +523,6 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
               isLoadingPreview={isLoadingPreview}
               onLoadPreview={() => void handleLoadPreview()}
               onCreateDraft={openDraftModal}
-              onSaveMapping={handleSaveMapping}
-              onPublish={handlePublishTemplate}
             />
           </>
         )}

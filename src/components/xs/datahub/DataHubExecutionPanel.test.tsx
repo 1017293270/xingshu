@@ -497,4 +497,102 @@ describe("DataHubExecutionPanel", () => {
       expect.objectContaining({ type: "document_url" })
     );
   });
+
+  it("keeps a nested ask-data helper as linear stages instead of switching to the orchestration canvas", () => {
+    const askEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "问数智能体",
+        sessionId: "ask-main",
+        chatId: "ask-chat"
+      },
+      {
+        type: "activity",
+        agentName: "问数智能体",
+        sessionId: "ask-main",
+        chatId: "ask-chat",
+        content: {
+          activityId: "model:understand",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "success",
+          summary: "问题分析完成"
+        }
+      },
+      {
+        type: "subagent_exposed",
+        agentName: "数据源选择智能体",
+        sessionId: "ask-child",
+        globalSessionId: "ask-main",
+        parentSessionId: "ask-main",
+        chatId: "ask-chat",
+        content: {
+          agentId: "datasource-selection",
+          sessionId: "ask-child",
+          subagentId: "subagent-ds",
+          label: "数据源选择智能体"
+        }
+      },
+      {
+        type: "data_source_selected",
+        agentName: "数据源选择智能体",
+        sessionId: "ask-child",
+        globalSessionId: "ask-main",
+        parentSessionId: "ask-main",
+        chatId: "ask-chat",
+        content: { datasourceId: 8, datasourceName: "经营分析库" }
+      },
+      {
+        type: "text",
+        agentName: "问数智能体",
+        sessionId: "ask-main",
+        chatId: "ask-chat",
+        content: "本月收入为 128 万元。"
+      },
+      {
+        type: "table",
+        agentName: "问数智能体",
+        sessionId: "ask-main",
+        chatId: "ask-chat",
+        content: {
+          columns: [{ name: "month", title: "月份" }],
+          rows: [{ month: "7月" }]
+        }
+      },
+      {
+        type: "done",
+        agentName: "问数智能体",
+        sessionId: "ask-main",
+        chatId: "ask-chat",
+        content: {},
+        finished: true
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(askEvents, {
+      mainSessionId: "ask-main",
+      fallbackAgentName: "问数智能体"
+    });
+
+    render(
+      <DataHubExecutionPanel
+        projection={projection}
+        title="问数 Agent 执行"
+        preferDirectMainExecution
+      />
+    );
+
+    expect(screen.getByLabelText("主智能体执行过程")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "模型活动：理解数据问题" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("本月收入为 128 万元。")).not.toBeInTheDocument();
+    expect(screen.queryByText("月份")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "打开 数据源选择智能体执行详情" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")
+    ).not.toBeInTheDocument();
+  });
 });

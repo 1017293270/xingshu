@@ -3,7 +3,7 @@ import { Button, Input } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 
 const STAGGER_MS = 32;
-const STAGGER_MAX_MS = 200;
+const STAGGER_MAX_MS = 160;
 
 export function listStaggerDelay(index: number) {
   return `${Math.min(index * STAGGER_MS, STAGGER_MAX_MS)}ms`;

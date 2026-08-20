@@ -2,10 +2,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceInputState = "idle" | "permission" | "recording" | "processing" | "error";
 
+export const MAX_VOICE_DURATION_MS = 60_000;
+
 type UseVoiceInputOptions = {
-  onAudioReady?: (audio: Blob) => void;
+  onAudioReady?: (audio: Blob, signal: AbortSignal) => void | Promise<void>;
   onError?: (message: string) => void;
 };
+
+function pickRecorderMimeType() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
 
 export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const [state, setState] = useState<VoiceInputState>("idle");
@@ -14,21 +25,37 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const requestVersionRef = useRef(0);
   const discardedRecordersRef = useRef(new WeakSet<MediaRecorder>());
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
+  const maxDurationTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const clearMaxDurationTimer = useCallback(() => {
+    if (maxDurationTimerRef.current !== null) {
+      window.clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
+    }
+  }, []);
 
   const releaseStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
 
+  const abortTranscription = useCallback(() => {
+    transcriptionAbortRef.current?.abort();
+    transcriptionAbortRef.current = null;
+  }, []);
+
   const reportError = useCallback(
     (message: string) => {
       requestVersionRef.current += 1;
+      abortTranscription();
       if (recorderRef.current) {
         discardedRecordersRef.current.add(recorderRef.current);
       }
+      clearMaxDurationTimer();
       releaseStream();
       recorderRef.current = null;
       if (mountedRef.current) {
@@ -37,7 +64,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         optionsRef.current.onError?.(message);
       }
     },
-    [releaseStream]
+    [abortTranscription, clearMaxDurationTimer, releaseStream]
   );
 
   const start = useCallback(async () => {
@@ -63,7 +90,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       }
 
       streamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
+      const mimeType = pickRecorderMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       recorderRef.current = recorder;
       const chunks: Blob[] = [];
 
@@ -83,17 +111,78 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         if (streamRef.current === stream) {
           streamRef.current = null;
         }
-        if (!discarded && mountedRef.current) {
-          const audio = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
-          optionsRef.current.onAudioReady?.(audio);
+        clearMaxDurationTimer();
+
+        if (discarded || !mountedRef.current) {
+          if (mountedRef.current) {
+            setError("");
+            setState("idle");
+          }
+          return;
         }
+
+        const audio = new Blob(chunks, { type: chunks[0]?.type || mimeType || "audio/webm" });
+        if (audio.size === 0) {
+          reportError("没有录到有效语音");
+          return;
+        }
+
+        const transcriptionVersion = requestVersionRef.current;
+        const abortController = new AbortController();
+        transcriptionAbortRef.current = abortController;
         if (mountedRef.current) {
-          setState("idle");
+          setState("processing");
         }
+
+        void Promise.resolve()
+          .then(() => optionsRef.current.onAudioReady?.(audio, abortController.signal))
+          .then(() => {
+            if (!mountedRef.current || requestVersionRef.current !== transcriptionVersion) {
+              return;
+            }
+            setState("idle");
+          })
+          .catch((cause: unknown) => {
+            if (
+              !mountedRef.current ||
+              requestVersionRef.current !== transcriptionVersion ||
+              abortController.signal.aborted
+            ) {
+              if (
+                mountedRef.current &&
+                abortController.signal.aborted &&
+                requestVersionRef.current === transcriptionVersion
+              ) {
+                setError("");
+                setState("idle");
+              }
+              return;
+            }
+            const message =
+              cause instanceof Error && cause.message.trim()
+                ? cause.message
+                : "语音转写失败，请稍后重试";
+            reportError(message);
+          })
+          .finally(() => {
+            if (transcriptionAbortRef.current === abortController) {
+              transcriptionAbortRef.current = null;
+            }
+          });
       };
 
       recorder.start();
       setState("recording");
+      clearMaxDurationTimer();
+      maxDurationTimerRef.current = window.setTimeout(() => {
+        const activeRecorder = recorderRef.current;
+        if (activeRecorder?.state === "recording") {
+          if (mountedRef.current) {
+            setState("processing");
+          }
+          activeRecorder.stop();
+        }
+      }, MAX_VOICE_DURATION_MS);
     } catch (cause) {
       if (!mountedRef.current || requestVersionRef.current !== requestVersion) {
         return;
@@ -103,7 +192,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         : "无法启动语音输入";
       reportError(message);
     }
-  }, [reportError, releaseStream, state]);
+  }, [clearMaxDurationTimer, reportError, state]);
 
   const stop = useCallback(() => {
     const recorder = recorderRef.current;
@@ -112,14 +201,17 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       return;
     }
 
+    clearMaxDurationTimer();
     if (mountedRef.current) {
       setState("processing");
     }
     recorder.stop();
-  }, [releaseStream]);
+  }, [clearMaxDurationTimer, releaseStream]);
 
   const cancel = useCallback(() => {
     requestVersionRef.current += 1;
+    abortTranscription();
+    clearMaxDurationTimer();
     const recorder = recorderRef.current;
 
     if (recorder) {
@@ -140,7 +232,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       setError("");
       setState("idle");
     }
-  }, [releaseStream]);
+  }, [abortTranscription, clearMaxDurationTimer, releaseStream]);
 
   const toggle = useCallback(() => {
     if (state === "permission") {
@@ -161,6 +253,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     return () => {
       mountedRef.current = false;
       requestVersionRef.current += 1;
+      abortTranscription();
+      clearMaxDurationTimer();
       const recorder = recorderRef.current;
       if (recorder?.state === "recording") {
         discardedRecordersRef.current.add(recorder);
@@ -168,7 +262,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       }
       releaseStream();
     };
-  }, [releaseStream]);
+  }, [abortTranscription, clearMaxDurationTimer, releaseStream]);
 
   return { cancel, error, start, state, stop, toggle };
 }

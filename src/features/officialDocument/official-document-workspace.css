@@ -2,7 +2,7 @@
 
 .official-document-app {
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: var(--xs-sidebar-expanded-width) minmax(0, 1fr);
   width: 100%;
   height: 100dvh;
   min-height: 100dvh;
@@ -11,21 +11,28 @@
   color: var(--xs-text);
 }
 
+/* 独立工作台，但外壳材质与全局侧栏一致：同宽、同留白、同投影 */
 .official-document-rail {
   display: flex;
   min-height: 0;
   flex-direction: column;
   gap: 18px;
-  padding: 20px 14px 16px;
+  padding: 28px 16px 22px;
   border-right: 1px solid var(--xs-border);
   background: var(--xs-surface);
+  box-shadow: 8px 0 30px rgba(8, 26, 58, 0.03);
 }
 
 .official-document-rail__brand {
-  display: flex;
-  align-items: center;
+  display: grid;
   gap: 10px;
   padding: 0 6px;
+}
+
+.official-document-rail__brand img {
+  width: 170px;
+  height: auto;
+  object-fit: contain;
 }
 
 .official-document-rail__mark {
@@ -40,11 +47,15 @@
   background: linear-gradient(160deg, #f4f9ff, #e6f0ff);
 }
 
+/* 工作台名而不是页面标题：它一直在，所以只占标签级字号 */
 .official-document-rail__brand h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  color: var(--xs-text);
-  font-size: 15.5px;
-  font-weight: 700;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-bold);
   line-height: 1.25;
 }
 
@@ -59,11 +70,13 @@
 
 .official-document-rail__nav a {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 12px;
   color: var(--xs-text-2);
+  border-left: 3px solid transparent;
   border-radius: var(--xs-radius-control);
   text-decoration: none;
   transition:
@@ -79,8 +92,8 @@
 
 .official-document-rail__nav a strong {
   color: inherit;
-  font-size: 13.5px;
-  font-weight: 650;
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-medium);
   line-height: 1.3;
   white-space: nowrap;
 }
@@ -88,7 +101,7 @@
 .official-document-rail__nav a small {
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 11px;
+  font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -115,11 +128,12 @@
 .official-document-app__exit {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 40px;
   padding: 8px 12px;
   color: var(--xs-text-3);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -140,8 +154,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  min-height: 68px;
-  padding: 12px 28px;
+  min-height: 76px;
+  padding: 14px 28px;
   border-bottom: 1px solid var(--xs-border);
   background: rgba(255, 255, 255, 0.92);
 }
@@ -158,9 +172,9 @@
   gap: 7px;
   margin: 0;
   color: var(--xs-text-3);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+  letter-spacing: var(--xs-ls-caps);
 }
 
 .official-document-app__eyebrow i {
@@ -178,13 +192,14 @@
   color: var(--xs-primary-2);
 }
 
+/* 常驻顶栏里的阶段名走分区字号，比一级页面标题低一档，但仍在同一套比例尺内 */
 .official-document-app__context-title {
   overflow: hidden;
-  margin: 0;
+  margin: 4px 0 0;
   color: var(--xs-text);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: var(--xs-fs-section);
+  font-weight: var(--xs-fw-display);
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -192,7 +207,7 @@
 .official-document-app__context small {
   overflow: hidden;
   color: #7185a1;
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -218,28 +233,8 @@
   color: var(--xs-primary-2);
   border-radius: 999px;
   background: #eaf3ff;
-  font-size: 11px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
-}
-
-.official-document-engine-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 11px;
-  color: #4f7cb5;
-  border: 1px solid #dfeafa;
-  border-radius: 999px;
-  background: #f5f9ff;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.official-document-engine-chip[data-state="unavailable"] {
-  color: #98610d;
-  border-color: #f5dda9;
-  background: #fffaf0;
 }
 
 .official-document-app__workspace {
@@ -274,7 +269,7 @@
 .official-document-view__lede {
   margin: 0;
   color: var(--xs-text-3);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   line-height: 1.6;
 }
 
@@ -288,7 +283,7 @@
   border: 1px solid #f5dda9;
   border-radius: 11px;
   background: #fffaf0;
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   line-height: 1.6;
 }
 
@@ -326,7 +321,7 @@
 
 .official-document-toolbar-row__summary {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   white-space: nowrap;
 }
 
@@ -356,7 +351,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -371,7 +366,7 @@
 
 .official-document-filters button span {
   color: var(--xs-text-3);
-  font-size: 11px;
+  font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -399,7 +394,7 @@
   color: #8296b0;
   border-bottom: 1px solid #eef3fa;
   background: #fafcff;
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   font-weight: 600;
   letter-spacing: 0.03em;
 }
@@ -463,7 +458,7 @@
 .official-document-row__name strong {
   overflow: hidden;
   color: var(--xs-text);
-  font-size: 13.5px;
+  font-size: var(--xs-fs-label);
   font-weight: 650;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -473,7 +468,7 @@
 .official-document-row__name small {
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -481,7 +476,7 @@
 .official-document-row__cell {
   overflow: hidden;
   color: var(--xs-text-2);
-  font-size: 12.5px;
+  font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -489,7 +484,7 @@
 .official-document-row__cell[data-mono] {
   color: #6f839e;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
 }
 
 .official-document-row__cell em {
@@ -500,7 +495,7 @@
 
 .official-document-row__cell .ant-tag {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--xs-fs-caption);
 }
 
 .official-document-row__caret {

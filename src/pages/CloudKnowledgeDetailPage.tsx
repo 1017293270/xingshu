@@ -1,14 +1,15 @@
 import { ArrowLeft, ArrowsClockwise, FileText } from "@phosphor-icons/react";
 import { Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import {
   listDataHubKnowledgeBases,
   listDataHubKnowledgeDocuments,
-  loadDataHubKnowledgeMarkdown
+  loadDataHubKnowledgeMarkdown,
+  loadDataHubKnowledgeSource
 } from "@/services/dataHubKnowledgeService";
 import type { DataHubKnowledgeDocument, DataHubKnowledgeDocumentStatus } from "@/types/dataHub";
 import { canBrowseKnowledgeDocument, CloudDocumentPreview } from "./CloudDocumentPreview";
@@ -49,6 +50,8 @@ export function CloudKnowledgeDetailPage() {
   const sessionScope = useSessionQueryScope();
   const [previewDocument, setPreviewDocument] = useState<DataHubKnowledgeDocument | null>(null);
   const [previewMarkdown, setPreviewMarkdown] = useState("");
+  const [previewSourceUrl, setPreviewSourceUrl] = useState("");
+  const [previewSourceType, setPreviewSourceType] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const knowledgeBasesQuery = useQuery({
@@ -72,6 +75,7 @@ export function CloudKnowledgeDetailPage() {
   });
   const title = knowledgeBase?.title || (kbId ? `知识库 ${kbId}` : "知识库");
   const previewId = previewDocument?.id;
+  const previewSourceRevokeRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
     if (!previewId || !kbId) {
@@ -84,28 +88,53 @@ export function CloudKnowledgeDetailPage() {
     }
 
     let cancelled = false;
+    previewSourceRevokeRef.current?.();
+    previewSourceRevokeRef.current = undefined;
     setPreviewLoading(true);
     setPreviewError("");
     setPreviewMarkdown("");
+    setPreviewSourceUrl("");
+    setPreviewSourceType("");
 
-    void loadDataHubKnowledgeMarkdown(kbId, current)
-      .then(({ markdown }) => {
+    void (async () => {
+      try {
+        const access = await loadDataHubKnowledgeSource(kbId, current);
+        if (cancelled) {
+          access.revoke?.();
+          return;
+        }
+        if (access.contentType === "application/pdf") {
+          previewSourceRevokeRef.current = access.revoke;
+          setPreviewSourceUrl(access.url);
+          setPreviewSourceType(access.contentType);
+          setPreviewLoading(false);
+          return;
+        }
+        access.revoke?.();
+      } catch {
+        // PDF 原文不可用时再回退到已解析 Markdown，避免合同预览空白。
+      }
+
+      try {
+        const { markdown } = await loadDataHubKnowledgeMarkdown(kbId, current);
         if (cancelled) {
           return;
         }
         setPreviewMarkdown(markdown);
         setPreviewLoading(false);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (cancelled) {
           return;
         }
         setPreviewLoading(false);
-        setPreviewError(error instanceof Error ? error.message : "Markdown 读取失败，请稍后重试");
-      });
+        setPreviewError(error instanceof Error ? error.message : "原文读取失败，请稍后重试");
+      }
+    })();
 
     return () => {
       cancelled = true;
+      previewSourceRevokeRef.current?.();
+      previewSourceRevokeRef.current = undefined;
     };
   }, [documents, kbId, previewId]);
 
@@ -119,6 +148,8 @@ export function CloudKnowledgeDetailPage() {
   const handleClosePreview = () => {
     setPreviewDocument(null);
     setPreviewMarkdown("");
+    setPreviewSourceUrl("");
+    setPreviewSourceType("");
     setPreviewError("");
     setPreviewLoading(false);
   };
@@ -142,6 +173,7 @@ export function CloudKnowledgeDetailPage() {
           </Button>
         </>
       )}
+      track="data"
     >
       <nav className="cloud-detail__crumb xs-page-enter" aria-label="返回列表">
         <Link to="/cloud">我的云盘</Link>
@@ -208,6 +240,8 @@ export function CloudKnowledgeDetailPage() {
         previewDocument={previewDocument}
         documents={documents}
         markdown={previewMarkdown}
+        sourceUrl={previewSourceUrl}
+        sourceContentType={previewSourceType}
         loading={previewLoading}
         error={previewError}
         onSelect={setPreviewDocument}

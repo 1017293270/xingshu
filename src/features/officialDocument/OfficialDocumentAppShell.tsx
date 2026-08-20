@@ -8,6 +8,7 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
+import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import { Link, Outlet, useLocation } from "react-router";
 import "./official-document.css";
 import "./official-document-workspace.css";
@@ -31,7 +32,7 @@ const defaultChrome: OfficialDocumentAppChrome = {
 const stageEyebrow: Record<OfficialDocumentAppStage, string> = {
   library: "Agent 应用",
   drafts: "Agent 应用",
-  template: "模板校准",
+  template: "模板结构",
   draft: "结构化起草"
 };
 
@@ -45,7 +46,7 @@ const navItems = [
   {
     key: "templates",
     label: "模板库",
-    detail: "上传、校准与发布",
+    detail: "上传模板并起草",
     to: OFFICIAL_DOCUMENT_TEMPLATES_PATH,
     icon: Stack,
     matches: (pathname: string) => pathname === "/writing" || pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)
@@ -134,10 +135,13 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
         <a className="xs-skip-link" href="#official-document-workspace">跳到公文工作区</a>
         <aside className="official-document-rail">
           <div className="official-document-rail__brand">
-            <span className="official-document-rail__mark" aria-hidden="true">
-              <NotePencil size={19} weight="duotone" />
-            </span>
-            <h1>公文写作</h1>
+            <img src={logoSource} alt="星数" width={400} height={183} />
+            <h1>
+              <span className="official-document-rail__mark" aria-hidden="true">
+                <NotePencil size={16} weight="duotone" />
+              </span>
+              公文写作
+            </h1>
           </div>
           <nav className="official-document-rail__nav" aria-label="公文写作导航">
             {navItems.map((item) => {

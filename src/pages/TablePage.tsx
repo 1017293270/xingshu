@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import { XsCapabilityStatus } from "@/components/xs/XsCapabilityStatus";
-import { productCapabilities } from "@/config/capabilities";
+import { xsEnterStep } from "@/components/xs/motion";
 import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
 import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
 import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
@@ -109,10 +108,10 @@ export function TablePage() {
       title="智能制表"
       subtitle="用自然语言描述表格结构，问表智能体帮你生成企业表格"
       className="table-page"
+      track="data"
     >
-      <XsCapabilityStatus capability={productCapabilities.tables} />
       <div className="sheet-workbench">
-        <section className="xs-card sheet-console xs-page-enter" style={{ animationDelay: "80ms" }}>
+        <section className="xs-card sheet-console xs-page-enter" style={xsEnterStep(1)}>
           <div className="sheet-console__head">
             <h2>描述制表需求</h2>
             <p>写清主题、字段与统计口径。生成后进入独立的问表会话，结果表会标注数据源、字段数与行数。</p>
@@ -173,7 +172,7 @@ export function TablePage() {
         />
       </div>
       <section aria-label="最近制表">
-        <div className="section-title-row section-title-row--compact xs-page-enter" style={{ animationDelay: "140ms" }}>
+        <div className="section-title-row section-title-row--compact xs-page-enter" style={xsEnterStep(2)}>
           <h2 className="subsection-title">最近制表</h2>
           <span className="section-title-meta">{recentTables.length} 条记录 · 点击打开当时的结果表</span>
         </div>
@@ -197,7 +196,7 @@ export function TablePage() {
             {recentTables.map((table, index) => (
               <article
                 className="xs-page-enter sheet-row"
-                style={{ animationDelay: `${200 + index * 40}ms` }}
+                style={xsEnterStep(3 + Math.min(index, 2))}
                 key={table.id}
                 aria-label={`${table.title} ${table.description}`}
               >

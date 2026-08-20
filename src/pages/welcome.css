@@ -58,7 +58,7 @@
   align-items: center;
   gap: 7px;
   color: var(--xs-primary-2);
-  font-size: 14px;
+  font-size: var(--xs-fs-control);
   font-weight: 750;
 }
 
@@ -77,33 +77,33 @@
 .welcome-page__copy {
   position: relative;
   z-index: 2;
-  max-width: 590px;
+  max-width: 720px;
 }
 
 .welcome-page__eyebrow {
   margin: 0 0 18px;
   color: var(--xs-primary-2);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-bold);
+  letter-spacing: var(--xs-ls-caps);
 }
 
 .welcome-page__copy h1 {
   margin: 0;
   color: var(--xs-text);
-  font-size: 58px;
-  line-height: 1.12;
-  font-weight: 780;
-  letter-spacing: -0.02em;
+  font-size: var(--xs-fs-display);
+  line-height: var(--xs-lh-tight);
+  font-weight: var(--xs-fw-display);
+  letter-spacing: var(--xs-ls-display);
 }
 
 .welcome-page__lead {
   max-width: 540px;
   margin: 22px 0 0;
   color: var(--xs-text-2);
-  font-size: 22px;
-  line-height: 1.65;
-  font-weight: 520;
+  font-size: var(--xs-fs-card);
+  line-height: 1.7;
+  font-weight: var(--xs-fw-regular);
 }
 
 .welcome-page__actions {
@@ -123,7 +123,7 @@
   padding: 0 22px;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
-  font-size: 16px;
+  font-size: var(--xs-fs-card);
   font-weight: 760;
   text-decoration: none;
   transition:
@@ -187,9 +187,9 @@
 .welcome-page__capability {
   display: flex;
   align-items: flex-start;
-  min-height: 128px;
+  min-height: 112px;
   gap: 14px;
-  padding: 18px 16px;
+  padding: 18px;
   border: 1px solid rgba(199, 217, 246, 0.82);
   border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.78);
@@ -221,16 +221,16 @@
 
 .welcome-page__capability strong {
   color: var(--xs-text);
-  font-size: 15px;
-  font-weight: 780;
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-display);
 }
 
 .welcome-page__capability em {
   margin-top: 8px;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.55;
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .welcome-page__visual {
@@ -244,7 +244,7 @@
   pointer-events: none;
 }
 
-.welcome-page__visual.xs-page-enter {
+.welcome-page__visual.xs-hero-enter {
   animation-name: welcome-visual-enter;
 }
 
@@ -318,13 +318,8 @@
     max-width: 760px;
   }
 
-  .welcome-page__copy h1 {
-    font-size: 64px;
-  }
-
   .welcome-page__lead {
     max-width: 660px;
-    font-size: 24px;
   }
 
   .welcome-page__actions {
@@ -418,12 +413,8 @@
     padding-top: 32px;
   }
 
-  .welcome-page__copy h1 {
-    font-size: 38px;
-  }
-
   .welcome-page__lead {
-    font-size: 18px;
+    font-size: var(--xs-fs-card);
     line-height: 1.6;
   }
 

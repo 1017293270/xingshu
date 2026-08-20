@@ -1,78 +1,5 @@
 /* 我的云盘：当前空间知识库只读列表 */
 
-/* ---------- 概览指标 ---------- */
-
-.cloud-kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
-  gap: 16px;
-  margin: 18px 0 22px;
-}
-
-.cloud-kpi {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-}
-
-.cloud-kpi > div {
-  min-width: 0;
-}
-
-.cloud-kpi__label {
-  display: block;
-  color: var(--xs-text-3);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.cloud-kpi__value {
-  display: block;
-  margin: 7px 0 5px;
-  color: var(--xs-text);
-  font-size: 30px;
-  font-weight: 760;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.12;
-}
-
-.cloud-kpi__value--time {
-  font-size: 19px;
-  letter-spacing: -0.01em;
-}
-
-.cloud-kpi__caption {
-  display: block;
-  overflow: hidden;
-  color: var(--xs-text-3);
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cloud-kpi .xs-icon-tile {
-  width: 52px;
-  height: 52px;
-}
-
-.cloud-kpi .xs-icon-tile__image {
-  width: 32px;
-  height: 32px;
-}
-
-.cloud-kpi .xs-icon-tile > svg {
-  width: 26px;
-  height: 26px;
-}
-
-.cloud-kpi .xs-icon-tile__node {
-  right: 10px;
-  bottom: 10px;
-}
-
 /* ---------- 工具条 ---------- */
 
 .cloud-toolbar {
@@ -152,7 +79,7 @@
 
 .cloud-share small {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -172,132 +99,6 @@
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--xs-primary), var(--xs-cyan));
-}
-
-/* ---------- 卡片视图 ---------- */
-
-.cloud-kb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(324px, 1fr));
-  gap: 16px;
-  margin: 0 0 18px;
-}
-
-.cloud-kb-card {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-  padding: 20px;
-}
-
-.cloud-kb-card__head {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
-}
-
-.cloud-kb-card .xs-icon-tile {
-  width: 56px;
-  height: 56px;
-}
-
-.cloud-kb-card .xs-icon-tile > svg {
-  width: 26px;
-  height: 26px;
-}
-
-.cloud-kb-card .xs-icon-tile__node {
-  right: 11px;
-  bottom: 11px;
-}
-
-.cloud-kb-card__heading {
-  min-width: 0;
-}
-
-.cloud-kb-card__heading h2 {
-  margin: 0;
-  overflow: hidden;
-  font-size: 16px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cloud-kb-card__heading p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 8px 0 0;
-  color: var(--xs-text-3);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.6;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.cloud-kb-card__stats {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 34px;
-}
-
-.cloud-kb-card__count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.cloud-kb-card__count strong {
-  color: var(--xs-text);
-  font-size: 22px;
-  font-weight: 760;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.cloud-kb-card__count small,
-.cloud-kb-card__time {
-  color: var(--xs-text-3);
-  font-size: 12px;
-  font-weight: 620;
-}
-
-.cloud-kb-card__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 14px;
-  border-top: 1px solid #edf3fc;
-}
-
-.cloud-kb-card__time {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-variant-numeric: tabular-nums;
-}
-
-.cloud-kb-card__open {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--xs-interactive-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.cloud-kb-card__open svg {
-  transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
-}
-
-.cloud-kb-card:hover .cloud-kb-card__open svg,
-.cloud-kb-card:focus-visible .cloud-kb-card__open svg {
-  transform: translateX(3px);
 }
 
 /* ---------- 列表视图 ---------- */
@@ -323,9 +124,9 @@
 .cloud-kb-table__head {
   min-height: 46px;
   border-bottom: 1px solid var(--xs-border);
-  background: #f6faff;
+  background: var(--xs-surface-soft);
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -343,7 +144,7 @@
 }
 
 .cloud-kb-row:hover {
-  background: #f5f9ff;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-kb-row__name {
@@ -354,23 +155,15 @@
   min-width: 0;
 }
 
+/* 列表视图行高更紧，图标底板降一档，但仍由 token 控制 */
 .cloud-kb-row .xs-icon-tile {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  --xs-icon-tile-size: 44px;
 }
 
+/* 32 网格的功能图标压到列表行尺寸；1:1 之外的整数倍才不糊 */
 .cloud-kb-row .xs-icon-tile > svg {
   width: 22px;
   height: 22px;
-}
-
-.cloud-kb-row .xs-icon-tile__node {
-  right: 8px;
-  bottom: 8px;
-  width: 5px;
-  height: 5px;
-  box-shadow: 0 0 0 2px rgba(0, 194, 255, 0.14);
 }
 
 .cloud-kb-row__text {
@@ -381,7 +174,7 @@
 
 .cloud-kb-row__text strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -393,7 +186,7 @@
 .cloud-kb-row__time {
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -403,13 +196,13 @@
 .cloud-kb-table__head > span:nth-child(2) {
   text-align: right;
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .cloud-kb-row__time {
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-variant-numeric: tabular-nums;
 }
 
@@ -430,7 +223,7 @@
 .cloud-add-hint {
   max-width: 220px;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
   line-height: 1.5;
 }
@@ -441,7 +234,7 @@
   gap: 8px;
   margin: -8px 0 18px;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
 }
 
 .cloud-detail__crumb a {
@@ -474,9 +267,9 @@
 .cloud-doc-table__head {
   min-height: 46px;
   border-bottom: 1px solid var(--xs-border);
-  background: #f6faff;
+  background: var(--xs-surface-soft);
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -492,7 +285,7 @@
 }
 
 .cloud-doc-row:hover {
-  background: #f8fbff;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-doc-row__name {
@@ -522,7 +315,7 @@
 
 .cloud-doc-row__text strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--xs-fs-body);
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -533,7 +326,7 @@
 .cloud-doc-row__meta {
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 620;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -552,7 +345,7 @@
   min-height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -596,33 +389,6 @@
 }
 
 @media (max-width: 900px) {
-  .cloud-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
-  }
-
-  .cloud-kpi {
-    padding: 14px 16px;
-  }
-
-  .cloud-kpi__value {
-    font-size: 26px;
-  }
-
-  .cloud-kpi__value--time {
-    font-size: 17px;
-  }
-
-  /* 奇数个指标时最后一张占满整行，避免时间戳被挤成两行 */
-  .cloud-kpis > article:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .cloud-kpi__caption {
-    white-space: normal;
-  }
-
   .cloud-toolbar {
     grid-template-columns: 1fr;
   }
@@ -635,10 +401,6 @@
     max-width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
-  }
-
-  .cloud-kb-grid {
-    grid-template-columns: 1fr;
   }
 
   .cloud-kb-table__head {
@@ -725,7 +487,7 @@
   margin: 0;
   padding: 18px 18px 10px;
   color: var(--xs-primary-2);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 760;
   letter-spacing: 0.04em;
 }
@@ -769,7 +531,7 @@
 
 .cloud-preview__rail-item strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 650;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -778,17 +540,17 @@
 
 .cloud-preview__rail-item small {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 600;
 }
 
 .cloud-preview__rail-item:hover {
-  background: #f5f9ff;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-preview__rail-item[aria-current="true"] {
   border-color: #d7e6ff;
-  background: #eaf3ff;
+  background: var(--xs-info-soft);
   box-shadow: inset 3px 0 0 var(--xs-primary-2);
 }
 
@@ -819,7 +581,7 @@
 .cloud-preview__heading h2 {
   margin: 0;
   overflow: hidden;
-  font-size: 16px;
+  font-size: var(--xs-fs-card);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -828,13 +590,13 @@
 .cloud-preview__heading p {
   margin: 3px 0 0;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
   font-weight: 650;
 }
 
 .cloud-preview__count {
   color: var(--xs-primary-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -860,7 +622,7 @@
   min-height: 40px;
   padding: 0 14px;
   color: var(--xs-interactive-text);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   font-weight: 700;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
@@ -869,11 +631,11 @@
 
 .cloud-preview__download:hover {
   border-color: var(--xs-border-strong);
-  background: #f5f9ff;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-preview__download--primary {
-  color: #fff;
+  color: var(--xs-surface);
   border-color: transparent;
   background: var(--xs-primary);
 }
@@ -891,7 +653,7 @@
 }
 
 .cloud-preview__close:hover {
-  background: #f5f9ff;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-preview__stage {
@@ -901,6 +663,21 @@
   overscroll-behavior: contain;
   padding: 16px;
   -webkit-overflow-scrolling: touch;
+}
+
+.cloud-preview__stage--pdf {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+  background: var(--xs-bg-2);
+}
+
+.cloud-preview__pdf {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--xs-surface);
 }
 
 .cloud-preview__markdown,
@@ -997,14 +774,14 @@
 
 .cloud-preview__state strong {
   color: var(--xs-text);
-  font-size: 16px;
+  font-size: var(--xs-fs-card);
 }
 
 .cloud-preview__state p {
   max-width: 360px;
   margin: 0;
   color: var(--xs-text-3);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.6;
 }
 

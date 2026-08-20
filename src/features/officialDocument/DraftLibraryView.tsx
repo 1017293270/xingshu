@@ -8,7 +8,8 @@ import type { OfficialDocumentDraftStatus } from "@/types/officialDocument";
 import {
   draftStatusColor,
   draftStatusLabel,
-  formatDate
+  formatDate,
+  templateIsUsable
 } from "./officialDocumentMeta";
 import {
   OfficialDocumentList,
@@ -34,7 +35,7 @@ const draftFilters: Array<{ key: DraftFilter; label: string }> = [
   { key: "EDITING", label: "编辑中" },
   { key: "VALIDATING", label: "校验中" },
   { key: "READY", label: "可导出" },
-  { key: "BLOCKED", label: "已阻断" }
+  { key: "BLOCKED", label: "有错误" }
 ];
 
 const draftColumns: OfficialDocumentListColumn[] = [
@@ -62,8 +63,8 @@ export function DraftLibraryView() {
   const [keyword, setKeyword] = useState("");
 
   const drafts = query.data?.drafts ?? [];
-  const publishedTemplateCount = (query.data?.templates ?? [])
-    .filter((template) => template.status === "PUBLISHED").length;
+  const usableTemplateCount = (query.data?.templates ?? [])
+    .filter((template) => templateIsUsable(template.status)).length;
   const readyCount = drafts.filter((draft) => draft.status === "READY").length;
   const searchKeyword = keyword.trim().toLocaleLowerCase();
   const visibleDrafts = drafts.filter((draft) => (
@@ -72,14 +73,14 @@ export function DraftLibraryView() {
   ));
 
   const handleCreateDraft = () => {
-    if (publishedTemplateCount === 0) {
+    if (usableTemplateCount === 0) {
       setOperationTone("warning");
-      setOperationStatus("还没有已发布模板，请先在模板库上传 DOCX 并完成校准。");
+      setOperationStatus("还没有可用模板，请先在模板库上传 DOCX。");
       return;
     }
     navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH, {
       state: {
-        notice: "选择一个已发布模板，进入校准页后点击“按模板新建草稿”。",
+        notice: "选择一个模板，进入详情后点击“按模板新建草稿”。",
         noticeTone: "info"
       }
     });
@@ -91,7 +92,7 @@ export function DraftLibraryView() {
         <Button type="primary" icon={<Plus size={16} />} onClick={handleCreateDraft}>新建草稿</Button>
       </OfficialDocumentAppActions>
 
-      <OfficialDocumentViewHead description="草稿继承创建时的不可变模板版本，不会反向修改已发布模板。" />
+      <OfficialDocumentViewHead description="草稿继承创建时的模板版本。正文有误时直接在草稿里改。" />
 
       {operationStatus ? (
         <XsStatusBar
@@ -106,7 +107,7 @@ export function DraftLibraryView() {
         status={status}
         empty={drafts.length === 0}
         emptyTitle="还没有公文草稿"
-        emptyDescription="从已发布模板创建第一份草稿。"
+        emptyDescription="从可用模板创建第一份草稿。"
         emptyActionLabel="去模板库"
         onEmptyAction={() => navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH)}
         errorTitle="草稿箱不可用"

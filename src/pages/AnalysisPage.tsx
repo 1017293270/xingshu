@@ -30,6 +30,7 @@ import type {
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { XsChartCard } from "@/components/xs/XsChartCard";
+import { xsEnterStep } from "@/components/xs/motion";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { DataHubExecutionPanel, DataHubResultTable } from "@/components/xs/datahub";
@@ -37,6 +38,7 @@ import { XsStreamingText } from "@/components/xs/XsStreamingText";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
@@ -366,11 +368,108 @@ function isNearScrollBottom(element: HTMLElement) {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= autoScrollBottomThreshold;
 }
 
-function scrollElementToBottom(element: HTMLElement) {
-  const bottom = Math.max(0, element.scrollHeight - element.clientHeight);
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+}
 
-  if (Math.abs(element.scrollTop - bottom) > 1) {
+function getScrollBottom(element: HTMLElement) {
+  return Math.max(0, element.scrollHeight - element.clientHeight);
+}
+
+function easeOutXingshu(progress: number) {
+  const t = Math.min(1, Math.max(0, progress));
+  return 1 - (1 - t) ** 4;
+}
+
+type SmoothScrollHandle = {
+  frameId: number | null;
+  aborted: boolean;
+};
+
+function cancelSmoothScroll(handle: SmoothScrollHandle) {
+  handle.aborted = true;
+
+  if (handle.frameId !== null) {
+    window.cancelAnimationFrame(handle.frameId);
+    handle.frameId = null;
+  }
+}
+
+function scrollElementToBottom(
+  element: HTMLElement,
+  options?: {
+    behavior?: ScrollBehavior;
+    handle?: SmoothScrollHandle;
+  }
+) {
+  const behavior = options?.behavior ?? "auto";
+  const handle = options?.handle;
+  const bottom = getScrollBottom(element);
+
+  if (handle) {
+    cancelSmoothScroll(handle);
+    handle.aborted = false;
+  }
+
+  if (Math.abs(element.scrollTop - bottom) <= 1) {
+    return;
+  }
+
+  if (behavior !== "smooth" || prefersReducedMotion()) {
     element.scrollTop = bottom;
+    return;
+  }
+
+  const startTop = element.scrollTop;
+  const duration = Math.min(520, Math.max(280, Math.abs(bottom - startTop) * 0.32));
+  let startTime: number | null = null;
+  let lastNow: number | null = null;
+  let finished = false;
+
+  const finish = () => {
+    finished = true;
+    element.scrollTop = getScrollBottom(element);
+
+    if (handle) {
+      handle.frameId = null;
+    }
+  };
+
+  const tick = (now: number) => {
+    if (finished || handle?.aborted) {
+      return;
+    }
+
+    if (startTime === null) {
+      startTime = now;
+    }
+
+    if (lastNow !== null && now <= lastNow) {
+      finish();
+      return;
+    }
+
+    lastNow = now;
+    const t = Math.min(1, (now - startTime) / duration);
+    const liveTarget = getScrollBottom(element);
+    element.scrollTop = startTop + (liveTarget - startTop) * easeOutXingshu(t);
+
+    if (t >= 1) {
+      finish();
+      return;
+    }
+
+    const nextId = window.requestAnimationFrame(tick);
+
+    if (!finished && handle && !handle.aborted) {
+      handle.frameId = nextId;
+    }
+  };
+
+  const frameId = window.requestAnimationFrame(tick);
+
+  if (!finished && handle && !handle.aborted) {
+    handle.frameId = frameId;
   }
 }
 
@@ -1120,12 +1219,21 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const [thinkingPlaybackStates, setThinkingPlaybackStates] = useState<Record<string, ThinkingPlaybackState>>({});
   const [isScrollToBottomVisible, setIsScrollToBottomVisible] = useState(false);
   const voiceInput = useVoiceInput({
-    onAudioReady: () => setWorkflowStatus("语音录入完成；转写服务尚未接入"),
+    onAudioReady: async (audio, signal) => {
+      setWorkflowStatus("正在转写语音");
+      const text = await transcribeVoice(audio, signal);
+      if (signal.aborted) {
+        return;
+      }
+      setFollowUpDraft((current) => appendVoiceTranscript(current, text));
+      setWorkflowStatus("");
+    },
     onError: setWorkflowStatus
   });
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const scrollFrameRef = useRef<number | null>(null);
+  const smoothScrollHandleRef = useRef<SmoothScrollHandle>({ frameId: null, aborted: false });
   const lastWorkspaceScrollTopRef = useRef(0);
   const isWorkspacePointerDownRef = useRef(false);
   const lastWorkspaceTouchYRef = useRef<number | null>(null);
@@ -1218,6 +1326,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       liveChartTurnIdsRef.current.clear();
       autoChartAttemptedRef.current.clear();
       chartPlanInFlightRef.current.clear();
+      cancelSmoothScroll(smoothScrollHandleRef.current);
       setIsScrollToBottomVisible(false);
     }
   }, [hasConversation]);
@@ -1238,6 +1347,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
   const pauseAutoScroll = useCallback(() => {
     shouldAutoScrollRef.current = false;
+    cancelSmoothScroll(smoothScrollHandleRef.current);
     const workspace = workspaceRef.current;
 
     if (workspace && !isNearScrollBottom(workspace)) {
@@ -1248,7 +1358,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const scheduleAutoScrollToBottom = useCallback(() => {
     const workspace = workspaceRef.current;
 
-    if (!workspace || !shouldAutoScrollRef.current || scrollFrameRef.current !== null) {
+    if (
+      !workspace ||
+      !shouldAutoScrollRef.current ||
+      scrollFrameRef.current !== null ||
+      smoothScrollHandleRef.current.frameId !== null
+    ) {
       return;
     }
 
@@ -1280,6 +1395,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         window.cancelAnimationFrame(scrollFrameRef.current);
         scrollFrameRef.current = null;
       }
+
+      cancelSmoothScroll(smoothScrollHandleRef.current);
     };
   }, [hasConversation, isReasoningVisible, scheduleAutoScrollToBottom, scrollSignature]);
 
@@ -1370,7 +1487,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       return;
     }
 
-    scrollElementToBottom(workspace);
+    scrollElementToBottom(workspace, {
+      behavior: "smooth",
+      handle: smoothScrollHandleRef.current
+    });
     lastWorkspaceScrollTopRef.current = workspace.scrollTop;
   };
 
@@ -1563,19 +1683,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         continue;
       }
 
-      const tables = isAskMode
-        ? turnAsk.tableResults
-        : isAgentMode
-          ? getDataHubSingleQueryTableResults(
-              projectDataHubExecutionEvents(turn.events, {
-                mainSessionId: turn.sessionId || undefined,
-                globalSessionId: turn.sessionId || undefined,
-                chatId: turn.chatId,
-                fallbackAgentName: `${taskName}智能体`,
-                terminalStatus: "done"
-              })
-            )
-          : [];
+      const tables = isAskMode || isAgentMode
+        ? getDataHubSingleQueryTableResults(
+            projectDataHubExecutionEvents(turn.events, {
+              mainSessionId: turn.sessionId || undefined,
+              globalSessionId: turn.sessionId || undefined,
+              chatId: turn.chatId,
+              fallbackAgentName: `${taskName}智能体`,
+              terminalStatus: "done"
+            }),
+            isAskMode
+          )
+        : [];
 
       if (!canAutoGenerateAiChart({ question: turn.question, tables, answer: turnAsk.assistantContent })) {
         continue;
@@ -1738,7 +1857,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     });
 
   return (
-    <PageFrame title={modeMeta.title} className="analysis-page" hideHeader>
+    <PageFrame title={modeMeta.title} className="analysis-page" track="data" hideHeader>
       {hasConversation ? <h1 className="sr-only">{modeMeta.title}</h1> : null}
       <div
         className="analysis-workspace"
@@ -1792,15 +1911,24 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               );
               const shouldShowExecutionPanel =
                 isAgentMode || isDocumentLookupMode || hasNativeAgentScope;
-              const expandExecutionPanelByDefault =
-                isAgentMode || isDocumentLookupMode;
+              const expandExecutionPanelByDefault = shouldShowExecutionPanel;
+              const preferDirectMainExecution = !isAgentMode;
               const documentLookupResults = getDataHubDocumentLookupResults(turnAsk.done);
               const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
               const thinkingPhases = hasLegacyProcess ? buildThinkingPhases(turnAsk, displayStatus) : [];
               const playbackState = thinkingPlaybackStates[turn.id];
+              const chartTables =
+                isAskMode
+                  ? getDataHubSingleQueryTableResults(executionProjection, true)
+                  : isAgentMode
+                    ? getDataHubSingleQueryTableResults(executionProjection)
+                    : [];
+              const visibleTables = isAskMode
+                ? (chartTables.length > 0 ? chartTables : turnAsk.tableResults)
+                : turnAsk.tableResults;
               const hasRenderableResult = Boolean(
                 (!isDocumentLookupMode && turnAsk.answerBlocks.length) ||
-                  (supportsTables && turnAsk.tableResults.length) ||
+                  (supportsTables && visibleTables.length) ||
                   (supportsCitations && turnAsk.citationDocuments.length) ||
                   (isDocumentLookupMode && documentLookupResults.length)
               );
@@ -1856,12 +1984,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       { mainSessionIsAskData: isAskMode }
                     )
                   : [];
-              const chartTables =
-                isAskMode
-                  ? turnAsk.tableResults
-                  : isAgentMode
-                    ? getDataHubSingleQueryTableResults(executionProjection)
-                    : [];
               const queryAssetActionItems = queryAssetTargets.map((target) => ({
                 target,
                 state:
@@ -1932,6 +2054,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           projection={executionProjection}
                           title={isAgentMode ? "智能编排执行" : `${taskName} Agent 执行`}
                           defaultExpanded={expandExecutionPanelByDefault}
+                          preferDirectMainExecution={preferDirectMainExecution}
                           showMainDocumentBlocks={isAgentMode}
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
@@ -2025,8 +2148,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             {isAskMode &&
                             isResultReady &&
                             isLatestTurn &&
-                            turnAsk.tableResults.length > 0 ? (
-                              <Button icon={<DownloadSimple size={18} />} onClick={() => handleExport(turnAsk.tableResults)}>
+                            visibleTables.length > 0 ? (
+                              <Button icon={<DownloadSimple size={18} />} onClick={() => handleExport(visibleTables)}>
                                 导出结果
                               </Button>
                             ) : null}
@@ -2043,9 +2166,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
                             />
                           ) : null}
-                          {supportsTables && isResultReady && turnAsk.tableResults.length > 0 ? (
+                          {supportsTables && isResultReady && visibleTables.length > 0 ? (
                             <div className="analysis-output__tables">
-                              {turnAsk.tableResults.map((table) => (
+                              {visibleTables.map((table) => (
                                 <DataHubResultTable table={table} key={table.tableIndex} />
                               ))}
                             </div>
@@ -2109,7 +2232,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               <span className="analysis-empty-state__star analysis-empty-state__star--b" aria-hidden="true" />
               <img src={assistantMark} alt="" width={160} height={160} aria-hidden="true" />
             </div>
-            <div className="analysis-empty-state__copy xs-page-enter" style={{ animationDelay: "120ms" }}>
+            <div className="analysis-empty-state__copy xs-page-enter" style={xsEnterStep(1)}>
               <h1 id="analysis-empty-title">
                 {modeMeta.emptyTitle}
               </h1>
@@ -2120,7 +2243,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 <button
                   type="button"
                   className={`xs-page-enter${selectedQuickQuestion === item.question ? " is-selected" : ""}`}
-                  style={{ animationDelay: `${240 + index * 60}ms` }}
+                  style={xsEnterStep(2 + Math.min(index, 3))}
                   key={item.question}
                   aria-pressed={selectedQuickQuestion === item.question}
                   onClick={() => {
@@ -2138,7 +2261,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         )}
       </div>
 
-      <div className="analysis-composer">
+      <div className="analysis-composer" data-stage={hasConversation ? "conversation" : "empty"}>
         {hasConversation && isScrollToBottomVisible ? (
           <Button
             className="analysis-scroll-to-bottom"
@@ -2155,7 +2278,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           onSubmit={handleFollowUp}
           submitOnEnter
           onVoice={() => {
-            setWorkflowStatus(voiceInput.state === "recording" ? "正在结束语音录入" : "正在准备语音输入");
+            setWorkflowStatus(voiceInput.state === "recording" ? "正在转写语音" : "正在听取语音");
             voiceInput.toggle();
           }}
           onCancelVoice={() => {
