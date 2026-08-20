@@ -2,6 +2,8 @@ import { XsAppCard, type XsAppCardData } from "@/components/xs/XsAppCard";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { getXsCommandModelMeta } from "@/components/xs/XsCommandModelSelect";
 import { useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSessionQueryScope } from "@/app/sessionQuery";
 import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
 import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
@@ -12,6 +14,7 @@ import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.webp";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { invalidateDataAssetOverview } from "@/services/dataAssetService";
 import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -106,6 +109,8 @@ const routeByModelMode: Record<DataHubChatMode, string> = {
 
 export function HomePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const sessionScope = useSessionQueryScope();
   const username = useDataHubAuthStore((state) => state.user?.username?.trim() || "用户");
   const draft = useUiStore((state) => state.homeDraft);
   const selectedAppId = useUiStore((state) => state.selectedAppId);
@@ -164,7 +169,10 @@ export function HomePage() {
             failAskDataRun(runId, typeof data === "string" ? data : data?.message || "智能编排执行失败");
           }
         },
-        onDone: () => completeAskDataRun(runId),
+        onDone: () => {
+          completeAskDataRun(runId);
+          void invalidateDataAssetOverview(queryClient, sessionScope);
+        },
         onError: (error) => failAskDataRun(runId, error.message)
       }
     );

@@ -84,6 +84,22 @@ describe("XsChartCard", () => {
     expect(screen.getByRole("table", { name: "收入趋势数据" })).toBeVisible();
   });
 
+  it("can hide the source-data disclosure", () => {
+    render(
+      <XsChartCard
+        title="收入趋势"
+        summary="7 月收入较 6 月增长 12%"
+        option={{ series: [{ type: "line", data: [120, 134] }] }}
+        table={table}
+        controlsPlacement="head"
+        showDataTable={false}
+      />
+    );
+
+    expect(screen.queryByText("查看数据")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全屏查看收入趋势" })).toBeInTheDocument();
+  });
+
   it("opens a focused full-screen chart view and closes it", async () => {
     const user = userEvent.setup();
     render(

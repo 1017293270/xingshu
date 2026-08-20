@@ -129,7 +129,7 @@ export function DashboardCard({
                     className="dashboard-card__menu-danger"
                     disabled={archiving}
                     onClick={runMenuAction(onArchive)}
-                  >归档</button>
+                  >删除</button>
                 </li>
               </ul>
             ) : null}

@@ -5,12 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { xsEnterStep } from "@/components/xs/motion";
-import tableContactListIcon from "@/assets/table-icons/table-contact-list.png";
-import tableExpenseStatisticsIcon from "@/assets/table-icons/table-expense-statistics.png";
-import tableInventoryIcon from "@/assets/table-icons/table-inventory.png";
-import tableRankingIcon from "@/assets/table-icons/table-ranking.png";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import type { XsIconComponent } from "@/components/xs/XsIconTile";
+import {
+  XsGlyphTableChecklist,
+  XsGlyphTableInventory,
+  XsGlyphTableRanking,
+  XsGlyphTableStatistics
+} from "@/components/xs/XsMetricGlyphs";
 import { tableSessionPath, queueTableSessionLaunch } from "@/features/tableGeneration/useTableGeneration";
 import { createAskTableSessionId } from "@/services/dataHubAskTable";
 import { listRecentTables } from "@/services/tableService";
@@ -18,11 +21,14 @@ import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 import "./styles/workflows.css";
 
-const sheetIconById: Record<TableTemplateIconId, string> = {
-  ranking: tableRankingIcon,
-  "contact-list": tableContactListIcon,
-  "expense-statistics": tableExpenseStatisticsIcon,
-  inventory: tableInventoryIcon
+/** 制表类型图标固定 20px：32 网格的 5/8，笔画落在 1.25px 上，与同尺寸 Phosphor 同重量。 */
+const SHEET_GLYPH_SIZE = 20;
+
+const sheetGlyphById: Record<TableTemplateIconId, XsIconComponent> = {
+  ranking: XsGlyphTableRanking,
+  "contact-list": XsGlyphTableChecklist,
+  "expense-statistics": XsGlyphTableStatistics,
+  inventory: XsGlyphTableInventory
 };
 
 const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销售排行」「各部门人员通讯录」...";
@@ -206,7 +212,10 @@ export function TablePage() {
                   aria-label={`打开制表结果：${table.title}`}
                 >
                   <span className="sheet-icon" aria-hidden="true">
-                    <img src={sheetIconById[table.iconId]} alt="" />
+                    {(() => {
+                      const SheetGlyph = sheetGlyphById[table.iconId];
+                      return <SheetGlyph size={SHEET_GLYPH_SIZE} />;
+                    })()}
                   </span>
                   <h2 className="sheet-row__title" title={table.title}>
                     {table.title}

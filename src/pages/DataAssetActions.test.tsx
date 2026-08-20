@@ -104,6 +104,7 @@ describe("data asset actions", () => {
     expect(screen.getByText(/数据更新于/)).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "统计范围" })).toBeInTheDocument();
     expect(screen.queryByText(/演示数据|查看明细|即将开放/)).not.toBeInTheDocument();
+    expect(screen.queryByText("查看数据")).not.toBeInTheDocument();
     const hotAssetsTable = screen.getByRole("table", { name: "按调用次数排序的热门数据资产" });
     expect(within(hotAssetsTable).getByRole("columnheader", { name: "资产名称" })).toHaveAttribute("scope", "col");
     expect(within(hotAssetsTable).getByRole("columnheader", { name: "调用次数" })).toBeInTheDocument();

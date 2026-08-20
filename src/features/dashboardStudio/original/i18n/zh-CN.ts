@@ -1,8 +1,8 @@
 export const bigScreenText = {
   common: {
     actions: {
-      archive: '归档',
-      archiving: '归档中',
+      archive: '删除',
+      archiving: '删除中',
       backToLibrary: '返回大屏库',
       cancel: '取消',
       copy: '复制',
@@ -38,7 +38,7 @@ export const bigScreenText = {
     },
   },
   dashboardList: {
-    archiveConfirm: (name: string) => `归档“${name}”？它会从大屏库中移除。`,
+    archiveConfirm: (name: string) => `删除“${name}”？它会从大屏库中移除。`,
     createFirst: '创建第一个大屏',
     dashboardLibrary: '大屏库',
     emptyDescription: '已发布的大屏和草稿会显示在这里。',

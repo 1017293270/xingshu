@@ -27,6 +27,8 @@ export type XsChartCardProps = {
    * 定高卡片里页脚是纯开销（1px 上边线 + 40px 行高 + 间距），只有一屏看板需要 `head`。
    */
   controlsPlacement?: "footer" | "head";
+  /** 是否展示「查看数据」展开表。数据资产看板这类汇总图不需要源表明细。 */
+  showDataTable?: boolean;
 };
 
 function formatCell(value: unknown) {
@@ -61,7 +63,8 @@ export function XsChartCard({
   contained = true,
   maxTableRows = 50,
   motionPreset = "inherit",
-  controlsPlacement = "footer"
+  controlsPlacement = "footer",
+  showDataTable = true
 }: XsChartCardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -124,32 +127,34 @@ export function XsChartCard({
         <ArrowsOutSimple size={16} aria-hidden="true" />
         全屏查看
       </button>
-      <details className="xs-chart-card__data">
-        <summary>查看数据</summary>
-        <div className="xs-chart-card__table-scroll">
-          <table className="xs-table">
-            <caption>{tableCaption}</caption>
-            <thead>
-              <tr>
-                {table.columns.map((column) => (
-                  <th key={column.key} scope="col" title={column.title}>
-                    {formatDataHubColumnTitle(column.title, column.key)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
+      {showDataTable ? (
+        <details className="xs-chart-card__data">
+          <summary>查看数据</summary>
+          <div className="xs-chart-card__table-scroll">
+            <table className="xs-table">
+              <caption>{tableCaption}</caption>
+              <thead>
+                <tr>
                   {table.columns.map((column) => (
-                    <td key={column.key}>{formatCell(row[column.key])}</td>
+                    <th key={column.key} scope="col" title={column.title}>
+                      {formatDataHubColumnTitle(column.title, column.key)}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+              </thead>
+              <tbody>
+                {visibleRows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {table.columns.map((column) => (
+                      <td key={column.key}>{formatCell(row[column.key])}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
   const controlsInHead = controlsPlacement === "head";

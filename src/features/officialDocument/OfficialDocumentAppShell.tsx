@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, NotePencil, Stack } from "@phosphor-icons/react";
+import { ArrowLeft, FileText, Stack } from "@phosphor-icons/react";
 import {
   createContext,
   useContext,
@@ -8,6 +8,7 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
+import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import { Link, Outlet, useLocation } from "react-router";
 import "./official-document.css";
@@ -136,12 +137,21 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
         <aside className="official-document-rail">
           <div className="official-document-rail__brand">
             <img src={logoSource} alt="星数" width={400} height={183} />
-            <h1>
-              <span className="official-document-rail__mark" aria-hidden="true">
-                <NotePencil size={16} weight="duotone" />
-              </span>
-              公文写作
-            </h1>
+            {/* 与首页应用卡同一枚图标、同一档标题字号：从应用网格点进来的人一眼认出是同一个应用 */}
+            <div className="official-document-rail__app">
+              <img
+                className="official-document-rail__mark"
+                src={appWritingIcon}
+                alt=""
+                width={256}
+                height={256}
+                data-icon-source="xingshu-home-apps-image2-v1"
+              />
+              <div>
+                <h1>公文写作</h1>
+                <p>套模板 · 绑数据 · 出定稿</p>
+              </div>
+            </div>
           </div>
           <nav className="official-document-rail__nav" aria-label="公文写作导航">
             {navItems.map((item) => {

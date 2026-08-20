@@ -23,39 +23,54 @@
   box-shadow: 8px 0 30px rgba(8, 26, 58, 0.03);
 }
 
+/* 顶部是"你在哪个应用"，与下面的导航分属两层，所以用一条细线划开 */
 .official-document-rail__brand {
   display: grid;
-  gap: 10px;
-  padding: 0 6px;
+  gap: 16px;
+  padding: 0 6px 18px;
+  border-bottom: 1px solid var(--xs-border);
 }
 
-.official-document-rail__brand img {
+.official-document-rail__brand > img {
   width: 170px;
   height: auto;
   object-fit: contain;
 }
 
-.official-document-rail__mark {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--xs-primary-2);
-  border: 1px solid #dcebfb;
-  border-radius: 11px;
-  background: linear-gradient(160deg, #f4f9ff, #e6f0ff);
-}
-
-/* 工作台名而不是页面标题：它一直在，所以只占标签级字号 */
-.official-document-rail__brand h1 {
+.official-document-rail__app {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.official-document-rail__app > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 应用图标自带圆角与投影，直接按 40px 摆，不要再套一层底板 */
+.official-document-rail__mark {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.official-document-rail__app p {
   margin: 0;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  letter-spacing: 0.02em;
+}
+
+/* 图标底板与标题字号都取首页应用卡那一套，同一个应用在两处长得一样 */
+.official-document-rail__brand h1 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-card);
+  font-weight: 750;
   line-height: 1.25;
 }
 
@@ -547,6 +562,19 @@
     border-bottom: 1px solid var(--xs-border);
   }
 
+  /* 顶栏形态：logo 与应用标识并排，分隔线交给顶栏自己的下边框 */
+  .official-document-rail__brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .official-document-rail__brand > img {
+    width: 124px;
+  }
+
   .official-document-rail__nav {
     display: flex;
     grid-column: 1 / -1;
@@ -577,6 +605,10 @@
 }
 
 @media (max-width: 760px) {
+  .official-document-rail__app p {
+    display: none;
+  }
+
   .official-document-app__bar {
     align-items: flex-start;
     flex-direction: column;

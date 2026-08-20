@@ -29,7 +29,7 @@
   --xs-module-gap: 16px;
   --xs-control-height: 44px;
   --xs-control-height-lg: 52px;
-  --xs-sidebar-expanded-width: 260px;
+  --xs-sidebar-expanded-width: 240px;
   --xs-sidebar-collapsed-width: 80px;
   --xs-sidebar-width: var(--xs-sidebar-expanded-width);
   --xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1440px);

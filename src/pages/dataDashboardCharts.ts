@@ -4,6 +4,7 @@ import type { DataHubTableResult } from "@/types/dataHub";
 
 export const typeLabels: Record<string, string> = {
   STRUCTURED: "结构化数据",
+  TABLE: "结构化数据",
   DOCUMENT: "文档",
   IMAGE: "图片",
   AUDIO: "音频",

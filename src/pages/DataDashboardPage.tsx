@@ -34,7 +34,8 @@ export function DataDashboardPage() {
   const overviewQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "dataAssetOverview", range),
     queryFn: () => getDataAssetOverview(range),
-    retry: false
+    retry: false,
+    refetchOnMount: "always"
   });
   const overview = overviewQuery.data;
   const dashboardView = useMemo(
@@ -101,10 +102,10 @@ export function DataDashboardPage() {
             </section>
             {/* 五张面板同属一个栅格：四张图两两成对，排行表在底部通栏收口，不留空格子 */}
             <section className="data-dashboard-grid" aria-label="数据资产图表与排行">
-              <XsChartCard title="数据资产类型分布" {...dashboardView.charts.donut} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" />
-              <XsChartCard title="数据资产增长趋势" {...dashboardView.charts.growth} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" />
-              <XsChartCard title="数据来源分布" {...dashboardView.charts.source} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" />
-              <XsChartCard title="数据应用场景" {...dashboardView.charts.usage} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" />
+              <XsChartCard title="数据资产类型分布" {...dashboardView.charts.donut} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
+              <XsChartCard title="数据资产增长趋势" {...dashboardView.charts.growth} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
+              <XsChartCard title="数据来源分布" {...dashboardView.charts.source} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
+              <XsChartCard title="数据应用场景" {...dashboardView.charts.usage} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
               <article className="xs-card data-card data-card--hot data-table">
                 <h2>热门数据资产</h2>
                 <table className="xs-table">

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as officialDocumentService from "@/services/officialDocumentService";
+import { setReducedMotion } from "@/test/setup";
 import type { OfficialDocumentDraft, OfficialDocumentStructureNode } from "@/types/officialDocument";
 import { OfficialDocumentAppShell } from "./OfficialDocumentAppShell";
 import { StructuredDraftEditor } from "./StructuredDraftEditor";
@@ -50,10 +51,59 @@ const nodes: OfficialDocumentStructureNode[] = [
   }
 ];
 
+type AnimateCall = { element: Element; keyframes: Keyframe[]; options: KeyframeAnimationOptions; animation: FakeAnimation };
+type FakeAnimation = { onfinish: (() => void) | null; oncancel: (() => void) | null };
+
+/** jsdom 没有 WAAPI，也没有真实布局：这里补一套可断言的替身。 */
+function stubMotionEnvironment(cardHeight = 120) {
+  const calls: AnimateCall[] = [];
+  Element.prototype.animate = function stubAnimate(this: Element, keyframes, options) {
+    const animation: FakeAnimation = { onfinish: null, oncancel: null };
+    calls.push({
+      element: this,
+      keyframes: keyframes as Keyframe[],
+      options: options as KeyframeAnimationOptions,
+      animation
+    });
+    return animation as unknown as Animation;
+  } as Element["animate"];
+
+  const rect = (top: number, height: number) => ({
+    top,
+    bottom: top + height,
+    left: 0,
+    right: 400,
+    width: 400,
+    height,
+    x: 0,
+    y: top,
+    toJSON: () => ({})
+  }) as DOMRect;
+
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const container = document.querySelector(".structured-draft-editor__blocks");
+    if (!container) return rect(0, 0);
+    if (this === container) return rect(0, 1000);
+    const cards = Array.from(container.querySelectorAll("article[data-block-id]"));
+    const index = cards.indexOf(this);
+    return index < 0 ? rect(0, 0) : rect(index * cardHeight, cardHeight);
+  });
+
+  return calls;
+}
+
+function transformKeyframes(calls: AnimateCall[], element: Element) {
+  return calls
+    .filter((call) => call.element === element)
+    .flatMap((call) => call.keyframes.map((frame) => String(frame.transform ?? "")));
+}
+
 describe("StructuredDraftEditor", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(Element.prototype, "animate");
+    setReducedMotion(false);
   });
 
   it("loads authoritative content and saves the complete revision after 600ms", async () => {
@@ -147,5 +197,154 @@ describe("StructuredDraftEditor", () => {
         ]
       }));
     });
+  });
+  it("swaps the two cards with a lift when a node moves", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [
+        { id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "第一段" },
+        { id: "body-2", order: 1, role: "BODY", variantId: "body-main", text: "第二段" }
+      ]
+    });
+    vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+    const calls = stubMotionEnvironment();
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByDisplayValue("第一段")).toBeInTheDocument();
+
+    const lead = document.querySelector('article[data-block-id="body-1"]')!;
+    const partner = document.querySelector('article[data-block-id="body-2"]')!;
+    fireEvent.click(screen.getAllByRole("button", { name: "下移节点" })[0]);
+
+    /* 被点的那张抬起后落到下面一格，另一张从上一格滑到它原来的位置 */
+    expect(transformKeyframes(calls, lead)).toEqual([
+      "translateY(-120px)",
+      "translateY(-50.4px) scale(1.02)",
+      "translateY(0) scale(1)"
+    ]);
+    expect(transformKeyframes(calls, partner)).toEqual(["translateY(120px)", "translateY(0)"]);
+    expect(document.querySelectorAll("article[data-block-id]")[0]).toBe(partner);
+    /* 编辑期间不再改写 order，序号在写回时重排 */
+    await waitFor(() => {
+      expect(officialDocumentService.updateOfficialDocumentDraftContent).toHaveBeenCalledWith("draft-1", expect.objectContaining({
+        blocks: [
+          expect.objectContaining({ id: "body-2", order: 0 }),
+          expect.objectContaining({ id: "body-1", order: 1 })
+        ]
+      }));
+    });
+  });
+
+  it("names the role picker after the node it belongs to", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [
+        { id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "第一段" },
+        { id: "body-2", order: 1, role: "BODY", variantId: "body-main", text: "第二段" }
+      ]
+    });
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByDisplayValue("第一段")).toBeInTheDocument();
+
+    expect(screen.getByRole("combobox", { name: "节点 2 类型" })).toBeInTheDocument();
+    expect(screen.getByLabelText("正文节点 2")).toHaveDisplayValue("第二段");
+  });
+
+  it("keeps a ghost card that shrinks into the delete button, then drops it", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [
+        { id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "第一段" },
+        { id: "body-2", order: 1, role: "BODY", variantId: "body-main", text: "第二段" }
+      ]
+    });
+    const save = vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+    const calls = stubMotionEnvironment();
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByDisplayValue("第一段")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "删除节点" })[0]);
+
+    const ghost = document.querySelector<HTMLElement>(".structured-draft-editor__ghost")!;
+    expect(ghost).toBeInTheDocument();
+    expect(ghost).toHaveAttribute("aria-hidden", "true");
+    expect(ghost.style.top).toBe("0px");
+    /* 残影不进可访问性树，不会和真实卡片抢同名控件 */
+    expect(screen.getAllByRole("button", { name: "删除节点" })).toHaveLength(1);
+    expect(document.querySelectorAll("article[data-block-id]")).toHaveLength(1);
+
+    const exit = calls.find((call) => call.element === ghost)!;
+    expect(exit.keyframes.at(-1)?.transform).toContain("scale(.08)");
+    expect(exit.options.fill).toBe("forwards");
+    /* 数据侧不等动画，删除立即落库 */
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith("draft-1", expect.objectContaining({
+        blocks: [expect.objectContaining({ id: "body-2", order: 0 })]
+      }));
+    });
+
+    act(() => exit.animation.onfinish?.());
+    expect(document.querySelector(".structured-draft-editor__ghost")).toBeNull();
+  });
+
+  it("lets the neighbours open a slot before the new card settles in", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [{ id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "第一段" }]
+    });
+    vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+    const calls = stubMotionEnvironment();
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByDisplayValue("第一段")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("button", { name: "在下方新增节点" })[0]);
+    await user.click(await screen.findByRole("menuitem", { name: "正文" }));
+
+    const added = document.querySelectorAll<HTMLElement>("article[data-block-id]")[1];
+    const enter = calls.find((call) => call.element === added)!;
+    expect(enter.options.delay).toBe(90);
+    expect(enter.options.fill).toBe("backwards");
+    expect(enter.keyframes[0].opacity).toBe(0);
+    expect(added).toHaveAttribute("data-just-added", "true");
+  });
+
+  it("skips ghosts and displacement when reduced motion is on", async () => {
+    setReducedMotion(true);
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [
+        { id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "第一段" },
+        { id: "body-2", order: 1, role: "BODY", variantId: "body-main", text: "第二段" }
+      ]
+    });
+    vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+    const calls = stubMotionEnvironment();
+
+    render(<StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    expect(await screen.findByDisplayValue("第一段")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "下移节点" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "删除节点" })[0]);
+
+    expect(calls).toHaveLength(0);
+    expect(document.querySelector(".structured-draft-editor__ghost")).toBeNull();
+    expect(document.querySelectorAll("article[data-block-id]")).toHaveLength(1);
   });
 });

@@ -754,15 +754,10 @@
   place-items: center;
   width: var(--sheet-col-icon);
   height: var(--sheet-col-icon);
+  color: var(--xs-primary-2);
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-small);
   background: var(--xs-surface-soft);
-}
-
-.sheet-icon img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
 }
 
 .sheet-list .sheet-row__copy.ant-btn {

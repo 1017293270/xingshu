@@ -200,7 +200,7 @@ describe("workflow page actions", () => {
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "打开原文" }));
+    await user.click(screen.getByRole("button", { name: "打开原文：合同管理办法.pdf" }));
 
     expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
     expect(knowledgeService.loadDataHubCitationDocument).toHaveBeenCalledWith(

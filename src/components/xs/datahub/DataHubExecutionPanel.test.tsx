@@ -586,7 +586,7 @@ describe("DataHubExecutionPanel", () => {
     expect(
       screen.getByRole("region", { name: "模型活动：理解数据问题" })
     ).toBeInTheDocument();
-    expect(screen.queryByText("本月收入为 128 万元。")).not.toBeInTheDocument();
+    expect(screen.getByText("本月收入为 128 万元。")).toBeInTheDocument();
     expect(screen.queryByText("月份")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "打开 数据源选择智能体执行详情" })

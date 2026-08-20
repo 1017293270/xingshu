@@ -19,7 +19,7 @@ export const xingshuTokens = {
   colorInteractiveText: "#1D4ED8",
   radiusControl: 12,
   radiusCard: 14,
-  sidebarWidth: 260,
+  sidebarWidth: 240,
   sidebarCollapsedWidth: 80,
   shadowSoft: "0 10px 28px rgba(22, 119, 255, 0.08)",
   shadowButton: "0 12px 22px rgba(22, 119, 255, 0.2)",

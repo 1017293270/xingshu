@@ -240,6 +240,24 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
   };
 }
 
+/**
+ * DataHub 正式回答规则，与平台 ChatService.AssistantReply
+ * 以及 `finalAnswerAfterStream(summary, streamed, hasError)` 保持一致：
+ * 终态 summary 优先，没有才用主会话流式文本；出错则不展示半成品。
+ */
+export function resolveDataHubFinalAnswer(
+  summary: unknown,
+  streamedContent: unknown,
+  hasTerminalError: boolean
+): string {
+  if (hasTerminalError) {
+    return "";
+  }
+
+  const finalSummary = String(summary ?? "").trim();
+  return finalSummary || String(streamedContent ?? "").trim();
+}
+
 export function getDataHubActionLabel(action?: string): string {
   if (!action) {
     return "执行步骤";
@@ -539,14 +557,22 @@ export function createDataHubAskTurn(
   }
   turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("");
 
-  if (turn.answerBlocks.length === 0 && turn.done?.summary) {
-    turn.answerBlocks.push({ content: turn.done.summary });
-  }
-  turn.assistantContent = turn.answerBlocks.map((block) => block.content).join("");
-
   if (errorMessage && !turn.error) {
     turn.error = { message: errorMessage };
   }
+
+  const streamedAnswer = turn.answerBlocks.map((block) => block.content).join("");
+  const officialAnswer = resolveDataHubFinalAnswer(
+    turn.done?.summary,
+    streamedAnswer,
+    Boolean(turn.error)
+  );
+  turn.answerBlocks = officialAnswer
+    ? officialAnswer === streamedAnswer
+      ? turn.answerBlocks
+      : [{ content: officialAnswer }]
+    : [];
+  turn.assistantContent = officialAnswer;
 
   return turn;
 }

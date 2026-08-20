@@ -1108,14 +1108,10 @@
   justify-content: center;
   width: 42px;
   height: 42px;
+  color: var(--xs-primary-2);
   border: 1px solid var(--xs-border);
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff, #f1f7ff);
-}
-
-.topic-icon img {
-  max-width: 34px;
-  max-height: 34px;
 }
 
 @media (max-width: 900px) {

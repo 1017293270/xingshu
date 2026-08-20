@@ -86,7 +86,7 @@ export function DashboardPage() {
       queryClient.setQueryData<DashboardRecord[]>(dashboardsKey, (current = []) =>
         current.filter((record) => record.id !== id));
     },
-    onError: (error) => setOperationError(error instanceof Error ? error.message : "归档看板失败")
+    onError: (error) => setOperationError(error instanceof Error ? error.message : "删除看板失败")
   });
   const rollbackMutation = useMutation({
     mutationFn: ({ record, version }: { record: DashboardRecord; version: DashboardVersion }) =>
@@ -312,9 +312,9 @@ export function DashboardPage() {
       </Modal>
 
       <Modal
-        title="归档大屏"
+        title="删除大屏"
         open={Boolean(archiveCandidate)}
-        okText="确认归档"
+        okText="确认删除"
         cancelText="取消"
         okButtonProps={{ danger: true }}
         confirmLoading={archiveMutation.isPending}
@@ -328,7 +328,7 @@ export function DashboardPage() {
           }
         }}
       >
-        <p>归档“{archiveCandidate?.schema.title}”？它会从大屏库中移除。</p>
+        <p>删除“{archiveCandidate?.schema.title}”？它会从大屏库中移除。</p>
       </Modal>
     </PageFrame>
   );

@@ -88,7 +88,7 @@ describe("DashboardPage", () => {
     );
 
     await openCardMenu(user, "善治测试");
-    ["复制", "版本", "分享", "归档"].forEach((action) => {
+    ["复制", "版本", "分享", "删除"].forEach((action) => {
       expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
     });
   });
@@ -121,19 +121,19 @@ describe("DashboardPage", () => {
     expect(records.some((record) => record.schema.title === "销售大屏 副本" && record.status === "draft")).toBe(true);
   });
 
-  it("archives a dashboard after confirmation", async () => {
+  it("deletes a dashboard after confirmation", async () => {
     const user = userEvent.setup();
-    createStoredDashboard("待归档大屏", "archive");
+    createStoredDashboard("待删除大屏", "archive");
     renderPage();
 
-    await openCardMenu(user, "待归档大屏");
-    await user.click(screen.getByRole("menuitem", { name: "归档" }));
+    await openCardMenu(user, "待删除大屏");
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
 
-    expect(await screen.findByRole("dialog", { name: "归档大屏" })).toHaveTextContent(
-      "归档“待归档大屏”？它会从大屏库中移除。"
+    expect(await screen.findByRole("dialog", { name: "删除大屏" })).toHaveTextContent(
+      "删除“待删除大屏”？它会从大屏库中移除。"
     );
-    await user.click(screen.getByRole("button", { name: "确认归档" }));
-    expect(screen.queryByText("待归档大屏")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+    expect(screen.queryByText("待删除大屏")).not.toBeInTheDocument();
     expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
   });
 

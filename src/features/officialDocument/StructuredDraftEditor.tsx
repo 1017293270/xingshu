@@ -9,7 +9,18 @@ import {
   Trash
 } from "@phosphor-icons/react";
 import { Button, Dropdown, Input, Modal, Select, Tag } from "antd";
-import { type ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  type CSSProperties,
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import {
   getOfficialDocumentDraftContent,
   getOfficialDocumentDraftPreview,
@@ -21,6 +32,7 @@ import type {
   OfficialDocumentDraftContent,
   OfficialDocumentStructureNode
 } from "@/types/officialDocument";
+import { useDraftBlockMotion, type DraftBlock } from "./draftBlockMotion";
 import { OfficialDocumentAppActions } from "./OfficialDocumentAppShell";
 
 export type StructuredDraftSaveState = "loading" | "saving" | "saved" | "failed";
@@ -48,8 +60,12 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "草稿保存失败";
 }
 
+/**
+ * 序号只在写回服务端时重排一次。编辑期间不动 order：删/插一条会让后面所有 block 换新对象，
+ * 429 个节点的草稿里那就是整片卡片重渲染（实测阻塞 570ms）。渲染只认数组顺序。
+ */
 function normalizeOrders(blocks: OfficialDocumentDraftContent["blocks"]) {
-  return blocks.map((block, order) => ({ ...block, order }));
+  return blocks.map((block, order) => (block.order === order ? block : { ...block, order }));
 }
 
 function AddNodeTypeMenu({
@@ -82,6 +98,147 @@ function AddNodeTypeMenu({
   );
 }
 
+/** 节点序号是整张卡片里唯一跟着位置变的信息，单独走 context 订阅。 */
+const DraftBlockOrderContext = createContext<Map<string, number>>(new Map());
+
+/**
+ * 序号叶子节点：删/插一条会让后面所有节点改号，序号若是卡片的 props，
+ * 就要连带重渲染整片 antd 子树。这里改号只重渲染三个 span。
+ */
+const DraftBlockLabel = memo(function DraftBlockLabel({
+  blockId,
+  roleLabel,
+  fixedOrder
+}: {
+  blockId: string;
+  roleLabel: string;
+  fixedOrder?: number;
+}) {
+  const orders = useContext(DraftBlockOrderContext);
+  const order = (fixedOrder ?? orders.get(blockId) ?? 0) + 1;
+  return (
+    <>
+      <span>节点 {order}</span>
+      {fixedOrder === undefined ? (
+        <>
+          <span className="sr-only" id={`draft-block-name-${blockId}`}>{roleLabel}节点 {order}</span>
+          <span className="sr-only" id={`draft-block-type-${blockId}`}>节点 {order} 类型</span>
+        </>
+      ) : null}
+    </>
+  );
+});
+
+/** 卡片只拿到这一份稳定引用，节点增删改不会因为回调换了新函数而击穿 memo。 */
+type DraftBlockActions = {
+  changeRole: (id: string, role: OfficialDocumentDraftBlockRole) => void;
+  move: (id: string, direction: -1 | 1) => void;
+  insert: (afterId: string, role: OfficialDocumentDraftBlockRole) => void;
+  remove: (id: string) => void;
+  setText: (id: string, text: string) => void;
+};
+
+const ghostActions: DraftBlockActions = {
+  changeRole: () => undefined,
+  move: () => undefined,
+  insert: () => undefined,
+  remove: () => undefined,
+  setText: () => undefined
+};
+
+/**
+ * 单个结构化节点卡片。ghost 形态用于删除动画的残影：不参与可访问性树、不接管交互，
+ * 但复用同一套结构与样式，保证"被扔进回收站"的那张与原卡片像素一致。
+ */
+const DraftBlockCard = memo(function DraftBlockCard({
+  block,
+  isFirst,
+  isLast,
+  actions,
+  ghost = false,
+  ghostKey,
+  ghostStyle,
+  ghostOrder,
+  highlighted = false,
+  autoFocus = false
+}: {
+  block: DraftBlock;
+  isFirst: boolean;
+  isLast: boolean;
+  actions: DraftBlockActions;
+  ghost?: boolean;
+  ghostKey?: string;
+  ghostStyle?: CSSProperties;
+  ghostOrder?: number;
+  highlighted?: boolean;
+  autoFocus?: boolean;
+}) {
+  const label = (text: string) => (ghost ? undefined : text);
+  const labelledBy = (id: string) => (ghost ? undefined : id);
+  return (
+    <article
+      className={ghost ? "structured-draft-editor__ghost" : undefined}
+      data-role={block.role.toLocaleLowerCase()}
+      data-block-id={ghost ? undefined : block.id}
+      data-ghost-key={ghostKey}
+      data-just-added={highlighted ? "true" : undefined}
+      style={ghostStyle}
+      aria-hidden={ghost || undefined}
+      inert={ghost || undefined}
+    >
+      <div className="structured-draft-editor__block-tools">
+        <Select
+          aria-labelledby={labelledBy(`draft-block-type-${block.id}`)}
+          size="small"
+          value={block.role}
+          options={roleOptions}
+          popupMatchSelectWidth={false}
+          getPopupContainer={() => document.body}
+          classNames={{ popup: { root: "structured-draft-editor__role-dropdown" } }}
+          onChange={(role) => actions.changeRole(block.id, role)}
+        />
+        <DraftBlockLabel blockId={block.id} roleLabel={roleLabels[block.role]} fixedOrder={ghostOrder} />
+        <Button type="text" size="small" aria-label={label("上移节点")} disabled={isFirst} icon={<ArrowUp size={15} />} onClick={() => actions.move(block.id, -1)} />
+        <Button type="text" size="small" aria-label={label("下移节点")} disabled={isLast} icon={<ArrowDown size={15} />} onClick={() => actions.move(block.id, 1)} />
+        <AddNodeTypeMenu onSelect={(role) => actions.insert(block.id, role)}>
+          <Button type="text" size="small" aria-label={label("在下方新增节点")} icon={<Plus size={15} />} />
+        </AddNodeTypeMenu>
+        <Button
+          danger
+          type="text"
+          size="small"
+          data-block-bin="true"
+          aria-label={label("删除节点")}
+          icon={<Trash size={15} />}
+          onClick={() => actions.remove(block.id)}
+        />
+      </div>
+      {block.role === "BODY" ? (
+        <Input.TextArea
+          id={ghost ? undefined : `draft-block-${block.id}`}
+          value={block.text}
+          readOnly={ghost}
+          autoFocus={autoFocus}
+          autoSize={{ minRows: 4, maxRows: 16 }}
+          placeholder={rolePlaceholders[block.role]}
+          aria-labelledby={labelledBy(`draft-block-name-${block.id}`)}
+          onChange={(event) => actions.setText(block.id, event.target.value)}
+        />
+      ) : (
+        <Input
+          id={ghost ? undefined : `draft-block-${block.id}`}
+          value={block.text}
+          readOnly={ghost}
+          autoFocus={autoFocus}
+          placeholder={rolePlaceholders[block.role]}
+          aria-labelledby={labelledBy(`draft-block-name-${block.id}`)}
+          onChange={(event) => actions.setText(block.id, event.target.value)}
+        />
+      )}
+    </article>
+  );
+});
+
 export function StructuredDraftEditor({
   draft,
   templateNodes,
@@ -112,6 +269,7 @@ export function StructuredDraftEditor({
   const mountedRef = useRef(true);
   const previewUrlRef = useRef<string | undefined>(undefined);
   const performSaveRef = useRef<() => Promise<void>>(async () => undefined);
+  const motion = useDraftBlockMotion();
 
   const slotNodes = useMemo(
     () => new Map(templateNodes.filter((node) => node.slotId).map((node) => [node.slotId!, node])),
@@ -234,14 +392,15 @@ export function StructuredDraftEditor({
 
   const updateBlock = (id: string, changes: Partial<OfficialDocumentDraftContent["blocks"][number]>) => commit((current) => ({
     ...current,
-    blocks: normalizeOrders(current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block))
+    blocks: current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block)
   }));
 
-  const addBlock = (afterIndex?: number, role: OfficialDocumentDraftBlockRole = "BODY") => {
+  const addBlock = (afterIndex: number | undefined, role: OfficialDocumentDraftBlockRole = "BODY") => {
     const id = crypto.randomUUID();
     pendingFocusIdRef.current = id;
     setJustAddedId(id);
     setAddNotice(`已加入${roleLabels[role]}`);
+    motion.prepare({ kind: "add", blockId: id });
     commit((current) => {
       const blocks = [...current.blocks];
       const insertionIndex = afterIndex === undefined ? blocks.length : afterIndex + 1;
@@ -253,27 +412,55 @@ export function StructuredDraftEditor({
         variantId: sample?.variantId ?? "",
         text: ""
       });
-      return { ...current, blocks: normalizeOrders(blocks) };
+      return { ...current, blocks };
     });
   };
 
-  const removeBlock = (index: number) => commit((current) => ({
-    ...current,
-    blocks: normalizeOrders(current.blocks.filter((_, itemIndex) => itemIndex !== index))
-  }));
+  const removeBlock = (id: string) => {
+    const blocks = contentRef.current?.blocks ?? [];
+    const index = blocks.findIndex((item) => item.id === id);
+    const block = blocks[index];
+    if (!block) return;
+    motion.captureGhost(block, index, blocks.length);
+    motion.prepare({ kind: "remove", blockId: block.id });
+    /* 按 id 删除：残影动画期间若连点多张，索引已经不可靠 */
+    commit((current) => ({
+      ...current,
+      blocks: current.blocks.filter((item) => item.id !== block.id)
+    }));
+  };
 
-  const moveBlock = (index: number, direction: -1 | 1) => commit((current) => {
-    const target = index + direction;
-    if (target < 0 || target >= current.blocks.length) return current;
-    const blocks = [...current.blocks];
-    [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
-    return { ...current, blocks: normalizeOrders(blocks) };
-  });
+  const moveBlock = (id: string, direction: -1 | 1) => {
+    const index = contentRef.current?.blocks.findIndex((item) => item.id === id) ?? -1;
+    if (index < 0) return;
+    motion.prepare({ kind: "move", blockId: id });
+    commit((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.blocks.length) return current;
+      const blocks = [...current.blocks];
+      [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
+      return { ...current, blocks };
+    });
+  };
 
   const changeRole = (id: string, role: OfficialDocumentDraftBlockRole) => {
     const sample = templateNodes.find((node) => node.role === role);
     updateBlock(id, { role, variantId: sample?.variantId ?? "" });
   };
+
+  /* 卡片只认这一份稳定的动作表：内部每次都读最新闭包，外部引用永不变 */
+  const latestActions = useRef({ changeRole, moveBlock, addBlock, removeBlock, updateBlock });
+  latestActions.current = { changeRole, moveBlock, addBlock, removeBlock, updateBlock };
+  const blockActions = useMemo<DraftBlockActions>(() => ({
+    changeRole: (id, role) => latestActions.current.changeRole(id, role),
+    move: (id, direction) => latestActions.current.moveBlock(id, direction),
+    insert: (afterId, role) => {
+      const index = contentRef.current?.blocks.findIndex((item) => item.id === afterId) ?? -1;
+      latestActions.current.addBlock(index < 0 ? undefined : index, role);
+    },
+    remove: (id) => latestActions.current.removeBlock(id),
+    setText: (id, text) => latestActions.current.updateBlock(id, { text })
+  }), []);
 
   const flushPendingSave = async () => {
     for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -313,6 +500,16 @@ export function StructuredDraftEditor({
     setPreviewOpen(true);
     if (!previewUrl) void refreshPreview();
   };
+
+  /* 序号表按 id 序列缓存：改正文不会让它换引用，只有增删移才通知订阅序号的叶子节点。 */
+  const blockIdSignature = content?.blocks.map((block) => block.id).join("|") ?? "";
+  const orderById = useMemo(() => {
+    const map = new Map<string, number>();
+    blockIdSignature.split("|").forEach((id, index) => {
+      if (id) map.set(id, index);
+    });
+    return map;
+  }, [blockIdSignature]);
 
   const saveLabel = saveState === "loading"
     ? "加载中"
@@ -394,55 +591,34 @@ export function StructuredDraftEditor({
             <span className="structured-draft-editor__add-notice" role="status">{addNotice}</span>
           ) : null}
         </div>
-        <div className="structured-draft-editor__blocks">
-          {content.blocks.map((block, index) => (
-            <article
-              key={block.id}
-              data-role={block.role.toLocaleLowerCase()}
-              data-just-added={block.id === justAddedId ? "true" : undefined}
-            >
-              <div className="structured-draft-editor__block-tools">
-                <Select
-                  aria-label={`节点 ${index + 1} 类型`}
-                  size="small"
-                  value={block.role}
-                  options={roleOptions}
-                  popupMatchSelectWidth={false}
-                  getPopupContainer={() => document.body}
-                  classNames={{ popup: { root: "structured-draft-editor__role-dropdown" } }}
-                  onChange={(role) => changeRole(block.id, role)}
-                />
-                <span>节点 {index + 1}</span>
-                <Button type="text" size="small" aria-label="上移节点" disabled={index === 0} icon={<ArrowUp size={15} />} onClick={() => moveBlock(index, -1)} />
-                <Button type="text" size="small" aria-label="下移节点" disabled={index === content.blocks.length - 1} icon={<ArrowDown size={15} />} onClick={() => moveBlock(index, 1)} />
-                <AddNodeTypeMenu onSelect={(role) => addBlock(index, role)}>
-                  <Button type="text" size="small" aria-label="在下方新增节点" icon={<Plus size={15} />} />
-                </AddNodeTypeMenu>
-                <Button danger type="text" size="small" aria-label="删除节点" icon={<Trash size={15} />} onClick={() => removeBlock(index)} />
-              </div>
-              {block.role === "BODY" ? (
-                <Input.TextArea
-                  id={`draft-block-${block.id}`}
-                  value={block.text}
-                  autoFocus={block.id === justAddedId}
-                  autoSize={{ minRows: 4, maxRows: 16 }}
-                  placeholder={rolePlaceholders[block.role]}
-                  aria-label={`正文节点 ${index + 1}`}
-                  onChange={(event) => updateBlock(block.id, { text: event.target.value })}
-                />
-              ) : (
-                <Input
-                  id={`draft-block-${block.id}`}
-                  value={block.text}
-                  autoFocus={block.id === justAddedId}
-                  placeholder={rolePlaceholders[block.role]}
-                  aria-label={`${roleLabels[block.role]}节点 ${index + 1}`}
-                  onChange={(event) => updateBlock(block.id, { text: event.target.value })}
-                />
-              )}
-            </article>
-          ))}
-        </div>
+        <DraftBlockOrderContext.Provider value={orderById}>
+          <div className="structured-draft-editor__blocks" ref={motion.blocksRef}>
+            {content.blocks.map((block, index) => (
+              <DraftBlockCard
+                key={block.id}
+                block={block}
+                isFirst={index === 0}
+                isLast={index === content.blocks.length - 1}
+                actions={blockActions}
+                highlighted={block.id === justAddedId}
+                autoFocus={block.id === justAddedId}
+              />
+            ))}
+            {motion.ghosts.map((ghost) => (
+              <DraftBlockCard
+                key={ghost.key}
+                ghost
+                ghostKey={ghost.key}
+                ghostStyle={ghost.style}
+                ghostOrder={ghost.index}
+                block={ghost.block}
+                isFirst={ghost.index === 0}
+                isLast={ghost.index === ghost.total - 1}
+                actions={ghostActions}
+              />
+            ))}
+          </div>
+        </DraftBlockOrderContext.Provider>
       </main>
 
       <Modal

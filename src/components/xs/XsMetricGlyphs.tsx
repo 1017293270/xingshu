@@ -169,6 +169,110 @@ export function XsGlyphCloudDrive(props: XsMetricGlyphProps) {
   );
 }
 
+/**
+ * 制表类型四枚：轮廓必须互不相似。
+ * 它们并排出现在同一列里，20px 下人眼先读的是外形不是细节——
+ * 四张都画成"表格 + 小角标"就等于四张一样的图（改造前正是如此）。
+ * 所以这里是：领奖台 / 清单勾 / 折线 / 箱子，四种完全不同的剪影。
+ */
+
+/** 排行：领奖台，中间最高。 */
+export function XsGlyphTableRanking(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="12.5" y="7" width="7" height="20" rx="1.5" />
+      <g opacity={ACCENT_OPACITY}>
+        <rect x="4" y="16" width="7" height="11" rx="1.5" />
+        <rect x="21" y="19" width="7" height="8" rx="1.5" />
+      </g>
+    </Glyph>
+  );
+}
+
+/** 清单：勾选行。 */
+export function XsGlyphTableChecklist(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4.5 7.5l2.5 2.5 4-4.5" />
+      <path d="M4.5 16.5l2.5 2.5 4-4.5" />
+      <path d="M4.5 25.5l2.5 2.5 4-4.5" />
+      <path d="M15.5 9h12" />
+      <path d="M15.5 18h12" />
+      <path d="M15.5 27h12" />
+    </Glyph>
+  );
+}
+
+/** 统计：折线趋势。柱状会和领奖台撞剪影，所以这里走折线。 */
+export function XsGlyphTableStatistics(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5 5v22h22" />
+      <path d="M9.5 21.5l4.5-5.5 4 3 8-10" />
+    </Glyph>
+  );
+}
+
+/** 库存：档案箱。 */
+export function XsGlyphTableInventory(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="5.5" y="7.5" width="21" height="17" rx="2.5" />
+      <g opacity={ACCENT_OPACITY}>
+        <path d="M5.5 13.5h21" />
+        <path d="M13 19h6" />
+      </g>
+    </Glyph>
+  );
+}
+
+/**
+ * 历史对话三类：放大镜 / 柱状图 / 文档，同样是三种互不相似的剪影。
+ * 改造前这三张里有两张是把生成图描成 SVG——渐变、写死色值、笔宽 11/12/13 三种混用、
+ * 四角还挂着装饰星芒，等于把位图的问题原样搬进矢量。
+ */
+
+/** 知识快查：放大镜里有文字行。 */
+export function XsGlyphHistoryKnowledge(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="14" cy="14" r="9.5" />
+      <path d="M20.8 20.8L27 27" />
+      <g opacity={ACCENT_OPACITY}>
+        <path d="M9.5 11.5h9" />
+        <path d="M9.5 16.5h5.5" />
+      </g>
+    </Glyph>
+  );
+}
+
+/** 数据洞察：升序柱。 */
+export function XsGlyphHistoryInsight(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <g opacity={ACCENT_OPACITY}>
+        <rect x="6" y="17.5" width="6" height="9" rx="1.5" />
+        <rect x="13" y="11.5" width="6" height="15" rx="1.5" />
+      </g>
+      <rect x="20" y="5.5" width="6" height="21" rx="1.5" />
+    </Glyph>
+  );
+}
+
+/** 文档处理：带折角的单页文档。 */
+export function XsGlyphHistoryDocument(props: XsMetricGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 6h10l7 7v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
+      <path d="M18 6v7h7" />
+      <g opacity={ACCENT_OPACITY}>
+        <path d="M10 18h11" />
+        <path d="M10 22.5h7" />
+      </g>
+    </Glyph>
+  );
+}
+
 export type XsMetricGlyphId =
   | "data-assets"
   | "data-volume"

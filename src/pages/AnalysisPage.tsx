@@ -29,6 +29,8 @@ import type {
   WheelEvent as ReactWheelEvent
 } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSessionQueryScope } from "@/app/sessionQuery";
 import { XsChartCard } from "@/components/xs/XsChartCard";
 import { xsEnterStep } from "@/components/xs/motion";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
@@ -38,6 +40,7 @@ import { XsStreamingText } from "@/components/xs/XsStreamingText";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { invalidateDataAssetOverview } from "@/services/dataAssetService";
 import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import {
   buildGeneratedChartOption,
@@ -1194,6 +1197,8 @@ function AiChartSuggestionCard({
 export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const sessionScope = useSessionQueryScope();
   const storedAnalysisQuestion = useUiStore((state) => state.activeAnalysisQuestion);
   const storedAskDataStatus = useUiStore((state) => state.askDataStatus);
   const storedAskDataEvents = useUiStore((state) => state.askDataEvents);
@@ -1765,7 +1770,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
             );
           }
         },
-        onDone: () => completeAskDataRun(runId),
+        onDone: () => {
+          completeAskDataRun(runId);
+          void invalidateDataAssetOverview(queryClient, sessionScope);
+        },
         onError: (error) => failAskDataRun(runId, error.message)
       }
     );
@@ -2055,7 +2063,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           title={isAgentMode ? "智能编排执行" : `${taskName} Agent 执行`}
                           defaultExpanded={expandExecutionPanelByDefault}
                           preferDirectMainExecution={preferDirectMainExecution}
-                          showMainDocumentBlocks={isAgentMode}
+                          showMainDocumentBlocks={isAgentMode || isKnowledgeMode}
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
                             if (!citation) {
@@ -2157,7 +2165,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           ) : null}
                         </div>
                         <div className="analysis-result-stage" data-state={resultStageState}>
-                          {!isDocumentLookupMode && isResultReady && turnAsk.answerBlocks.length > 0 ? (
+                          {!isDocumentLookupMode &&
+                          isResultReady &&
+                          turnAsk.answerBlocks.length > 0 &&
+                          Boolean(turnAsk.done?.summary?.trim() || !preferDirectMainExecution) ? (
                             <DataHubAnswer blocks={turnAsk.answerBlocks} />
                           ) : null}
                           {isResultReady && aiChartState.status !== "idle" ? (
@@ -2173,7 +2184,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               ))}
                             </div>
                           ) : null}
-                          {supportsCitations && isResultReady && turnAsk.citationDocuments.length > 0 ? (
+                          {supportsCitations &&
+                          isResultReady &&
+                          turnAsk.citationDocuments.length > 0 &&
+                          turnAsk.done?.askKnowledge !== true ? (
                             <DataHubCitationList
                               citations={turnAsk.citationDocuments}
                               onOpen={(citation) => void handleOpenCitation(citation)}

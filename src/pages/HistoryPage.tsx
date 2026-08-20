@@ -4,11 +4,14 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import historyConversationIcon from "@/assets/history-icons/history-conversation-image2.png";
-import dataInsightIcon from "@/assets/history-icons/history-data-insight.svg";
-import knowledgeQuickIcon from "@/assets/history-icons/history-knowledge-quick.svg";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import type { XsIconComponent } from "@/components/xs/XsIconTile";
+import {
+  XsGlyphHistoryDocument,
+  XsGlyphHistoryInsight,
+  XsGlyphHistoryKnowledge
+} from "@/components/xs/XsMetricGlyphs";
 import {
   filterHistorySessionList,
   listHistorySessions,
@@ -29,10 +32,13 @@ const historyCategoryFilters: NonNullable<HistoryFilter["category"]>[] = [
   "文档处理"
 ];
 
-const historyIconByCategory: Record<HistoryCategory, string> = {
-  知识快查: knowledgeQuickIcon,
-  数据洞察: dataInsightIcon,
-  文档处理: historyConversationIcon
+/** 历史类型图标固定 28px：42px 底板的 2/3，与指标卡底板 32/52 同比例。 */
+const HISTORY_GLYPH_SIZE = 28;
+
+const historyGlyphByCategory: Record<HistoryCategory, XsIconComponent> = {
+  知识快查: XsGlyphHistoryKnowledge,
+  数据洞察: XsGlyphHistoryInsight,
+  文档处理: XsGlyphHistoryDocument
 };
 
 export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
@@ -49,8 +55,8 @@ function getHistoryFallbackMode(session: HistorySession): DataHubChatMode {
   return "ask";
 }
 
-function getHistoryIcon(category: HistoryCategory) {
-  return historyIconByCategory[category];
+function getHistoryGlyph(category: HistoryCategory) {
+  return historyGlyphByCategory[category];
 }
 
 function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
@@ -237,7 +243,10 @@ export function HistoryPage() {
               onClick={() => void handleRestoreSession(session)}
             >
               <span className="topic-icon" aria-hidden="true">
-                <img src={getHistoryIcon(session.category)} alt="" />
+                {(() => {
+                  const HistoryGlyph = getHistoryGlyph(session.category);
+                  return <HistoryGlyph size={HISTORY_GLYPH_SIZE} />;
+                })()}
               </span>
               <div className="history-card__body">
                 <Tooltip title={session.title} placement="topLeft">

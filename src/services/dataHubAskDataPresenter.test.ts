@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createDataHubAskTurn,
   getDataHubActionLabel,
-  normalizeDataHubTableResult
+  normalizeDataHubTableResult,
+  resolveDataHubFinalAnswer
 } from "./dataHubAskDataPresenter";
 import type { DataHubStreamEvent } from "@/types/dataHub";
 
@@ -375,5 +376,38 @@ describe("dataHubAskDataPresenter", () => {
     expect(turn.tableResults).toEqual([]);
     expect(turn.citationDocuments).toEqual([]);
     expect(turn.done).toBeUndefined();
+  });
+
+  it("uses DataHub done.summary as the official answer when it differs from streamed text", () => {
+    const turn = createDataHubAskTurn(
+      "合同金额是多少？",
+      [
+        { type: "text", data: "流式草稿：金额待定" },
+        {
+          type: "done",
+          data: { mode: "rag", askKnowledge: true, summary: "合同金额为 128 万元。" }
+        }
+      ],
+      "done"
+    );
+
+    expect(resolveDataHubFinalAnswer("合同金额为 128 万元。", "流式草稿：金额待定", false))
+      .toBe("合同金额为 128 万元。");
+    expect(turn.assistantContent).toBe("合同金额为 128 万元。");
+    expect(turn.answerBlocks).toEqual([{ content: "合同金额为 128 万元。" }]);
+  });
+
+  it("keeps streamed root text when DataHub done has no summary", () => {
+    const turn = createDataHubAskTurn(
+      "只根据销售合同回答",
+      [
+        { type: "text", data: "编排结论：以合同约定为准。" },
+        { type: "text", data: "合同条款详见子智能体。", parentSessionId: "child-rag" },
+        { type: "done", data: { mode: "agent", adaptiveTeam: true } }
+      ],
+      "done"
+    );
+
+    expect(turn.assistantContent).toBe("编排结论：以合同约定为准。");
   });
 });

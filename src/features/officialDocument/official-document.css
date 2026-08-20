@@ -810,6 +810,11 @@
   padding: 14px;
 }
 
+/* 删除残影按容器坐标绝对定位 */
+.structured-draft-editor__blocks {
+  position: relative;
+}
+
 .structured-draft-editor__fixed-fields {
   display: grid;
   border-bottom: 1px solid #eef3f8;
@@ -826,6 +831,7 @@
 }
 
 .structured-draft-editor__blocks article {
+  position: relative;
   flex: none;
   min-height: min-content;
   overflow: visible;
@@ -835,10 +841,42 @@
   box-shadow: 0 4px 14px rgb(37 86 137 / 5%);
 }
 
+/* 新增节点：让位动画结束后卡片落位，高亮环再自行淡出，只留一次确认 */
 .structured-draft-editor__blocks article[data-just-added="true"] {
-  box-shadow:
-    0 0 0 2px rgb(45 114 189 / 22%),
-    0 4px 14px rgb(37 86 137 / 5%);
+  animation: structured-draft-block-highlight 900ms var(--xs-motion-ease-out) both;
+}
+
+@keyframes structured-draft-block-highlight {
+  0%,
+  45% {
+    box-shadow:
+      0 0 0 2px rgb(45 114 189 / 30%),
+      0 8px 20px rgb(37 86 137 / 12%);
+  }
+
+  100% {
+    box-shadow:
+      0 0 0 0 rgb(45 114 189 / 0%),
+      0 4px 14px rgb(37 86 137 / 5%);
+  }
+}
+
+/* 删除残影：数据已经删掉，这张只负责收进删除按钮（回收站）后消失 */
+.structured-draft-editor__blocks article.structured-draft-editor__ghost {
+  position: absolute;
+  z-index: 3;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .structured-draft-editor__blocks article[data-just-added="true"] {
+    animation: none !important;
+    box-shadow:
+      0 0 0 2px rgb(45 114 189 / 30%),
+      0 4px 14px rgb(37 86 137 / 5%);
+  }
 }
 
 .structured-draft-editor__canvas-head .ant-tag {

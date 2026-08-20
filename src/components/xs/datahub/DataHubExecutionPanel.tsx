@@ -10,6 +10,7 @@ import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 import { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
 import { DataHubSubagentDag, dataHubDagGhostVisible } from "./DataHubSubagentDag";
 import { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
+import { asRecord, asString } from "./display";
 import type { DataHubExecutionPanelProps } from "./types";
 import "../../../pages/styles/datahub-execution.css";
 
@@ -42,6 +43,14 @@ function useControllableSelection(
     onChange?.(next);
   };
   return [value, update] as const;
+}
+
+function citationIdentity(content: unknown): string {
+  const record = asRecord(content);
+  const docId = asString(record?.docId) ?? asString(record?.doc_id);
+  const docKey = asString(record?.docKey)?.trim();
+  if (docId) return `doc:${docId}`;
+  return docKey ? `key:${docKey}` : "";
 }
 
 export function DataHubExecutionPanel({
@@ -107,14 +116,22 @@ export function DataHubExecutionPanel({
     projection.mainSession.cards.length > 0 &&
     (preferDirectMainExecution || !hasOrchestrationStructure);
   const directMainCards = projection.mainSession.cards.map((card) => {
+    const seenCitations = new Set<string>();
     const stageBlocks = card.blocks.filter((block) => {
-      if (block.type === "text" || block.type === "content" || block.type === "table") {
+      if (block.type === "table") {
         return false;
       }
-      return (
-        showMainDocumentBlocks ||
-        (block.type !== "document_url" && block.type !== "citation_document")
-      );
+      if (block.type === "citation_document" || block.type === "document_url") {
+        if (!showMainDocumentBlocks) {
+          return false;
+        }
+        const identity = citationIdentity(block.content);
+        if (identity && seenCitations.has(identity)) {
+          return false;
+        }
+        if (identity) seenCitations.add(identity);
+      }
+      return true;
     });
     return stageBlocks.length && stageBlocks.length !== card.blocks.length
       ? { ...card, blocks: stageBlocks }

@@ -25,10 +25,17 @@ export {
   XsGlyphDataTables,
   XsGlyphDataVolume,
   XsGlyphDocumentTotal,
+  XsGlyphHistoryDocument,
+  XsGlyphHistoryInsight,
+  XsGlyphHistoryKnowledge,
   XsGlyphKnowledgeTotal,
   XsGlyphMediaDocuments,
   XsGlyphRecentUpdate,
   XsGlyphServiceCalls,
+  XsGlyphTableChecklist,
+  XsGlyphTableInventory,
+  XsGlyphTableRanking,
+  XsGlyphTableStatistics,
   xsMetricGlyphById
 } from "./XsMetricGlyphs";
 export type { XsMetricGlyphId } from "./XsMetricGlyphs";

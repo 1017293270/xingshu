@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -75,6 +76,20 @@ describe("XsCommandBox", () => {
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "附件" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
+  });
+
+  it("keeps the send control a square so Ant Design controlHeight cannot stretch it", () => {
+    const css = readFileSync("src/components/xs/xs.css", "utf8").replaceAll("\r\n", "\n");
+
+    expect(css).toMatch(
+      /\.xs-command-box__actions \.ant-btn \{[\s\S]*?aspect-ratio: 1 \/ 1;[\s\S]*?width: 36px;[\s\S]*?height: 36px;/
+    );
+    expect(css).toMatch(
+      /\.xs-command-box__send\.ant-btn \{[\s\S]*?width: 36px;[\s\S]*?height: 36px;/
+    );
+    expect(css).toMatch(
+      /\.xs-command-box__actions \.ant-btn svg \{[\s\S]*?width: 18px;[\s\S]*?height: 18px;/
+    );
   });
 
   it("keeps send disabled while background data is loading without showing stop", () => {
