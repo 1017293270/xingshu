@@ -145,6 +145,8 @@ describe("HomePage", () => {
     const navigation = screen.getByRole("navigation", { name: "星数主导航" });
     expect(navigation).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建对话" })).toHaveClass("xs-sidebar__new-chat--current");
+    expect(screen.getByRole("main").contains(screen.getByRole("button", { name: "收起侧边栏" }))).toBe(true);
     expect(within(navigation).getByText("历史对话")).toBeInTheDocument();
     expect(within(navigation).getByText("智能制表")).toBeInTheDocument();
     expect(within(navigation).getByText("公文写作")).toBeInTheDocument();
@@ -154,7 +156,7 @@ describe("HomePage", () => {
     expect(within(navigation).getByText("数据资产管理")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /您好，张三/ })).toBeInTheDocument();
     expect(screen.getByText("我是您的数据管家，有什么可以帮您？")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "命令输入" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveAttribute("placeholder", "给星数发送消息");
     expect(screen.getByRole("button", { name: "选择模型，当前编排模型" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "推荐应用" })).toBeInTheDocument();
   });
@@ -170,7 +172,6 @@ describe("HomePage", () => {
         "aria-pressed",
         "false"
       );
-      expect(screen.getByRole("button", { name: `进入 ${appName}` })).toBeInTheDocument();
     }
 
     expect(screen.queryByText("👋")).not.toBeInTheDocument();
@@ -179,10 +180,11 @@ describe("HomePage", () => {
 
     const dataChatButton = screen.getByRole("button", { name: /打开 智能问数/ });
     await user.click(dataChatButton);
-    expect(dataChatButton).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
     expect(screen.queryByText("已切换为问数模型")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
+    expect(screen.getByRole("heading", { name: "从一个经营数据问题开始" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "推荐问题" })).toBeInTheDocument();
   });
 
   it("uses the authenticated username in the greeting", () => {
@@ -215,21 +217,20 @@ describe("HomePage", () => {
 
     await user.click(screen.getByRole("button", { name: /^打开 智能问数/ }));
 
-    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue(
-      "帮我分析本月经营数据，并生成趋势图表"
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveAttribute(
+      "placeholder",
+      "帮你查数据"
     );
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("");
     expect(screen.queryByText("已切换为问数模型")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
     expect(useUiStore.getState().homeChatMode).toBe("ask");
   });
 
   it.each([
-    ["文档助手", "/cloud"],
-    ["报表生成", "/dashboard"],
-    ["公文写作", "/writing"],
-    ["会议纪要", "/writing"],
-    ["更多应用", "/data-dashboard"]
+    ["报表生成", "/table"],
+    ["公文写作", "/writing"]
   ])("routes %s to its product workspace", async (appName, expectedPath) => {
     const user = userEvent.setup();
     renderHomePage();
@@ -239,18 +240,27 @@ describe("HomePage", () => {
     expect(screen.getByLabelText("当前应用路径")).toHaveTextContent(expectedPath);
   });
 
+  it.each(["会议纪要", "更多应用"])("shows a coming-soon status for %s", async (appName) => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole("button", { name: new RegExp(`^打开 ${appName}`) }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("待开放，敬请期待");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
+  });
+
   it("opens the knowledge workspace and selects the knowledge model", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
     await user.click(screen.getByRole("button", { name: /^打开 知识问答/ }));
 
-    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue(
-      "帮我查询最新销售政策中的重点变化"
-    );
+    expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("");
     expect(screen.getByRole("button", { name: "选择模型，当前问知模型" })).toBeInTheDocument();
     expect(screen.queryByText("已切换为问知模型")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-knowledge");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
+    expect(screen.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeInTheDocument();
     expect(useUiStore.getState().homeChatMode).toBe("rag");
   });
 
@@ -276,6 +286,7 @@ describe("HomePage", () => {
     expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeTruthy();
     expect(container.querySelector(".xs-sidebar--collapsed")).toBeTruthy();
     expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+    expect(screen.getByRole("main").contains(screen.getByRole("button", { name: "展开侧边栏" }))).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "展开侧边栏" }));
     expect(container.querySelector(".xs-shell--sidebar-collapsed")).toBeNull();
@@ -292,7 +303,7 @@ describe("HomePage", () => {
 
     await user.type(commandInput, "生成经营日报{Enter}");
 
-    expect(screen.getByRole("status")).toHaveTextContent("已提交智能编排：生成经营日报");
+    expect(screen.queryByText(/已提交智能编排/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-agent");
     expect(useUiStore.getState().analysisTurns.at(-1)?.chatMode).toBe("agent");
   });
@@ -302,14 +313,14 @@ describe("HomePage", () => {
     const { unmount } = renderHomePage();
 
     await user.click(screen.getByRole("button", { name: /^打开 智能问数/ }));
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-data");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
     expect(useUiStore.getState().homeChatMode).toBe("ask");
     expect(useUiStore.getState().analysisTurns).toHaveLength(0);
 
     unmount();
     renderHomePage();
     await user.click(screen.getByRole("button", { name: /^打开 知识问答/ }));
-    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/ask-knowledge");
+    expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
     expect(useUiStore.getState().homeChatMode).toBe("rag");
     expect(useUiStore.getState().analysisTurns).toHaveLength(0);
   });
@@ -318,8 +329,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(screen.getByRole("button", { name: "选择模型，当前编排模型" }));
-    await user.click(screen.getByRole("menuitem", { name: /找文档模型/ }));
+    await user.click(screen.getByRole("button", { name: "切换到找文档模型" }));
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "帮我找最新版员工手册");
     await user.click(screen.getByRole("button", { name: "发送" }));
 

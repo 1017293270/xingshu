@@ -1,28 +1,25 @@
-import { Button, Dropdown, Progress, Segmented, Tag } from "antd";
+import { Button, Dropdown, Segmented, Tag } from "antd";
 import type { MenuProps } from "antd";
 import {
   ArrowDown,
   ArrowSquareOut,
   Brain,
-  CaretDown,
-  CaretUp,
   ChartLineUp,
   ChartPieSlice,
-  CheckCircle,
+  Check,
   CircleNotch,
+  CopySimple,
   Database,
-  DownloadSimple,
   FileText,
   FlowArrow,
   Function,
-  MagicWand,
   MapPin,
   PresentationChart,
   Star,
   TrendUp,
   WarningCircle
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   TouchEvent as ReactTouchEvent,
@@ -35,8 +32,9 @@ import { XsChartCard } from "@/components/xs/XsChartCard";
 import { xsEnterStep } from "@/components/xs/motion";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { DataHubExecutionPanel, DataHubResultTable } from "@/components/xs/datahub";
-import { XsStreamingText } from "@/components/xs/XsStreamingText";
+import { useNow } from "@/components/xs/datahub/useNow";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
@@ -57,18 +55,14 @@ import {
   projectDataHubExecutionEvents
 } from "@/services/dataHubExecutionProjector";
 import {
+  getDataHubAskTableResults,
+  getDataHubChildAnswerBlocks,
   getDataHubSingleQueryTableResults,
   getDataHubQueryAssetTargets,
   type DataHubQueryAssetTarget
 } from "@/services/dataHubQueryAssetTargetService";
 import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
-import {
-  countDataHubTableRows,
-  downloadCsv,
-  buildDataHubTablesCsv,
-  sanitizeCsvBasename
-} from "@/services/dataHubTableExport";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { useUiStore } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
@@ -166,39 +160,44 @@ const analysisModeMeta: Record<
     emptyTitle: string;
     emptyDescription: string;
     emptyAria: string;
+    placeholder: string;
   }
 > = {
   ask: {
     title: "智能问数",
     taskName: "问数",
     resultTitle: "问数结果",
-    emptyTitle: "从一个经营问题开始",
-    emptyDescription: "星数只会在当前 data-hub 空间及您有权访问的数据范围内查询和生成结果。",
-    emptyAria: "空白问数工作区"
+    emptyTitle: "从一个经营数据问题开始",
+    emptyDescription: "",
+    emptyAria: "空白问数工作区",
+    placeholder: "帮你查数据"
   },
   rag: {
     title: "知识问答",
     taskName: "问知",
     resultTitle: "问知结果",
     emptyTitle: "从一个企业知识问题开始",
-    emptyDescription: "星数只会检索当前 data-hub 空间内您有权访问的知识，并提供经过复核的引用来源。",
-    emptyAria: "空白问知工作区"
+    emptyDescription: "",
+    emptyAria: "空白问知工作区",
+    placeholder: "帮你查知识"
   },
   document_lookup: {
     title: "查找文档",
     taskName: "找文档",
     resultTitle: "文档结果",
-    emptyTitle: "描述您要查找的企业文档",
-    emptyDescription: "星数会在当前 data-hub 空间内定位可访问的原文，并通过受鉴权接口安全打开。",
-    emptyAria: "空白找文档工作区"
+    emptyTitle: "从一份企业文档开始",
+    emptyDescription: "",
+    emptyAria: "空白找文档工作区",
+    placeholder: "帮你找文档"
   },
   agent: {
     title: "智能编排",
     taskName: "智能编排",
     resultTitle: "综合结果",
     emptyTitle: "从一个跨数据与知识的任务开始",
-    emptyDescription: "星数会展示 data-hub 的真实路由、Agent 协作、工具调用和最终可追溯结果。",
-    emptyAria: "空白智能编排工作区"
+    emptyDescription: "",
+    emptyAria: "空白智能编排工作区",
+    placeholder: "给星数发送消息"
   }
 };
 
@@ -208,6 +207,150 @@ const analysisRouteByMode: Record<DataHubChatMode, string> = {
   rag: "/ask-knowledge",
   document_lookup: "/document-lookup"
 };
+
+function formatDurationZh(ms?: number) {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 1) {
+    return "用时不到 1 秒";
+  }
+  if (seconds < 60) {
+    return `用时 ${seconds} 秒`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest > 0 ? `用时 ${minutes} 分 ${rest} 秒` : `用时 ${minutes} 分`;
+}
+
+function stripMarkdownTables(markdown: string) {
+  return markdown
+    .replace(/(^|\n)(?:[ \t]*\|.*\|[ \t]*\n)+/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function copyText(text: string) {
+  const value = text.trim();
+  if (!value) {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function citationSourceLabel(citation: DataHubCitationDocument) {
+  const name = citation.docName || citation.fileName || citation.docKey;
+  const blob = [name, ...citation.fragments].join(" ");
+  const chapter = blob.match(/第[\d一二三四五六七八九十百千]+章[^，。\s]*/)?.[0];
+  const page = blob.match(/第?\s*\d+\s*页/)?.[0];
+  const location = [chapter, page].filter(Boolean).join(" ");
+  return location ? `根据《${name}》${location}` : `根据《${name}》`;
+}
+
+function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHubDocumentLookupResult[] {
+  return citations.map((citation) => ({
+    docId: citation.docId,
+    docKey: citation.docKey,
+    kbId: citation.kbId,
+    title: citation.docName || citation.fileName || citation.docKey,
+    sourceAvailable: citation.sourceAvailable
+  }));
+}
+
+/**
+ * 任务动态：运行中展开为实时编排轨（脉冲 + 走秒 + 阶段链 + 最新动作），
+ * 结束后收回成一行摘要，历史轮次不留动效。
+ */
+function AnalysisTaskDynamics({
+  nodes,
+  durationMs,
+  status,
+  phases = [],
+  running = false,
+  startedAt
+}: {
+  nodes: string[];
+  durationMs?: number;
+  status: string;
+  phases?: ThinkingPhase[];
+  running?: boolean;
+  startedAt?: number;
+}) {
+  const now = useNow(1000, running);
+  const duration = formatDurationZh(durationMs);
+
+  if (!running) {
+    return (
+      <p className="analysis-task-dynamics" aria-label="任务动态">
+        <span>任务动态</span>
+        {duration ? <span>{duration}</span> : null}
+        <span>{nodes.length > 0 ? nodes.join(" → ") : status}</span>
+      </p>
+    );
+  }
+
+  const elapsed = startedAt ? formatDurationZh(Math.max(0, now - startedAt)) : "";
+  const activePhase = phases.find((phase) => phase.status === "active");
+  const completedCount = phases.filter((phase) => phase.status === "complete").length;
+  // 最新动作优先取真实事件明细，事件未到时退回阶段说明，避免这行空着闪烁。
+  const detail = activePhase ? activePhase.details.at(-1) || activePhase.description : "";
+
+  return (
+    <div className="analysis-live" aria-label="任务动态">
+      <p className="analysis-live__head">
+        <span className="xs-status-bar__pulse analysis-live__pulse" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="analysis-live__status">{status}</span>
+        {elapsed ? <span className="analysis-live__timer">{elapsed}</span> : null}
+        {phases.length > 0 ? (
+          <span className="analysis-live__count">
+            {completedCount}/{phases.length}
+          </span>
+        ) : null}
+      </p>
+      {phases.length > 0 ? (
+        <ol className="analysis-live__rail">
+          {phases.map((phase) => {
+            const PhaseIcon = phase.icon;
+            return (
+              <li
+                className="analysis-live__step"
+                data-state={phase.status}
+                key={phase.id}
+                title={phase.description}
+              >
+                <span className="analysis-live__step-mark" aria-hidden="true">
+                  {phase.status === "complete" ? (
+                    <Check size={12} weight="bold" />
+                  ) : phase.status === "error" ? (
+                    <WarningCircle size={13} weight="bold" />
+                  ) : (
+                    <PhaseIcon size={13} weight="bold" />
+                  )}
+                </span>
+                <span className="analysis-live__step-title">{phase.title}</span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+      {detail ? (
+        <p className="analysis-live__detail" key={detail}>
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function DataHubQueryAssetActions({
   items,
@@ -231,20 +374,21 @@ function DataHubQueryAssetActions({
 
   const favoriteControl =
     items.length === 1 ? (
-      <Button
+      <button
+        type="button"
+        className="analysis-icon-button"
+        aria-label={items[0].state.status === "saved" ? "已收藏问数" : "收藏问数"}
         aria-pressed={items[0].state.status === "saved"}
-        icon={
-          <Star
-            size={18}
-            weight={items[0].state.status === "saved" ? "fill" : "regular"}
-          />
-        }
-        loading={items[0].state.status === "saving"}
-        disabled={items[0].state.status === "saved"}
+        aria-busy={items[0].state.status === "saving" || undefined}
+        disabled={items[0].state.status === "saved" || items[0].state.status === "saving"}
         onClick={() => onFavorite(items[0].target)}
       >
-        {items[0].state.status === "saved" ? "已收藏问数" : "收藏问数"}
-      </Button>
+        <Star
+          size={16}
+          weight={items[0].state.status === "saved" ? "fill" : "regular"}
+          aria-hidden="true"
+        />
+      </button>
     ) : (
       <Dropdown
         menu={{
@@ -253,7 +397,7 @@ function DataHubQueryAssetActions({
               key: target.key,
               icon: (
                 <Star
-                  size={17}
+                  size={16}
                   weight={state.status === "saved" ? "fill" : "regular"}
                 />
               ),
@@ -269,37 +413,40 @@ function DataHubQueryAssetActions({
         placement="bottomRight"
         trigger={["click"]}
       >
-        <Button
+        <button
+          type="button"
+          className="analysis-icon-button"
           aria-label={
             allSaved
               ? `已收藏全部数据结果（${items.length}）`
               : `收藏数据结果（${items.length}）`
           }
-          icon={<Star size={18} weight={allSaved ? "fill" : "regular"} />}
-          loading={saving}
-          disabled={allSaved}
+          aria-pressed={allSaved}
+          aria-busy={saving || undefined}
+          disabled={allSaved || saving}
         >
-          {allSaved ? `已收藏全部（${items.length}）` : `收藏数据结果（${items.length}）`}
-        </Button>
+          <Star size={16} weight={allSaved ? "fill" : "regular"} aria-hidden="true" />
+        </button>
       </Dropdown>
     );
 
   const dashboardControl =
     savedItems.length === 1 ? (
-      <Button
-        type="primary"
-        icon={<PresentationChart size={18} />}
+      <button
+        type="button"
+        className="analysis-icon-button"
+        aria-label="加入看板"
         onClick={() => onOpenDashboard(savedItems[0].state.asset)}
       >
-        加入看板
-      </Button>
+        <PresentationChart size={16} aria-hidden="true" />
+      </button>
     ) : savedItems.length > 1 ? (
       <Dropdown
         menu={{
           items: savedItems.map(
             ({ target, state }): NonNullable<MenuProps["items"]>[number] => ({
               key: state.asset.id,
-              icon: <PresentationChart size={17} />,
+              icon: <PresentationChart size={16} />,
               label: `加入看板：${target.label}`,
               onClick: () => onOpenDashboard(state.asset)
             })
@@ -308,9 +455,13 @@ function DataHubQueryAssetActions({
         placement="bottomRight"
         trigger={["click"]}
       >
-        <Button type="primary" icon={<PresentationChart size={18} />}>
-          加入看板（{savedItems.length}）
-        </Button>
+        <button
+          type="button"
+          className="analysis-icon-button"
+          aria-label={`加入看板（${savedItems.length}）`}
+        >
+          <PresentationChart size={16} aria-hidden="true" />
+        </button>
       </Dropdown>
     ) : null;
 
@@ -535,7 +686,7 @@ function buildThinkingPhases(
     {
       id: "understand",
       title: "理解问题",
-      description: "识别问数意图，拆解为 data-hub 可执行的问题。",
+      description: "识别问数意图，拆解为可执行的查询。",
       icon: Brain,
       details: compactMessages([
         ...(askTurn.decompose?.subQuestions ?? []),
@@ -555,14 +706,14 @@ function buildThinkingPhases(
     {
       id: "process",
       title: "数据处理",
-      description: "读取 Skill 与语义模型，生成受约束的查询结构。",
+      description: "读取业务语义并生成查询结构。",
       icon: Function,
       details: compactMessages(collectStepDetails(steps, ["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"]))
     },
     {
       id: "execute",
       title: "执行查询",
-      description: "调用 data-hub 查询服务，返回结构化数据结果。",
+      description: "执行查询并返回结构化数据结果。",
       icon: FlowArrow,
       details: compactMessages([
         ...collectStepDetails(steps, ["execute_query"]),
@@ -616,265 +767,6 @@ function buildThinkingPhases(
   });
 }
 
-function getPhasePercent(phases: ThinkingPhase[]) {
-  const completeWeight = phases.filter((phase) => phase.status === "complete").length;
-  const activeWeight = phases.some((phase) => phase.status === "active") ? 0.45 : 0;
-
-  return Math.min(100, Math.round(((completeWeight + activeWeight) / phases.length) * 100));
-}
-
-const phaseStatusMeta: Record<ThinkingPhaseStatus, { label: string; color: string }> = {
-  complete: { label: "已完成", color: "success" },
-  active: { label: "思考中", color: "processing" },
-  pending: { label: "待处理", color: "default" },
-  error: { label: "异常", color: "error" }
-};
-
-type DrainedPhase = {
-  id: string;
-  signature: string;
-};
-
-type ThinkingPlaybackState = {
-  activeTitle?: string;
-  isComplete: boolean;
-};
-
-const phasePlaybackSettleMs = 220;
-
-function getPhaseStreamMessages(phase: ThinkingPhase) {
-  return Array.from(new Set([phase.description, ...phase.details].filter(Boolean)));
-}
-
-function getPhaseStreamSignature(phase: ThinkingPhase) {
-  return getPhaseStreamMessages(phase).join("\u001f");
-}
-
-function getInitialPlaybackIndex(phases: ThinkingPhase[]) {
-  return phases.some((phase) => phase.status === "active") ? 0 : phases.length;
-}
-
-function useThinkingPhasePlayback(phases: ThinkingPhase[], isProcessing: boolean) {
-  const playbackEnabledRef = useRef(phases.some((phase) => phase.status === "active"));
-  const [playbackIndex, setPlaybackIndex] = useState(() => getInitialPlaybackIndex(phases));
-  const [drainedPhase, setDrainedPhase] = useState<DrainedPhase | null>(null);
-  const targetPhase = phases[playbackIndex];
-  const targetSignature = targetPhase ? getPhaseStreamSignature(targetPhase) : "";
-  const hasPendingPhase = phases.some((phase) => phase.status === "pending");
-  const shouldAbortPlayback = !isProcessing && hasPendingPhase;
-  const backendHasAdvanced = Boolean(
-    targetPhase &&
-    (targetPhase.status === "complete" ||
-      targetPhase.status === "error" ||
-      phases.slice(playbackIndex + 1).some((phase) => phase.status !== "pending"))
-  );
-
-  useEffect(() => {
-    if (
-      !playbackEnabledRef.current ||
-      shouldAbortPlayback ||
-      !targetPhase ||
-      !backendHasAdvanced ||
-      drainedPhase?.id !== targetPhase.id ||
-      drainedPhase.signature !== targetSignature
-    ) {
-      return undefined;
-    }
-
-    const settleTimer = window.setTimeout(() => {
-      setPlaybackIndex((current) => Math.min(phases.length, current + 1));
-      setDrainedPhase(null);
-    }, phasePlaybackSettleMs);
-
-    return () => window.clearTimeout(settleTimer);
-  }, [
-    backendHasAdvanced,
-    drainedPhase,
-    phases.length,
-    shouldAbortPlayback,
-    targetPhase,
-    targetSignature
-  ]);
-
-  const displayedPhases = useMemo<ThinkingPhase[]>(() => {
-    if (!playbackEnabledRef.current || shouldAbortPlayback || playbackIndex >= phases.length) {
-      return phases;
-    }
-
-    return phases.map((phase, index) => {
-      if (index < playbackIndex) {
-        return { ...phase, status: phase.status === "error" ? "error" : "complete" };
-      }
-
-      if (index === playbackIndex) {
-        return { ...phase, status: phase.status === "error" ? "error" : "active" };
-      }
-
-      return { ...phase, status: "pending" };
-    });
-  }, [phases, playbackIndex, shouldAbortPlayback]);
-
-  return {
-    displayedPhases,
-    markPhaseDrained: (id: string, signature: string) => setDrainedPhase({ id, signature })
-  };
-}
-
-function AiThinkingDots({ label }: { label: string }) {
-  return (
-    <span className="datahub-thinking-dots" role="status" aria-label={label}>
-      <span aria-hidden="true" />
-      <span aria-hidden="true" />
-      <span aria-hidden="true" />
-    </span>
-  );
-}
-
-function PhaseStreamingOutput({
-  phase,
-  onDrained
-}: {
-  phase: ThinkingPhase;
-  onDrained: (id: string, signature: string) => void;
-}) {
-  const messages = getPhaseStreamMessages(phase);
-  const signature = messages.join("\u001f");
-  const [completedCount, setCompletedCount] = useState(0);
-  const lastDrainedSignatureRef = useRef("");
-  const currentMessage = messages[completedCount];
-
-  useEffect(() => {
-    if (completedCount < messages.length || lastDrainedSignatureRef.current === signature) {
-      return;
-    }
-
-    lastDrainedSignatureRef.current = signature;
-    onDrained(phase.id, signature);
-  }, [completedCount, messages.length, onDrained, phase.id, signature]);
-
-  return (
-    <div className="datahub-step__stream">
-      <span className="datahub-step__stream-label" aria-hidden="true">实时输出</span>
-      <div className="datahub-step__stream-lines">
-        {messages.slice(0, completedCount).map((message, index) => (
-          <span className="datahub-step__stream-line datahub-step__stream-line--complete" key={`${index}-${message}`}>
-            {message}
-          </span>
-        ))}
-        {currentMessage ? (
-          <XsStreamingText
-            key={`${completedCount}-${currentMessage}`}
-            ariaLabel={`${phase.title}实时输出`}
-            className="datahub-step__stream-copy"
-            intervalMs={22}
-            isStreaming
-            onComplete={() => setCompletedCount((current) => Math.min(messages.length, current + 1))}
-            text={currentMessage}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function DataHubThinkingProcess({
-  phases,
-  isProcessing,
-  turnId,
-  onPlaybackChange
-}: {
-  phases: ThinkingPhase[];
-  isProcessing: boolean;
-  turnId: string;
-  onPlaybackChange: (turnId: string, activeTitle: string | undefined, isComplete: boolean) => void;
-}) {
-  const { displayedPhases, markPhaseDrained } = useThinkingPhasePlayback(phases, isProcessing);
-  const completedCount = displayedPhases.filter((phase) => phase.status === "complete").length;
-  const activePhase = displayedPhases.find((phase) => phase.status === "active");
-  const isPlaybackComplete = displayedPhases.every(
-    (phase) => phase.status === "complete" || phase.status === "error"
-  );
-
-  useEffect(() => {
-    onPlaybackChange(turnId, activePhase?.title, isPlaybackComplete);
-  }, [activePhase?.title, isPlaybackComplete, onPlaybackChange, turnId]);
-
-  return (
-    <div className={`datahub-thinking-panel${activePhase ? " datahub-thinking-panel--active" : ""}`}>
-      <div className="datahub-thinking-panel__head">
-        <div>
-          <strong>Agent 思考进度</strong>
-          <span>
-            {completedCount} / {displayedPhases.length} 已完成
-            {activePhase ? ` · 正在${activePhase.title}` : ""}
-          </span>
-        </div>
-        <Progress
-          aria-label={`Agent 思考进度 ${getPhasePercent(displayedPhases)}%`}
-          className="datahub-thinking-progress"
-          percent={getPhasePercent(displayedPhases)}
-          size="small"
-          showInfo={false}
-        />
-      </div>
-
-      <ol className="datahub-step-list datahub-step-list--condensed" aria-label="data-hub 问数步骤">
-        {displayedPhases.map((phase) => {
-          const Icon = phase.icon;
-          const meta = phaseStatusMeta[phase.status];
-          const visibleDetail = phase.details[0];
-          const extraDetails = phase.details.slice(1);
-          const showStaticDetails = phase.status === "complete" || phase.status === "error";
-
-          return (
-            <li key={phase.id} className={`datahub-step datahub-step--${phase.status}`}>
-              <span className="datahub-step__index" aria-hidden="true">
-                {phase.status === "complete" ? (
-                  <CheckCircle size={20} weight="fill" />
-                ) : (
-                  <Icon size={18} weight="bold" />
-                )}
-              </span>
-              <div className="datahub-step__content">
-                <div className="datahub-step__title">
-                  <strong>{phase.title}</strong>
-                  <Tag className={phase.status === "active" ? "datahub-step__tag--thinking" : ""} color={meta.color}>
-                    {meta.label}
-                    {phase.status === "active" ? <AiThinkingDots label={`AI 正在${phase.title}`} /> : null}
-                  </Tag>
-                </div>
-                {phase.status === "active" ? (
-                  <PhaseStreamingOutput phase={phase} onDrained={markPhaseDrained} />
-                ) : (
-                  <>
-                    <p>{phase.description}</p>
-                    {showStaticDetails && visibleDetail ? (
-                      <span className="datahub-step__hint">{visibleDetail}</span>
-                    ) : null}
-                  </>
-                )}
-                {showStaticDetails && extraDetails.length > 0 ? (
-                  <details className="datahub-step-details" open>
-                    <summary>
-                      <span>过程细节</span>
-                      <small>{extraDetails.length} 条</small>
-                    </summary>
-                    <div className="datahub-step-detail-list">
-                      {extraDetails.map((detail) => (
-                        <span key={detail}>{detail}</span>
-                      ))}
-                    </div>
-                  </details>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 function hasLegacyThinkingProcess(turn: DataHubAskTurn) {
   return Boolean(
     turn.decompose ||
@@ -885,55 +777,37 @@ function hasLegacyThinkingProcess(turn: DataHubAskTurn) {
   );
 }
 
-function DataHubNativeThinking({
+function DataHubAnswer({
   blocks,
-  isProcessing
+  hideMarkdownTables = false,
+  streaming = false
 }: {
   blocks: DataHubContentBlock[];
-  isProcessing: boolean;
+  hideMarkdownTables?: boolean;
+  streaming?: boolean;
 }) {
-  return (
-    <div className="datahub-native-thinking">
-      <div className="datahub-native-thinking__head">
-        <span className="datahub-native-thinking__icon" aria-hidden="true">
-          <Brain size={18} weight="bold" />
-        </span>
-        <div>
-          <strong>{isProcessing ? "Agent 正在思考" : "Agent 思考完成"}</strong>
-          <span>{blocks.length > 1 ? `${blocks.length} 个模型调用片段` : "真实流式思考记录"}</span>
-        </div>
-        {isProcessing ? <AiThinkingDots label="Agent 正在思考" /> : null}
-      </div>
-      <div className="datahub-native-thinking__blocks">
-        {blocks.map((block, index) => (
-          <article
-            className="datahub-native-thinking__block"
-            key={`${block.replyId || "reply"}-${block.modelCallIndex ?? "legacy"}-${index}`}
-          >
-            {block.modelCallIndex !== undefined ? (
-              <span className="datahub-native-thinking__call">第 {block.modelCallIndex} 次模型调用</span>
-            ) : null}
-            <XsSafeMarkdown content={block.content} />
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
+  const rendered = blocks
+    .map((block) => ({
+      ...block,
+      content: hideMarkdownTables ? stripMarkdownTables(block.content) : block.content
+    }))
+    .filter((block) => block.content.trim());
 
-function DataHubAnswer({ blocks }: { blocks: DataHubContentBlock[] }) {
-  if (blocks.length === 0) {
+  if (rendered.length === 0) {
     return null;
   }
 
   return (
-    <div className="datahub-answer" aria-label="正式回答">
-      {blocks.map((block, index) => (
+    <div
+      className={`datahub-answer${streaming ? " datahub-answer--streaming" : ""}`}
+      aria-label="正式回答"
+    >
+      {rendered.map((block, index) => (
         <article
           className="datahub-answer__block"
           key={`${block.replyId || "reply"}-${block.modelCallIndex ?? "legacy"}-${index}`}
         >
-          {blocks.length > 1 && block.modelCallIndex !== undefined ? (
+          {rendered.length > 1 && block.modelCallIndex !== undefined ? (
             <span className="datahub-answer__call">第 {block.modelCallIndex} 次模型调用</span>
           ) : null}
           <XsSafeMarkdown content={block.content} />
@@ -945,55 +819,67 @@ function DataHubAnswer({ blocks }: { blocks: DataHubContentBlock[] }) {
 
 function DataHubCitationList({
   citations,
-  onOpen
+  onOpen,
+  onCopyFragment
 }: {
   citations: DataHubCitationDocument[];
   onOpen: (citation: DataHubCitationDocument) => void;
+  onCopyFragment?: (text: string) => void;
 }) {
-  const titleId = useId();
-
   if (citations.length === 0) {
     return null;
   }
 
   return (
-    <section className="knowledge-citations" aria-labelledby={titleId}>
-      <div className="knowledge-citations__head">
-        <div>
-          <span className="knowledge-citations__eyebrow">可信来源</span>
-          <h3 id={titleId}>引用文档</h3>
+    <section className="knowledge-citations knowledge-citations--chips" aria-label="引用文档">
+      <div className="knowledge-citations__chips">
+        {citations.map((citation) => {
+          const title = citation.docName || citation.fileName || citation.docKey;
+          return (
+            <button
+              type="button"
+              className="knowledge-citation-chip"
+              key={`${citation.docId}::${citation.docKey}`}
+              aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}`}
+              disabled={!citation.sourceAvailable}
+              onClick={() => onOpen(citation)}
+            >
+              <FileText size={15} aria-hidden="true" />
+              <span>{title}</span>
+            </button>
+          );
+        })}
+      </div>
+      {citations.some((citation) => citation.fragments.length > 0) ? (
+        <div className="knowledge-citations__quotes">
+          {citations.flatMap((citation) =>
+            citation.fragments.map((fragment, index) => (
+              <blockquote key={`${citation.docId}-${index}`}>
+                <p>{fragment}</p>
+                <span className="knowledge-citations__quote-actions">
+                  <button
+                    type="button"
+                    className="analysis-icon-button"
+                    aria-label="复制原文"
+                    onClick={() => onCopyFragment?.(fragment)}
+                  >
+                    <CopySimple size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="analysis-icon-button"
+                    aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey}`}
+                    disabled={!citation.sourceAvailable}
+                    onClick={() => onOpen(citation)}
+                  >
+                    <ArrowSquareOut size={15} aria-hidden="true" />
+                  </button>
+                </span>
+              </blockquote>
+            ))
+          )}
         </div>
-        <span>{citations.length} 份</span>
-      </div>
-      <div className="knowledge-citations__list">
-        {citations.map((citation) => (
-          <article className="knowledge-citation" key={`${citation.docId}::${citation.docKey}`}>
-            <div className="knowledge-citation__title">
-              <span aria-hidden="true">
-                <FileText size={19} weight="duotone" />
-              </span>
-              <div>
-                <strong>{citation.docName || citation.fileName || citation.docKey}</strong>
-                <small>文档编号 {citation.docId}</small>
-              </div>
-              <Button
-                icon={<ArrowSquareOut size={17} />}
-                disabled={!citation.sourceAvailable}
-                onClick={() => onOpen(citation)}
-              >
-                {citation.sourceAvailable ? "打开原文" : "原文不可用"}
-              </Button>
-            </div>
-            {citation.fragments.length > 0 ? (
-              <div className="knowledge-citation__fragments">
-                {citation.fragments.map((fragment, index) => (
-                  <blockquote key={`${citation.docId}-${index}`}>{fragment}</blockquote>
-                ))}
-              </div>
-            ) : null}
-          </article>
-        ))}
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -1005,48 +891,25 @@ function DataHubDocumentLookupList({
   documents: DataHubDocumentLookupResult[];
   onOpen: (document: DataHubDocumentLookupResult) => void;
 }) {
-  const titleId = useId();
-
   if (documents.length === 0) {
     return null;
   }
 
   return (
-    <section className="document-lookup-results" aria-labelledby={titleId}>
-      <div className="document-lookup-results__head">
-        <div>
-          <span>已定位原文</span>
-          <h3 id={titleId}>匹配文档</h3>
-        </div>
-        <Tag color="blue">{documents.length} 份</Tag>
-      </div>
-      <div className="document-lookup-results__list">
+    <section className="document-lookup-results" aria-label="匹配文档">
+      <div className="document-lookup-results__list document-lookup-results__list--names">
         {documents.map((document) => (
-          <article
-            className="document-lookup-card"
+          <button
+            type="button"
+            className="document-lookup-name"
             key={`${String(document.docId)}::${document.docKey}`}
+            aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
+            disabled={document.sourceAvailable === false}
+            onClick={() => onOpen(document)}
           >
-            <span className="document-lookup-card__icon" aria-hidden="true">
-              <FileText size={21} />
-            </span>
-            <div className="document-lookup-card__body">
-              <strong>{document.title}</strong>
-              <div className="document-lookup-card__meta">
-                {document.contentType ? <span>{document.contentType}</span> : null}
-                {document.docStatus ? <span>{document.docStatus}</span> : null}
-                <span>文档编号 {String(document.docId)}</span>
-              </div>
-              {document.excerpt ? <p>{document.excerpt}</p> : null}
-            </div>
-            <Button
-              icon={<ArrowSquareOut size={17} />}
-              aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
-              disabled={document.sourceAvailable === false}
-              onClick={() => onOpen(document)}
-            >
-              {document.sourceAvailable === false ? "原文不可用" : "打开原文"}
-            </Button>
-          </article>
+            <FileText size={16} aria-hidden="true" />
+            <span>{document.title}</span>
+          </button>
         ))}
       </div>
     </section>
@@ -1077,7 +940,7 @@ function DataHubResultLoading({
         </span>
         <div>
           <strong>{title || `AI 正在生成${taskName}结果`}</strong>
-          <span>{description || (activePhase ? `当前步骤：${activePhase}` : `正在连接 data-hub ${taskName} Agent`)}</span>
+          <span>{description || (activePhase ? `当前步骤：${activePhase}` : `正在${taskName}`)}</span>
         </div>
       </div>
       <div className="datahub-result-loading__skeleton" aria-hidden="true">
@@ -1214,14 +1077,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const cancelAskDataRun = useUiStore((state) => state.cancelAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
   const releaseAnalysisTransientBuffers = useUiStore((state) => state.releaseAnalysisTransientBuffers);
-  const [isReasoningVisible, setIsReasoningVisible] = useState(true);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [composerMode, setComposerMode] = useState<DataHubChatMode>(mode);
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [selectedQuickQuestion, setSelectedQuickQuestion] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
   const [favoriteStates, setFavoriteStates] = useState<Record<string, AskFavoriteUiState>>({});
-  const [thinkingPlaybackStates, setThinkingPlaybackStates] = useState<Record<string, ThinkingPlaybackState>>({});
   const [isScrollToBottomVisible, setIsScrollToBottomVisible] = useState(false);
   const voiceInput = useVoiceInput({
     onAudioReady: async (audio, signal) => {
@@ -1309,20 +1170,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const scrollSignature = visibleTurns
     .map((turn) => `${turn.id}:${turn.status}:${turn.events.length}:${turn.error}`)
     .join("|");
-  const handleThinkingPlaybackChange = useCallback(
-    (turnId: string, activeTitle: string | undefined, isComplete: boolean) => {
-      setThinkingPlaybackStates((current) => {
-        const previous = current[turnId];
-
-        if (previous && previous.activeTitle === activeTitle && previous.isComplete === isComplete) {
-          return current;
-        }
-
-        return { ...current, [turnId]: { activeTitle, isComplete } };
-      });
-    },
-    []
-  );
 
   useEffect(() => {
     if (!hasConversation) {
@@ -1403,7 +1250,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
       cancelSmoothScroll(smoothScrollHandleRef.current);
     };
-  }, [hasConversation, isReasoningVisible, scheduleAutoScrollToBottom, scrollSignature]);
+  }, [hasConversation, scheduleAutoScrollToBottom, scrollSignature]);
 
   useEffect(() => {
     const workspace = workspaceRef.current;
@@ -1497,27 +1344,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       handle: smoothScrollHandleRef.current
     });
     lastWorkspaceScrollTopRef.current = workspace.scrollTop;
-  };
-
-  const handleToggleReasoning = () => {
-    setIsReasoningVisible((current) => {
-      const next = !current;
-      setWorkflowStatus(next ? "已展开分析过程" : "已收起分析过程");
-      return next;
-    });
-  };
-
-  const handleExport = (tables: DataHubTableResult[]) => {
-    const rowCount = countDataHubTableRows(tables);
-
-    if (rowCount === 0) {
-      setWorkflowStatus("暂无可导出的问数表格");
-      return;
-    }
-
-    const safeQuestion = sanitizeCsvBasename(lastVisibleTurn?.question || "问数结果") || "问数结果";
-    downloadCsv(`${safeQuestion}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv(tables));
-    setWorkflowStatus(`已导出 ${rowCount} 行问数结果`);
   };
 
   const ensureFavoriteAsset = async (
@@ -1628,7 +1454,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
     chartPlanInFlightRef.current.add(turnId);
     setAiChartStates((current) => ({ ...current, [turnId]: { status: "loading" } }));
-    setWorkflowStatus("DataHub 正在使用编排 Agent 模型规划图表");
+    setWorkflowStatus("正在规划图表");
 
     try {
       const chartTables = resolveAiChartTables({ question, tables, answer });
@@ -1638,7 +1464,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       if (!plan.chartable || !spec) {
         const message = plan.reason || "当前结果暂不适合生成图表。";
         setAiChartStates((current) => ({ ...current, [turnId]: { status: "not-chartable", message } }));
-        setWorkflowStatus(message);
+        /* 完整理由由结果区的图表卡片承载，状态条只报结论，不复述整段判断 */
+        setWorkflowStatus("暂不适合生成图表");
         return;
       }
 
@@ -1650,7 +1477,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI 图表判断失败";
       setAiChartStates((current) => ({ ...current, [turnId]: { status: "error", message } }));
-      setWorkflowStatus(message);
+      setWorkflowStatus("图表生成失败");
     } finally {
       chartPlanInFlightRef.current.delete(turnId);
     }
@@ -1683,11 +1510,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         turn.error,
         { sessionId: turn.sessionId, chatId: turn.chatId }
       );
-      const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
-      if (hasLegacyProcess && thinkingPlaybackStates[turn.id]?.isComplete !== true) {
-        continue;
-      }
-
       const tables = isAskMode || isAgentMode
         ? getDataHubSingleQueryTableResults(
             projectDataHubExecutionEvents(turn.events, {
@@ -1715,7 +1537,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     isAskMode,
     supportsTables,
     taskName,
-    thinkingPlaybackStates,
     visibleTurns
   ]);
 
@@ -1782,18 +1603,16 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
   const askDataStatusText = (() => {
     if (isLoadingHistory) {
-      return "正在从 data-hub 加载历史对话";
+      return "正在加载历史对话";
     }
     if (askDataStatus === "streaming") {
-      return `正在调用 data-hub ${taskName}，已接收 ${askDataEvents.length} 个过程事件`;
+      return `正在${taskName}`;
     }
     if (askDataStatus === "done") {
-      return askDataEvents.length > 0
-        ? `data-hub ${taskName}完成，共接收 ${askDataEvents.length} 个过程事件`
-        : `data-hub ${taskName}已提交`;
+      return `${taskName}已完成`;
     }
     if (askDataStatus === "error") {
-      return `data-hub ${taskName}失败：${askDataError || "未知错误"}`;
+      return `${taskName}失败：${askDataError || "未知错误"}`;
     }
     if (askDataStatus === "cancelled") {
       return `已停止本次${taskName}生成`;
@@ -1847,7 +1666,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       if (access.revoke) {
         window.setTimeout(access.revoke, 60_000);
       }
-      setWorkflowStatus("已通过 data-hub 鉴权打开原文");
+      setWorkflowStatus("已打开原文");
     } catch (error) {
       previewWindow.close();
       setWorkflowStatus(error instanceof Error ? `原文打开失败：${error.message}` : "原文打开失败，请稍后重试");
@@ -1910,79 +1729,64 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     : undefined,
                 terminalTimestamp: turn.endedAt
               });
-              const hasNativeAgentScope = turn.events.some(
-                (event) =>
-                  event.type === "agent_start" ||
-                  event.type === "subagent_exposed" ||
-                  Boolean(event.agentName || event.parentSessionId) ||
-                  event.modelCallIndex !== undefined
-              );
-              const shouldShowExecutionPanel =
-                isAgentMode || isDocumentLookupMode || hasNativeAgentScope;
+              const shouldShowExecutionPanel = isAgentMode;
               const expandExecutionPanelByDefault = shouldShowExecutionPanel;
               const preferDirectMainExecution = !isAgentMode;
-              const documentLookupResults = getDataHubDocumentLookupResults(turnAsk.done);
-              const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
-              const thinkingPhases = hasLegacyProcess ? buildThinkingPhases(turnAsk, displayStatus) : [];
-              const playbackState = thinkingPlaybackStates[turn.id];
-              const chartTables =
-                isAskMode
-                  ? getDataHubSingleQueryTableResults(executionProjection, true)
-                  : isAgentMode
-                    ? getDataHubSingleQueryTableResults(executionProjection)
+              const lookupFromDone = getDataHubDocumentLookupResults(turnAsk.done);
+              const documentLookupResults =
+                lookupFromDone.length > 0
+                  ? lookupFromDone
+                  : isDocumentLookupMode
+                    ? citationsAsLookupResults(turnAsk.citationDocuments)
                     : [];
-              const visibleTables = isAskMode
-                ? (chartTables.length > 0 ? chartTables : turnAsk.tableResults)
-                : turnAsk.tableResults;
+              const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
+              // 运行中即使编排事件还没到，也先按问数固定阶段链展示（首阶段 active），
+              // 否则用户在首个事件到达前看不到任何“正在跑”的证据。
+              const thinkingPhases =
+                !isAgentMode && (hasLegacyProcess || displayStatus === "streaming")
+                  ? buildThinkingPhases(turnAsk, displayStatus)
+                  : [];
+              const askTables = isAskMode || isAgentMode
+                ? getDataHubAskTableResults(executionProjection, isAskMode)
+                : [];
+              const visibleTables = askTables.length > 0 ? askTables : turnAsk.tableResults;
+              const childAnswerBlocks = isAgentMode
+                ? getDataHubChildAnswerBlocks(executionProjection).filter((block) =>
+                    !turnAsk.answerBlocks.some(
+                      (answer) =>
+                        answer.content.includes(block.content) ||
+                        block.content.includes(answer.content)
+                    )
+                  )
+                : [];
+              const visibleAnswerBlocks = [...turnAsk.answerBlocks, ...childAnswerBlocks];
               const hasRenderableResult = Boolean(
-                (!isDocumentLookupMode && turnAsk.answerBlocks.length) ||
+                (!isDocumentLookupMode && visibleAnswerBlocks.length) ||
                   (supportsTables && visibleTables.length) ||
                   (supportsCitations && turnAsk.citationDocuments.length) ||
                   (isDocumentLookupMode && documentLookupResults.length)
               );
-              const isResultReady = hasLegacyProcess
-                ? playbackState?.isComplete === true
-                : hasRenderableResult || ["done", "error", "cancelled"].includes(displayStatus);
-              const isWaitingForPlayback =
-                !isResultReady && (displayStatus === "streaming" || displayStatus === "done");
+              const isResultReady =
+                hasRenderableResult || ["done", "error", "cancelled"].includes(displayStatus);
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
               const isHistoryLoadingTurn = isLoadingHistory && isLatestTurn;
-              const hasReasoning =
-                !isHistoryLoadingTurn &&
-                !isAgentMode &&
-                Boolean(
-                  hasLegacyProcess ||
-                    ((!shouldShowExecutionPanel || !expandExecutionPanelByDefault) &&
-                      turnAsk.thinkingBlocks.length) ||
-                    turnAsk.infoMessages.length ||
-                    (supportsTables && turnAsk.dataSources.length)
-                );
-              const statusTitle =
+              const taskNodes = thinkingPhases
+                .filter((phase) => phase.status === "complete" || phase.status === "active")
+                .map((phase) => phase.title);
+              const taskStatus =
                 isHistoryLoadingTurn
                   ? "正在加载历史对话"
-                  : displayStatus === "streaming" || (displayStatus === "done" && !isResultReady)
-                  ? `正在${taskName}`
-                  : displayStatus === "done"
-                    ? `${taskName}完成`
+                  : displayStatus === "streaming"
+                    ? `正在${taskName}`
                     : displayStatus === "error"
                       ? `${taskName}失败`
                       : displayStatus === "cancelled"
                         ? "已停止生成"
-                        : `已完成${taskName}`;
-              const statusDescription =
-                  isHistoryLoadingTurn
-                    ? "正在读取已保存的消息、过程与结果，请稍候。"
-                    : displayStatus === "idle"
-                    ? `请发起${taskName}，星数会同步展示 data-hub 返回的真实过程与结果。`
-                    : displayStatus === "done" && !isResultReady
-                      ? `数据已返回，正在完成${taskName}过程并整理结果。`
-                    : displayStatus === "cancelled"
-                      ? `本次${taskName}已停止，你可以修改问题后重新发送。`
-                    : turnAsk.error?.message ||
-                      (turnAsk.done?.failed ? turnAsk.done.summary : undefined) ||
-                      (displayStatus === "done"
-                        ? `data-hub ${taskName}结果已整理完成。`
-                        : `正在连接 data-hub ${taskName} Agent，请稍候。`);
+                        : `${taskName}已完成`;
+              const durationMs =
+                turn.startedAt && turn.endedAt
+                  ? turn.endedAt - turn.startedAt
+                  : turnAsk.done?.totalDurationMs;
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const queryAssetTargets =
                 isAskMode || isAgentMode
@@ -2010,14 +1814,23 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const materializationQuestion = canMaterializeSingleQuery
                 ? recoverySubQuestions[0] || turn.question
                 : undefined;
-              const isGeneratingAiChart = aiChartState.status === "loading";
               const resultStageState = isResultReady
                 ? hasRenderableResult
                   ? "ready"
-                  : "empty"
-                : isWaitingForPlayback
+                  : displayStatus === "streaming"
+                    ? "loading"
+                    : "empty"
+                : displayStatus === "streaming"
                   ? "loading"
                   : "empty";
+              const answerText = stripMarkdownTables(
+                [
+                  turnAsk.assistantContent || turnAsk.done?.summary || "",
+                  ...childAnswerBlocks.map((block) => block.content)
+                ]
+                  .filter(Boolean)
+                  .join("\n\n")
+              );
 
               return (
                 <div
@@ -2029,6 +1842,38 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   <section className="analysis-question" aria-label="用户提问">
                     <div>
                       <strong>{turn.question}</strong>
+                      <div className="analysis-question__actions">
+                        <button
+                          type="button"
+                          className="analysis-icon-button"
+                          aria-label="复制问题"
+                          onClick={async () => {
+                            const copied = await copyText(turn.question);
+                            setWorkflowStatus(copied ? "已复制问题" : "复制问题失败，请稍后重试");
+                          }}
+                        >
+                          <CopySimple size={16} aria-hidden="true" />
+                        </button>
+                        {queryAssetFeatureEnabled && (isAskMode || isAgentMode) && isResultReady ? (
+                          <DataHubQueryAssetActions
+                            items={queryAssetActionItems}
+                            onFavorite={(target) =>
+                              void handleFavoriteQuestion(
+                                turn.id,
+                                turnAsk,
+                                target,
+                                queryAssetTargets.length === 1,
+                                materializationQuestion
+                              )
+                            }
+                            onOpenDashboard={(asset) =>
+                              navigate(
+                                `/dashboard-editor?source=favorites&asset=${encodeURIComponent(asset.id)}&returnTo=${encodeURIComponent(analysisReturnPath)}`
+                              )
+                            }
+                          />
+                        ) : null}
+                      </div>
                     </div>
                     <img src={userAvatar} alt="" width={53} height={56} />
                   </section>
@@ -2036,21 +1881,14 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   <section className="analysis-response" aria-label="星数分析结果">
                     <img className="analysis-response__mark" src={assistantMark} alt="" width={160} height={160} />
                     <article className="xs-card analysis-card">
-                      <header className="analysis-card__head">
-                        <div className="analysis-card__status-copy" key={`${turn.id}:${statusTitle}`}>
-                          <h2>{statusTitle}</h2>
-                          <p>{statusDescription}</p>
-                        </div>
-                        {hasReasoning ? (
-                          <Button
-                            aria-label={isReasoningVisible ? "收起分析过程" : "展开分析过程"}
-                            aria-expanded={isReasoningVisible}
-                            aria-controls={`analysis-reasoning-${turn.id}`}
-                            icon={isReasoningVisible ? <CaretUp size={18} /> : <CaretDown size={18} />}
-                            onClick={handleToggleReasoning}
-                          />
-                        ) : null}
-                      </header>
+                      <AnalysisTaskDynamics
+                        nodes={taskNodes}
+                        durationMs={durationMs}
+                        status={taskStatus}
+                        phases={thinkingPhases}
+                        running={displayStatus === "streaming"}
+                        startedAt={turn.startedAt}
+                      />
                       {isLatestTurn && (askDataStatusText || workflowStatus) ? (
                         <div className="sr-only" role="status">
                           {[askDataStatusText, workflowStatus].filter(Boolean).join("，")}
@@ -2060,7 +1898,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       {shouldShowExecutionPanel && !isHistoryLoadingTurn ? (
                         <DataHubExecutionPanel
                           projection={executionProjection}
-                          title={isAgentMode ? "智能编排执行" : `${taskName} Agent 执行`}
+                          title="智能编排执行"
                           defaultExpanded={expandExecutionPanelByDefault}
                           preferDirectMainExecution={preferDirectMainExecution}
                           showMainDocumentBlocks={isAgentMode || isKnowledgeMode}
@@ -2075,29 +1913,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         />
                       ) : null}
 
-                      {hasReasoning ? (
-                        <section
-                          className="reasoning-block"
-                          id={`analysis-reasoning-${turn.id}`}
-                          aria-label="思考过程"
-                          hidden={!isReasoningVisible}
-                        >
-                          <h2>{hasLegacyProcess ? "问数过程（5 步）" : `${taskName}思考过程`}</h2>
-                          {hasLegacyProcess ? (
-                            <DataHubThinkingProcess
-                              phases={thinkingPhases}
-                              isProcessing={displayStatus === "idle" || displayStatus === "streaming"}
-                              turnId={turn.id}
-                              onPlaybackChange={handleThinkingPlaybackChange}
-                            />
-                          ) : turnAsk.thinkingBlocks.length > 0 ? (
-                            <DataHubNativeThinking
-                              blocks={turnAsk.thinkingBlocks}
-                              isProcessing={displayStatus === "streaming"}
-                            />
-                          ) : null}
-
-                          {supportsTables && turnAsk.dataSources.length > 0 ? (
+                      <section className="analysis-output" aria-label="分析结果">
+                        {isAgentMode &&
+                        (hasRenderableResult ||
+                          displayStatus === "done" ||
+                          displayStatus === "error" ||
+                          displayStatus === "cancelled") ? (
+                          <div className="section-title-row">
+                            <h2>{modeMeta.resultTitle}</h2>
+                          </div>
+                        ) : null}
+                        <div className="analysis-result-stage" data-state={resultStageState}>
+                          {supportsTables && isResultReady && turnAsk.dataSources.length > 0 ? (
                             <div className="datahub-data-sources" aria-label="已选择数据源">
                               <span>已选择数据源</span>
                               <div>
@@ -2109,67 +1936,45 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               </div>
                             </div>
                           ) : null}
-
-                          {turnAsk.infoMessages.length > 0 ? (
-                            <div className="datahub-info-list">
-                              {turnAsk.infoMessages.map((message) => (
-                                <p key={message}>{message}</p>
-                              ))}
-                            </div>
+                          {isKnowledgeMode && isResultReady && turnAsk.citationDocuments[0] ? (
+                            <p className="knowledge-source-line">
+                              {citationSourceLabel(turnAsk.citationDocuments[0])}
+                            </p>
                           ) : null}
-                        </section>
-                      ) : null}
-
-                      <section className="analysis-output" aria-label="分析结果">
-                        <div className="section-title-row">
-                          <h2>{modeMeta.resultTitle}</h2>
-                          {isAskMode || isAgentMode ? (
-                            <div className="analysis-output__actions">
-                            {queryAssetFeatureEnabled && isResultReady ? (
-                              <DataHubQueryAssetActions
-                                items={queryAssetActionItems}
-                                onFavorite={(target) =>
-                                  void handleFavoriteQuestion(
-                                    turn.id,
-                                    turnAsk,
-                                    target,
-                                    queryAssetTargets.length === 1,
-                                    materializationQuestion
-                                  )
-                                }
-                                onOpenDashboard={(asset) =>
-                                  navigate(
-                                    `/dashboard-editor?source=favorites&asset=${encodeURIComponent(asset.id)}&returnTo=${encodeURIComponent(analysisReturnPath)}`
-                                  )
-                                }
-                              />
-                            ) : null}
-                            {isResultReady && chartTables.length > 0 ? (
-                              <Button
-                                icon={<MagicWand size={18} />}
-                                loading={isGeneratingAiChart}
-                                onClick={() => handleGenerateAiChart(turn.id, turn.question, chartTables, turnAsk.assistantContent)}
-                              >
-                                AI 生成图表
-                              </Button>
-                            ) : null}
-                            {isAskMode &&
-                            isResultReady &&
-                            isLatestTurn &&
-                            visibleTables.length > 0 ? (
-                              <Button icon={<DownloadSimple size={18} />} onClick={() => handleExport(visibleTables)}>
-                                导出结果
-                              </Button>
-                            ) : null}
-                            </div>
+                          {isKnowledgeMode && isResultReady && turnAsk.citationDocuments.length > 0 ? (
+                            <DataHubCitationList
+                              citations={turnAsk.citationDocuments}
+                              onOpen={(citation) => void handleOpenCitation(citation)}
+                              onCopyFragment={async (text) => {
+                                const copied = await copyText(text);
+                                setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
+                              }}
+                            />
                           ) : null}
-                        </div>
-                        <div className="analysis-result-stage" data-state={resultStageState}>
                           {!isDocumentLookupMode &&
                           isResultReady &&
-                          turnAsk.answerBlocks.length > 0 &&
-                          Boolean(turnAsk.done?.summary?.trim() || !preferDirectMainExecution) ? (
-                            <DataHubAnswer blocks={turnAsk.answerBlocks} />
+                          visibleAnswerBlocks.length > 0 ? (
+                            <div className="analysis-answer-block">
+                              {isKnowledgeMode ? <p className="knowledge-summary-label">总结</p> : null}
+                              <DataHubAnswer
+                                blocks={visibleAnswerBlocks}
+                                hideMarkdownTables={visibleTables.length > 0}
+                                streaming={displayStatus === "streaming"}
+                              />
+                              {answerText ? (
+                                <button
+                                  type="button"
+                                  className="analysis-icon-button"
+                                  aria-label="复制回答"
+                                  onClick={async () => {
+                                    const copied = await copyText(answerText);
+                                    setWorkflowStatus(copied ? "已复制回答" : "复制回答失败，请稍后重试");
+                                  }}
+                                >
+                                  <CopySimple size={16} aria-hidden="true" />
+                                </button>
+                              ) : null}
+                            </div>
                           ) : null}
                           {isResultReady && aiChartState.status !== "idle" ? (
                             <AiChartSuggestionCard
@@ -2180,17 +1985,25 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           {supportsTables && isResultReady && visibleTables.length > 0 ? (
                             <div className="analysis-output__tables">
                               {visibleTables.map((table) => (
-                                <DataHubResultTable table={table} key={table.tableIndex} />
+                                <DataHubResultTable
+                                  table={table}
+                                  key={table.tableIndex}
+                                  onStatus={setWorkflowStatus}
+                                />
                               ))}
                             </div>
                           ) : null}
                           {supportsCitations &&
+                          !isKnowledgeMode &&
                           isResultReady &&
-                          turnAsk.citationDocuments.length > 0 &&
-                          turnAsk.done?.askKnowledge !== true ? (
+                          turnAsk.citationDocuments.length > 0 ? (
                             <DataHubCitationList
                               citations={turnAsk.citationDocuments}
                               onOpen={(citation) => void handleOpenCitation(citation)}
+                              onCopyFragment={async (text) => {
+                                const copied = await copyText(text);
+                                setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
+                              }}
                             />
                           ) : null}
                           {isDocumentLookupMode && isResultReady && documentLookupResults.length > 0 ? (
@@ -2199,9 +2012,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               onOpen={(document) => void handleOpenDocumentLookupResult(document)}
                             />
                           ) : null}
-                          {isWaitingForPlayback ? (
+                          {displayStatus === "streaming" && !hasRenderableResult ? (
                             <DataHubResultLoading
-                              activePhase={playbackState?.activeTitle}
                               taskName={taskName}
                               title={isHistoryLoadingTurn ? "正在加载历史对话" : undefined}
                               description={isHistoryLoadingTurn ? "历史内容加载完成后会在当前页面直接显示。" : undefined}
@@ -2250,7 +2062,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               <h1 id="analysis-empty-title">
                 {modeMeta.emptyTitle}
               </h1>
-              <p>{modeMeta.emptyDescription}</p>
+              {modeMeta.emptyDescription ? <p>{modeMeta.emptyDescription}</p> : null}
             </div>
             <div className="analysis-empty-state__prompts" aria-label="快捷问题">
               {pageQuickQuestions.map((item, index) => (
@@ -2291,6 +2103,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           onChange={setFollowUpDraft}
           onSubmit={handleFollowUp}
           submitOnEnter
+          placeholder={analysisModeMeta[composerMode].placeholder}
           onVoice={() => {
             setWorkflowStatus(voiceInput.state === "recording" ? "正在转写语音" : "正在听取语音");
             voiceInput.toggle();
@@ -2306,11 +2119,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           onModelModeChange={setComposerMode}
         />
         <div className="analysis-composer__status-slot">
-          {workflowStatus ? (
-            <div className="analysis-composer__status" role="status">
-              {workflowStatus}
-            </div>
-          ) : null}
+          <XsStatusBar
+            tone={askDataStatus === "streaming" ? "loading" : "info"}
+            spinner={false}
+            message={workflowStatus}
+            transitionKey={workflowStatus}
+          />
         </div>
       </div>
     </PageFrame>

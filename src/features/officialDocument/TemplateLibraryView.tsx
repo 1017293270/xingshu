@@ -101,7 +101,6 @@ export function TemplateLibraryView() {
       {operationStatus ? (
         <XsStatusBar
           tone={operationTone}
-          label="操作"
           message={operationStatus}
           transitionKey={`${operationTone}:${operationStatus}`}
         />

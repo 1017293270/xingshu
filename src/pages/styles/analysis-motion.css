@@ -9,6 +9,7 @@
   contain-intrinsic-block-size: auto 720px;
 }
 
+.analysis-task-dynamics,
 .analysis-card__status-copy,
 .reasoning-block:not([hidden]),
 .analysis-result-stage > *,
@@ -623,7 +624,7 @@
 }
 
 .datahub-empty-state--error {
-  color: #b42318;
+  color: var(--xs-danger-ink);
   border-color: #ffd4cf;
   background: #fff7f6;
 }
@@ -671,6 +672,198 @@
   .document-lookup-card .ant-btn {
     width: 100%;
     margin-left: 52px;
+  }
+}
+
+
+/* ---------- 问数运行态：实时编排轨 ----------
+   运行中才挂载：脉冲点 + 走秒 + 阶段链 + 最新动作四层，
+   都由真实编排事件驱动；结束后整块换成一行摘要（.analysis-task-dynamics）。 */
+.analysis-live {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  animation: analysis-state-in var(--xs-motion-base) var(--xs-motion-ease-out) backwards;
+}
+
+.analysis-live__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* 复用全站唯一的加载脉冲节拍（同时继承其 prefers-reduced-motion 豁免） */
+.analysis-live__pulse {
+  color: var(--xs-primary);
+}
+
+.analysis-live__status {
+  color: var(--xs-text-2);
+  font-weight: 600;
+}
+
+.analysis-live__timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-live__count {
+  padding: 1px 7px;
+  border-radius: 6px;
+  color: var(--xs-info-ink);
+  background: var(--xs-info-soft);
+  font-size: var(--xs-fs-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-live__rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-live__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 5px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+/* 连接线：流程走到本阶段时从左向右填满，这一下是“进度真的动了”的主证据 */
+.analysis-live__step + .analysis-live__step::before {
+  width: 16px;
+  height: 1px;
+  margin-right: 3px;
+  content: "";
+  background-color: var(--xs-border-strong);
+  background-image: linear-gradient(90deg, var(--xs-primary), var(--xs-cyan));
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  transition: background-size var(--xs-motion-slow) var(--xs-motion-ease-out);
+}
+
+.analysis-live__step[data-state="complete"] + .analysis-live__step::before,
+.analysis-live__step[data-state="active"]::before,
+.analysis-live__step[data-state="error"]::before {
+  background-size: 100% 100%;
+}
+
+.analysis-live__step-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--xs-text-3);
+  background: #f0f5fc;
+  transition:
+    color var(--xs-motion-state) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.analysis-live__step[data-state="pending"] {
+  opacity: 0.6;
+}
+
+.analysis-live__step[data-state="active"] {
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
+}
+
+.analysis-live__step[data-state="active"] .analysis-live__step-mark {
+  position: relative;
+  isolation: isolate;
+  color: #fff;
+  background: var(--xs-primary);
+}
+
+/* 当前阶段光环：与编排面板同一组呼吸参数 */
+.analysis-live__step[data-state="active"] .analysis-live__step-mark::before {
+  position: absolute;
+  z-index: -1;
+  inset: -5px;
+  content: "";
+  border: 1px solid rgba(22, 119, 255, 0.42);
+  border-radius: 9px;
+  animation: datahub-thinking-halo var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
+}
+
+.analysis-live__step[data-state="complete"] {
+  color: var(--xs-text-2);
+}
+
+.analysis-live__step[data-state="complete"] .analysis-live__step-mark {
+  color: var(--xs-primary-2);
+  background: #e6f1ff;
+  animation: datahub-phase-complete var(--xs-motion-slow) var(--xs-motion-ease-spring) both;
+}
+
+.analysis-live__step[data-state="error"] {
+  color: var(--xs-danger-ink);
+}
+
+.analysis-live__step[data-state="error"] .analysis-live__step-mark {
+  color: var(--xs-danger-ink);
+  background: var(--xs-danger-soft);
+}
+
+/* 最新动作：内容变化时按 key 重挂载，换行即换一次淡入 */
+.analysis-live__detail {
+  overflow: hidden;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: analysis-state-in var(--xs-motion-base) var(--xs-motion-ease-out) backwards;
+}
+
+/* 流式回答：末段落尾部留一个呼吸光标，表示这段话还在写 */
+.datahub-answer--streaming {
+  border-color: #bcd8ff;
+}
+
+.datahub-answer--streaming .datahub-answer__block:last-child .xs-safe-markdown > p:last-child::after {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 4px;
+  content: "";
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: var(--xs-primary);
+  animation: analysis-caret var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
+}
+
+@keyframes analysis-caret {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+
+  50% {
+    opacity: 1;
   }
 }
 

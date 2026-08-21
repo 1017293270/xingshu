@@ -595,4 +595,46 @@ describe("DataHubExecutionPanel", () => {
       screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")
     ).not.toBeInTheDocument();
   });
+
+  it("does not render an empty ReAct timeline when the run only has a DAG", () => {
+    const dagEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "编排智能体",
+        sessionId: "dag-main",
+        chatId: "dag-chat"
+      },
+      {
+        type: "subagent_exposed",
+        agentName: "查询合同设备清单",
+        sessionId: "dag-child",
+        globalSessionId: "dag-main",
+        parentSessionId: "dag-main",
+        chatId: "dag-chat",
+        content: {
+          sessionId: "dag-child",
+          label: "查询合同设备清单"
+        }
+      },
+      {
+        type: "text",
+        agentName: "编排智能体",
+        sessionId: "dag-main",
+        chatId: "dag-chat",
+        content: "我来帮您查询相关设备清单。"
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(dagEvents, {
+      mainSessionId: "dag-main",
+      fallbackAgentName: "编排智能体"
+    });
+
+    render(<DataHubExecutionPanel projection={projection} />);
+
+    expect(screen.getByRole("button", { name: "打开 查询合同设备清单执行详情" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "编排执行轨迹" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("本次响应没有独立的路由、ReAct 或工具调用事件。")
+    ).not.toBeInTheDocument();
+  });
 });

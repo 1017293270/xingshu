@@ -506,14 +506,13 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
             {operationStatus ? (
               <XsStatusBar
                 tone={operationTone}
-                label="操作"
                 message={operationStatus}
                 transitionKey={`${operationTone}:${operationStatus}`}
               />
             ) : null}
 
             {template.status === "ANALYZING" || analysisQuery.isFetching ? (
-              <div className="official-document-analysis__loading" role="status">正在分析模板结构…</div>
+              <XsStatusBar tone="loading" message="正在分析模板结构" />
             ) : null}
 
             <CalibrationPanel

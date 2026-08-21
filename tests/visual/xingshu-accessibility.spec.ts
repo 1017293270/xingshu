@@ -42,8 +42,8 @@ const accessibilityRoutes: AccessibilityRoute[] = [
     path: "/dashboard",
     authenticated: true,
     ready: async (page) => {
-      await expect(page.getByRole("heading", { name: "大屏库", level: 1 })).toBeVisible();
-      await expect(page.getByRole("region", { name: "大屏库空状态" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "看板广场", level: 1 })).toBeVisible();
+      await expect(page.getByRole("region", { name: "看板广场空状态" })).toBeVisible();
     }
   },
   {

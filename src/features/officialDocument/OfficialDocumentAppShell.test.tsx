@@ -70,17 +70,15 @@ describe("OfficialDocumentAppShell", () => {
     expect(within(navigation).getByRole("link", { name: /模板库/ })).not.toHaveAttribute("aria-current");
   });
 
-  it("identifies the workspace with the same app icon as the home app card", () => {
+  it("identifies the workspace with text only, no app-card gradient mark", () => {
     renderShell("/writing/templates");
 
     const heading = screen.getByRole("heading", { name: "公文写作" });
     const identity = heading.closest(".official-document-rail__app");
     expect(identity).not.toBeNull();
-    /* 图标是装饰：名字由 h1 承担，读屏不该念两遍 */
-    const mark = identity!.querySelector("img");
-    expect(mark).toHaveAttribute("alt", "");
-    expect(mark).toHaveAttribute("data-icon-source", "xingshu-home-apps-image2-v1");
     expect(identity).toHaveTextContent("套模板 · 绑数据 · 出定稿");
+    /* 渐变应用图标只属于首页应用卡那一层，不和导航的线性图标同处一列 */
+    expect(identity!.querySelector("img")).toBeNull();
   });
 
   it("shows the library context without a redundant page-header shortcut", async () => {
@@ -93,7 +91,7 @@ describe("OfficialDocumentAppShell", () => {
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("模板库");
     });
-    expect(screen.getByText("Agent 应用")).toBeInTheDocument();
+    expect(screen.queryByText("Agent 应用")).not.toBeInTheDocument();
   });
 
   it("updates the top-bar context for template structure and draft canvas", async () => {

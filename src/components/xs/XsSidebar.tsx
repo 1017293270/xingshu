@@ -1,6 +1,4 @@
 import {
-  CaretLeft,
-  CaretRight,
   CaretUp,
   PlusCircle,
   SquaresFour
@@ -19,11 +17,10 @@ const MORE_MENU_KEY = "more";
 
 type XsSidebarProps = {
   collapsed: boolean;
-  onToggleCollapsed: () => void;
   onNewChat: () => void;
 };
 
-export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebarProps) {
+export function XsSidebar({ collapsed, onNewChat }: XsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { accountMenuItems, handleAccountMenuClick, username, userRole } = useXsAccountMenu();
@@ -45,25 +42,27 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
     return match ? [match.to] : [];
   }, [location.pathname]);
 
+  const isNewChatCurrent = selectedKeys.length === 0;
+
   const menuItems: MenuProps["items"] = useMemo(
     () => [
       ...primaryNavigation.map((item) => {
         const Icon = item.icon;
         return {
           key: item.to,
-          icon: <Icon size={20} weight="regular" />,
+          icon: <Icon size={18} weight="regular" />,
           label: <Link to={item.to}>{item.label}</Link>
         };
       }),
       {
         key: MORE_MENU_KEY,
-        icon: <SquaresFour size={20} weight="regular" />,
+        icon: <SquaresFour size={18} weight="regular" />,
         label: "更多",
         children: secondaryNavigation.map((item) => {
           const Icon = item.icon;
           return {
             key: item.to,
-            icon: <Icon size={20} weight="regular" />,
+            icon: <Icon size={18} weight="regular" />,
             label: <Link to={item.to}>{item.label}</Link>
           };
         })
@@ -98,20 +97,12 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
     >
       <div className="xs-sidebar__brand">
         <img src={logoSource} alt="星数" width={400} height={183} />
-        <Button
-          type="text"
-          className="xs-sidebar__collapse"
-          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-          aria-expanded={!collapsed}
-          icon={collapsed ? <CaretRight size={18} /> : <CaretLeft size={18} />}
-          onClick={onToggleCollapsed}
-        />
       </div>
 
       <Button
         type="default"
-        className="xs-sidebar__new-chat"
-        icon={<PlusCircle size={20} weight="regular" />}
+        className={`xs-sidebar__new-chat${isNewChatCurrent ? " xs-sidebar__new-chat--current" : ""}`}
+        icon={<PlusCircle size={18} weight="regular" />}
         aria-label="新建对话"
         onClick={handleNewChat}
       >
@@ -142,7 +133,7 @@ export function XsSidebar({ collapsed, onToggleCollapsed, onNewChat }: XsSidebar
             <strong>{username}</strong>
             <span>{userRole}</span>
           </div>
-          <CaretUp className="xs-sidebar__user-caret" size={15} aria-hidden="true" />
+          <CaretUp className="xs-sidebar__user-caret" size={14} aria-hidden="true" />
         </button>
       </Dropdown>
     </Sider>

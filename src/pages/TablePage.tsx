@@ -171,7 +171,6 @@ export function TablePage() {
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
           tone={submissionTone}
-          label="操作"
           message={submissionStatus}
           transitionKey={`${submissionTone}:${submissionStatus}`}
           reserveSpace

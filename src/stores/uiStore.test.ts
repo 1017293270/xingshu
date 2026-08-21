@@ -112,6 +112,7 @@ describe("useUiStore", () => {
 
     expect(useUiStore.getState().activeAnalysisSessionId).toBe("history-session-1");
     expect(useUiStore.getState().analysisTurns.map((turn) => turn.question)).toEqual(["历史问题", "继续追问"]);
+    expect(useUiStore.getState().sentStatus).toBe("");
   });
 
   it("releases the duplicated active event buffer after leaving a settled conversation", () => {

@@ -42,7 +42,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding-left: clamp(24px, 1.6vw, 36px);
+  padding-left: var(--xs-shell-toggle-gutter);
   padding-right: clamp(24px, 1.6vw, 36px);
 }
 
@@ -163,11 +163,11 @@
 }
 
 .dashboard-editor-shell__status[data-state="ready"] strong {
-  color: var(--xs-success);
+  color: var(--xs-success-ink);
 }
 
 .dashboard-editor-shell__status[data-state="error"] strong {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .dashboard-editor-shell__frame {
@@ -312,7 +312,7 @@
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
   background: rgba(255, 77, 79, 0.08);
   font-size: 12px;
   font-weight: 760;
@@ -355,7 +355,7 @@
 }
 
 .revenue-value .revenue-delta__change {
-  color: var(--xs-success);
+  color: var(--xs-success-ink);
   font-size: 13px;
   font-weight: 760;
   white-space: nowrap;
@@ -368,7 +368,7 @@
 }
 
 .success-text {
-  color: var(--xs-success);
+  color: var(--xs-success-ink);
 }
 
 .metric-row {

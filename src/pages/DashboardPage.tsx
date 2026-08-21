@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { XsEmptyState } from "@/components/xs/XsEmptyState";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { xsEnterStep } from "@/components/xs/motion";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { DashboardCard } from "@/features/dashboard/DashboardCard";
@@ -151,7 +152,7 @@ export function DashboardPage() {
   return (
     <PageFrame
       className="dashboard-list"
-      title="大屏库"
+      title="看板广场"
       subtitle="查询数据按当前登录账号权限实时加载，布局与查询版本独立发布。"
       actions={(
         <>
@@ -166,22 +167,27 @@ export function DashboardPage() {
             data-testid="create-dashboard-button"
             onClick={() => requestCreate("blank")}
           >
-            {createMutation.isPending ? "创建中" : "新建大屏"}
+            新建看板
           </Button>
         </>
       )}
     >
 
       {operationError ? (
-        <p className="dashboard-list__alert dashboard-list__alert--error" role="alert">{operationError}</p>
+        <XsStatusBar
+          slotClassName="dashboard-list__alert-slot"
+          tone="error"
+          message={operationError}
+          transitionKey={operationError}
+        />
       ) : null}
 
       {records.length > 0 && !dashboardsQuery.isLoading && !dashboardsQuery.isError ? (
-        <section className="dashboard-list__toolbar xs-page-enter" style={xsEnterStep(1)} aria-label="筛选大屏">
+        <section className="dashboard-list__toolbar xs-page-enter" style={xsEnterStep(1)} aria-label="筛选看板">
           <Input
             allowClear
             prefix={<MagnifyingGlass size={18} />}
-            placeholder="搜索大屏名称或说明"
+            placeholder="搜索看板名称或说明"
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -201,12 +207,12 @@ export function DashboardPage() {
               setPage(1);
             }}
           />
-          <span>{filteredRecords.length} 个大屏</span>
+          <span>{filteredRecords.length} 个看板</span>
         </section>
       ) : null}
 
       {dashboardsQuery.isLoading ? (
-        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-busy="true" aria-label="正在加载大屏库">
+        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-busy="true" aria-label="正在加载看板广场">
           {[1, 2, 3, 4, 5, 6].map((item) => (
             <div key={item} className="dashboard-card dashboard-card--skeleton" aria-hidden="true">
               <div className="dashboard-card__preview dashboard-list__skeleton" />
@@ -220,27 +226,27 @@ export function DashboardPage() {
       ) : dashboardsQuery.isError ? (
         <XsEmptyState
           tone="error"
-          title="大屏库暂不可用"
+          title="看板广场暂不可用"
           description={dashboardsQuery.error instanceof Error ? dashboardsQuery.error.message : "请稍后重试"}
           actionLabel="重试"
           onAction={() => void dashboardsQuery.refetch()}
         />
       ) : records.length === 0 ? (
         <XsEmptyState
-          ariaLabel="大屏库空状态"
-          eyebrow="暂无大屏"
-          title="创建第一个大屏"
+          ariaLabel="看板广场空状态"
+          eyebrow="暂无看板"
+          title="创建第一个看板"
           description="可从空白画布开始，也可在问数结果中收藏并一键生成。"
           secondaryActionLabel={queryAssetFeatureEnabled ? "选择收藏问数" : undefined}
           onSecondaryAction={queryAssetFeatureEnabled ? () => requestCreate("favorites") : undefined}
-          actionLabel="新建大屏"
+          actionLabel="新建看板"
           onAction={() => requestCreate("blank")}
         />
       ) : filteredRecords.length === 0 ? (
         <XsEmptyState
-          ariaLabel="大屏库筛选无结果"
+          ariaLabel="看板广场筛选无结果"
           eyebrow="无匹配结果"
-          title="没有找到符合条件的大屏"
+          title="没有找到符合条件的看板"
           description="调整关键词或发布状态后重试。"
           actionLabel="清除筛选"
           onAction={() => {
@@ -250,7 +256,7 @@ export function DashboardPage() {
         />
       ) : (
         <>
-        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-label="大屏库">
+        <section className="dashboard-list__grid xs-page-enter" style={xsEnterStep(2)} aria-label="看板广场">
           {visibleRecords.map((record) => (
             <DashboardCard
               key={record.id}
@@ -285,7 +291,7 @@ export function DashboardPage() {
       )}
 
       <Modal
-        title={createSource === "favorites" ? "从收藏问数创建大屏" : "新建大屏"}
+        title={createSource === "favorites" ? "从收藏问数创建看板" : "新建看板"}
         open={createDialogOpen}
         okText={createMutation.isPending ? "创建中" : "创建并进入编辑器"}
         cancelText="取消"
@@ -295,7 +301,7 @@ export function DashboardPage() {
         onCancel={() => setCreateDialogOpen(false)}
         onOk={() => createMutation.mutate({ source: createSource, title: createTitle.trim() })}
       >
-        <label className="dashboard-list__create-label" htmlFor="dashboard-create-title">大屏名称</label>
+        <label className="dashboard-list__create-label" htmlFor="dashboard-create-title">看板名称</label>
         <Input
           id="dashboard-create-title"
           autoFocus
@@ -312,7 +318,7 @@ export function DashboardPage() {
       </Modal>
 
       <Modal
-        title="删除大屏"
+        title="删除看板"
         open={Boolean(archiveCandidate)}
         okText="确认删除"
         cancelText="取消"
@@ -328,7 +334,7 @@ export function DashboardPage() {
           }
         }}
       >
-        <p>删除“{archiveCandidate?.schema.title}”？它会从大屏库中移除。</p>
+        <p>删除“{archiveCandidate?.schema.title}”？它会从看板广场中移除。</p>
       </Modal>
     </PageFrame>
   );

@@ -22,8 +22,8 @@
   color: var(--xs-text);
   font-size: var(--xs-fs-title);
   line-height: var(--xs-lh-tight);
-  font-weight: var(--xs-fw-display);
-  letter-spacing: var(--xs-ls-title);
+  font-weight: var(--xs-fw-medium);
+  letter-spacing: 0;
 }
 
 .xs-page__actions,
@@ -34,10 +34,11 @@
 }
 
 .xs-page__title p {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-body);
-  font-weight: var(--xs-fw-medium);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.5;
 }
 
 .xs-page__actions {
@@ -150,8 +151,8 @@
 .xs-card h2 {
   margin: 0;
   color: var(--xs-text);
-  font-size: var(--xs-fs-section);
-  font-weight: var(--xs-fw-display);
+  font-size: var(--xs-fs-control-lg);
+  font-weight: var(--xs-fw-medium);
 }
 
 /* ---------- 表格：排行表、结果表、清单表共用一套呈现 ----------
@@ -257,7 +258,7 @@
   white-space: nowrap;
 }
 
-/* 口径条：一张表能不能被交出去，靠的就是来源、字段数、行数这三项 */
+/* 口径条：字段数、行数 */
 .datahub-result-meta {
   display: flex;
   align-items: baseline;
@@ -347,10 +348,6 @@
   min-height: 300px;
 }
 
-.xs-status-bar {
-  animation: xs-page-status-in 160ms var(--xs-motion-ease-out) both;
-}
-
 /* ---------- 页面入场阶梯与内容卡交互 ---------- */
 
 @keyframes xs-page-enter {
@@ -405,18 +402,6 @@
   box-shadow:
     0 0 0 3px rgba(37, 99, 235, 0.14),
     var(--xs-shadow-soft);
-}
-
-@keyframes xs-page-status-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @media (max-width: 900px) {

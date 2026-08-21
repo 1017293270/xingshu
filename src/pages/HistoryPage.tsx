@@ -1,17 +1,11 @@
-import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react";
-import { Input, Pagination, Segmented, Tag, Tooltip } from "antd";
+import { MagnifyingGlass } from "@phosphor-icons/react";
+import { Input, Pagination, Segmented, Tooltip } from "antd";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
-import type { XsIconComponent } from "@/components/xs/XsIconTile";
-import {
-  XsGlyphHistoryDocument,
-  XsGlyphHistoryInsight,
-  XsGlyphHistoryKnowledge
-} from "@/components/xs/XsMetricGlyphs";
 import {
   filterHistorySessionList,
   listHistorySessions,
@@ -23,22 +17,19 @@ import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/his
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { PageFrame } from "./PageFrame";
 
-const defaultPageSize = 8;
+const defaultPageSize = 16;
 
-const historyCategoryFilters: NonNullable<HistoryFilter["category"]>[] = [
-  "全部",
-  "知识快查",
-  "数据洞察",
-  "文档处理"
+const historyCategoryFilters: Array<{ label: string; value: NonNullable<HistoryFilter["category"]> }> = [
+  { label: "全部", value: "全部" },
+  { label: "查知识", value: "知识快查" },
+  { label: "查数据", value: "数据洞察" },
+  { label: "找文档", value: "文档处理" }
 ];
 
-/** 历史类型图标固定 28px：42px 底板的 2/3，与指标卡底板 32/52 同比例。 */
-const HISTORY_GLYPH_SIZE = 28;
-
-const historyGlyphByCategory: Record<HistoryCategory, XsIconComponent> = {
-  知识快查: XsGlyphHistoryKnowledge,
-  数据洞察: XsGlyphHistoryInsight,
-  文档处理: XsGlyphHistoryDocument
+const historyTypeLabel: Record<HistoryCategory, string> = {
+  知识快查: "查知识",
+  数据洞察: "查数据",
+  文档处理: "找文档"
 };
 
 export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
@@ -53,10 +44,6 @@ function getHistoryFallbackMode(session: HistorySession): DataHubChatMode {
   if (session.category === "知识快查") return "rag";
   if (session.category === "文档处理") return "document_lookup";
   return "ask";
-}
-
-function getHistoryGlyph(category: HistoryCategory) {
-  return historyGlyphByCategory[category];
 }
 
 function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
@@ -239,31 +226,16 @@ export function HistoryPage() {
               style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
               key={session.id}
               type="button"
-              aria-label={`${session.title}：${session.summary}`}
+              aria-label={`${session.title}，${historyTypeLabel[session.category]}，${session.updatedAt}`}
               onClick={() => void handleRestoreSession(session)}
             >
-              <span className="topic-icon" aria-hidden="true">
-                {(() => {
-                  const HistoryGlyph = getHistoryGlyph(session.category);
-                  return <HistoryGlyph size={HISTORY_GLYPH_SIZE} />;
-                })()}
-              </span>
               <div className="history-card__body">
                 <Tooltip title={session.title} placement="topLeft">
                   <h2 className="history-card__title">{session.title}</h2>
                 </Tooltip>
-                <p>{session.summary}</p>
               </div>
-              <div className="history-card__aside">
-                <Tag bordered={false} color="blue">
-                  {session.category}
-                </Tag>
-                <span className="history-card__time">{session.updatedAt}</span>
-                <span className="history-card__restore-state" aria-hidden="true">
-                  打开
-                  <ArrowRight size={14} weight="bold" />
-                </span>
-              </div>
+              <span className="history-card__type">{historyTypeLabel[session.category]}</span>
+              <span className="history-card__time">{session.updatedAt}</span>
             </button>
           ))}
         </section>

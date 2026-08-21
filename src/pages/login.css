@@ -371,40 +371,20 @@
   line-height: 1.5;
 }
 
-.login-panel__session-alert {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  margin: -8px 0 20px;
-  padding: 12px 14px;
-  border: 1px solid rgba(212, 137, 6, 0.28);
-  border-radius: var(--xs-radius-control);
-  color: #8a5700;
-  background: rgba(255, 248, 230, 0.88);
+/* 登录页两条提示都走全站状态条（XsStatusBar），这里只管落位 */
+.login-panel .xs-status-bar-slot {
+  text-align: center;
 }
 
-.login-panel__session-alert > svg {
-  margin-top: 2px;
-  color: #d48806;
+.login-panel__notice {
+  margin: 16px 0 0;
+  text-align: left;
 }
 
-.login-panel__session-alert strong,
-.login-panel__session-alert small {
-  display: block;
-}
-
-.login-panel__session-alert strong {
-  font-size: var(--xs-fs-control);
-  line-height: 1.5;
-  font-weight: 700;
-}
-
-.login-panel__session-alert small {
-  margin-top: 2px;
-  color: #876b36;
-  font-size: var(--xs-fs-caption);
-  line-height: 1.5;
+/* 会话过期是两行形态：占满面板宽度，排在表单之前 */
+.login-panel__notice.xs-status-bar--stacked {
+  width: 100%;
+  margin: -6px 0 18px;
 }
 
 .login-panel__form .ant-form-item {
@@ -465,7 +445,7 @@
 
 .login-panel__form .ant-form-item-explain-error {
   margin-top: 7px;
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
   font-size: var(--xs-fs-label);
   font-weight: 600;
   animation: login-feedback-enter 160ms var(--xs-motion-ease-out) backwards;
@@ -517,43 +497,9 @@
   text-decoration: underline;
 }
 
-.login-panel__status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 16px 0 0;
-  padding: 11px 13px;
-  border: 1px solid #cfe3ff;
-  border-radius: var(--xs-radius-control);
-  color: var(--xs-primary-2);
-  background: #eef6ff;
-  font-size: var(--xs-fs-label);
-  font-weight: 600;
-  animation: login-feedback-enter 160ms var(--xs-motion-ease-out) backwards;
-}
-
 @keyframes login-feedback-enter {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.login-panel__status button {
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  color: var(--xs-primary-2);
-  background: transparent;
-  font-size: var(--xs-fs-label);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.login-panel__status button:hover,
-.login-panel__status button:focus-visible {
-  color: var(--xs-primary);
-  outline: none;
-  text-decoration: underline;
 }
 
 .login-panel__foot {

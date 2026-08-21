@@ -18,6 +18,17 @@
   --xs-success-soft: #EAF8F3;
   --xs-warning-soft: #FFF7E6;
   --xs-danger-soft: #FFF1F0;
+  /* ---------- 状态语汇 ----------
+     全站提示条只用这四组：ink 走图标与前缀（对白底 6.7~9.3:1），line 走描边。
+     四档 line 对白底刻意压在 1.71~1.79，所以四种语气看起来是同一个物件换了颜色。 */
+  --xs-info-ink: #1D4ED8;
+  --xs-info-line: #A8C8F5;
+  --xs-success-ink: #0B5F45;
+  --xs-success-line: #8FD0B8;
+  --xs-warning-ink: #713800;
+  --xs-warning-line: #E8BF6E;
+  --xs-danger-ink: #8C1D18;
+  --xs-danger-line: #EFB3AC;
   --xs-text: #081A3A;
   --xs-text-2: #294469;
   --xs-text-3: #536987;
@@ -29,7 +40,7 @@
   --xs-module-gap: 16px;
   --xs-control-height: 44px;
   --xs-control-height-lg: 52px;
-  --xs-sidebar-expanded-width: 240px;
+  --xs-sidebar-expanded-width: 200px;
   --xs-sidebar-collapsed-width: 80px;
   --xs-sidebar-width: var(--xs-sidebar-expanded-width);
   --xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1440px);
@@ -79,17 +90,17 @@
      字号按角色定义，页面样式只允许引用这些变量，不再自定字号。
      display 只用于登录/欢迎/首页问候；title 是所有一级页面标题的唯一字号。 */
   --xs-fs-display: 40px;
-  --xs-fs-title: 34px;
+  --xs-fs-title: 24px;
   --xs-fs-metric: 30px;
   --xs-fs-section: 20px;
   --xs-fs-card: 17px;
   --xs-fs-body: 15px;
   --xs-fs-label: 13px;
   --xs-fs-caption: 12px;
-  /* 控件与输入：antd 控件文本 14，主命令输入与登录主按钮 16（唯一一级焦点） */
+  /* 控件与输入：antd 控件、命令框和已发送问题同一档 14 */
   --xs-fs-control: 14px;
   --xs-fs-control-lg: 16px;
-  --xs-fs-input: 16px;
+  --xs-fs-input: 14px;
   /* 行内小数值：卡片里的份数、条数 */
   --xs-fs-metric-sm: 22px;
   /* 字重四档：正文 400、次要强调 600、强调 700、标题与数值 760 */
@@ -110,7 +121,7 @@
 @media (max-width: 900px) {
   :root {
     --xs-fs-display: 30px;
-    --xs-fs-title: 26px;
+    --xs-fs-title: 22px;
     --xs-fs-metric: 24px;
     --xs-fs-section: 18px;
   }
@@ -181,6 +192,7 @@ textarea {
   .xs-async-panel__skeleton > span:not(.sr-only),
   .xs-async-panel__refresh::after,
   .xs-upload-dialog__progress[data-mode="indeterminate"] > span,
+  .xs-status-bar__pulse:not([data-static]) > i,
   .ant-spin {
     animation: xs-loading-pulse 1600ms var(--xs-motion-ease-ambient) infinite !important;
   }
@@ -203,6 +215,10 @@ textarea {
 /* 高对比：加深边框与三级文字，保证卡片/输入框轮廓可辨 */
 @media (prefers-contrast: more) {
   :root {
+    --xs-info-line: #6C9FE4;
+    --xs-success-line: #4FB394;
+    --xs-warning-line: #C99334;
+    --xs-danger-line: #D97F77;
     --xs-border: #9FB9E8;
     --xs-border-strong: #7FA3DE;
     --xs-text-3: #3E5578;

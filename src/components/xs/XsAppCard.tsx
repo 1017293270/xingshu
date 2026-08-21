@@ -1,4 +1,3 @@
-import { ArrowRight } from "@phosphor-icons/react";
 import { XsIconTile, type XsIconComponent } from "./XsIconTile";
 
 export type XsAppCardData = {
@@ -40,14 +39,6 @@ export function XsAppCard({ app, selected = false, onOpen }: XsAppCardProps) {
           <span className="xs-app-card__title">{app.title}</span>
           <span className="xs-app-card__desc">{app.description}</span>
         </span>
-      </button>
-      <button
-        type="button"
-        className="xs-app-card__arrow"
-        onClick={() => onOpen(app)}
-        aria-label={`进入 ${app.title}`}
-      >
-        <ArrowRight size={18} weight="regular" />
       </button>
     </article>
   );

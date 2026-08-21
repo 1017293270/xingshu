@@ -1,4 +1,5 @@
-import { Alert, Button } from "antd";
+import { WarningOctagon } from "@phosphor-icons/react";
+import { Button } from "antd";
 import type { ReactNode } from "react";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-2x.png";
 
@@ -29,39 +30,28 @@ export function XsEmptyState({
   className = "",
   ariaLabel
 }: XsEmptyStateProps) {
-  if (tone === "error") {
-    return (
-      <Alert
-        className={`xs-empty-state xs-empty-state--error ${className}`.trim()}
-        role="alert"
-        type="error"
-        showIcon
-        message={title ?? "加载失败"}
-        description={description}
-        action={
-          actionLabel && onAction ? (
-            <Button size="small" aria-label={actionLabel} onClick={onAction}>
-              {actionLabel}
-            </Button>
-          ) : undefined
-        }
-      />
-    );
-  }
-
   const hasPrimary = Boolean(actionLabel && onAction);
   const hasSecondary = Boolean(secondaryActionLabel && onSecondaryAction);
 
+  const isError = tone === "error";
+
   return (
     <div
-      className={`xs-empty-state ${className}`.trim()}
-      role={ariaLabel ? "region" : "note"}
+      className={`xs-empty-state${isError ? " xs-empty-state--error" : ""} ${className}`.trim()}
+      role={isError ? "alert" : ariaLabel ? "region" : "note"}
       aria-label={ariaLabel}
     >
+      {/* 失败与空态共用同一个外壳，只换视觉主体：一处失败长什么样，全站就长什么样 */}
       <div className="xs-empty-state__visual" aria-hidden="true">
-        <span className="xs-empty-state__orbit xs-empty-state__orbit--outer" />
-        <span className="xs-empty-state__orbit xs-empty-state__orbit--inner" />
-        <img src={assistantMark} alt="" width={160} height={160} />
+        {isError ? (
+          <WarningOctagon className="xs-empty-state__mark" size={44} />
+        ) : (
+          <>
+            <span className="xs-empty-state__orbit xs-empty-state__orbit--outer" />
+            <span className="xs-empty-state__orbit xs-empty-state__orbit--inner" />
+            <img src={assistantMark} alt="" width={160} height={160} />
+          </>
+        )}
       </div>
       <div className="xs-empty-state__copy">
         {eyebrow ? <p className="xs-empty-state__eyebrow">{eyebrow}</p> : null}

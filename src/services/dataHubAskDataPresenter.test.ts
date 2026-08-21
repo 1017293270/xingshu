@@ -410,4 +410,52 @@ describe("dataHubAskDataPresenter", () => {
 
     expect(turn.assistantContent).toBe("编排结论：以合同约定为准。");
   });
+
+  it("keeps the streamed agent synthesis when done.summary is only a completion status", () => {
+    const turn = createDataHubAskTurn(
+      "查询合同设备清单",
+      [
+        { type: "text", data: "我来帮您查询相关设备清单。" },
+        {
+          type: "text",
+          data: "该合同设备清单共 12 项，主要包括远程控制终端、照明灯具与通信模块。"
+        },
+        {
+          type: "done",
+          data: {
+            mode: "agent",
+            adaptiveTeam: true,
+            summary: "数据与制度来源均已完成。"
+          }
+        }
+      ],
+      "done"
+    );
+
+    expect(turn.assistantContent).toContain("该合同设备清单共 12 项");
+    expect(turn.assistantContent).not.toBe("数据与制度来源均已完成。");
+  });
+
+  it("uses a real agent done.summary even when the streamed intro is longer", () => {
+    const turn = createDataHubAskTurn(
+      "查询合同设备清单",
+      [
+        {
+          type: "text",
+          data: "我来帮您查询眉山天府新区城市照明及景观亮化集中远程控制设备采购合同的相关设备清单。"
+        },
+        {
+          type: "done",
+          data: {
+            mode: "agent",
+            adaptiveTeam: true,
+            summary: "该合同设备清单共 12 项。"
+          }
+        }
+      ],
+      "done"
+    );
+
+    expect(turn.assistantContent).toBe("该合同设备清单共 12 项。");
+  });
 });

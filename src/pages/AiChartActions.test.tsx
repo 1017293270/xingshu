@@ -116,13 +116,6 @@ function seedAgentAskChildResult(childCount = 1) {
   appendAgentAskChildEvents(runId, childCount);
 }
 
-function seedRatioResult() {
-  const store = useUiStore.getState();
-  const runId = store.startAskDataRun("每个收入人群占比多少");
-  appendRatioTable(runId);
-  store.completeAskDataRun(runId);
-}
-
 describe("AI chart actions", () => {
   beforeEach(() => {
     useUiStore.getState().resetUiState();
@@ -172,6 +165,33 @@ describe("AI chart actions", () => {
     );
   });
 
+  it("keeps the whole not-chartable rationale in the chart card, not in the composer status", async () => {
+    const rationale =
+      "问题'合同设备清单有哪些'本质上是列表查询/枚举类问题，需要返回的是合同明细记录本身而非分析对比。表格仅有 2-3 行记录，数据量过少，图表无法提供额外洞察。";
+    vi.spyOn(window, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: 200, message: "ok", data: { chartable: false, reason: rationale } }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("合同设备清单有哪些");
+    renderPage(<AnalysisPage mode="ask" />);
+
+    act(() => {
+      appendRatioTable(runId);
+      store.completeAskDataRun(runId);
+    });
+
+    const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
+    expect(within(chartCard).getByText(rationale)).toBeInTheDocument();
+
+    /* 底部状态条是一行状态，不是第二块正文：整段判断理由留在图表卡片里 */
+    const statusBar = document.querySelector(".analysis-composer__status-slot .xs-status-bar");
+    expect(statusBar).toHaveTextContent("暂不适合生成图表");
+    expect(statusBar).not.toHaveTextContent("列表查询");
+  });
+
   it("does not auto-plan a chart for a completed scalar answer", () => {
     const fetchSpy = vi.spyOn(window, "fetch");
     const store = useUiStore.getState();
@@ -217,13 +237,17 @@ describe("AI chart actions", () => {
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
     );
-    seedRatioResult();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("每个收入人群占比多少");
     renderPage(<AnalysisPage mode="ask" />);
 
-    await user.click(screen.getByRole("button", { name: "AI 生成图表" }));
+    act(() => {
+      appendRatioTable(runId);
+      store.completeAskDataRun(runId);
+    });
 
-    const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
-    expect(within(chartCard).getByText("收入人群占比")).toBeInTheDocument();
+    expect(await screen.findByText("收入人群占比")).toBeInTheDocument();
+    const chartCard = screen.getByRole("region", { name: "智能图表建议" });
     expect(
       within(chartCard).getByRole("img", { name: /收入人群占比.*有收入人群维度和占比数值/ })
     ).toBeInTheDocument();
@@ -306,9 +330,7 @@ describe("AI chart actions", () => {
     });
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(
-      screen.getByRole("button", { name: "AI 生成图表" })
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -330,7 +352,6 @@ describe("AI chart actions", () => {
   });
 
   it("shows which result table AI used when multiple tables are available", async () => {
-    const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -353,43 +374,44 @@ describe("AI chart actions", () => {
 
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("按不同维度统计咨询");
-    store.appendAskDataEvent(runId, {
-      type: "table",
-      data: {
-        columns: [
-          { name: "name", title: "项目名称" },
-          { name: "count", title: "记录数", type: "number" }
-        ],
-        rows: [
-          { name: "演示账号", count: 718 },
-          { name: "六角井社区", count: 264 }
-        ],
-        totalRows: 2,
-        source: "cube"
-      }
-    });
-    store.appendAskDataEvent(runId, {
-      type: "table",
-      data: {
-        columns: [
-          { name: "name", title: "咨询类型" },
-          { name: "count", title: "记录数", type: "number" }
-        ],
-        rows: [
-          { name: "物业咨询", count: 18 },
-          { name: "民生咨询", count: 12 }
-        ],
-        totalRows: 2,
-        source: "cube"
-      }
-    });
-    store.completeAskDataRun(runId);
     renderPage(<AnalysisPage mode="ask" />);
 
-    await user.click(screen.getByRole("button", { name: "AI 生成图表" }));
+    act(() => {
+      store.appendAskDataEvent(runId, {
+        type: "table",
+        data: {
+          columns: [
+            { name: "name", title: "项目名称" },
+            { name: "count", title: "记录数", type: "number" }
+          ],
+          rows: [
+            { name: "演示账号", count: 718 },
+            { name: "六角井社区", count: 264 }
+          ],
+          totalRows: 2,
+          source: "cube"
+        }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "table",
+        data: {
+          columns: [
+            { name: "name", title: "咨询类型" },
+            { name: "count", title: "记录数", type: "number" }
+          ],
+          rows: [
+            { name: "物业咨询", count: 18 },
+            { name: "民生咨询", count: 12 }
+          ],
+          totalRows: 2,
+          source: "cube"
+        }
+      });
+      store.completeAskDataRun(runId);
+    });
 
-    const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
-    expect(within(chartCard).getByText("来源：结果表 2")).toBeInTheDocument();
+    expect(await screen.findByText("来源：结果表 2")).toBeInTheDocument();
+    const chartCard = screen.getByRole("region", { name: "智能图表建议" });
     expect(within(chartCard).getByText("咨询类型分布")).toBeInTheDocument();
   });
 

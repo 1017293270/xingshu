@@ -80,7 +80,7 @@
 .cloud-share small {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-regular);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -127,7 +127,7 @@
   background: var(--xs-surface-soft);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -174,9 +174,10 @@
 
 .cloud-kb-row__text strong {
   overflow: hidden;
-  font-size: var(--xs-fs-body);
-  font-weight: 700;
-  line-height: 1.4;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -187,7 +188,7 @@
   overflow: hidden;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -196,8 +197,8 @@
 .cloud-kb-table__head > span:nth-child(2) {
   text-align: right;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -270,7 +271,7 @@
   background: var(--xs-surface-soft);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -315,9 +316,10 @@
 
 .cloud-doc-row__text strong {
   overflow: hidden;
-  font-size: var(--xs-fs-body);
-  font-weight: 700;
-  line-height: 1.4;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -327,7 +329,7 @@
   overflow: hidden;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-regular);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -346,7 +348,7 @@
   padding: 0 10px;
   border-radius: 999px;
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-medium);
   white-space: nowrap;
 }
 
@@ -488,7 +490,7 @@
   padding: 18px 18px 10px;
   color: var(--xs-primary-2);
   font-size: var(--xs-fs-caption);
-  font-weight: 760;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.04em;
 }
 
@@ -581,8 +583,10 @@
 .cloud-preview__heading h2 {
   margin: 0;
   overflow: hidden;
-  font-size: var(--xs-fs-card);
-  line-height: 1.4;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -591,13 +595,13 @@
   margin: 3px 0 0;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-regular);
 }
 
 .cloud-preview__count {
   color: var(--xs-primary-2);
   font-size: var(--xs-fs-label);
-  font-weight: 750;
+  font-weight: var(--xs-fw-medium);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

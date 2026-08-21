@@ -39,7 +39,7 @@ const voiceStateLabels = {
   error: "重试语音输入"
 } as const;
 
-const defaultPlaceholder = "请输入您的问题，支持问题、找文件、写文档、做分析、用应用...";
+const defaultPlaceholder = "给星数发送消息";
 
 export function XsCommandBox({
   value,
@@ -129,11 +129,14 @@ export function XsCommandBox({
               </button>
             ))}
           </div>
+        ) : modelMode && onModelModeChange ? (
+          <XsCommandModelSelect
+            value={modelMode}
+            onChange={onModelModeChange}
+            capabilitiesOnly={modelMode !== "agent"}
+          />
         ) : null}
         <div className="xs-command-box__actions">
-          {modelMode && onModelModeChange ? (
-            <XsCommandModelSelect value={modelMode} onChange={onModelModeChange} />
-          ) : null}
           {onAttach ? (
             <>
               <input

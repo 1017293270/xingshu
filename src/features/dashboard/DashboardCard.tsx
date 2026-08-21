@@ -1,3 +1,4 @@
+import { GearSix } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import dashboardIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
@@ -100,24 +101,26 @@ export function DashboardCard({
         </span>
         <img className="dashboard-card__icon" src={dashboardIcon} alt="" />
         <div className="dashboard-card__actions">
-          <Link className="dashboard-card__action" to={editorPath}>编辑</Link>
           <Link
             className={`dashboard-card__action${published ? "" : " is-disabled"}`}
             aria-disabled={!published}
             tabIndex={published ? undefined : -1}
             to={published ? runtimePath : "#"}
-          >运行态</Link>
+          >浏览大屏</Link>
           <div className="dashboard-card__more" ref={menuRef}>
             <button
               type="button"
               className="dashboard-card__action dashboard-card__more-trigger"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label={`${record.schema.title} 更多操作`}
+              aria-label={`${record.schema.title} 设置`}
               onClick={() => setMenuOpen((open) => !open)}
-            >⋯</button>
+            >
+              <GearSix size={16} aria-hidden="true" />
+            </button>
             {menuOpen || menuMounted ? (
               <ul className="dashboard-card__menu" role="menu" data-closing={!menuOpen || undefined}>
+                <li role="none"><Link role="menuitem" to={editorPath} onClick={() => setMenuOpen(false)}>编辑</Link></li>
                 <li role="none"><button type="button" role="menuitem" disabled={copying} onClick={runMenuAction(onCopy)}>复制</button></li>
                 <li role="none"><button type="button" role="menuitem" onClick={runMenuAction(onToggleVersions)}>版本</button></li>
                 <li role="none"><button type="button" role="menuitem" disabled={!published} onClick={runMenuAction(onShare)}>分享</button></li>

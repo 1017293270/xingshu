@@ -100,13 +100,6 @@ function createTurnId() {
   return `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function dataHubModeLabel(chatMode: DataHubChatMode) {
-  if (chatMode === "rag") return "问知";
-  if (chatMode === "document_lookup") return "找文档";
-  if (chatMode === "agent") return "智能编排";
-  return "问数";
-}
-
 function updateTurn(
   turns: AnalysisTurnState[],
   runId: DataHubAskRunId,
@@ -268,7 +261,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         askDataEvents: [],
         askDataError: "",
         analysisTurns: startsNewConversation ? [nextTurn] : [...state.analysisTurns, nextTurn],
-        sentStatus: `已提交${dataHubModeLabel(chatMode)}：${question}`
+        sentStatus: ""
       };
     });
     return runId;
@@ -389,12 +382,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       askDataError: activeTurn?.error || error,
       analysisTurns: restoredTurns,
       pendingAttachments: [],
-      sentStatus:
-        status === "streaming"
-          ? `正在加载历史对话：${question}`
-          : status === "error"
-            ? `历史对话加载失败：${question}`
-            : `已加载历史对话：${question}`
+      sentStatus: ""
     });
     abortAllAskDataControllers();
   },

@@ -373,7 +373,6 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
             {operationStatus ? (
               <XsStatusBar
                 tone={operationTone}
-                label="操作"
                 message={operationStatus}
                 transitionKey={`${operationTone}:${operationStatus}`}
               />

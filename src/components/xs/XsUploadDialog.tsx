@@ -1,4 +1,5 @@
-import { ArrowsClockwise, Check, FileArrowUp, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import { ArrowsClockwise, Check, FileArrowUp, UploadSimple } from "@phosphor-icons/react";
+import { XsStatusBar } from "./XsStatusBar";
 import { Button, Modal } from "antd";
 import {
   useCallback,
@@ -289,12 +290,12 @@ export function XsUploadDialog({
         支持 {acceptLabel} · 单个文件最大 {formatBytes(maxBytes)}
       </p>
 
-      {error ? (
-        <p className="xs-upload-dialog__error" role="alert">
-          <WarningCircle size={16} weight="fill" aria-hidden="true" />
-          {error}
-        </p>
-      ) : null}
+      <XsStatusBar
+        slotClassName="xs-upload-dialog__error"
+        tone="error"
+        message={error}
+        transitionKey={error}
+      />
 
       <div className="xs-upload-dialog__footer">
         {hint ? <span className="xs-upload-dialog__hint">{hint}</span> : null}

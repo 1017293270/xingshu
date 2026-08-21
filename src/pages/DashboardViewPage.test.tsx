@@ -37,6 +37,7 @@ describe("DashboardViewPage", () => {
     renderPage(`/dashboard-view?dashboard=${schema.id}`);
 
     expect(screen.getByLabelText("全屏大屏画布")).toHaveAttribute("data-fullscreen", "true");
+    expect(screen.getByRole("link", { name: "返回看板广场" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "返回大屏列表" })).not.toBeInTheDocument();
     expect(screen.queryByText("草稿预览")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();

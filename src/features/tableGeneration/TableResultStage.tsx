@@ -16,7 +16,6 @@ export function TableResultStage({ status, turn, progress, isLatest }: TableResu
   const trace = buildTableAgentTrace(turn);
   const hasTables = trace.tableCount > 0;
   const answer = turn.answerBlocks[0]?.content.trim() ?? "";
-  const datasourceName = trace.datasourceName || undefined;
   const isStreaming = status === "streaming";
   const isDone = status === "done";
   const isError = status === "error";
@@ -41,7 +40,7 @@ export function TableResultStage({ status, turn, progress, isLatest }: TableResu
       {hasTables ? (
         <div className="sheet-result__tables">
           {turn.tableResults.map((table) => (
-            <DataHubResultTable table={table} datasourceName={datasourceName} key={table.tableIndex} />
+            <DataHubResultTable table={table} key={table.tableIndex} />
           ))}
         </div>
       ) : null}

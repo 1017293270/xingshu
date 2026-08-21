@@ -240,22 +240,36 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
   };
 }
 
+function isOrchestrationStatusSummary(summary: string) {
+  const text = summary.trim();
+  if (!text || text.length > 24 || /[，,；;：:]/.test(text)) {
+    return false;
+  }
+  return /完成/.test(text);
+}
+
 /**
  * DataHub 正式回答规则，与平台 ChatService.AssistantReply
  * 以及 `finalAnswerAfterStream(summary, streamed, hasError)` 保持一致：
  * 终态 summary 优先，没有才用主会话流式文本；出错则不展示半成品。
+ * Agent 编排的 done.summary 经常只是「均已完成」这类收束状态，不能盖掉流式综合结论。
  */
 export function resolveDataHubFinalAnswer(
   summary: unknown,
   streamedContent: unknown,
-  hasTerminalError: boolean
+  hasTerminalError: boolean,
+  options: { keepRicherStreamedAnswer?: boolean } = {}
 ): string {
   if (hasTerminalError) {
     return "";
   }
 
   const finalSummary = String(summary ?? "").trim();
-  return finalSummary || String(streamedContent ?? "").trim();
+  const streamedText = String(streamedContent ?? "").trim();
+  if (options.keepRicherStreamedAnswer && streamedText && isOrchestrationStatusSummary(finalSummary)) {
+    return streamedText;
+  }
+  return finalSummary || streamedText;
 }
 
 export function getDataHubActionLabel(action?: string): string {
@@ -565,7 +579,11 @@ export function createDataHubAskTurn(
   const officialAnswer = resolveDataHubFinalAnswer(
     turn.done?.summary,
     streamedAnswer,
-    Boolean(turn.error)
+    Boolean(turn.error),
+    {
+      keepRicherStreamedAnswer:
+        turn.done?.mode === "agent" || turn.done?.adaptiveTeam === true
+    }
   );
   turn.answerBlocks = officialAnswer
     ? officialAnswer === streamedAnswer

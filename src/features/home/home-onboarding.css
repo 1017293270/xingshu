@@ -214,7 +214,7 @@
 }
 
 .home-onboarding__kpi small {
-  color: var(--xs-success);
+  color: var(--xs-success-ink);
   font-size: 12px;
   font-weight: 600;
 }

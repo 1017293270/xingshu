@@ -38,12 +38,7 @@ export function DataHubExecutionTimeline({ session }: DataHubExecutionTimelinePr
   const items = orchestrationEventsForSession(session);
 
   if (!items.length) {
-    return (
-      <div className="xs-datahub-timeline xs-datahub-timeline--empty">
-        <FlowArrow size={20} aria-hidden="true" />
-        <p>本次响应没有独立的路由、ReAct 或工具调用事件。</p>
-      </div>
-    );
+    return null;
   }
 
   return (

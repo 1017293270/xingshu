@@ -1,6 +1,7 @@
 import { XsAppCard, type XsAppCardData } from "@/components/xs/XsAppCard";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { getXsCommandModelMeta } from "@/components/xs/XsCommandModelSelect";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSessionQueryScope } from "@/app/sessionQuery";
@@ -19,46 +20,54 @@ import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscri
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { DataHubChatMode } from "@/types/dataHub";
-import { useTypingPlaceholder } from "./useTypingPlaceholder";
 import "./home.css";
 
-const recommendedApps: XsAppCardData[] = [
+type RecommendedApp = XsAppCardData & {
+  chatMode?: DataHubChatMode;
+  stayOnHome?: boolean;
+  comingSoon?: boolean;
+};
+
+const recommendedApps: RecommendedApp[] = [
   {
     id: "data-chat",
     title: "智能问数",
     description: "经营指标、趋势变化和数据洞察",
     prompt: "帮我分析本月经营数据，并生成趋势图表",
-    routeTo: "/ask-data",
     imageSrc: appDataChatIcon,
     imageSource: "xingshu-home-apps-image2-v1",
-    tone: "blue"
+    tone: "blue",
+    chatMode: "ask",
+    stayOnHome: true
   },
   {
     id: "knowledge",
     title: "知识问答",
     description: "制度、合同和企业知识快速检索",
     prompt: "帮我查询最新销售政策中的重点变化",
-    routeTo: "/ask-knowledge",
     imageSrc: appKnowledgeQaIcon,
     imageSource: "xingshu-home-apps-image2-v1",
-    tone: "cyan"
+    tone: "cyan",
+    chatMode: "rag",
+    stayOnHome: true
   },
   {
     id: "document",
     title: "文档助手",
-    description: "读取文档并提炼关键结论",
-    prompt: "帮我总结这份项目材料的关键风险",
-    routeTo: "/cloud",
+    description: "快速查找文档",
+    prompt: "帮我找最新版员工手册",
     imageSrc: appDocumentAssistantIcon,
     imageSource: "xingshu-home-apps-image2-v1",
-    tone: "green"
+    tone: "green",
+    chatMode: "document_lookup",
+    stayOnHome: true
   },
   {
     id: "report",
     title: "报表生成",
-    description: "生成可复用的分析报表和图表",
+    description: "快速做好表格",
     prompt: "根据销售数据生成一份周报",
-    routeTo: "/dashboard",
+    routeTo: "/table",
     imageSrc: appReportGenerationIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "orange"
@@ -78,26 +87,49 @@ const recommendedApps: XsAppCardData[] = [
     title: "会议纪要",
     description: "提炼议题、结论和待办事项",
     prompt: "帮我整理今天会议的纪要和行动项",
-    routeTo: "/writing",
     imageSrc: appMeetingMinutesIcon,
     imageSource: "xingshu-home-apps-image2-v1",
-    tone: "blue"
+    tone: "blue",
+    comingSoon: true
   },
   {
     id: "more-apps",
     title: "更多应用",
     description: "打开更多企业智能能力",
     prompt: "帮我打开更多企业智能应用",
-    routeTo: "/data-dashboard",
     imageSrc: appMoreAppsIcon,
     imageSource: "xingshu-home-apps-image2-v1",
-    tone: "blue"
+    tone: "blue",
+    comingSoon: true
   }
 ];
 
-const modelModeByAppId: Partial<Record<string, DataHubChatMode>> = {
-  "data-chat": "ask",
-  knowledge: "rag"
+const suggestedQuestions: Record<Exclude<DataHubChatMode, "agent">, Array<{ label: string; value: string }>> = {
+  ask: [
+    { label: "本月经营数据趋势", value: "帮我分析本月经营数据，并生成趋势图表" },
+    { label: "华东区销售同比", value: "本月华东区销售额同比增长多少？" },
+    { label: "各部门费用占比", value: "各部门费用占比如何？" },
+    { label: "库存周转变化", value: "库存周转率有什么变化？" }
+  ],
+  rag: [
+    { label: "销售政策变化", value: "帮我查询最新销售政策中的重点变化" },
+    { label: "差旅住宿标准", value: "差旅住宿标准是什么？" },
+    { label: "合同审批流程", value: "合同审批流程怎么走？" },
+    { label: "报销所需材料", value: "员工报销需要哪些材料？" }
+  ],
+  document_lookup: [
+    { label: "查找销售合同", value: "查找销售合同" },
+    { label: "最新采购制度", value: "找最新采购制度" },
+    { label: "差旅管理办法", value: "打开差旅管理办法" },
+    { label: "供应商准入标准", value: "查找供应商准入标准" }
+  ]
+};
+
+const commandPlaceholderByMode: Record<DataHubChatMode, string> = {
+  agent: "给星数发送消息",
+  ask: "帮你查数据",
+  rag: "帮你查知识",
+  document_lookup: "帮你找文档"
 };
 
 const routeByModelMode: Record<DataHubChatMode, string> = {
@@ -137,7 +169,8 @@ export function HomePage() {
     },
     onError: setSentStatus
   });
-  const commandPlaceholder = useTypingPlaceholder(!draft.trim());
+
+  const questions = homeChatMode === "agent" ? [] : suggestedQuestions[homeChatMode];
 
   function startDataHubConversation(question: string, chatMode: DataHubChatMode) {
     const runId = startAskDataRun(question, null, chatMode);
@@ -179,18 +212,18 @@ export function HomePage() {
     bindAskDataController(runId, controller);
   }
 
-  function handleOpenApp(app: XsAppCardData) {
-    const appModelMode = modelModeByAppId[app.id];
-    selectApp(app.id, app.prompt, appModelMode);
-
-    if (appModelMode) {
-      setSentStatus("");
-      navigate(routeByModelMode[appModelMode]);
+  function handleOpenApp(app: RecommendedApp) {
+    if (app.comingSoon) {
+      setSentStatus("待开放，敬请期待");
       return;
     }
 
-    setSentStatus(`正在打开：${app.title}`);
+    if (app.stayOnHome && app.chatMode) {
+      selectApp(app.id, "", app.chatMode);
+      return;
+    }
 
+    selectApp(app.id, app.prompt, app.chatMode);
     if (app.routeTo) {
       navigate(app.routeTo);
     }
@@ -209,8 +242,20 @@ export function HomePage() {
     <div className="home-page">
       <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
       <section className="home-page__hero" aria-labelledby="home-greeting">
-        <h1 id="home-greeting">您好，<span className="home-page__hero-name">{username}</span></h1>
-        <p>我是您的数据管家，有什么可以帮您？</p>
+        {homeChatMode === "agent" ? (
+          <>
+            <h1 id="home-greeting">您好，<span className="home-page__hero-name">{username}</span></h1>
+            <p>我是您的数据管家，有什么可以帮您？</p>
+          </>
+        ) : (
+          <h1 id="home-greeting">
+            {homeChatMode === "ask"
+              ? "从一个经营数据问题开始"
+              : homeChatMode === "rag"
+                ? "从一个企业知识问题开始"
+                : "从一份企业文档开始"}
+          </h1>
+        )}
       </section>
 
       <XsCommandBox
@@ -218,7 +263,7 @@ export function HomePage() {
         onChange={setDraft}
         onSubmit={handleSubmit}
         submitOnEnter
-        placeholder={commandPlaceholder}
+        placeholder={commandPlaceholderByMode[homeChatMode]}
         onVoice={() => {
           setSentStatus(voiceInput.state === "recording" ? "正在转写语音" : "正在听取语音");
           voiceInput.toggle();
@@ -235,25 +280,43 @@ export function HomePage() {
         }}
       />
 
-      {sentStatus ? (
-        <div key={sentStatus} className="home-page__status" role="status">
-          {sentStatus}
-        </div>
-      ) : null}
+      <XsStatusBar
+        slotClassName="home-page__status-slot"
+        message={sentStatus}
+        transitionKey={sentStatus}
+      />
 
-      <section className="home-page__apps" aria-labelledby="home-apps-title">
-        <h2 id="home-apps-title">推荐应用</h2>
-        <div className="home-page__app-grid">
-          {recommendedApps.map((app) => (
-            <XsAppCard
-              app={app}
-              key={app.id}
-              selected={selectedAppId === app.id}
-              onOpen={handleOpenApp}
-            />
-          ))}
-        </div>
-      </section>
+      {questions.length > 0 ? (
+        <section className="home-page__questions" aria-labelledby="home-questions-title">
+          <h2 id="home-questions-title">推荐问题</h2>
+          <div className="home-page__question-grid">
+            {questions.map((question) => (
+              <button
+                type="button"
+                className="home-page__question"
+                key={question.value}
+                onClick={() => setDraft(question.value)}
+              >
+                {question.label}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="home-page__apps" aria-labelledby="home-apps-title">
+          <h2 id="home-apps-title">推荐应用</h2>
+          <div className="home-page__app-grid">
+            {recommendedApps.map((app) => (
+              <XsAppCard
+                app={app}
+                key={app.id}
+                selected={selectedAppId === app.id}
+                onOpen={handleOpenApp}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

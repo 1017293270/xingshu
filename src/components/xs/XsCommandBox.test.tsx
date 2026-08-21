@@ -78,14 +78,17 @@ describe("XsCommandBox", () => {
     expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
   });
 
-  it("keeps the send control a square so Ant Design controlHeight cannot stretch it", () => {
+  it("keeps send and stop squares so page min-height cannot stretch them", () => {
     const css = readFileSync("src/components/xs/xs.css", "utf8").replaceAll("\r\n", "\n");
 
     expect(css).toMatch(
-      /\.xs-command-box__actions \.ant-btn \{[\s\S]*?aspect-ratio: 1 \/ 1;[\s\S]*?width: 36px;[\s\S]*?height: 36px;/
+      /\.xs-command-box__actions \.ant-btn \{[\s\S]*?aspect-ratio: 1 \/ 1;[\s\S]*?width: 36px;[\s\S]*?height: 36px;[\s\S]*?max-height: 36px;/
     );
     expect(css).toMatch(
-      /\.xs-command-box__send\.ant-btn \{[\s\S]*?width: 36px;[\s\S]*?height: 36px;/
+      /\.xs-page \.xs-command-box__actions \.ant-btn \{[\s\S]*?width: 36px;[\s\S]*?height: 36px;[\s\S]*?min-height: 36px;[\s\S]*?max-height: 36px;/
+    );
+    expect(css).toMatch(
+      /\.xs-command-box__send\.ant-btn,\s*\.xs-command-box__stop\.ant-btn \{[\s\S]*?width: 36px;[\s\S]*?height: 36px;[\s\S]*?min-height: 36px;[\s\S]*?max-height: 36px;/
     );
     expect(css).toMatch(
       /\.xs-command-box__actions \.ant-btn svg \{[\s\S]*?width: 18px;[\s\S]*?height: 18px;/
@@ -166,13 +169,7 @@ describe("XsCommandBox", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "选择模型，当前编排模型" }));
-    expect(await screen.findByText("自动拆解并组合数据与知识能力")).toBeInTheDocument();
-    expect(screen.getByText("指标、趋势与结构化数据分析")).toBeInTheDocument();
-    expect(screen.getByText("企业制度、合同与知识库检索")).toBeInTheDocument();
-    expect(screen.getByText("定位并打开有权限的企业文档")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("menuitem", { name: /问数模型/ }));
+    await user.click(screen.getByRole("button", { name: "切换到问数模型" }));
     expect(onModelModeChange).toHaveBeenCalledWith("ask");
   });
 });

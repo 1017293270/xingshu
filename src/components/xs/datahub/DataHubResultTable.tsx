@@ -1,12 +1,17 @@
+import { CopySimple, DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
-import { formatDataHubTableCell } from "@/services/dataHubTableExport";
+import {
+  buildDataHubTablesCsv,
+  downloadCsv,
+  formatDataHubTableCell,
+  sanitizeCsvBasename
+} from "@/services/dataHubTableExport";
 import type { DataHubTableColumn, DataHubTableResult } from "@/types/dataHub";
 
 type DataHubResultTableProps = {
   table: DataHubTableResult;
-  /** 命中的数据源名称，来自本轮 data_source_selected 事件；缺省时回落到表自带的 source。 */
-  datasourceName?: string;
+  onStatus?: (message: string) => void;
 };
 
 const PREVIEW_ROW_LIMIT = 20;
@@ -26,12 +31,11 @@ function isNumericColumn(column: DataHubTableColumn, rows: Record<string, unknow
   return values.every((text) => numericCellPattern.test(text));
 }
 
-export function DataHubResultTable({ table, datasourceName }: DataHubResultTableProps) {
+export function DataHubResultTable({ table, onStatus }: DataHubResultTableProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollEdge, setScrollEdge] = useState<"none" | "start" | "end" | "both">("none");
   const previewRows = table.rows.slice(0, PREVIEW_ROW_LIMIT);
   const hiddenRowCount = Math.max(0, table.totalRows - previewRows.length);
-  const source = datasourceName || table.source || "data-hub";
   const numericColumnKeys = new Set(
     table.columns.filter((column) => isNumericColumn(column, previewRows)).map((column) => column.key)
   );
@@ -79,12 +83,38 @@ export function DataHubResultTable({ table, datasourceName }: DataHubResultTable
     <article className="datahub-table-card">
       <div className="datahub-result-head">
         <h3>{table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : 1}`}</h3>
-        {/* 口径条：表格可信度的全部依据——来源、字段数、行数 */}
+        <div className="datahub-table-card__actions">
+          <button
+            type="button"
+            className="analysis-icon-button"
+            aria-label="复制表格"
+            onClick={async () => {
+              const csv = buildDataHubTablesCsv([table]);
+              try {
+                await navigator.clipboard.writeText(csv);
+                onStatus?.(`已复制 ${table.rows.length} 行表格`);
+              } catch {
+                onStatus?.("复制表格失败，请稍后重试");
+              }
+            }}
+          >
+            <CopySimple size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="analysis-icon-button"
+            aria-label="下载表格"
+            onClick={() => {
+              const basename = sanitizeCsvBasename(table.groupLabel || "问数表格") || "问数表格";
+              downloadCsv(`${basename}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv([table]));
+              onStatus?.(`已导出 ${table.rows.length} 行问数结果`);
+            }}
+          >
+            <DownloadSimple size={16} aria-hidden="true" />
+          </button>
+        </div>
+        {/* 口径条：字段数、行数 */}
         <dl className="datahub-result-meta">
-          <div>
-            <dt>数据源</dt>
-            <dd title={source}>{source}</dd>
-          </div>
           <div>
             <dt>字段</dt>
             <dd data-numeric="true">{table.columns.length}</dd>

@@ -8,7 +8,6 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
-import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import logoSource from "@/assets/brand/xingshu-logo-2x.png";
 import { Link, Outlet, useLocation } from "react-router";
 import "./official-document.css";
@@ -30,9 +29,8 @@ const defaultChrome: OfficialDocumentAppChrome = {
   context: "模板库"
 };
 
-const stageEyebrow: Record<OfficialDocumentAppStage, string> = {
-  library: "Agent 应用",
-  drafts: "Agent 应用",
+/* 列表页的页头只说"你在哪一栏"，标题已经和左侧导航一一对应，不再压一行静态说明 */
+const stageEyebrow: Partial<Record<OfficialDocumentAppStage, string>> = {
   template: "模板结构",
   draft: "结构化起草"
 };
@@ -47,7 +45,6 @@ const navItems = [
   {
     key: "templates",
     label: "模板库",
-    detail: "上传模板并起草",
     to: OFFICIAL_DOCUMENT_TEMPLATES_PATH,
     icon: Stack,
     matches: (pathname: string) => pathname === "/writing" || pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)
@@ -55,7 +52,6 @@ const navItems = [
   {
     key: "drafts",
     label: "草稿箱",
-    detail: "起草、绑定与导出",
     to: OFFICIAL_DOCUMENT_DRAFTS_PATH,
     icon: FileText,
     matches: (pathname: string) => pathname.startsWith(OFFICIAL_DOCUMENT_DRAFTS_PATH)
@@ -125,6 +121,7 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
     (location.state as { from?: unknown } | null)?.from
   );
   const parent = stageParent[chrome.stage];
+  const eyebrow = stageEyebrow[chrome.stage];
   const value = useMemo(
     () => ({ actionsHost, setChrome }),
     [actionsHost]
@@ -137,20 +134,10 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
         <aside className="official-document-rail">
           <div className="official-document-rail__brand">
             <img src={logoSource} alt="星数" width={400} height={183} />
-            {/* 与首页应用卡同一枚图标、同一档标题字号：从应用网格点进来的人一眼认出是同一个应用 */}
+            {/* 应用身份只用文字：渐变应用图标属于首页应用卡那一层，和下面的线性导航图标不同体系 */}
             <div className="official-document-rail__app">
-              <img
-                className="official-document-rail__mark"
-                src={appWritingIcon}
-                alt=""
-                width={256}
-                height={256}
-                data-icon-source="xingshu-home-apps-image2-v1"
-              />
-              <div>
-                <h1>公文写作</h1>
-                <p>套模板 · 绑数据 · 出定稿</p>
-              </div>
+              <h1>公文写作</h1>
+              <p>套模板 · 绑数据 · 出定稿</p>
             </div>
           </div>
           <nav className="official-document-rail__nav" aria-label="公文写作导航">
@@ -164,11 +151,8 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
                   data-active={active || undefined}
                   aria-current={active ? "page" : undefined}
                 >
-                  <Icon size={18} weight={active ? "fill" : "regular"} aria-hidden="true" />
-                  <span>
-                    <strong>{item.label}</strong>
-                    <small>{item.detail}</small>
-                  </span>
+                  <Icon size={18} weight="regular" aria-hidden="true" />
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
@@ -183,15 +167,17 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
         <div className="official-document-app__main">
           <header className="official-document-app__bar">
             <div className="official-document-app__context">
-              <p className="official-document-app__eyebrow">
-                {parent ? (
-                  <>
-                    <Link className="official-document-app__library" to={parent.to}>{parent.label}</Link>
-                    <i aria-hidden="true">/</i>
-                  </>
-                ) : null}
-                <span>{stageEyebrow[chrome.stage]}</span>
-              </p>
+              {parent || eyebrow ? (
+                <p className="official-document-app__eyebrow">
+                  {parent ? (
+                    <>
+                      <Link className="official-document-app__library" to={parent.to}>{parent.label}</Link>
+                      <i aria-hidden="true">/</i>
+                    </>
+                  ) : null}
+                  {eyebrow ? <span>{eyebrow}</span> : null}
+                </p>
+              ) : null}
               <p className="official-document-app__context-title">{chrome.context}</p>
               {chrome.contextDetail ? <small>{chrome.contextDetail}</small> : null}
             </div>

@@ -470,7 +470,7 @@
 }
 
 .db-arrange__kpi-trend {
-  color: var(--xs-success);
+  color: var(--xs-success-ink);
   font-size: 11px;
   font-weight: 600;
 }

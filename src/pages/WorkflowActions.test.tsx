@@ -20,8 +20,6 @@ vi.mock("@/services/tableService", () => ({
   listRecentTables: tableServiceMocks.listRecentTables
 }));
 
-const phasePlaybackSettleForTest = 250;
-
 function renderPage(page: ReactElement) {
   return render(
     <AppProviders>
@@ -44,6 +42,71 @@ function renderPageWithLocation(page: ReactElement) {
       </MemoryRouter>
     </AppProviders>
   );
+}
+
+function appendAgentAskChildTable(runId: string, childCount = 1) {
+  const store = useUiStore.getState();
+  const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+  const rootSessionId = turn.sessionId!;
+
+  for (let index = 0; index < childCount; index += 1) {
+    const childSessionId = `ask-data-child-${index + 1}`;
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        agentId: "ask-data",
+        sessionId: childSessionId,
+        subagentId: `ask-data-subagent-${index + 1}`,
+        label: `问数智能体 ${index + 1}`
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        columns: ["合同编号", "合同金额"],
+        rows: index === 0 ? [["szsz-2023-cg00001", 698850]] : [["szsz-2023-cg00002", 128000]],
+        totalRows: 1
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "ask" }
+    });
+  }
+
+  store.appendAskDataEvent(runId, {
+    type: "text",
+    agentName: "编排智能体",
+    sessionId: rootSessionId,
+    globalSessionId: rootSessionId,
+    chatId: turn.chatId,
+    content:
+      "经查询，系统中存在相关合同，具体情况如下：\n\n| 合同编号 | 合同金额 |\n| --- | ---: |\n| szsz-2023-cg00001 | 698850 |"
+  });
+  store.appendAskDataEvent(runId, {
+    type: "done",
+    agentName: "编排智能体",
+    sessionId: rootSessionId,
+    globalSessionId: rootSessionId,
+    chatId: turn.chatId,
+    content: { mode: "agent", adaptiveTeam: true },
+    finished: true
+  });
 }
 
 describe("workflow page actions", () => {
@@ -110,17 +173,15 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
     expect(screen.getByText("目前咨询数最多的社区为演示账号，累计咨询记录 716 条。")).toBeInTheDocument();
-    const steps = screen.getByRole("list", { name: "data-hub 问数步骤" });
-    expect(within(steps).getAllByRole("listitem")).toHaveLength(5);
-    expect(screen.getByText("理解问题")).toBeInTheDocument();
-    expect(screen.getByText("确定数据范围")).toBeInTheDocument();
-    expect(screen.getByText("数据处理")).toBeInTheDocument();
-    expect(screen.getByText("执行查询")).toBeInTheDocument();
-    expect(screen.getByText("生成结果")).toBeInTheDocument();
-    expect(screen.getByText("过程细节")).toBeInTheDocument();
-    expect(screen.getByText("已匹配事件域业务 Skill")).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("理解问题");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("确定数据范围");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("数据处理");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("执行查询");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("生成结果");
+    expect(screen.queryByText("过程细节")).not.toBeInTheDocument();
+    expect(screen.queryByText("已匹配事件域业务 Skill")).not.toBeInTheDocument();
     expect(screen.getByText("项目名称")).toBeInTheDocument();
     expect(screen.getByText("演示账号")).toBeInTheDocument();
   });
@@ -187,9 +248,8 @@ describe("workflow page actions", () => {
 
     const { container } = renderPage(<AnalysisPage mode="rag" />);
 
-    expect(screen.getByRole("heading", { name: "问知完成" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "已检索并复核制度" })).toBeInTheDocument();
-    expect(screen.getByText("部门审核")).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.getAllByText("部门审核", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(container.querySelector('img[src="x"]')).not.toBeInTheDocument();
     expect(screen.getAllByText("合同管理办法.pdf")).toHaveLength(1);
@@ -292,10 +352,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
-    expect(screen.getByText("问数 Agent 执行")).toBeInTheDocument();
-    expect(screen.getByLabelText("主智能体执行过程")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "模型活动：理解数据问题" })).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
     expect(screen.getByText("128 万元")).toBeInTheDocument();
     expect(screen.getByText("月份")).toBeInTheDocument();
     expect(screen.getByText("7月")).toBeInTheDocument();
@@ -374,11 +431,8 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="rag" />);
 
-    expect(screen.getByRole("heading", { name: "问知完成" })).toBeInTheDocument();
-    expect(screen.getByText("问知 Agent 执行")).toBeInTheDocument();
-    expect(screen.getByLabelText("主智能体执行过程")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "模型活动：检索知识证据" })).toBeInTheDocument();
-    expect(screen.getByText("单笔差旅费超过 5000 元需复核")).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.getByText("单笔差旅费超过 5000 元需复核", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("财务报销制度（2026）")).toBeInTheDocument();
     expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
   });
@@ -539,9 +593,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(
-      screen.getByRole("heading", { name: "智能编排完成" })
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("智能编排已完成");
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -605,7 +657,7 @@ describe("workflow page actions", () => {
     renderPage(<AnalysisPage mode="agent" />);
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
-    expect(screen.getByRole("heading", { name: "已停止生成" })).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("已停止生成");
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -645,9 +697,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(
-      screen.getByRole("heading", { name: "智能编排失败" })
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("智能编排失败");
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -1189,8 +1239,7 @@ describe("workflow page actions", () => {
     ).toBeDisabled();
   });
 
-  it("streams every phase detail before advancing to the next ask-data phase", async () => {
-    vi.useFakeTimers();
+  it("shows compact Chinese task dynamics instead of english process details", () => {
     const runId = useUiStore.getState().startAskDataRun("分析最近 30 天客户增长趋势");
     const store = useUiStore.getState();
 
@@ -1209,93 +1258,25 @@ describe("workflow page actions", () => {
     });
     store.appendAskDataEvent(runId, {
       type: "react_step",
-      data: {
-        round: 1,
-        action: "match_skill",
-        status: "success",
-        summary: "已按数据源 Skill 规划出业务组，直接加载业务组 Skill。"
-      }
+      data: { round: 2, action: "execute_query", status: "success", summary: "返回 1 行数据" }
     });
     store.appendAskDataEvent(runId, {
-      type: "react_step",
-      data: {
-        round: 1,
-        action: "load_cube_meta",
-        status: "success",
-        summary: "groupName=group_1, hitLayer=group（已定位业务组）"
-      }
+      type: "done",
+      data: { summary: "客户增长保持稳定。" }
     });
-    store.appendAskDataEvent(runId, {
-      type: "react_step",
-      data: {
-        round: 2,
-        action: "plan_with_datasource_skill",
-        status: "success",
-        summary: "已读取数据源 Skill"
-      }
-    });
+    store.completeAskDataRun(runId);
 
-    const { container } = renderPage(<AnalysisPage mode="ask" />);
-    const firstStream = screen.getByRole("status", { name: "理解问题实时输出" });
-    const firstVisual = firstStream.querySelector(".xs-streaming-text__visual");
+    renderPage(<AnalysisPage mode="ask" />);
 
-    expect(firstVisual?.textContent).toBe("");
-
-    act(() => {
-      vi.advanceTimersByTime(84);
-    });
-
-    expect(firstVisual?.textContent?.length).toBeGreaterThan(0);
-    expect(firstVisual?.textContent).not.toBe("识别问数意图，拆解为 data-hub 可执行的问题。");
-
-    const steps = screen.getByRole("list", { name: "data-hub 问数步骤" });
-    const understandStep = within(steps).getByText("理解问题").closest("li");
-    const scopeStep = within(steps).getByText("确定数据范围").closest("li");
-
-    expect(understandStep).toHaveClass("datahub-step--active");
-    expect(scopeStep).toHaveClass("datahub-step--pending");
-    expect(scopeStep).not.toHaveTextContent("datasourceId=1000002");
-    expect(within(steps).getByText("数据处理").closest("li")).not.toHaveTextContent("已读取数据源 Skill");
-    expect(within(steps).queryByRole("status", { name: "AI 正在确定数据范围" })).not.toBeInTheDocument();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(phasePlaybackSettleForTest);
-    });
-
-    expect(scopeStep).toHaveClass("datahub-step--active");
-    expect(within(steps).getByRole("status", { name: "AI 正在确定数据范围" })).toBeInTheDocument();
-    const scopeStream = within(steps).getByRole("status", { name: "确定数据范围实时输出" });
-    expect(scopeStream.querySelector(".xs-streaming-text__visual")?.textContent).not.toBe(
-      "定位空间、数据源和业务语义，确认本次查询边界。"
-    );
-    expect(screen.getByRole("status", { name: /AI 正在生成问数结果/ })).toHaveTextContent(
-      "当前步骤：确定数据范围"
-    );
-    expect(container.querySelector(".datahub-result-loading__skeleton")).toBeInTheDocument();
-
-    for (let messageIndex = 0; messageIndex < 4; messageIndex += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2_000);
-      });
-    }
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(phasePlaybackSettleForTest);
-    });
-
-    expect(within(steps).getByText("数据处理").closest("li")).toHaveClass("datahub-step--active");
-    expect(scopeStep).toHaveTextContent("datasourceId=1000002, name=生产销售数据, datasourceSkillLength=473");
-    expect(scopeStep).toHaveTextContent("已按数据源 Skill 规划出业务组，直接加载业务组 Skill。");
-    expect(scopeStep).toHaveTextContent("groupName=group_1, hitLayer=group（已定位业务组）");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("理解问题");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("确定数据范围");
+    expect(screen.queryByText("datasourceId=1000002")).not.toBeInTheDocument();
+    expect(screen.queryByText("已读取数据源 Skill")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "data-hub 问数步骤" })).not.toBeInTheDocument();
+    expect(screen.getByText("客户增长保持稳定。")).toBeInTheDocument();
   });
 
-  it("keeps completed table events buffered until the reasoning playback finishes", async () => {
-    vi.useFakeTimers();
+  it("shows completed tables immediately without waiting for process playback", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询咨询数最多的社区");
 
@@ -1311,18 +1292,6 @@ describe("workflow page actions", () => {
         data: { action: "locate_datasource", status: "success", summary: "已定位生产数据源" }
       });
       store.appendAskDataEvent(runId, {
-        type: "react_step",
-        data: { action: "load_cube_meta", status: "success", summary: "已加载社区咨询语义模型" }
-      });
-      store.appendAskDataEvent(runId, {
-        type: "react_step",
-        data: { action: "plan_with_datasource_skill", status: "success", summary: "已生成查询计划" }
-      });
-      store.appendAskDataEvent(runId, {
-        type: "react_step",
-        data: { action: "execute_query", status: "success", summary: "返回 1 行数据" }
-      });
-      store.appendAskDataEvent(runId, {
         type: "table",
         data: {
           columns: [
@@ -1335,35 +1304,19 @@ describe("workflow page actions", () => {
         }
       });
       store.appendAskDataEvent(runId, {
-        type: "react_step",
-        data: { action: "finalize", status: "success", summary: "finalize" }
-      });
-      store.appendAskDataEvent(runId, {
         type: "done",
         data: { summary: "演示账号咨询数最多，共 720 条。" }
       });
       store.completeAskDataRun(runId);
     });
 
-    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "问数完成" })).not.toBeInTheDocument();
     expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
     expect(screen.getByText("演示账号")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "AI 生成图表" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
-
-    for (let playbackTick = 0; playbackTick < 20; playbackTick += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_000);
-      });
-    }
-
-    expect(screen.getByRole("heading", { name: "问数完成" })).toBeInTheDocument();
-    expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
-    expect(screen.getByText("演示账号")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "AI 生成图表" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载表格" })).toBeInTheDocument();
   });
 
   it("does not fabricate reasoning or export actions without backend events", () => {
@@ -1409,7 +1362,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    await user.click(screen.getByRole("button", { name: "导出结果" }));
+    await user.click(screen.getByRole("button", { name: "下载表格" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
     await expect(blob.text()).resolves.toContain("项目名称,记录数");
@@ -1420,6 +1373,188 @@ describe("workflow page actions", () => {
 
     Object.defineProperty(window.URL, "createObjectURL", { configurable: true, value: originalCreateObjectURL });
     Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
+  });
+
+  it("exports a single ask-data child table from agent results", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.fn<(object: Blob | MediaSource) => string>(() => "blob:xingshu-csv");
+    const revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const originalCreateObjectURL = window.URL.createObjectURL;
+    const originalRevokeObjectURL = window.URL.revokeObjectURL;
+
+    Object.defineProperty(window.URL, "createObjectURL", { configurable: true, value: createObjectURL });
+    Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
+
+    const runId = useUiStore.getState().startAskDataRun("查询眉山天府新区照明采购合同", null, "agent");
+    appendAgentAskChildTable(runId);
+    useUiStore.getState().completeAskDataRun(runId);
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "下载表格" }));
+
+    const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
+    await expect(blob.text()).resolves.toContain("合同编号,合同金额");
+    await expect(blob.text()).resolves.toContain("szsz-2023-cg00001,698850");
+    expect(clickSpy).toHaveBeenCalled();
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("已导出 1 行问数结果");
+
+    Object.defineProperty(window.URL, "createObjectURL", { configurable: true, value: originalCreateObjectURL });
+    Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
+  });
+
+  it("does not export when agent orchestration has multiple ask-data children", () => {
+    const runId = useUiStore.getState().startAskDataRun("同时查询两份合同", null, "agent");
+    appendAgentAskChildTable(runId, 2);
+    useUiStore.getState().completeAskDataRun(runId);
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "下载表格" })).toHaveLength(2);
+  });
+
+  it("shows 综合结果 with query-child tables labeled by the sub-question", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun(
+      "查询眉山天府新区照明采购合同的设备清单",
+      null,
+      "agent"
+    );
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-device-list";
+
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "我来帮您查询眉山天府新区城市照明采购合同的相关设备清单。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "查询合同设备清单",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        sessionId: childSessionId,
+        subagentId: "subagent-device-list",
+        label: "查询合同设备清单"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      agentName: "查询合同设备清单",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        columns: ["设备名称", "数量"],
+        rows: [["远程控制终端", 6]],
+        totalRows: 1
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "查询合同设备清单",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {}
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        mode: "agent",
+        adaptiveTeam: true,
+        summary: "数据与制度来源均已完成。"
+      },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    const result = screen.getByRole("region", { name: "分析结果" });
+    expect(
+      within(result).getByText("我来帮您查询眉山天府新区城市照明采购合同的相关设备清单。")
+    ).toBeInTheDocument();
+    expect(within(result).queryByText("数据与制度来源均已完成。")).not.toBeInTheDocument();
+    expect(within(result).getByRole("columnheader", { name: "设备名称" })).toBeInTheDocument();
+    expect(within(result).getByText("远程控制终端")).toBeInTheDocument();
+    expect(within(result).getByRole("button", { name: "下载表格" })).toBeInTheDocument();
+    expect(screen.queryByText("本次响应没有独立的路由、ReAct 或工具调用事件。")).not.toBeInTheDocument();
+  });
+
+  it("lifts a completed child narrative into 综合结果 when there is no table", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("核对设备清单口径", null, "agent");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+    const childSessionId = "child-policy-answer";
+
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "我来帮您核对设备清单口径。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "subagent_exposed",
+      agentName: "制度研究员",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { sessionId: childSessionId, label: "制度研究员" }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "制度研究员",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "根据合同约定，设备清单以附件为准，共计 12 项。"
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "制度研究员",
+      sessionId: childSessionId,
+      globalSessionId: rootSessionId,
+      parentSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {}
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "编排智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "agent", adaptiveTeam: true, summary: "编排完成。" },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+    renderPage(<AnalysisPage mode="agent" />);
+
+    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.getByText("根据合同约定，设备清单以附件为准，共计 12 项。")).toBeInTheDocument();
   });
 
   it("submits a follow-up with Enter without exposing upload controls", async () => {
@@ -1447,8 +1582,7 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "命令输入" }), "查询最新销售制度");
-    await user.click(screen.getByRole("button", { name: "选择模型，当前问数模型" }));
-    await user.click(screen.getByRole("menuitem", { name: /问知模型/ }));
+    await user.click(screen.getByRole("button", { name: "切换到问知模型" }));
 
     expect(screen.getByRole("button", { name: "选择模型，当前问知模型" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("查询最新销售制度");
@@ -1481,7 +1615,7 @@ describe("workflow page actions", () => {
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
     expect(abort).toHaveBeenCalledOnce();
-    expect(screen.getByRole("heading", { name: "已停止生成" })).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("已停止生成");
     expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
       "已停止本次问数生成"
     );

@@ -1,4 +1,4 @@
-import { FileText, Plus, ShieldWarning } from "@phosphor-icons/react";
+import { FileText, Plus } from "@phosphor-icons/react";
 import { Button, Tag } from "antd";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -97,7 +97,6 @@ export function DraftLibraryView() {
       {operationStatus ? (
         <XsStatusBar
           tone={operationTone}
-          label="操作"
           message={operationStatus}
           transitionKey={`${operationTone}:${operationStatus}`}
         />
@@ -172,11 +171,6 @@ export function DraftLibraryView() {
           )}
         </div>
       </XsAsyncPanel>
-
-      <p className="official-document-view__note">
-        <ShieldWarning size={16} aria-hidden="true" />
-        <span>许可失效、结构槽位丢失、Schema 漂移或致命保真差异时，正式导出会自动停止。</span>
-      </p>
     </section>
   );
 }

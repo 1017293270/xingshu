@@ -13,64 +13,11 @@
   margin-bottom: 0;
 }
 
-/* ---------- 提示条（迁移 / 行内错误共用 alert 模式） ---------- */
+/* ---------- 提示条：外形由 XsStatusBar 统一，这里只管落位 ---------- */
 
-.dashboard-list__alert {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-control);
-  background: var(--xs-surface);
-  box-shadow: var(--xs-shadow-soft);
-  font-size: var(--xs-fs-label);
-}
-
-.dashboard-list__alert div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.dashboard-list__alert strong {
-  color: var(--xs-text);
-}
-
-.dashboard-list__alert span {
-  color: var(--xs-text-3);
-}
-
-.dashboard-list__alert button {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--xs-border-strong);
-  border-radius: var(--xs-radius-control);
-  background: var(--xs-surface);
-  color: var(--xs-interactive-text);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.dashboard-list__alert button:hover:not(:disabled) {
-  border-color: var(--xs-primary);
-  background: var(--xs-surface-soft);
-}
-
-.dashboard-list__alert button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.dashboard-list__alert--error {
-  display: block;
-  margin: 0 auto;
-  border-color: color-mix(in srgb, var(--xs-danger) 32%, var(--xs-border));
-  color: var(--xs-danger);
-  font-weight: 600;
-  overflow-wrap: anywhere;
+.dashboard-list__alert-slot {
+  margin-bottom: 4px;
+  text-align: center;
 }
 
 /* ---------- 卡片网格 ---------- */
@@ -251,6 +198,7 @@
   font-size: var(--xs-fs-label);
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
   transition:
     background var(--xs-motion-fast) var(--xs-motion-ease-out),
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -278,10 +226,11 @@
 }
 
 .dashboard-card__more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 32px;
   padding: 0 8px;
-  font-size: var(--xs-fs-control-lg);
-  letter-spacing: 1px;
 }
 
 .dashboard-card__menu {
@@ -333,7 +282,8 @@
   }
 }
 
-.dashboard-card__menu button {
+.dashboard-card__menu button,
+.dashboard-card__menu a[role="menuitem"] {
   display: flex;
   align-items: center;
   width: 100%;
@@ -349,7 +299,8 @@
   transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
-.dashboard-card__menu button:hover:not(:disabled) {
+.dashboard-card__menu button:hover:not(:disabled),
+.dashboard-card__menu a[role="menuitem"]:hover {
   background: var(--xs-surface-soft);
   color: var(--xs-interactive-text);
 }
@@ -364,12 +315,12 @@
 }
 
 .dashboard-card__menu .dashboard-card__menu-danger {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .dashboard-card__menu .dashboard-card__menu-danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--xs-danger) 8%, #ffffff);
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .dashboard-card__menu-separator {
@@ -388,10 +339,10 @@
 }
 
 .dashboard-card__name {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-body);
-  font-weight: 600;
-  line-height: 1.35;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.4;
   overflow: hidden;
   text-decoration: none;
   text-overflow: ellipsis;
@@ -405,7 +356,8 @@
 .dashboard-card__meta {
   margin: 0;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
 }
 
 .dashboard-card__share {
@@ -576,11 +528,6 @@
     padding: 0 0 24px;
   }
 
-  .dashboard-list__alert {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .dashboard-list__grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -609,8 +556,11 @@
   .dashboard-card,
   .dashboard-card__menu,
   .dashboard-card__versions,
-  .dashboard-list__skeleton,
+  .dashboard-list__skeleton {
+    animation: none;
+  }
 }
+
 .dashboard-list__toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 420px) auto 1fr;

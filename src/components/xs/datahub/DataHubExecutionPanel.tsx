@@ -175,7 +175,6 @@ export function DataHubExecutionPanel({
             <TreeStructure size={19} weight="duotone" />
           </span>
           <span>
-            <small>AGENT EXECUTION</small>
             <strong id={titleId}>{title}</strong>
           </span>
           <DataHubExecutionStatus status={projection.mainSession.status} compact />

@@ -53,7 +53,7 @@ export function DashboardViewPage() {
       <header className="dashboard-fullscreen-view__toolbar">
         <Link className="dashboard-fullscreen-view__back" to="/dashboard">
           <ArrowLeft size={18} aria-hidden="true" />
-          返回大屏库
+          返回看板广场
         </Link>
         <div className="dashboard-fullscreen-view__meta">
           <strong>{runtimeQuery.data.schema.title}</strong>

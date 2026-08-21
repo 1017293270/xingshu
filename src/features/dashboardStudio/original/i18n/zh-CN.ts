@@ -3,7 +3,7 @@ export const bigScreenText = {
     actions: {
       archive: '删除',
       archiving: '删除中',
-      backToLibrary: '返回大屏库',
+      backToLibrary: '返回看板广场',
       cancel: '取消',
       copy: '复制',
       copying: '复制中',
@@ -38,9 +38,9 @@ export const bigScreenText = {
     },
   },
   dashboardList: {
-    archiveConfirm: (name: string) => `删除“${name}”？它会从大屏库中移除。`,
+    archiveConfirm: (name: string) => `删除“${name}”？它会从看板广场中移除。`,
     createFirst: '创建第一个大屏',
-    dashboardLibrary: '大屏库',
+    dashboardLibrary: '看板广场',
     emptyDescription: '已发布的大屏和草稿会显示在这里。',
     eyebrow: '大屏',
     loadFailed: '加载失败',
@@ -50,7 +50,7 @@ export const bigScreenText = {
     noPublishedVersions: '暂无已发布版本',
     notPublished: '未发布',
     rollbackConfirm: (name: string, version: number) => `将“${name}”回滚到版本 ${version}？`,
-    unavailable: '大屏库暂不可用',
+    unavailable: '看板广场暂不可用',
     versionLoading: '正在加载版本',
     table: {
       actions: '操作',

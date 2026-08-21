@@ -144,7 +144,7 @@ describe("HistoryPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Q2销售业绩分析" })).toBeInTheDocument();
 
-    await user.click(segmentedOption("数据洞察"));
+    await user.click(segmentedOption("查数据"));
 
     const historyList = screen.getByRole("region", { name: "历史对话列表" });
     expect(within(historyList).getByRole("heading", { name: "Q2销售业绩分析" })).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("HistoryPage", () => {
     expect(within(historyList).queryByRole("heading", { name: "员工报销流程说明" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 2 条历史对话");
 
-    await user.click(segmentedOption("文档处理"));
+    await user.click(segmentedOption("找文档"));
 
     expect(within(historyList).queryByRole("heading", { name: "Q2销售业绩分析" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已筛选 0 条历史对话");

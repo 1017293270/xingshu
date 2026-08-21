@@ -170,10 +170,10 @@ describe("data asset actions", () => {
   it("exposes the real dashboard creation workflow instead of unavailable placeholders", async () => {
     renderRoute("/dashboard");
 
-    await screen.findByRole("heading", { name: "大屏库" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
-    expect(await screen.findByRole("heading", { name: "创建第一个大屏" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "新建大屏" })).toHaveLength(2);
-    screen.getAllByRole("button", { name: "新建大屏" }).forEach((button) => expect(button).toBeEnabled());
+    await screen.findByRole("heading", { name: "看板广场" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
+    expect(await screen.findByRole("heading", { name: "创建第一个看板" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "新建看板" })).toHaveLength(2);
+    screen.getAllByRole("button", { name: "新建看板" }).forEach((button) => expect(button).toBeEnabled());
     expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "看板市场" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "切换看板" })).not.toBeInTheDocument();
@@ -183,8 +183,8 @@ describe("data asset actions", () => {
     const user = userEvent.setup();
     renderRoute("/dashboard");
 
-    await user.click((await screen.findAllByRole("button", { name: "新建大屏" }))[0]);
-    await user.type(await screen.findByLabelText("大屏名称"), "数据资产经营看板");
+    await user.click((await screen.findAllByRole("button", { name: "新建看板" }))[0]);
+    await user.type(await screen.findByLabelText("看板名称"), "数据资产经营看板");
     await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     expect(await screen.findByLabelText("看板编辑器工作区")).toBeInTheDocument();

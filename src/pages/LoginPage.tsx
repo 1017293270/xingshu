@@ -1,8 +1,9 @@
 import { Button, Form, Input } from "antd";
-import { ChartLineUp, Check, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User, WarningCircle } from "@phosphor-icons/react";
+import { ChartLineUp, Check, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User } from "@phosphor-icons/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import logo from "@/assets/brand/xingshu-logo-2x.png";
+import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { loginToDataHub } from "@/services/dataHubAuthService";
 import { DataHubServiceError } from "@/services/dataHubClient";
@@ -224,13 +225,12 @@ export function LoginPage() {
             </div>
 
             {isSessionExpired ? (
-              <div className="login-panel__session-alert" role="alert">
-                <WarningCircle size={20} weight="fill" aria-hidden="true" />
-                <span>
-                  <strong>登录状态已过期，请重新登录</strong>
-                  <small>为保护企业数据，当前会话已安全退出。</small>
-                </span>
-              </div>
+              <XsStatusBar
+                className="login-panel__notice"
+                tone="warning"
+                message="登录状态已过期，请重新登录"
+                detail="为保护企业数据，当前会话已安全退出。"
+              />
             ) : null}
 
             <Form<LoginFormValues>
@@ -298,16 +298,19 @@ export function LoginPage() {
               )}
             </Form>
 
-            {statusMessage ? (
-              <div key={statusMessage} className="login-panel__status" role="status">
-                <span>{statusMessage}</span>
-                {isSubmitting ? (
+            <XsStatusBar
+              className="login-panel__notice"
+              tone={isLoginComplete ? "success" : isSubmitting ? "loading" : "info"}
+              message={statusMessage}
+              transitionKey={statusMessage}
+              action={
+                isSubmitting ? (
                   <button type="button" onClick={handleCancelLogin}>
                     取消
                   </button>
-                ) : null}
-              </div>
-            ) : null}
+                ) : null
+              }
+            />
 
             <footer className="login-panel__foot">
               <Database size={15} />

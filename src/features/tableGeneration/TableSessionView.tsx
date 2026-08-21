@@ -264,7 +264,6 @@ export function TableSessionView() {
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
           tone={statusToneFor(statusMessage, isBusy, generation.status, generation.restoreError)}
-          label="问表"
           spinner={false}
           message={statusMessage}
           transitionKey={`${generation.status}:${statusMessage}`}

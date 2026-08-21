@@ -1472,31 +1472,29 @@ test("workspace model selector changes the strict DataHub chatMode request param
   await page.goto("/ask-data");
 
   await page.getByRole("textbox", { name: "命令输入" }).fill("查询最新差旅制度");
-  await page.getByRole("button", { name: "选择模型，当前问数模型" }).click();
-  await expect(page.getByRole("menuitem", { name: /问知模型/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换到问知模型" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/analysis-model-selector-open-1672x941.png",
     animations: "disabled",
     fullPage: true
   });
-  await page.getByRole("menuitem", { name: /问知模型/ }).click();
+  await page.getByRole("button", { name: "切换到问知模型" }).click();
 
   await expect(page.getByRole("button", { name: "选择模型，当前问知模型" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "命令输入" })).toHaveValue("查询最新差旅制度");
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("button", { name: "选择模型，当前问知模型" }).click();
-  await expect(page.getByRole("menuitem", { name: /编排模型/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换到问数模型" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /编排模型/ })).toHaveCount(0);
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/analysis-model-selector-open-390x844.png",
     animations: "disabled",
     fullPage: true
   });
-  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page).toHaveURL(/\/ask-knowledge$/);
-  await expect(page.getByRole("heading", { name: "问知完成" })).toBeVisible();
+  await expect(page.getByText("问知已完成")).toBeVisible();
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "rag");
   expect(fixture.streamRequests[0].message).toBe("查询最新差旅制度");
@@ -1560,8 +1558,8 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   const answerImage = page.getByRole("img", { name: "制度截图" });
   await expect(answerImage).toBeVisible();
   await expect(answerImage.locator("xpath=..")).toHaveAttribute("target", "_blank");
-  await expect(page.getByRole("heading", { name: "引用文档" })).toBeVisible();
-  await expect(page.locator(".knowledge-citation")).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "引用文档" })).toBeVisible();
+  await expect(page.locator(".knowledge-citation-chip")).toHaveCount(1);
   await expect(page.getByText("财务报销制度（2026）")).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
@@ -1579,7 +1577,7 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   await imagePopup.close();
 
   const popupPromise = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "打开原文" }).click();
+  await page.getByRole("button", { name: "打开原文：财务报销制度（2026）" }).click();
   const popup = await popupPromise;
   await expect(popup).toHaveURL(/\/fixtures\/source\/finance-policy-v2\.pdf$/);
 
@@ -1590,8 +1588,8 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
     }
   ]);
   await expect(
-    page.getByRole("status").filter({ hasText: "已通过 data-hub 鉴权打开原文" }).last()
-  ).toHaveText("已通过 data-hub 鉴权打开原文");
+    page.getByRole("status").filter({ hasText: "已打开原文" }).last()
+  ).toHaveText("已打开原文");
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/ask-knowledge-v2-flow-1672x941.png",
     animations: "disabled",
@@ -1600,8 +1598,8 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   await popup.close();
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("button", { name: "打开原文" }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole("button", { name: "打开原文" })).toBeVisible();
+  await page.getByRole("button", { name: "打开原文：财务报销制度（2026）" }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "打开原文：财务报销制度（2026）" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/ask-knowledge-v2-flow-390x844.png",
     animations: "disabled",
@@ -1618,10 +1616,10 @@ test("document lookup renders the validated document once and opens it through D
   await page.getByRole("textbox", { name: "命令输入" }).fill("帮我找到最新版销售管理制度");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "找文档完成" })).toBeVisible();
-  await expect(page.getByText("找文档 Agent 执行")).toBeVisible();
+  await expect(page.getByText("找文档已完成")).toBeVisible();
+  await expect(page.getByText("找文档 Agent 执行")).toHaveCount(0);
   await expect(page.getByText("销售管理制度（2026）")).toHaveCount(1);
-  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
+  await expect(page.locator(".document-lookup-name")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
 
@@ -1674,7 +1672,7 @@ test("flat document agent renders its root stages and document link without a ge
     .fill("帮我找下给眉山天府新区的合同");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
   await expect(
     page.getByRole("list", { name: "找文档智能体执行时间轴" })
   ).toBeVisible();
@@ -1723,7 +1721,7 @@ test("agent ask-data child automatically generates a chart from its structured t
     .fill("分析本季度销售变化");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
   const chartCard = page.getByRole("region", { name: "智能图表建议" });
   await expect(chartCard).toBeVisible();
   await expect(
@@ -1743,7 +1741,7 @@ test("agent ask-data child automatically generates a chart from its structured t
   await expectNoHorizontalOverflow(page);
   await expect(
     page.getByRole("button", { name: "AI 生成图表" })
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("agent-ask-chart-action-390x844.png"),
     animations: "disabled",
@@ -1764,7 +1762,7 @@ test("right subagent drawer summarizes model activity lifecycle updates", async 
     .fill("分析本季度销售变化");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
   await page
     .getByRole("button", { name: "打开 问数智能体执行详情" })
     .click();
@@ -1886,7 +1884,8 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     .fill("分析销售变化并核对费用制度");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "综合结果" })).toBeVisible();
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "编排执行轨迹" })).toBeVisible();
@@ -2009,7 +2008,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
 
   await page.getByRole("button", { name: "返回上一页" }).click();
   await expect(page).toHaveURL(/\/ask-agent$/);
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
 });
 
 test("a single ask child and root artifact share one favorite action", async ({ page }) => {
@@ -2023,7 +2022,7 @@ test("a single ask child and root artifact share one favorite action", async ({ 
     .fill("统计咨询对象排名");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
   await expect(page.getByRole("cell", { name: "小治" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "456" })).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
@@ -2236,10 +2235,10 @@ test("persisted document lookup history restores the validated document without 
   await page.getByRole("button", { name: /查找销售管理制度/ }).click();
 
   await expect(page).toHaveURL(/\/document-lookup$/);
-  await expect(page.getByText("找文档 Agent 执行")).toBeVisible();
+  await expect(page.getByText("找文档 Agent 执行")).toHaveCount(0);
   await expect(page.getByText("销售管理制度（2026）")).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "打开原文：销售管理制度（2026）" })
   ).toBeVisible();
-  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
+  await expect(page.locator(".document-lookup-name")).toHaveCount(1);
 });

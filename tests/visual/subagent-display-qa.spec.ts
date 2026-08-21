@@ -356,7 +356,7 @@ test("capture done state", async ({ page }) => {
     .fill("分析销售变化并核对费用制度");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByRole("heading", { name: "智能编排完成" })).toBeVisible();
+  await expect(page.getByText("智能编排已完成")).toBeVisible();
   await expect(page.getByRole("heading", { name: "编排流程" })).toBeVisible();
   await expect(page.locator(".xs-datahub-execution")).toHaveAttribute(
     "data-status",

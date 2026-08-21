@@ -19,8 +19,8 @@
 .sheet-console .sheet-console__head h2 {
   margin: 0;
   color: var(--xs-text);
-  font-size: var(--xs-fs-card);
-  font-weight: 750;
+  font-size: var(--xs-fs-control-lg);
+  font-weight: var(--xs-fw-medium);
 }
 
 .sheet-console .sheet-console__head p {
@@ -197,7 +197,7 @@
 }
 
 .sheet-result__empty--error {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 /* 结果表位常驻：空态和加载中都保持一张"空表"的形状，加载动画发生在框里 */
@@ -220,8 +220,8 @@
 .table-placeholder .table-placeholder__head h2 {
   margin: 0;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-body);
-  font-weight: 750;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
 }
 
 .table-placeholder__head p {
@@ -468,7 +468,7 @@
 }
 
 .agent-trace__step[data-status="error"] .agent-trace__index {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .agent-trace__label {
@@ -478,7 +478,7 @@
 }
 
 .agent-trace__step[data-status="error"] .agent-trace__label {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .agent-trace__detail {
@@ -629,13 +629,14 @@
 }
 
 .section-title-row--compact h2.subsection-title {
-  font-size: var(--xs-fs-card);
+  font-size: var(--xs-fs-control-lg);
+  font-weight: var(--xs-fw-medium);
 }
 
 .section-title-meta {
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
 }
 
 /* ---------- 智能制表：最近制表 ---------- */
@@ -662,13 +663,13 @@
     var(--sheet-col-type) var(--sheet-col-time) var(--sheet-col-action);
   align-items: center;
   gap: var(--sheet-col-gap);
-  padding: 0 16px;
-  min-height: 38px;
+  padding: 0 14px;
+  min-height: 32px;
   border-bottom: 1px solid var(--xs-border-strong);
   color: var(--xs-text-3);
   background: var(--xs-table-head);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -686,7 +687,7 @@
   grid-template-columns: minmax(0, 1fr) var(--sheet-col-action);
   align-items: center;
   gap: var(--sheet-col-gap);
-  padding: 0 16px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--xs-table-grid);
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
@@ -707,7 +708,7 @@
     var(--sheet-col-type) var(--sheet-col-time);
   align-items: center;
   gap: var(--sheet-col-gap);
-  min-height: 54px;
+  min-height: 40px;
   color: inherit;
   text-decoration: none;
 }
@@ -722,10 +723,10 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--xs-text);
+  color: var(--xs-text-2);
   font-size: var(--xs-fs-control);
-  font-weight: 700;
-  line-height: 1.4;
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -737,7 +738,7 @@
 .sheet-row__type {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-regular);
 }
 
 /* 时间沿用结果表的数值字体：同一套数字语言贯穿列表与结果 */
@@ -762,12 +763,12 @@
 
 .sheet-list .sheet-row__copy.ant-btn {
   justify-self: end;
-  height: 30px;
+  height: 28px;
   padding: 0 10px;
   border-radius: var(--xs-radius-small);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-regular);
 }
 
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):hover,
@@ -894,10 +895,10 @@
 
 .table-agent__user {
   margin: 0;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-section);
-  font-weight: 750;
-  line-height: 1.45;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.55;
 }
 
 .table-agent__export.ant-btn {
@@ -1031,7 +1032,7 @@
 
 @media (max-width: 900px) {
   .table-agent__user {
-    font-size: var(--xs-fs-card);
+    font-size: var(--xs-fs-control);
   }
 
   .table-agent__request {
@@ -1053,7 +1054,8 @@
 
 .writing-panel__intro h2 {
   margin: 0;
-  font-size: var(--xs-fs-card);
+  font-size: var(--xs-fs-control-lg);
+  font-weight: var(--xs-fw-medium);
 }
 
 .writing-panel__intro p {
@@ -1193,12 +1195,12 @@
 
 .writing-attachment-queue li[data-status="rejected"] {
   border-color: #ffc5c5;
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
   background: #fff7f7;
 }
 
 .writing-attachment-queue li[data-status="rejected"] > small {
-  color: var(--xs-danger);
+  color: var(--xs-danger-ink);
 }
 
 .writing-panel__status-slot {
@@ -1252,9 +1254,9 @@
 }
 
 .scene-card strong {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-body);
-  font-weight: 700;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
 }
 
 .scene-card div > span {

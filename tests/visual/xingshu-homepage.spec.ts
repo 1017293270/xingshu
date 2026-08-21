@@ -351,12 +351,12 @@ const pages: SmokePage[] = [
   { slug: "login", path: "/login", heading: "登录星数", shell: false, charts: 0 },
   { slug: "home", path: "/", heading: "您好，张三", charts: 0 },
   { slug: "analysis", path: "/analysis", region: "星数命令输入区", charts: 0 },
-  { slug: "ask-data", path: "/ask-data", heading: "从一个经营问题开始", charts: 0 },
+  { slug: "ask-data", path: "/ask-data", heading: "从一个经营数据问题开始", charts: 0 },
   { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
   { slug: "writing", path: "/writing", heading: "公文写作", charts: 0, shell: false },
-  { slug: "dashboard", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏", charts: 0 },
+  { slug: "dashboard", path: "/dashboard", heading: "看板广场", readyText: "暂无看板", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
   {
@@ -907,7 +907,7 @@ test("dashboard viewing uses true fullscreen chrome", async ({ page }) => {
   await expect(page.getByRole("main", { name: "大屏运行态" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
   await expect(page.locator(".runtime-header")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "返回大屏库" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "返回看板广场" })).toBeVisible();
   await expect(page.getByRole("button", { name: "刷新" })).toBeVisible();
   await expect(page.getByText(/最近更新/)).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -1135,16 +1135,17 @@ test("sidebar logo is readable at desktop size", async ({ page }) => {
 
   const box = await logo.boundingBox();
   expect(box).not.toBeNull();
-  expect(box!.width).toBeGreaterThanOrEqual(170);
-  expect(box!.height).toBeGreaterThanOrEqual(76);
-  expect(box!.height).toBeLessThanOrEqual(86);
+  expect(box!.width).toBeGreaterThanOrEqual(80);
+  expect(box!.width).toBeLessThanOrEqual(96);
+  expect(box!.height).toBeGreaterThanOrEqual(36);
+  expect(box!.height).toBeLessThanOrEqual(48);
 
   const firstNavTile = page.locator(".xs-sidebar__menu svg").first();
   await expect(firstNavTile).toBeVisible();
   const firstNavTileBox = await firstNavTile.boundingBox();
   expect(firstNavTileBox).not.toBeNull();
-  expect(firstNavTileBox!.width).toBeGreaterThanOrEqual(20);
-  expect(firstNavTileBox!.height).toBeGreaterThanOrEqual(20);
+  expect(firstNavTileBox!.width).toBeGreaterThanOrEqual(18);
+  expect(firstNavTileBox!.height).toBeGreaterThanOrEqual(18);
 });
 
 test("home page matches the reference welcome workbench composition", async ({ page }) => {
@@ -1227,11 +1228,11 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.backgroundLoaded).toBe(true);
   expect(metrics!.heroTop).toBeGreaterThanOrEqual(120);
   expect(metrics!.heroTop).toBeLessThanOrEqual(190);
-  expect(metrics!.commandWidth).toBeGreaterThanOrEqual(980);
-  expect(metrics!.commandWidth).toBeLessThanOrEqual(1120);
-  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(140);
-  expect(metrics!.commandHeight).toBeLessThanOrEqual(176);
-  expect(metrics!.appsTop).toBeGreaterThanOrEqual(400);
+  expect(metrics!.commandWidth).toBeGreaterThanOrEqual(740);
+  expect(metrics!.commandWidth).toBeLessThanOrEqual(780);
+  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(110);
+  expect(metrics!.commandHeight).toBeLessThanOrEqual(150);
+  expect(metrics!.appsTop).toBeGreaterThanOrEqual(300);
   expect(metrics!.appsTop).toBeLessThanOrEqual(560);
   expect(metrics!.cardHeight).toBeGreaterThanOrEqual(196);
   expect(metrics!.cardHeight).toBeLessThanOrEqual(240);
@@ -1245,8 +1246,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.voiceButtonSize[1]).toBeCloseTo(44, 0);
   expect(metrics!.sendButtonSize[0]).toBeCloseTo(44, 0);
   expect(metrics!.sendButtonSize[1]).toBeCloseTo(44, 0);
-  expect(metrics!.modelButtonHeight).toBeGreaterThanOrEqual(42);
-  expect(metrics!.modelButtonHeight).toBeLessThanOrEqual(48);
+  expect(metrics!.modelButtonHeight).toBeGreaterThanOrEqual(30);
+  expect(metrics!.modelButtonHeight).toBeLessThanOrEqual(40);
   expect(metrics!.modelBeforeVoice).toBe(true);
   expect(metrics!.voiceButtonRadius).toBe(12);
   expect(metrics!.sendButtonRadius).toBe(12);
@@ -1259,20 +1260,17 @@ test("home model selector exposes all modes and recommendation cards open their 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  const modelButton = page.getByRole("button", { name: "选择模型，当前编排模型" });
-  await modelButton.click();
-
-  await expect(page.getByRole("menuitem", { name: /编排模型/ })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: /问数模型/ })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: /问知模型/ })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: /找文档模型/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "选择模型，当前编排模型" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换到问数模型" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换到问知模型" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换到找文档模型" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/home-model-selector-open-1440x900.png",
     animations: "disabled",
     fullPage: true
   });
 
-  await page.getByRole("menuitem", { name: /找文档模型/ }).click();
+  await page.getByRole("button", { name: "切换到找文档模型" }).click();
   await expect(page.getByRole("button", { name: "选择模型，当前找文档模型" })).toBeVisible();
   await expect(page.getByText(/已切换为.*模型/)).toHaveCount(0);
   await expect(page.locator(".xs-app-card--selected")).toHaveCount(0);
@@ -1280,12 +1278,12 @@ test("home model selector exposes all modes and recommendation cards open their 
 
   await page.reload();
   await page.getByRole("button", { name: /^打开 智能问数/ }).click();
-  await expect(page).toHaveURL(/\/ask-data$/);
-  await expect(page.getByRole("heading", { name: "从一个经营问题开始" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "从一个经营数据问题开始" })).toBeVisible();
 
   await page.goto("/");
   await page.getByRole("button", { name: /^打开 知识问答/ }).click();
-  await expect(page).toHaveURL(/\/ask-knowledge$/);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "从一个企业知识问题开始" })).toBeVisible();
 });
 
@@ -1346,7 +1344,7 @@ test("navigates from collapsed sidebar icons", async ({ page }) => {
   }).toBeLessThanOrEqual(80);
 
   await page.getByRole("menuitem", { name: "我的看板" }).click();
-  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
 
   await page.getByRole("button", { name: "新建对话" }).click();
   await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
@@ -1355,7 +1353,7 @@ test("navigates from collapsed sidebar icons", async ({ page }) => {
 test("sidebar active item has a stronger selected state", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
 
   const activeState = await page.getByRole("link", { name: /我的看板/ }).evaluate((element) => {
     const selectedItem = element.closest(".ant-menu-item") ?? element;
@@ -1377,10 +1375,10 @@ test("sidebar active item has a stronger selected state", async ({ page }) => {
 test("dashboard library hides the fixed business demo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "大屏库" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "大屏库空状态" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "创建第一个大屏" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "新建大屏" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "看板广场空状态" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "创建第一个看板" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建看板" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "选择收藏问数" })).toBeVisible();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await expect(page.getByText("月度营收趋势")).toHaveCount(0);
@@ -1499,7 +1497,7 @@ test("mobile navigation reaches every product destination and account route", as
     { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
     { label: "智能制表", path: "/table", heading: "智能制表" },
     { label: "公文写作", path: "/writing", heading: "公文写作" },
-    { label: "我的看板", path: "/dashboard", heading: "大屏库", readyText: "暂无大屏" },
+    { label: "我的看板", path: "/dashboard", heading: "看板广场", readyText: "暂无看板" },
     { label: "我的云盘", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
     {
@@ -1560,8 +1558,8 @@ test("reduced motion keeps feedback visible while suppressing nonessential motio
   await expectReducedMotionStatic(page);
 
   await page.getByRole("button", { name: /打开 智能问数/ }).click();
-  await expect(page).toHaveURL(/\/ask-data$/);
-  await expect(page.getByRole("heading", { name: "从一个经营问题开始" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "从一个经营数据问题开始" })).toBeVisible();
   await expectReducedMotionStatic(page);
 
   await page.goto("/analysis");

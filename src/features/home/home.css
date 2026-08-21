@@ -28,18 +28,18 @@
 
 /* 首屏问候区自己拿留白，主区 padding 保持与其他页面一致的 24px */
 .home-page__hero {
-  width: min(100%, var(--xs-page-track));
-  margin: 108px auto 56px;
+  width: min(100%, 760px);
+  margin: 88px auto 40px;
   text-align: center;
 }
 
 .home-page__hero h1 {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: var(--xs-text);
-  font-size: var(--xs-fs-display);
-  line-height: var(--xs-lh-tight);
-  font-weight: var(--xs-fw-display);
-  letter-spacing: var(--xs-ls-display);
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* 保持 inline：inline-block 会让无障碍名计算在"您好，"和名字之间插入空格，
@@ -47,7 +47,7 @@
 .home-page__hero-name {
   display: inline;
   color: var(--xs-interactive-text);
-  font-weight: var(--xs-fw-display);
+  font-weight: 600;
 }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
@@ -107,24 +107,23 @@
 /* ---------- 主命令输入框：全页唯一一级焦点 ---------- */
 
 .home-page .xs-command-box {
-  width: min(100%, var(--xs-page-track));
-  border-color: #c9dcf6;
-  border-radius: 12px;
+  width: min(100%, 760px);
+  border-color: #d5e4f6;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 16px 40px rgba(35, 104, 210, 0.1);
+  box-shadow: 0 12px 32px rgba(35, 104, 210, 0.08);
 }
 
 .home-page .xs-command-box:focus-within {
-  border-color: #8db9f7;
-  box-shadow:
-    0 0 0 3px rgba(37, 99, 235, 0.1),
-    0 16px 40px rgba(35, 104, 210, 0.1);
+  border-color: #d5e4f6;
+  box-shadow: 0 12px 32px rgba(35, 104, 210, 0.08);
 }
 
 .home-page .xs-command-box__input {
-  height: 112px;
-  padding: 26px 34px 16px;
-  line-height: 1.6;
+  height: 72px;
+  padding: 18px 22px 8px;
+  line-height: 1.55;
+  font-size: var(--xs-fs-control);
 }
 
 .home-page .xs-command-box__input::placeholder {
@@ -136,8 +135,8 @@
 }
 
 .home-page .xs-command-box__toolbar {
-  min-height: 64px;
-  padding: 0 22px 0 34px;
+  min-height: 52px;
+  padding: 0 16px 10px 18px;
   border-top: 0 !important;
   box-shadow: none;
   background: transparent;
@@ -148,9 +147,9 @@
 }
 
 .home-page .xs-command-model-select {
-  height: 44px;
-  padding: 0 14px;
-  font-size: var(--xs-fs-control);
+  height: auto;
+  padding: 0;
+  font-size: var(--xs-fs-label);
 }
 
 .home-page .xs-command-box__actions .ant-btn {
@@ -165,6 +164,7 @@
   max-width: 44px;
   height: 44px;
   min-height: 44px;
+  max-height: 44px;
   padding: 0;
   line-height: 1;
   color: #54729c;
@@ -189,11 +189,17 @@
   height: 18px;
 }
 
-.home-page .xs-command-box__send.ant-btn {
+.home-page .xs-command-box__send.ant-btn,
+.home-page .xs-command-box__stop.ant-btn {
   width: 44px;
   min-width: 44px;
   max-width: 44px;
   height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+}
+
+.home-page .xs-command-box__send.ant-btn {
   color: var(--xs-surface);
   border: 0;
   border-radius: 12px;
@@ -220,12 +226,11 @@
   box-shadow: none;
 }
 
-.home-page__status {
+/* 命令框回执走全站状态条，跟着页面轨道居中 */
+.home-page__status-slot {
   width: min(100%, var(--xs-page-track));
   margin: 14px auto 0;
-  color: var(--xs-primary-2);
-  font-size: var(--xs-fs-control);
-  font-weight: 650;
+  text-align: center;
 }
 
 /* ---------- 推荐应用：统一网格的左对齐竖卡 ---------- */
@@ -235,11 +240,12 @@
   margin: 40px auto 0;
 }
 
-.home-page__apps h2 {
+.home-page__apps h2,
+.home-page__questions h2 {
   margin: 0 0 18px;
   color: var(--xs-text);
-  font-size: var(--xs-fs-section);
-  font-weight: var(--xs-fw-display);
+  font-size: var(--xs-fs-body);
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -254,10 +260,10 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  min-height: 216px;
+  min-height: 188px;
   gap: 0;
-  padding: 20px 18px 16px;
-  text-align: left;
+  padding: 20px 16px 18px;
+  text-align: center;
   border-color: #d9e6f8;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
@@ -280,8 +286,7 @@
   transform: none;
 }
 
-.home-page .xs-app-card:has(.xs-app-card__main:focus-visible),
-.home-page .xs-app-card:has(.xs-app-card__arrow:focus-visible) {
+.home-page .xs-app-card:has(.xs-app-card__main:focus-visible) {
   border-color: #9ec2f0;
   box-shadow:
     0 0 0 3px rgba(37, 99, 235, 0.1),
@@ -293,11 +298,11 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-start;
   width: 100%;
   gap: 14px;
-  text-align: left;
+  text-align: center;
 }
 
 /* 应用图标是填色方块，比线性图标更满：只覆盖字形尺寸，底板尺寸仍走 token */
@@ -311,9 +316,9 @@
 
 .home-page .xs-app-card__title {
   color: var(--xs-text);
-  font-size: var(--xs-fs-card);
-  line-height: 1.3;
-  font-weight: var(--xs-fw-display);
+  font-size: var(--xs-fs-label);
+  line-height: 1.35;
+  font-weight: 600;
 }
 
 .home-page .xs-app-card__desc {
@@ -322,31 +327,43 @@
   margin-top: 6px;
   overflow: hidden;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-regular);
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.home-page .xs-app-card__arrow {
-  width: 32px;
-  height: 32px;
-  align-self: flex-end;
-  margin-top: auto;
-  color: #7c90ad;
-  border: 1px solid #e0ebfa;
-  border-radius: 10px;
-  background: var(--xs-surface-soft);
-  box-shadow: none;
-  opacity: 1;
+.home-page__questions {
+  width: min(100%, 760px);
+  margin: 28px auto 0;
 }
 
-.home-page .xs-app-card:hover .xs-app-card__arrow {
+.home-page__question-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-page__question {
+  min-height: 44px;
+  padding: 10px 14px;
+  color: var(--xs-text-2);
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: var(--xs-fs-label);
+  font-weight: 500;
+}
+
+.home-page__question:hover,
+.home-page__question:focus-visible {
   color: var(--xs-primary-2);
-  border-color: #c4dafa;
-  background: #eef5ff;
-  transform: translateX(2px);
+  border-color: #d8eaff;
+  background: var(--xs-surface-soft);
+  outline: none;
 }
 
 /* ---------- 桌面分段响应式：垂直节奏随视口高度舒展 ---------- */
@@ -366,11 +383,11 @@
   }
 
   .home-page .xs-command-box__input {
-    height: clamp(88px, 10.5vh, 112px);
+    height: 72px;
   }
 
   .home-page .xs-command-box__toolbar {
-    min-height: clamp(58px, 6.8vh, 68px);
+    min-height: 52px;
   }
 
   .home-page__apps {
@@ -463,12 +480,6 @@
   .home-page .xs-app-card__desc {
     min-height: 0;
     -webkit-line-clamp: 1;
-  }
-
-  .home-page .xs-app-card__arrow {
-    flex: 0 0 auto;
-    align-self: center;
-    margin-top: 0;
   }
 }
 
@@ -564,9 +575,7 @@
   .home-page .xs-app-card:hover,
   .home-page .xs-app-card--selected,
   .home-page .xs-app-card--selected:hover,
-  .home-page .xs-app-card:has(.xs-app-card__main:focus-visible),
-  .home-page .xs-app-card:has(.xs-app-card__arrow:focus-visible),
-  .home-page .xs-app-card:hover .xs-app-card__arrow {
+  .home-page .xs-app-card:has(.xs-app-card__main:focus-visible) {
     transform: none;
   }
 }

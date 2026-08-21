@@ -2,6 +2,7 @@ import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import { normalizeDataHubTableResult } from "@/services/dataHubAskDataPresenter";
 import type {
   AskArtifactRef,
+  DataHubContentBlock,
   DataHubExecutionProjection,
   DataHubExecutionSession,
   DataHubTableResult
@@ -143,6 +144,69 @@ export function getDataHubSingleQueryTableResults(
   return mainSessionIsAskData || isAskDataSession(projection.mainSession)
     ? normalizeSessionTables(projection.mainSession)
     : [];
+}
+
+export function getDataHubAskTableResults(
+  projection: DataHubExecutionProjection,
+  mainSessionIsAskData = false
+): DataHubTableResult[] {
+  const normalizeSessionTables = (session: DataHubExecutionSession) =>
+    session.tableResults
+      .map((table, index) => normalizeDataHubTableResult(table, index))
+      .filter((table): table is DataHubTableResult => Boolean(table));
+  const childTables = projection.subagentSessions.flatMap(normalizeSessionTables);
+
+  if (childTables.length > 0) {
+    return childTables.map((table, index) => ({ ...table, tableIndex: index }));
+  }
+
+  return mainSessionIsAskData || isAskDataSession(projection.mainSession)
+    ? normalizeSessionTables(projection.mainSession)
+    : [];
+}
+
+function readExecutionBlockText(content: unknown) {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (isRecord(content)) {
+    return optionalString(content.text) ?? optionalString(content.content) ?? "";
+  }
+  return "";
+}
+
+export function getDataHubChildAnswerBlocks(
+  projection: DataHubExecutionProjection
+): DataHubContentBlock[] {
+  const blocks: DataHubContentBlock[] = [];
+
+  for (const session of projection.subagentSessions) {
+    if (session.tableResults.length > 0) {
+      continue;
+    }
+    if (session.status !== "done" && !session.finished) {
+      continue;
+    }
+
+    for (const card of session.cards) {
+      for (const block of card.blocks) {
+        if (block.isThinking || (block.type !== "text" && block.type !== "content")) {
+          continue;
+        }
+        const content = readExecutionBlockText(block.content);
+        if (content.length < 8) {
+          continue;
+        }
+        blocks.push({
+          content,
+          replyId: block.replyId,
+          modelCallIndex: block.modelCallIndex
+        });
+      }
+    }
+  }
+
+  return blocks;
 }
 
 function createTarget(

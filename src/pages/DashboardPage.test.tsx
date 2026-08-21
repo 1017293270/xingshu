@@ -45,7 +45,7 @@ function cardOf(title: string) {
 }
 
 async function openCardMenu(user: ReturnType<typeof userEvent.setup>, title: string) {
-  await user.click(screen.getByRole("button", { name: `${title} 更多操作` }));
+  await user.click(screen.getByRole("button", { name: `${title} 设置` }));
 }
 
 describe("DashboardPage", () => {
@@ -57,10 +57,10 @@ describe("DashboardPage", () => {
   it("shows favorite-question entry points in the dashboard-library empty state", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "大屏库" })).toBeInTheDocument();
-    expect(screen.getByText("暂无大屏")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "创建第一个大屏" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "新建大屏" })).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "看板广场" })).toBeInTheDocument();
+    expect(screen.getByText("暂无看板")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "创建第一个看板" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "新建看板" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "从收藏问数创建" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择收藏问数" })).toBeInTheDocument();
     expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
@@ -77,28 +77,29 @@ describe("DashboardPage", () => {
 
     const draftCard = cardOf("运营草稿");
     expect(within(draftCard).getByText("草稿")).toBeInTheDocument();
-    expect(within(draftCard).getByRole("link", { name: "运行态" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(draftCard).getByRole("link", { name: "浏览大屏" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByText("不应在大屏库中展示的问数摘要")).not.toBeInTheDocument();
 
     const publishedCard = cardOf("善治测试");
     expect(within(publishedCard).getByText("已发布")).toBeInTheDocument();
-    expect(within(publishedCard).getByRole("link", { name: "运行态" })).toHaveAttribute(
+    expect(within(publishedCard).getByRole("link", { name: "浏览大屏" })).toHaveAttribute(
       "href",
       "/dashboard-view?dashboard=dashboard-published"
     );
 
     await openCardMenu(user, "善治测试");
-    ["复制", "版本", "分享", "删除"].forEach((action) => {
+    ["编辑", "复制", "版本", "分享", "删除"].forEach((action) => {
       expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
     });
+    expect(screen.queryByRole("menuitem", { name: "归档" })).not.toBeInTheDocument();
   });
 
   it("requires a dashboard name before entering the editor", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getAllByRole("button", { name: "新建大屏" })[0]);
-    await user.type(await screen.findByLabelText("大屏名称"), "华东区经营驾驶舱");
+    await user.click(screen.getAllByRole("button", { name: "新建看板" })[0]);
+    await user.type(await screen.findByLabelText("看板名称"), "华东区经营驾驶舱");
     await user.click(screen.getByRole("button", { name: "创建并进入编辑器" }));
 
     expect(await screen.findByText("编辑器目标页")).toBeInTheDocument();
@@ -129,8 +130,8 @@ describe("DashboardPage", () => {
     await openCardMenu(user, "待删除大屏");
     await user.click(screen.getByRole("menuitem", { name: "删除" }));
 
-    expect(await screen.findByRole("dialog", { name: "删除大屏" })).toHaveTextContent(
-      "删除“待删除大屏”？它会从大屏库中移除。"
+    expect(await screen.findByRole("dialog", { name: "删除看板" })).toHaveTextContent(
+      "删除“待删除大屏”？它会从看板广场中移除。"
     );
     await user.click(screen.getByRole("button", { name: "确认删除" }));
     expect(screen.queryByText("待删除大屏")).not.toBeInTheDocument();
