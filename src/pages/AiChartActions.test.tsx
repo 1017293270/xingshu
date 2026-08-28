@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
@@ -165,10 +165,10 @@ describe("AI chart actions", () => {
     );
   });
 
-  it("keeps the whole not-chartable rationale in the chart card, not in the composer status", async () => {
+  it("keeps non-chartable results silent", async () => {
     const rationale =
       "问题'合同设备清单有哪些'本质上是列表查询/枚举类问题，需要返回的是合同明细记录本身而非分析对比。表格仅有 2-3 行记录，数据量过少，图表无法提供额外洞察。";
-    vi.spyOn(window, "fetch").mockResolvedValue(
+    const fetchSpy = vi.spyOn(window, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({ code: 200, message: "ok", data: { chartable: false, reason: rationale } }),
         { status: 200, headers: { "Content-Type": "application/json" } }
@@ -183,16 +183,15 @@ describe("AI chart actions", () => {
       store.completeAskDataRun(runId);
     });
 
-    const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
-    expect(within(chartCard).getByText(rationale)).toBeInTheDocument();
-
-    /* 底部状态条是一行状态，不是第二块正文：整段判断理由留在图表卡片里 */
-    const statusBar = document.querySelector(".analysis-composer__status-slot .xs-status-bar");
-    expect(statusBar).toHaveTextContent("暂不适合生成图表");
-    expect(statusBar).not.toHaveTextContent("列表查询");
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(screen.queryByRole("region", { name: "智能图表建议" })).not.toBeInTheDocument();
+    expect(screen.queryByText(rationale)).not.toBeInTheDocument();
+    expect(document.querySelector(".analysis-composer__status-slot")?.textContent ?? "")
+      .not.toContain("暂不适合生成图表");
   });
 
-  it("does not auto-plan a chart for a completed scalar answer", () => {
+  it("does not auto-plan a chart for a completed scalar answer", async () => {
+    const user = userEvent.setup();
     const fetchSpy = vi.spyOn(window, "fetch");
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("咨询总数是多少");
@@ -211,7 +210,8 @@ describe("AI chart actions", () => {
       store.completeAskDataRun(runId);
     });
 
-    expect(screen.getByRole("cell", { name: "716" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
+    expect(screen.getByRole("cell", { name: "716" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "智能图表建议" })).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
   });

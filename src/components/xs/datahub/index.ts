@@ -2,6 +2,7 @@ export { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 export { DataHubResultTable } from "./DataHubResultTable";
 export { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 export { DataHubExecutionStatus } from "./DataHubExecutionStatus";
+export { DataHubBusinessExplanation } from "./DataHubBusinessExplanation";
 export { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
 export { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
 export { DataHubSubagentDag } from "./DataHubSubagentDag";

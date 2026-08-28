@@ -156,6 +156,14 @@ function buildAskStream(request: StreamRequest) {
       ...root,
       type: "table",
       content: {
+        annotation: {
+          measures: {
+            "Revenue.revenue": {
+              title: "月度收入统计，记录各月收入 收入",
+              shortTitle: "收入"
+            }
+          }
+        },
         columns: [
           { name: "month", title: "月份" },
           { name: "revenue", title: "收入", type: "number" }
@@ -1485,7 +1493,7 @@ test("workspace model selector changes the strict DataHub chatMode request param
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
   await expect(page.getByRole("button", { name: "切换到问数模型" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /编排模型/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "切换到编排模型" })).toBeVisible();
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/analysis-model-selector-open-390x844.png",
     animations: "disabled",
@@ -1500,7 +1508,7 @@ test("workspace model selector changes the strict DataHub chatMode request param
   expect(fixture.streamRequests[0].message).toBe("查询最新差旅制度");
 });
 
-test("ask-data sends the strict v2 request and supports table to favorite", async ({ page }) => {
+test("ask-data sends the strict v2 request and supports table to favorite", async ({ page }, testInfo) => {
   const fixture = await installDataHubFixture(page);
   await page.goto("/ask-data");
 
@@ -1510,8 +1518,12 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   await expect(page.getByText("本月收入为 128 万元。", { exact: false }).first()).toBeVisible();
   await expect(page.getByLabel("已选择数据源")).toContainText("经营分析库");
   await expect(page.getByText("子任务已完成。")).toHaveCount(0);
+  const tableSummary = page.getByRole("button", { name: /展开结果表汇总/ });
+  await expect(tableSummary).toHaveAttribute("aria-expanded", "false");
+  await tableSummary.click();
   await expect(page.getByRole("cell", { name: "7月" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "128" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "结果表 1 - 月度收入统计，记录各月收入" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "月度收入趋势" })).toBeVisible();
   await expect(page.locator('[data-echarts-ready="true"]')).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
@@ -1528,6 +1540,12 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   expect(fixture.favoriteRequests).toEqual([
     { askRunId: "ask-run-playwright", name: "统计本月收入" }
   ]);
+  const queryRules = page.locator(".datahub-business-explanation__query-rules");
+  await queryRules.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await queryRules.screenshot({
+    path: testInfo.outputPath("query-rules-1672x941.png"),
+    animations: "disabled"
+  });
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/ask-data-v2-flow-1672x941.png",
     animations: "disabled",
@@ -1535,6 +1553,11 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
+  await queryRules.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await page.screenshot({
+    path: testInfo.outputPath("query-rules-390x844.png"),
+    animations: "disabled"
+  });
   await page.getByRole("cell", { name: "7月" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("cell", { name: "7月" })).toBeVisible();
   await page.screenshot({
@@ -1546,24 +1569,44 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
 
 test("ask-knowledge renders safe Markdown, deduplicates citations, and opens authenticated source", async ({
   page
-}) => {
+}, testInfo) => {
   const fixture = await installDataHubFixture(page);
   await page.goto("/ask-knowledge");
 
   await page.getByRole("textbox", { name: "命令输入" }).fill("差旅费超过多少需要复核？");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByText("正在检索并复核制度原文。")).toBeVisible();
   await expect(page.getByText("单笔差旅费超过 5000 元需复核")).toBeVisible();
   const answerImage = page.getByRole("img", { name: "制度截图" });
   await expect(answerImage).toBeVisible();
   await expect(answerImage.locator("xpath=..")).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("region", { name: "引用文档" })).toBeVisible();
   await expect(page.locator(".knowledge-citation-chip")).toHaveCount(1);
-  await expect(page.getByText("财务报销制度（2026）")).toBeVisible();
+  await expect(page.locator(".knowledge-citation-chip")).toContainText("财务报销制度（2026）");
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "AI 生成图表" })).toHaveCount(0);
+
+  const queryProcessButton = page.getByRole("button", { name: /查询过程/ });
+  if (await queryProcessButton.getAttribute("aria-expanded") === "false") {
+    await queryProcessButton.click();
+  }
+  const sourceFragmentButton = page.getByRole("button", {
+    name: "查看来源片段：财务报销制度（2026）"
+  });
+  await expect(sourceFragmentButton).toBeVisible();
+  await expect(page.locator(".datahub-business-explanation__documents")).not.toContainText(
+    "单笔差旅费超过 5000 元时"
+  );
+  await sourceFragmentButton.click();
+  const sourceDialog = page.getByRole("dialog");
+  await expect(sourceDialog).toContainText("单笔差旅费超过 5000 元时");
+  await expect(sourceDialog).not.toHaveClass(/ant-zoom/);
+  await page.screenshot({
+    path: testInfo.outputPath("knowledge-source-modal-1672x941.png")
+  });
+  await sourceDialog.getByRole("button", { name: "Close" }).click();
+  await expect(sourceDialog).toBeHidden();
 
   expect(await page.evaluate(() => "__unsafeHtmlExecuted" in window)).toBe(false);
   expect(fixture.streamRequests).toHaveLength(1);
@@ -1598,6 +1641,15 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   await popup.close();
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
+  await sourceFragmentButton.scrollIntoViewIfNeeded();
+  await sourceFragmentButton.click();
+  await expect(sourceDialog).toBeVisible();
+  await expect(sourceDialog).not.toHaveClass(/ant-zoom/);
+  await page.screenshot({
+    path: testInfo.outputPath("knowledge-source-modal-390x844.png")
+  });
+  await sourceDialog.getByRole("button", { name: "Close" }).click();
+  await expect(sourceDialog).toBeHidden();
   await page.getByRole("button", { name: "打开原文：财务报销制度（2026）" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("button", { name: "打开原文：财务报销制度（2026）" })).toBeVisible();
   await page.screenshot({
@@ -2023,6 +2075,7 @@ test("a single ask child and root artifact share one favorite action", async ({ 
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("智能编排已完成")).toBeVisible();
+  await page.getByRole("button", { name: /展开结果表汇总/ }).click();
   await expect(page.getByRole("cell", { name: "小治" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "456" })).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();

@@ -16,6 +16,645 @@
   box-shadow: 0 14px 36px rgba(22, 82, 162, 0.07);
 }
 
+.datahub-business-explanation {
+  margin-top: 14px;
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.datahub-business-explanation__header {
+  display: flex;
+}
+
+.datahub-business-explanation__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 11px 13px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--xs-text-2);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    background var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.datahub-business-explanation__summary:hover {
+  color: var(--xs-primary-2);
+  background: #f5f9ff;
+}
+
+.datahub-business-explanation__summary:active {
+  background: #edf5ff;
+}
+
+.datahub-business-explanation__summary:focus-visible {
+  outline: 3px solid rgba(22, 119, 255, 0.2);
+  outline-offset: -2px;
+}
+
+.datahub-business-explanation__summary span,
+.datahub-business-explanation__note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.datahub-business-explanation__summary small {
+  color: var(--xs-text-3);
+}
+
+.datahub-business-explanation__summary > svg {
+  transition: transform var(--xs-motion-enter, 260ms)
+    var(--xs-motion-ease-out, ease);
+}
+
+.datahub-business-explanation__summary[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.datahub-business-explanation__body {
+  display: grid;
+  gap: 0;
+  padding: 0 13px 13px;
+  border-top: 1px solid #e7eef7;
+}
+
+.datahub-business-explanation__section {
+  min-width: 0;
+  padding: 11px 0;
+  border-bottom: 1px dashed #dce7f2;
+}
+
+.datahub-business-explanation__section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-business-explanation__body p,
+.datahub-business-explanation__body ol,
+.datahub-business-explanation__body ul {
+  margin: 5px 0 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.65;
+}
+
+.datahub-business-explanation__tasks,
+.datahub-business-explanation__steps,
+.datahub-business-explanation__documents ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.datahub-business-explanation__tasks li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.datahub-business-explanation__tasks li > span {
+  display: inline-grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border: 1px solid #c9ddf7;
+  border-radius: 6px;
+  color: #3269aa;
+  background: #f0f7ff;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-business-explanation__tasks li > div {
+  display: grid;
+  gap: 2px;
+}
+
+.datahub-business-explanation__tasks strong,
+.datahub-business-explanation__documents strong {
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__tasks small,
+.datahub-business-explanation__documents small {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__steps {
+  gap: 0;
+}
+
+.datahub-business-explanation__steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 23px minmax(0, 1fr);
+  gap: 9px;
+  padding-bottom: 11px;
+}
+
+.datahub-business-explanation__steps li:last-child {
+  padding-bottom: 0;
+}
+
+.datahub-business-explanation__steps li:not(:last-child)::after {
+  position: absolute;
+  top: 22px;
+  bottom: 2px;
+  left: 10px;
+  width: 1px;
+  content: "";
+  background: linear-gradient(180deg, #b9d6f5, #e1ebf6);
+}
+
+.datahub-business-explanation__steps li > span {
+  z-index: 1;
+  display: inline-grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border: 1px solid #bfd7f2;
+  border-radius: 50%;
+  color: #3672b6;
+  background: #f2f7fd;
+  font-size: 10px;
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-business-explanation__steps li[data-status="done"] > span {
+  border-color: #9ed7bf;
+  color: #16805f;
+  background: #eff9f5;
+}
+
+.datahub-business-explanation__steps li[data-status="running"] > span {
+  animation: xs-datahub-ring-pulse 1.7s ease-in-out infinite;
+}
+
+.datahub-business-explanation__steps li[data-status="error"] > span {
+  border-color: #f0aaa6;
+  color: #c53c38;
+  background: #fff3f2;
+}
+
+.datahub-business-explanation__steps li > div,
+.datahub-business-explanation__steps li header {
+  min-width: 0;
+}
+
+.datahub-business-explanation__steps li header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.datahub-business-explanation__steps li strong {
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__steps li header small {
+  flex: 0 0 auto;
+  color: #16805f;
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__steps li[data-status="running"] header small {
+  color: #286fc0;
+}
+
+.datahub-business-explanation__steps li[data-status="error"] header small {
+  color: #c53c38;
+}
+
+.datahub-business-explanation__steps li p {
+  margin-top: 2px;
+}
+
+.datahub-business-explanation__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.datahub-business-explanation__fact {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #dce8f6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.datahub-business-explanation__fact--wide {
+  grid-column: 1 / -1;
+}
+
+.datahub-business-explanation__fact > header {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.datahub-business-explanation__fact > header > span {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid #d0e2f7;
+  border-radius: 8px;
+  color: #3474b9;
+  background: #f0f7ff;
+}
+
+.datahub-business-explanation__fact > header strong {
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-business-explanation__fact > header small {
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #5e7898;
+  background: #f1f6fc;
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__body .datahub-business-explanation__fact-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 9px 0 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #607a99;
+  background: #f6f9fd;
+  line-height: 1.55;
+}
+
+.datahub-business-explanation__fact-context > span {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: #356ca7;
+  background: #e8f2ff;
+  font-size: 10px;
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-business-explanation__body .datahub-business-explanation__fact-values {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values li:only-child {
+  grid-column: 1 / -1;
+}
+
+.datahub-business-explanation__fact-values li {
+  position: relative;
+  min-width: 0;
+  padding: 7px 9px 7px 21px;
+  border: 1px solid #e4edf7;
+  border-radius: 8px;
+  color: #4f6c8e;
+  background: #fbfdff;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.datahub-business-explanation__fact-values li::before {
+  position: absolute;
+  top: 13px;
+  left: 10px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  border-radius: 50%;
+  background: #76a9df;
+}
+
+.datahub-business-explanation__fact details {
+  margin-top: 8px;
+}
+
+.datahub-business-explanation__fact summary {
+  width: max-content;
+  max-width: 100%;
+  color: #356fae;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+  cursor: pointer;
+}
+
+.datahub-business-explanation__documents li {
+  min-width: 0;
+}
+
+.datahub-business-explanation__documents li > button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid #d8e6f6;
+  border-radius: 10px;
+  color: var(--xs-text-2);
+  background: linear-gradient(135deg, #f8fbff, #fff);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out),
+    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.datahub-business-explanation__documents li > button:hover {
+  border-color: #aacdf5;
+  box-shadow: 0 7px 18px rgba(35, 92, 157, 0.07);
+  transform: translateY(-1px);
+}
+
+.datahub-business-explanation__documents li > button:active {
+  transform: translateY(0);
+}
+
+.datahub-business-explanation__documents li > button:focus-visible {
+  outline: 3px solid rgba(22, 119, 255, 0.2);
+  outline-offset: 2px;
+}
+
+.datahub-business-explanation__document-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #cde0f7;
+  border-radius: 9px;
+  color: #2c6fb9;
+  background: #edf6ff;
+}
+
+.datahub-business-explanation__documents li > button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.datahub-business-explanation__documents li > button strong,
+.datahub-business-explanation__documents li > button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datahub-business-explanation__document-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #356fae;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-source-modal .ant-modal-content {
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #d3e3f7;
+  border-radius: 14px;
+  box-shadow: 0 22px 64px rgba(20, 62, 118, 0.18);
+}
+
+.datahub-source-modal .ant-modal-header {
+  margin: 0;
+  padding: 18px 54px 17px 20px;
+  border-bottom: 1px solid #e0eaf6;
+  background: linear-gradient(135deg, #f1f7ff, #fff 64%);
+}
+
+.datahub-source-modal .ant-modal-close {
+  top: 17px;
+  right: 17px;
+  border-radius: 8px;
+  color: #627b9a;
+}
+
+.datahub-source-modal__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 11px;
+}
+
+.datahub-source-modal__title > span {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid #c8ddf7;
+  border-radius: 11px;
+  color: #286db8;
+  background: #eaf4ff;
+}
+
+.datahub-source-modal__title > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.datahub-source-modal__title small {
+  color: #6b82a0;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.datahub-source-modal__title strong {
+  overflow: hidden;
+  color: #153a67;
+  font-size: var(--xs-fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datahub-source-modal__body {
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+  padding: 18px 20px 22px;
+  color: var(--xs-text-2);
+}
+
+.datahub-source-modal__content {
+  overflow: hidden;
+  padding: 0 16px 16px;
+  border: 1px solid #dce8f6;
+  border-radius: 11px;
+  background: #fbfdff;
+}
+
+.datahub-source-modal__content > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0 -16px 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2ebf6;
+  background: #f5f9fe;
+}
+
+.datahub-source-modal__content > header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #315f93;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
+}
+
+.datahub-source-modal__content > header small {
+  color: #7589a2;
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-source-modal .xs-safe-markdown {
+  color: #294869;
+  font-size: var(--xs-fs-label);
+  line-height: 1.76;
+  overflow-wrap: anywhere;
+}
+
+.datahub-source-modal .xs-safe-markdown p {
+  margin: 0 0 0.9em;
+}
+
+.datahub-source-modal .xs-safe-markdown > :first-child {
+  margin-top: 0;
+}
+
+.datahub-source-modal .xs-safe-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.datahub-source-modal .xs-safe-markdown hr {
+  margin: 18px 0;
+  border: 0;
+  border-top: 1px dashed #d6e3f2;
+}
+
+.datahub-source-modal .xs-safe-markdown blockquote {
+  margin: 14px 0;
+  padding: 9px 13px;
+  border-left: 3px solid #9fc8f4;
+  color: #3f5f82;
+  background: #f6faff;
+}
+
+.datahub-source-modal .xs-safe-markdown table {
+  margin: 14px 0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.datahub-source-modal .xs-safe-markdown th {
+  color: #244f7f;
+  background: #eef5fd;
+  white-space: nowrap;
+}
+
+.datahub-source-modal .xs-safe-markdown td {
+  min-width: 96px;
+  vertical-align: top;
+}
+
+.datahub-business-explanation__body .datahub-business-explanation__note {
+  padding-top: 10px;
+}
+
+.datahub-business-explanation__note p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .datahub-business-explanation *,
+  .datahub-business-explanation *::before,
+  .datahub-business-explanation *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .datahub-business-explanation__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .datahub-business-explanation__fact--wide {
+    grid-column: auto;
+  }
+
+  .datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values {
+    grid-template-columns: 1fr;
+  }
+
+  .datahub-business-explanation__document-action {
+    font-size: 0;
+  }
+
+  .datahub-source-modal {
+    max-width: calc(100vw - 24px);
+  }
+
+  .datahub-source-modal .ant-modal-header {
+    padding-left: 16px;
+  }
+
+  .datahub-source-modal__body {
+    padding: 16px;
+  }
+
+  .datahub-source-modal__content {
+    padding: 0 13px 13px;
+  }
+
+  .datahub-source-modal__content > header {
+    margin-right: -13px;
+    margin-left: -13px;
+  }
+}
+
 .xs-datahub-execution__header {
   display: flex;
   align-items: stretch;

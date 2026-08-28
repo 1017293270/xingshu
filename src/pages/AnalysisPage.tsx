@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowSquareOut,
   Brain,
+  CaretDown,
   ChartLineUp,
   ChartPieSlice,
   Check,
@@ -12,14 +13,13 @@ import {
   Database,
   FileText,
   FlowArrow,
-  Function,
   MapPin,
   PresentationChart,
   Star,
   TrendUp,
   WarningCircle
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   TouchEvent as ReactTouchEvent,
@@ -33,7 +33,11 @@ import { xsEnterStep } from "@/components/xs/motion";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
-import { DataHubExecutionPanel, DataHubResultTable } from "@/components/xs/datahub";
+import {
+  DataHubBusinessExplanation,
+  DataHubExecutionPanel,
+  DataHubResultTable
+} from "@/components/xs/datahub";
 import { useNow } from "@/components/xs/datahub/useNow";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
@@ -48,6 +52,7 @@ import {
   resolveAiChartTables
 } from "@/services/aiChartPlannerService";
 import {
+  buildDataHubBusinessTrace,
   createDataHubAskTurn
 } from "@/services/dataHubAskDataPresenter";
 import { getDataHubDocumentLookupResults } from "@/services/dataHubDocumentLookupPresenter";
@@ -91,7 +96,6 @@ type ThinkingPhase = {
   description: string;
   status: ThinkingPhaseStatus;
   details: string[];
-  icon: typeof Brain;
 };
 
 type AiChartUiState =
@@ -247,17 +251,18 @@ async function copyText(text: string) {
 function citationSourceLabel(citation: DataHubCitationDocument) {
   const name = citation.docName || citation.fileName || citation.docKey;
   const blob = [name, ...citation.fragments].join(" ");
-  const chapter = blob.match(/第[\d一二三四五六七八九十百千]+章[^，。\s]*/)?.[0];
-  const page = blob.match(/第?\s*\d+\s*页/)?.[0];
+  const chapter = citation.chapter || blob.match(/第[\d一二三四五六七八九十百千]+章[^，。\s]*/)?.[0];
+  const page = citation.pageNumber || blob.match(/第?\s*\d+\s*页/)?.[0];
   const location = [chapter, page].filter(Boolean).join(" ");
   return location ? `根据《${name}》${location}` : `根据《${name}》`;
 }
 
 function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHubDocumentLookupResult[] {
-  return citations.map((citation) => ({
+  return citations.slice(0, 5).map((citation) => ({
     docId: citation.docId,
     docKey: citation.docKey,
     kbId: citation.kbId,
+    kbName: citation.kbName,
     title: citation.docName || citation.fileName || citation.docKey,
     sourceAvailable: citation.sourceAvailable
   }));
@@ -302,7 +307,7 @@ function AnalysisTaskDynamics({
   const detail = activePhase ? activePhase.details.at(-1) || activePhase.description : "";
 
   return (
-    <div className="analysis-live" aria-label="任务动态">
+    <div className="analysis-live" role="group" aria-label="任务动态">
       <p className="analysis-live__head">
         <span className="xs-status-bar__pulse analysis-live__pulse" aria-hidden="true">
           <i />
@@ -319,28 +324,25 @@ function AnalysisTaskDynamics({
       </p>
       {phases.length > 0 ? (
         <ol className="analysis-live__rail">
-          {phases.map((phase) => {
-            const PhaseIcon = phase.icon;
-            return (
-              <li
-                className="analysis-live__step"
-                data-state={phase.status}
-                key={phase.id}
-                title={phase.description}
-              >
-                <span className="analysis-live__step-mark" aria-hidden="true">
-                  {phase.status === "complete" ? (
-                    <Check size={12} weight="bold" />
-                  ) : phase.status === "error" ? (
-                    <WarningCircle size={13} weight="bold" />
-                  ) : (
-                    <PhaseIcon size={13} weight="bold" />
-                  )}
-                </span>
-                <span className="analysis-live__step-title">{phase.title}</span>
-              </li>
-            );
-          })}
+          {phases.map((phase) => (
+            <li
+              className="analysis-live__step"
+              data-state={phase.status}
+              key={phase.id}
+              title={phase.description}
+            >
+              <span className="analysis-live__step-mark" aria-hidden="true">
+                {phase.status === "complete" ? (
+                  <Check size={12} weight="bold" />
+                ) : phase.status === "error" ? (
+                  <WarningCircle size={13} weight="bold" />
+                ) : phase.status === "active" ? (
+                  <CircleNotch size={13} weight="bold" />
+                ) : null}
+              </span>
+              <span className="analysis-live__step-title">{phase.title}</span>
+            </li>
+          ))}
         </ol>
       ) : null}
       {detail ? (
@@ -501,8 +503,19 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
     docId,
     docKey,
     kbId,
+    kbName: optionalText(record.kbName),
     docName: optionalText(record.docName) || optionalText(record.title),
     fileName: optionalText(record.fileName),
+    chapter:
+      optionalText(record.chapter) ||
+      optionalText(record.sectionName) ||
+      optionalText(record.heading),
+    pageNumber:
+      identityText(record.pageNumber) ||
+      identityText(record.page_number) ||
+      identityText(record.page) ||
+      identityText(record.page_idx) ||
+      undefined,
     sourceAvailable: record.sourceAvailable !== false,
     markdownAvailable:
       typeof record.markdownAvailable === "boolean"
@@ -627,10 +640,6 @@ function scrollElementToBottom(
   }
 }
 
-function getStepSummary(step: DataHubReactStepData) {
-  return step.summary || step.resultSummary || step.content || step.reason || "正在推进问数步骤";
-}
-
 function getToolName(tool: DataHubToolResultData) {
   return tool.toolName || tool.tool || tool.name || "tool";
 }
@@ -654,12 +663,6 @@ function hasFailedStep(steps: DataHubReactStepData[], actions: string[]) {
   return steps.some((step) => step.action && actions.includes(step.action) && ["error", "fail"].includes(step.status || ""));
 }
 
-function collectStepDetails(steps: DataHubReactStepData[], actions: string[]) {
-  return steps
-    .filter((step) => step.action && actions.includes(step.action) && !["error", "fail"].includes(step.status || ""))
-    .map(getStepSummary);
-}
-
 function buildThinkingPhases(
   askTurn: ReturnType<typeof createDataHubAskTurn>,
   askDataStatus: DataHubAskDataStatus
@@ -669,78 +672,76 @@ function buildThinkingPhases(
   const hasRouting = askTurn.routingEvents.length > 0;
   const hasTable = askTurn.tableResults.length > 0;
   const isDone = askDataStatus === "done";
-  const hasProcessingStarted = hasStep(steps, [
-    "plan_with_datasource_skill",
-    "generate_query",
-    "nl2sql_fallback",
-    "execute_query",
-    "finalize"
+  // 后端有时只发 tool_call/tool_result，不发同名 react_step，两处都要认。
+  const toolNames = new Set([
+    ...askTurn.toolCalls.map(getToolName),
+    ...askTurn.toolResults.map(getToolName)
   ]);
-  const hasExecutionStarted =
-    hasStep(steps, ["execute_query", "finalize"]) ||
-    askTurn.toolCalls.some((tool) => getToolName(tool) === "execute_query") ||
-    askTurn.toolResults.some((tool) => getToolName(tool) === "execute_query");
-  const hasResultStarted = hasStep(steps, ["finalize"]) || hasTable || Boolean(askTurn.assistantContent);
+  const reached = (actions: string[]) =>
+    hasStep(steps, actions) || actions.some((action) => toolNames.has(action));
 
   const drafts: Omit<ThinkingPhase, "status">[] = [
     {
       id: "understand",
       title: "理解问题",
       description: "识别问数意图，拆解为可执行的查询。",
-      icon: Brain,
-      details: compactMessages([
-        ...(askTurn.decompose?.subQuestions ?? []),
-        ...askTurn.routingEvents.map((event) => {
-          const data = event.data as { message?: string; intent?: string; status?: string } | undefined;
-          return data?.message || data?.intent || data?.status || "";
-        })
-      ])
+      details: compactMessages(askTurn.decompose?.subQuestions ?? [])
     },
     {
       id: "scope",
       title: "确定数据范围",
       description: "定位空间、数据源和业务语义，确认本次查询边界。",
-      icon: Database,
-      details: compactMessages(collectStepDetails(steps, ["locate_datasource", "match_skill", "load_cube_meta"]))
+      details: compactMessages(askTurn.dataSources.map((dataSource) => `已选择数据源：${dataSource.datasourceName}`))
     },
     {
       id: "process",
       title: "数据处理",
       description: "读取业务语义并生成查询结构。",
-      icon: Function,
-      details: compactMessages(collectStepDetails(steps, ["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"]))
+      details: []
     },
     {
       id: "execute",
       title: "执行查询",
       description: "执行查询并返回结构化数据结果。",
-      icon: FlowArrow,
       details: compactMessages([
-        ...collectStepDetails(steps, ["execute_query"]),
         ...askTurn.toolResults
           .filter((tool) => getToolName(tool) === "execute_query")
-          .map((tool) => tool.summary || (typeof tool.rows === "number" ? `返回 ${tool.rows} 行数据` : "查询已执行"))
+          .map((tool) => typeof tool.rows === "number" ? `返回 ${tool.rows} 行数据` : "查询已执行")
       ])
     },
     {
       id: "result",
       title: "生成结果",
       description: "汇总答案并整理为可读表格。",
-      icon: PresentationChart,
       details: compactMessages([
-        ...collectStepDetails(steps, ["finalize"]),
         hasTable ? `已生成 ${askTurn.tableResults.length} 张结果表` : ""
       ])
     }
   ];
 
-  const completed = [
-    hasRouting || hasDecompose || steps.length > 0 || hasTable || isDone,
-    hasProcessingStarted || hasExecutionStarted || hasResultStarted || isDone,
-    hasExecutionStarted || hasResultStarted || isDone,
-    hasResultStarted || isDone,
-    isDone
+  // 每个阶段先只判断"有没有开始"，再从后往前回填：后面的阶段动了，
+  // 前面的阶段必然已经走完。否则模型正文一到，2~4 步会同时打勾而第 1 步还亮着。
+  const started = [
+    Boolean(askTurn.assistantContent) ||
+      hasRouting ||
+      hasDecompose ||
+      steps.length > 0 ||
+      toolNames.size > 0,
+    askTurn.dataSources.length > 0 || reached(["locate_datasource", "match_skill", "load_cube_meta"]),
+    reached(["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"]),
+    reached(["execute_query"]),
+    hasStep(steps, ["finalize"]) || hasTable
   ];
+  for (let index = started.length - 2; index >= 0; index -= 1) {
+    started[index] = started[index] || started[index + 1];
+  }
+  if (isDone) {
+    started.fill(true);
+  }
+  // 只有下一个阶段开始了（或整轮结束），当前阶段才算完成。
+  const completed = started.map(
+    (_, index) => isDone || (index + 1 < started.length ? started[index + 1] : false)
+  );
   const failed = [
     false,
     hasFailedStep(steps, ["locate_datasource", "match_skill", "load_cube_meta"]),
@@ -748,16 +749,20 @@ function buildThinkingPhases(
     hasFailedStep(steps, ["execute_query"]),
     askDataStatus === "error"
   ];
-  const firstIncompleteIndex = completed.findIndex((value) => !value);
+  const activeIndex = started.findIndex(
+    (value, index) => value && !completed[index] && !failed[index]
+  );
+  // 事件还没到时，运行中默认停在第一阶段，而不是整条轨全灰。
+  const runningIndex = activeIndex === -1 ? 0 : activeIndex;
 
   return drafts.map((phase, index) => {
     let status: ThinkingPhaseStatus = "pending";
 
-    if (completed[index]) {
-      status = "complete";
-    } else if (failed[index]) {
+    if (failed[index]) {
       status = "error";
-    } else if (askDataStatus === "streaming" && index === firstIncompleteIndex) {
+    } else if (completed[index]) {
+      status = "complete";
+    } else if (askDataStatus === "streaming" && index === runningIndex) {
       status = "active";
     } else if (askDataStatus === "idle" && index === 0) {
       status = "active";
@@ -807,9 +812,6 @@ function DataHubAnswer({
           className="datahub-answer__block"
           key={`${block.replyId || "reply"}-${block.modelCallIndex ?? "legacy"}-${index}`}
         >
-          {rendered.length > 1 && block.modelCallIndex !== undefined ? (
-            <span className="datahub-answer__call">第 {block.modelCallIndex} 次模型调用</span>
-          ) : null}
           <XsSafeMarkdown content={block.content} />
         </article>
       ))}
@@ -817,45 +819,131 @@ function DataHubAnswer({
   );
 }
 
+function AnalysisResultTables({
+  tables,
+  onStatus
+}: {
+  tables: DataHubTableResult[];
+  onStatus: (message: string) => void;
+}) {
+  const bodyId = useId();
+  const [expanded, setExpanded] = useState(false);
+  const bodyMountedRef = useRef(expanded);
+  if (expanded) bodyMountedRef.current = true;
+  const totalRows = tables.reduce((total, table) => total + table.totalRows, 0);
+
+  return (
+    <section className="analysis-result-tables" data-expanded={expanded || undefined} aria-label="结果表汇总">
+      <button
+        type="button"
+        className="analysis-result-tables__toggle"
+        aria-controls={bodyId}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "收起" : "展开"}结果表汇总，共 ${tables.length} 张表、${totalRows} 行`}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span className="analysis-result-tables__icon"><Database size={18} weight="duotone" aria-hidden="true" /></span>
+        <span className="analysis-result-tables__copy">
+          <strong>结果表汇总</strong>
+          <small>{tables.length} 张结果表 · 共 {totalRows} 行</small>
+        </span>
+        <span className="analysis-result-tables__action">
+          {expanded ? "收起" : "展开查看"}
+          <CaretDown size={16} aria-hidden="true" />
+        </span>
+      </button>
+      <div
+        id={bodyId}
+        className={`xs-datahub-collapse${expanded ? " xs-datahub-collapse--open" : ""}`}
+        aria-hidden={!expanded}
+      >
+        <div className="xs-datahub-collapse__inner">
+          {bodyMountedRef.current ? (
+            <div className="analysis-output__tables analysis-result-tables__body">
+              {tables.map((table) => (
+                <DataHubResultTable table={table} key={table.tableIndex} onStatus={onStatus} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function groupByKnowledgeBase<T>(items: T[], name: (item: T) => string) {
+  const groups = new Map<string, T[]>();
+  items.forEach((item) => {
+    const key = name(item);
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  });
+  return Array.from(groups);
+}
+
+function highlightQueryKeywords(text: string, query: string) {
+  const quoted = [...query.matchAll(/[《“"]([^》”"]{2,24})[》”"]/g)].map((match) => match[1]);
+  const words = query.match(/[A-Za-z0-9_-]{2,}|[\u4e00-\u9fff]{2,8}/g) ?? [];
+  const terms = Array.from(new Set([...quoted, ...words]))
+    .filter((term) => !/^(帮我|请问|查找|找出|文档|关于|相关|哪些|有没有)$/.test(term))
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 8);
+  if (!terms.length) return text;
+  const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.split(pattern).map((part, index) => (
+    terms.some((term) => term.toLocaleLowerCase() === part.toLocaleLowerCase())
+      ? <mark key={`${part}:${index}`}>{part}</mark>
+      : part
+  ));
+}
+
 function DataHubCitationList({
   citations,
   onOpen,
-  onCopyFragment
+  onCopyFragment,
+  query
 }: {
   citations: DataHubCitationDocument[];
   onOpen: (citation: DataHubCitationDocument) => void;
   onCopyFragment?: (text: string) => void;
+  query: string;
 }) {
   if (citations.length === 0) {
     return null;
   }
 
+  const groups = groupByKnowledgeBase(citations, (citation) => citation.kbName || "企业知识库");
   return (
     <section className="knowledge-citations knowledge-citations--chips" aria-label="引用文档">
-      <div className="knowledge-citations__chips">
-        {citations.map((citation) => {
-          const title = citation.docName || citation.fileName || citation.docKey;
-          return (
-            <button
-              type="button"
-              className="knowledge-citation-chip"
-              key={`${citation.docId}::${citation.docKey}`}
-              aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}`}
-              disabled={!citation.sourceAvailable}
-              onClick={() => onOpen(citation)}
-            >
-              <FileText size={15} aria-hidden="true" />
-              <span>{title}</span>
-            </button>
-          );
-        })}
-      </div>
+      {groups.map(([kbName, items]) => (
+        <section className="knowledge-citations__group" key={kbName}>
+          <strong>{kbName}</strong>
+          <div className="knowledge-citations__chips">
+            {items.map((citation) => {
+              const title = citation.docName || citation.fileName || citation.docKey;
+              return (
+                <button
+                  type="button"
+                  className="knowledge-citation-chip"
+                  key={`${citation.docId}::${citation.docKey}`}
+                  aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}`}
+                  disabled={!citation.sourceAvailable}
+                  onClick={() => onOpen(citation)}
+                >
+                  <FileText size={15} aria-hidden="true" />
+                  <span>{title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
       {citations.some((citation) => citation.fragments.length > 0) ? (
         <div className="knowledge-citations__quotes">
           {citations.flatMap((citation) =>
             citation.fragments.map((fragment, index) => (
               <blockquote key={`${citation.docId}-${index}`}>
-                <p>{fragment}</p>
+                <p>{highlightQueryKeywords(fragment, query)}</p>
                 <span className="knowledge-citations__quote-actions">
                   <button
                     type="button"
@@ -886,32 +974,49 @@ function DataHubCitationList({
 
 function DataHubDocumentLookupList({
   documents,
-  onOpen
+  onOpen,
+  query
 }: {
   documents: DataHubDocumentLookupResult[];
   onOpen: (document: DataHubDocumentLookupResult) => void;
+  query: string;
 }) {
   if (documents.length === 0) {
     return null;
   }
 
+  const groups = groupByKnowledgeBase(documents.slice(0, 5), (document) => document.kbName || "企业知识库");
   return (
     <section className="document-lookup-results" aria-label="匹配文档">
-      <div className="document-lookup-results__list document-lookup-results__list--names">
-        {documents.map((document) => (
-          <button
-            type="button"
-            className="document-lookup-name"
-            key={`${String(document.docId)}::${document.docKey}`}
-            aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
-            disabled={document.sourceAvailable === false}
-            onClick={() => onOpen(document)}
-          >
-            <FileText size={16} aria-hidden="true" />
-            <span>{document.title}</span>
-          </button>
-        ))}
-      </div>
+      <div className="document-lookup-results__head"><div><span>安全复核结果</span><h3>找到 {documents.length} 份文档</h3></div></div>
+      {groups.map(([kbName, items]) => (
+        <section className="document-lookup-results__group" key={kbName}>
+          <h4>{kbName}</h4>
+          <div className="document-lookup-results__list">
+            {items.map((document) => (
+              <button
+                type="button"
+                className="document-lookup-card"
+                key={`${String(document.docId)}::${document.docKey}`}
+                aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
+                disabled={document.sourceAvailable === false}
+                onClick={() => onOpen(document)}
+              >
+                <span className="document-lookup-card__icon"><FileText size={18} aria-hidden="true" /></span>
+                <span className="document-lookup-card__body">
+                  <strong>{document.title}</strong>
+                  {document.snippet || document.excerpt ? <p>{highlightQueryKeywords(document.snippet || document.excerpt || "", query)}</p> : null}
+                  <span className="document-lookup-card__meta">
+                    {document.matchReason ? <span>{document.matchReason}</span> : null}
+                    {document.score !== undefined ? <span>相关度 {document.score <= 1 ? `${Math.round(document.score * 100)}%` : document.score.toFixed(2)}</span> : null}
+                    {document.sourceAvailable === false ? <span>原文不可用</span> : <span>可打开原文</span>}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
     </section>
   );
 }
@@ -1013,48 +1118,6 @@ function AiChartSuccessCard({
       />
     </section>
   );
-}
-
-function AiChartSuggestionCard({
-  state,
-  onTypeChange
-}: {
-  state: AiChartUiState;
-  onTypeChange: (type: AiChartType) => void;
-}) {
-  if (state.status === "idle") {
-    return null;
-  }
-
-  if (state.status === "loading") {
-    return (
-      <section className="ai-chart-card ai-chart-card--loading" aria-label="智能图表建议">
-        <div className="ai-chart-card__icon" aria-hidden="true">
-          <CircleNotch size={20} weight="bold" />
-        </div>
-        <div>
-          <strong>AI 正在判断图表可行性</strong>
-          <p>只发送字段结构、样例行和行数统计，不上传完整结果表。</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (state.status === "not-chartable" || state.status === "error") {
-    return (
-      <section className={`ai-chart-card ai-chart-card--${state.status}`} role="region" aria-label="智能图表建议">
-        <div className="ai-chart-card__icon" aria-hidden="true">
-          <WarningCircle size={20} weight="bold" />
-        </div>
-        <div>
-          <strong>{state.status === "error" ? "图表生成失败" : "暂不适合生成图表"}</strong>
-          <p>{state.message}</p>
-        </div>
-      </section>
-    );
-  }
-
-  return <AiChartSuccessCard state={state} onTypeChange={onTypeChange} />;
 }
 
 export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
@@ -1454,7 +1517,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
 
     chartPlanInFlightRef.current.add(turnId);
     setAiChartStates((current) => ({ ...current, [turnId]: { status: "loading" } }));
-    setWorkflowStatus("正在规划图表");
 
     try {
       const chartTables = resolveAiChartTables({ question, tables, answer });
@@ -1464,8 +1526,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       if (!plan.chartable || !spec) {
         const message = plan.reason || "当前结果暂不适合生成图表。";
         setAiChartStates((current) => ({ ...current, [turnId]: { status: "not-chartable", message } }));
-        /* 完整理由由结果区的图表卡片承载，状态条只报结论，不复述整段判断 */
-        setWorkflowStatus("暂不适合生成图表");
         return;
       }
 
@@ -1477,7 +1537,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI 图表判断失败";
       setAiChartStates((current) => ({ ...current, [turnId]: { status: "error", message } }));
-      setWorkflowStatus("图表生成失败");
     } finally {
       chartPlanInFlightRef.current.delete(turnId);
     }
@@ -1729,9 +1788,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     : undefined,
                 terminalTimestamp: turn.endedAt
               });
-              const shouldShowExecutionPanel = isAgentMode;
-              const expandExecutionPanelByDefault = shouldShowExecutionPanel;
-              const preferDirectMainExecution = !isAgentMode;
               const lookupFromDone = getDataHubDocumentLookupResults(turnAsk.done);
               const documentLookupResults =
                 lookupFromDone.length > 0
@@ -1831,6 +1887,40 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   .filter(Boolean)
                   .join("\n\n")
               );
+              const businessKind = isAgentMode
+                ? "AGENT"
+                : isDocumentLookupMode
+                  ? "DOCUMENT_LOOKUP"
+                  : isKnowledgeMode
+                    ? "ASK_KNOWLEDGE"
+                    : "ASK_DATA";
+              const businessTrace = buildDataHubBusinessTrace(
+                turnAsk,
+                turn.question,
+                businessKind,
+                isAgentMode
+                  ? executionProjection.subagentSessions
+                      .map((session) => session.label || session.agentName || "子智能体")
+                      .filter((name) => !name.includes("数据源选择"))
+                  : [],
+                isAgentMode
+                  ? {
+                      tableResults: visibleTables,
+                      citationDocuments: [
+                        ...executionProjection.mainSession.citationDocuments,
+                        ...executionProjection.subagentSessions.flatMap(
+                          (session) => session.citationDocuments
+                        )
+                      ],
+                      dataSources: [
+                        ...executionProjection.mainSession.dataSources,
+                        ...executionProjection.subagentSessions.flatMap(
+                          (session) => session.dataSources
+                        )
+                      ]
+                    }
+                  : undefined
+              );
 
               return (
                 <div
@@ -1895,13 +1985,25 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         </div>
                       ) : null}
 
-                      {shouldShowExecutionPanel && !isHistoryLoadingTurn ? (
+                      {!isHistoryLoadingTurn ? (
+                        <DataHubBusinessExplanation
+                          kind={businessKind}
+                          intent={turn.question}
+                          trace={businessTrace}
+                          status={displayStatus === "streaming" || displayStatus === "idle"
+                            ? "running"
+                            : displayStatus === "done"
+                              ? "done"
+                              : displayStatus}
+                        />
+                      ) : null}
+                      {isAgentMode && !isHistoryLoadingTurn ? (
                         <DataHubExecutionPanel
                           projection={executionProjection}
                           title="智能编排执行"
-                          defaultExpanded={expandExecutionPanelByDefault}
-                          preferDirectMainExecution={preferDirectMainExecution}
-                          showMainDocumentBlocks={isAgentMode || isKnowledgeMode}
+                          className="analysis-orchestration-panel"
+                          defaultExpanded
+                          showMainDocumentBlocks
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
                             if (!citation) {
@@ -1944,6 +2046,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           {isKnowledgeMode && isResultReady && turnAsk.citationDocuments.length > 0 ? (
                             <DataHubCitationList
                               citations={turnAsk.citationDocuments}
+                              query={turn.question}
                               onOpen={(citation) => void handleOpenCitation(citation)}
                               onCopyFragment={async (text) => {
                                 const copied = await copyText(text);
@@ -1976,22 +2079,14 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               ) : null}
                             </div>
                           ) : null}
-                          {isResultReady && aiChartState.status !== "idle" ? (
-                            <AiChartSuggestionCard
+                          {isResultReady && aiChartState.status === "success" ? (
+                            <AiChartSuccessCard
                               state={aiChartState}
                               onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
                             />
                           ) : null}
                           {supportsTables && isResultReady && visibleTables.length > 0 ? (
-                            <div className="analysis-output__tables">
-                              {visibleTables.map((table) => (
-                                <DataHubResultTable
-                                  table={table}
-                                  key={table.tableIndex}
-                                  onStatus={setWorkflowStatus}
-                                />
-                              ))}
-                            </div>
+                            <AnalysisResultTables tables={visibleTables} onStatus={setWorkflowStatus} />
                           ) : null}
                           {supportsCitations &&
                           !isKnowledgeMode &&
@@ -1999,6 +2094,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           turnAsk.citationDocuments.length > 0 ? (
                             <DataHubCitationList
                               citations={turnAsk.citationDocuments}
+                              query={turn.question}
                               onOpen={(citation) => void handleOpenCitation(citation)}
                               onCopyFragment={async (text) => {
                                 const copied = await copyText(text);
@@ -2009,6 +2105,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           {isDocumentLookupMode && isResultReady && documentLookupResults.length > 0 ? (
                             <DataHubDocumentLookupList
                               documents={documentLookupResults}
+                              query={turn.question}
                               onOpen={(document) => void handleOpenDocumentLookupResult(document)}
                             />
                           ) : null}

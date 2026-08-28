@@ -100,15 +100,15 @@
   border-radius: 6px;
   color: var(--xs-primary-2);
   background: rgba(22, 119, 255, 0.09);
-  font-size: 11px;
-  font-weight: 760;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-display);
   white-space: nowrap;
 }
 
 .datahub-step__stream-copy {
   min-width: 0;
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.62;
   overflow-wrap: anywhere;
 }
@@ -123,7 +123,7 @@
   position: relative;
   padding-left: 13px;
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.62;
   overflow-wrap: anywhere;
 }
@@ -177,14 +177,14 @@
 
 .datahub-result-loading__head strong {
   color: var(--xs-text);
-  font-size: 14px;
-  font-weight: 780;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-display);
 }
 
 .datahub-result-loading__head span:not(.datahub-result-loading__icon) {
   color: var(--xs-text-3);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
 }
 
 .datahub-result-loading__icon {
@@ -265,7 +265,7 @@
 .datahub-native-thinking__head span:not(.datahub-native-thinking__icon, .datahub-thinking-dots),
 .knowledge-citation small {
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
 }
 
 .datahub-native-thinking__icon {
@@ -302,8 +302,8 @@
   display: block;
   margin-bottom: 6px;
   color: var(--xs-primary-2);
-  font-size: 11px;
-  font-weight: 760;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-display);
 }
 
 .datahub-data-sources {
@@ -312,7 +312,7 @@
   gap: 10px;
   margin-top: 12px;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
 }
 
 .datahub-data-sources > div {
@@ -413,7 +413,7 @@
   border-radius: 8px;
   background: #f2f7ff;
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
 }
 
 .xs-safe-markdown code {
@@ -466,14 +466,14 @@
 
 .knowledge-citations__head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--xs-fs-card);
 }
 
 .knowledge-citations__head > span,
 .knowledge-citations__eyebrow {
   color: var(--xs-primary-2);
-  font-size: 12px;
-  font-weight: 760;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-display);
 }
 
 .knowledge-citation {
@@ -526,13 +526,44 @@
   border-radius: 0 8px 8px 0;
   color: var(--xs-text-2);
   background: #f7fbff;
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.65;
 }
 
 .document-lookup-results {
   display: grid;
   gap: 12px;
+}
+
+.knowledge-citations__group,
+.document-lookup-results__group {
+  display: grid;
+  gap: 8px;
+}
+
+.analysis-orchestration-panel {
+  margin-top: 10px;
+  border-color: var(--xs-border);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.analysis-orchestration-panel .xs-datahub-execution__header {
+  min-height: 48px;
+  padding: 4px 8px 4px 12px;
+}
+
+.analysis-orchestration-panel .xs-datahub-execution__heading-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.knowledge-citations__group > strong,
+.document-lookup-results__group > h4 {
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
 }
 
 .document-lookup-results__head,
@@ -554,14 +585,14 @@
 
 .document-lookup-results__head span {
   color: var(--xs-primary-2);
-  font-size: 12px;
-  font-weight: 760;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-display);
 }
 
 .document-lookup-results__head h3 {
   margin: 0;
   color: var(--xs-text-1);
-  font-size: 16px;
+  font-size: var(--xs-fs-card);
 }
 
 .document-lookup-results__list {
@@ -570,11 +601,33 @@
 }
 
 .document-lookup-card {
+  width: 100%;
   gap: 12px;
   padding: 15px 16px;
   border: 1px solid #dceaff;
   border-radius: 14px;
   background: linear-gradient(180deg, #fbfdff, #fff);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-lookup-card:hover:not(:disabled) {
+  border-color: #b9d8fb;
+  box-shadow: 0 6px 18px rgba(31, 103, 190, 0.08);
+}
+
+.document-lookup-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.document-lookup-card mark,
+.knowledge-citations__quotes mark {
+  padding: 0 2px;
+  color: inherit;
+  border-radius: 3px;
+  background: #fff0a8;
 }
 
 .document-lookup-card__icon {
@@ -606,7 +659,7 @@
 .document-lookup-card__body p {
   margin: 0;
   color: var(--xs-text-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-label);
   line-height: 1.55;
 }
 
@@ -614,7 +667,7 @@
   flex-wrap: wrap;
   gap: 5px 10px;
   color: var(--xs-text-3);
-  font-size: 12px;
+  font-size: var(--xs-fs-caption);
 }
 
 .document-lookup-card__meta span + span::before {
@@ -694,7 +747,7 @@
   margin: 0;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   line-height: 1.5;
 }
 
@@ -705,7 +758,7 @@
 
 .analysis-live__status {
   color: var(--xs-text-2);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .analysis-live__timer {
@@ -718,7 +771,7 @@
   color: var(--xs-info-ink);
   background: var(--xs-info-soft);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -740,7 +793,7 @@
   border-radius: var(--xs-radius-small);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   white-space: nowrap;
   transition:
     color var(--xs-motion-state) var(--xs-motion-ease-out),
@@ -782,30 +835,36 @@
 }
 
 .analysis-live__step[data-state="pending"] {
-  opacity: 0.6;
+  opacity: 0.62;
 }
 
+/* 未开始：只留一颗静止的点，阶段图标在 20px 里糊成一团，不如不画 */
+.analysis-live__step[data-state="pending"] .analysis-live__step-mark::before {
+  width: 5px;
+  height: 5px;
+  content: "";
+  border-radius: 50%;
+  background: #b9cbe4;
+}
+
+/* 当前阶段：底色扫光 + 光环呼吸，两条都直接用编排面板的运行态动画 */
 .analysis-live__step[data-state="active"] {
   color: var(--xs-primary-2);
-  background: var(--xs-info-soft);
+  background: linear-gradient(100deg, #e4efff 20%, #cfe5ff 46%, #e4efff 72%);
+  background-size: 220% 100%;
+  animation:
+    xs-datahub-shimmer 1.9s linear infinite,
+    xs-datahub-status-breathe 2.1s ease-in-out infinite;
 }
 
 .analysis-live__step[data-state="active"] .analysis-live__step-mark {
-  position: relative;
-  isolation: isolate;
   color: #fff;
   background: var(--xs-primary);
 }
 
-/* 当前阶段光环：与编排面板同一组呼吸参数 */
-.analysis-live__step[data-state="active"] .analysis-live__step-mark::before {
-  position: absolute;
-  z-index: -1;
-  inset: -5px;
-  content: "";
-  border: 1px solid rgba(22, 119, 255, 0.42);
-  border-radius: 9px;
-  animation: datahub-thinking-halo var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
+/* 编排状态徽章同款转圈 */
+.analysis-live__step[data-state="active"] .analysis-live__step-mark svg {
+  animation: xs-datahub-spin 1.15s linear infinite;
 }
 
 .analysis-live__step[data-state="complete"] {
@@ -815,7 +874,7 @@
 .analysis-live__step[data-state="complete"] .analysis-live__step-mark {
   color: var(--xs-primary-2);
   background: #e6f1ff;
-  animation: datahub-phase-complete var(--xs-motion-slow) var(--xs-motion-ease-spring) both;
+  animation: xs-datahub-pop-in 300ms var(--xs-motion-ease-spring) backwards;
 }
 
 .analysis-live__step[data-state="error"] {
@@ -825,6 +884,17 @@
 .analysis-live__step[data-state="error"] .analysis-live__step-mark {
   color: var(--xs-danger-ink);
   background: var(--xs-danger-soft);
+}
+
+/* 窄屏阶段链换行后首端会挂一截空连线，这里直接收掉，只留状态芯片 */
+@media (max-width: 900px) {
+  .analysis-live__step + .analysis-live__step::before {
+    display: none;
+  }
+
+  .analysis-live__rail {
+    gap: 4px 6px;
+  }
 }
 
 /* 最新动作：内容变化时按 key 重挂载，换行即换一次淡入 */
@@ -839,33 +909,25 @@
   animation: analysis-state-in var(--xs-motion-base) var(--xs-motion-ease-out) backwards;
 }
 
-/* 流式回答：末段落尾部留一个呼吸光标，表示这段话还在写 */
+/* 流式回答：整块沿用编排里"运行中智能体卡"的边框呼吸，
+   不再在顶边贴一条与圆角割裂的进度线。 */
 .datahub-answer--streaming {
-  border-color: #bcd8ff;
+  border-color: #a4ccf8;
+  animation: xs-datahub-card-breathe 2.6s ease-in-out infinite;
 }
 
 .datahub-answer--streaming .datahub-answer__block:last-child .xs-safe-markdown > p:last-child::after {
   display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 4px;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
   content: "";
-  vertical-align: -0.18em;
-  border-radius: 1px;
+  vertical-align: 0.16em;
+  border-radius: 50%;
   background: var(--xs-primary);
-  animation: analysis-caret var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
+  animation: xs-datahub-soft-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes analysis-caret {
-  0%,
-  100% {
-    opacity: 0.18;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
 
 @keyframes datahub-thinking-dot {
   0%,

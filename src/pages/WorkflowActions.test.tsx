@@ -129,7 +129,37 @@ describe("workflow page actions", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders the data-hub ask-data process and result table", () => {
+  it("运行中阶段链按顺序推进，模型正文不会让后面的阶段先打勾", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("帮我分析本月经营数据");
+    // 只有模型正文时，编排还停在第一阶段。
+    store.appendAskDataEvent(runId, { type: "content", data: "我来帮您分析本月经营数据。" });
+
+    const view = renderPage(<AnalysisPage mode="ask" />);
+    const stepState = (title: string) =>
+      Array.from(view.container.querySelectorAll(".analysis-live__step"))
+        .find((step) => step.textContent?.includes(title))
+        ?.getAttribute("data-state");
+
+    expect(view.container.querySelectorAll('.analysis-live__step[data-state="complete"]')).toHaveLength(0);
+    expect(stepState("理解问题")).toBe("active");
+
+    act(() => {
+      useUiStore.getState().appendAskDataEvent(runId, {
+        type: "react_step",
+        data: { round: 2, action: "execute_query", status: "running", summary: "正在执行 Cube Query" }
+      });
+    });
+
+    expect(stepState("理解问题")).toBe("complete");
+    expect(stepState("确定数据范围")).toBe("complete");
+    expect(stepState("数据处理")).toBe("complete");
+    expect(stepState("执行查询")).toBe("active");
+    expect(stepState("生成结果")).toBe("pending");
+  });
+
+  it("renders the data-hub ask-data process and expands its result-table summary on demand", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("目前咨询数最多的社区是哪个社区");
     store.appendAskDataEvent(runId, {
@@ -182,8 +212,17 @@ describe("workflow page actions", () => {
     expect(screen.getByLabelText("任务动态")).toHaveTextContent("生成结果");
     expect(screen.queryByText("过程细节")).not.toBeInTheDocument();
     expect(screen.queryByText("已匹配事件域业务 Skill")).not.toBeInTheDocument();
-    expect(screen.getByText("项目名称")).toBeInTheDocument();
-    expect(screen.getByText("演示账号")).toBeInTheDocument();
+    const tableToggle = screen.getByRole("button", { name: /展开结果表汇总/ });
+    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("columnheader", { name: "项目名称" })).not.toBeInTheDocument();
+    await user.click(tableToggle);
+    expect(tableToggle).toHaveAttribute("aria-expanded", "true");
+    const projectHeader = screen.getByRole("columnheader", { name: "项目名称" });
+    expect(projectHeader).toBeVisible();
+    expect(screen.getByRole("cell", { name: "演示账号" })).toBeVisible();
+    await user.click(tableToggle);
+    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("columnheader", { name: "项目名称" })).not.toBeInTheDocument();
   });
 
   it("renders knowledge Markdown and deduplicated citations without ask-data actions", async () => {
@@ -270,7 +309,8 @@ describe("workflow page actions", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("renders native ask-data activity, answer and table instead of an empty orchestration canvas", () => {
+  it("renders native ask-data activity, answer and a collapsed table summary instead of an empty orchestration canvas", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("本月收入是多少？", null, "ask");
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
@@ -354,8 +394,9 @@ describe("workflow page actions", () => {
 
     expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
     expect(screen.getByText("128 万元")).toBeInTheDocument();
-    expect(screen.getByText("月份")).toBeInTheDocument();
-    expect(screen.getByText("7月")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
+    expect(screen.getByRole("columnheader", { name: "月份" })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "7月" })).toBeVisible();
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(screen.queryByText("本次问数未返回可展示的结构化结果。")).not.toBeInTheDocument();
     expect(screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")).not.toBeInTheDocument();
@@ -1276,7 +1317,8 @@ describe("workflow page actions", () => {
     expect(screen.getByText("客户增长保持稳定。")).toBeInTheDocument();
   });
 
-  it("shows completed tables immediately without waiting for process playback", () => {
+  it("shows a completed table summary immediately without waiting for process playback", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询咨询数最多的社区");
 
@@ -1312,7 +1354,11 @@ describe("workflow page actions", () => {
 
     expect(screen.queryByRole("heading", { name: "问数完成" })).not.toBeInTheDocument();
     expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
-    expect(screen.getByText("演示账号")).toBeInTheDocument();
+    const tableToggle = screen.getByRole("button", { name: /展开结果表汇总/ });
+    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "下载表格" })).not.toBeInTheDocument();
+    await user.click(tableToggle);
+    expect(screen.getByRole("cell", { name: "演示账号" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
@@ -1362,6 +1408,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
+    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
     await user.click(screen.getByRole("button", { name: "下载表格" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
@@ -1393,6 +1440,7 @@ describe("workflow page actions", () => {
 
     expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
     await user.click(screen.getByRole("button", { name: "下载表格" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
@@ -1405,7 +1453,8 @@ describe("workflow page actions", () => {
     Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
   });
 
-  it("does not export when agent orchestration has multiple ask-data children", () => {
+  it("does not export when agent orchestration has multiple ask-data children", async () => {
+    const user = userEvent.setup();
     const runId = useUiStore.getState().startAskDataRun("同时查询两份合同", null, "agent");
     appendAgentAskChildTable(runId, 2);
     useUiStore.getState().completeAskDataRun(runId);
@@ -1414,10 +1463,13 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    expect(screen.getByText("2 张结果表 · 共 2 行")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
     expect(screen.getAllByRole("button", { name: "下载表格" })).toHaveLength(2);
   });
 
-  it("shows 综合结果 with query-child tables labeled by the sub-question", () => {
+  it("shows 综合结果 with query-child tables labeled by the sub-question", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun(
       "查询眉山天府新区照明采购合同的设备清单",
@@ -1493,6 +1545,7 @@ describe("workflow page actions", () => {
       within(result).getByText("我来帮您查询眉山天府新区城市照明采购合同的相关设备清单。")
     ).toBeInTheDocument();
     expect(within(result).queryByText("数据与制度来源均已完成。")).not.toBeInTheDocument();
+    await user.click(within(result).getByRole("button", { name: /展开结果表汇总/ }));
     expect(within(result).getByRole("columnheader", { name: "设备名称" })).toBeInTheDocument();
     expect(within(result).getByText("远程控制终端")).toBeInTheDocument();
     expect(within(result).getByRole("button", { name: "下载表格" })).toBeInTheDocument();

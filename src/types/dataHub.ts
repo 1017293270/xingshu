@@ -235,18 +235,22 @@ export type DataHubDocumentLookupResult = {
   docId: string | number;
   docKey: string;
   kbId: string | number;
+  kbName?: string;
   title: string;
   docName?: string;
   fileName?: string;
   contentType?: string;
   excerpt?: string;
   matchReason?: string;
+  score?: number;
+  snippet?: string;
   docStatus?: string;
   sourceUrl?: string;
   source?: {
     url?: string;
   };
   sourceAvailable?: boolean;
+  markdownAvailable?: boolean;
 };
 
 export type DataHubDoneData = {
@@ -283,11 +287,56 @@ export type DataHubCitationDocument = {
   docId: string;
   docKey: string;
   kbId: string;
+  kbName?: string;
   docName?: string;
   fileName?: string;
+  chapter?: string;
+  pageNumber?: string;
   sourceAvailable: boolean;
   markdownAvailable?: boolean;
   fragments: string[];
+};
+
+export type DataHubBusinessQueryContext = {
+  dataTables: string[];
+  fields: string[];
+  filters: string[];
+  calculations: string[];
+  relationships: string[];
+  metricDefinitions: string[];
+  synonymMappings: string[];
+  time: string[];
+};
+
+export type DataHubBusinessTask = {
+  id: string;
+  agentName: string;
+  question: string;
+  target?: string;
+};
+
+export type DataHubBusinessDocument = {
+  kbName: string;
+  docName: string;
+  chapter?: string;
+  pageNumber?: string;
+  fragments: string[];
+};
+
+export type DataHubBusinessTrace = {
+  intent: string;
+  tasks: DataHubBusinessTask[];
+  steps: string[];
+  dataSources: string[];
+  dataTables: string[];
+  fields: string[];
+  filters: string[];
+  calculations: string[];
+  relationships: string[];
+  metricDefinitions: string[];
+  synonymMappings: string[];
+  time: string[];
+  documents: DataHubBusinessDocument[];
 };
 
 export type DataHubTableColumn = {
@@ -304,6 +353,7 @@ export type DataHubTableResult = {
   groupIndex?: number;
   groupLabel?: string;
   source?: string;
+  business?: DataHubBusinessQueryContext;
   tableIndex?: number;
 };
 

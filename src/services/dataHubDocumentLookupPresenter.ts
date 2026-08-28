@@ -39,7 +39,7 @@ export function isDataHubDocumentLookupTurn(done?: DataHubDoneData) {
  */
 export function getDataHubDocumentLookupResults(
   done?: DataHubDoneData,
-  limit = 10
+  limit = 5
 ): DataHubDocumentLookupResult[] {
   if (
     !isDataHubDocumentLookupTurn(done) ||
@@ -75,12 +75,18 @@ export function getDataHubDocumentLookupResults(
       docId,
       docKey,
       kbId,
+      kbName: optionalText(rawResult.kbName),
       title:
         optionalText(rawResult.docName) ||
         optionalText(rawResult.fileName) ||
         docKey,
       contentType: optionalText(rawResult.contentType, 80),
-      excerpt: optionalText(rawResult.matchReason),
+      excerpt: optionalText(rawResult.snippet) || optionalText(rawResult.matchReason),
+      matchReason: optionalText(rawResult.matchReason),
+      snippet: optionalText(rawResult.snippet, 240),
+      score: typeof rawResult.score === "number" && Number.isFinite(rawResult.score)
+        ? rawResult.score
+        : undefined,
       docStatus: optionalText(rawResult.docStatus, 40),
       sourceAvailable:
         typeof rawResult.sourceAvailable === "boolean"

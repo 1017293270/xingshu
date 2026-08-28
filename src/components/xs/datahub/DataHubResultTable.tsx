@@ -1,6 +1,6 @@
 import { CopySimple, DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { formatDataHubColumnTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
+import { formatDataHubColumnTitle, formatDataHubTableTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import {
   buildDataHubTablesCsv,
   downloadCsv,
@@ -36,6 +36,7 @@ export function DataHubResultTable({ table, onStatus }: DataHubResultTableProps)
   const [scrollEdge, setScrollEdge] = useState<"none" | "start" | "end" | "both">("none");
   const previewRows = table.rows.slice(0, PREVIEW_ROW_LIMIT);
   const hiddenRowCount = Math.max(0, table.totalRows - previewRows.length);
+  const tableTitle = formatDataHubTableTitle(table);
   const numericColumnKeys = new Set(
     table.columns.filter((column) => isNumericColumn(column, previewRows)).map((column) => column.key)
   );
@@ -82,7 +83,7 @@ export function DataHubResultTable({ table, onStatus }: DataHubResultTableProps)
   return (
     <article className="datahub-table-card">
       <div className="datahub-result-head">
-        <h3>{table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : 1}`}</h3>
+        <h3 title={tableTitle}>{tableTitle}</h3>
         <div className="datahub-table-card__actions">
           <button
             type="button"
@@ -105,7 +106,7 @@ export function DataHubResultTable({ table, onStatus }: DataHubResultTableProps)
             className="analysis-icon-button"
             aria-label="下载表格"
             onClick={() => {
-              const basename = sanitizeCsvBasename(table.groupLabel || "问数表格") || "问数表格";
+              const basename = sanitizeCsvBasename(tableTitle) || "问数表格";
               downloadCsv(`${basename}-${new Date().toISOString().slice(0, 10)}.csv`, buildDataHubTablesCsv([table]));
               onStatus?.(`已导出 ${table.rows.length} 行问数结果`);
             }}

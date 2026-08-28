@@ -160,6 +160,68 @@ describe("dataHubAskDataPresenter", () => {
     });
   });
 
+  it("prefers Chinese table and column labels when the payload includes comments", () => {
+    const table = normalizeDataHubTableResult({
+      tableName: "RcbBankStatement",
+      comment: "农商银行流水",
+      columns: [
+        {
+          name: "RcbBankStatement.totalCreditAmount",
+          title: "RcbBankStatement.totalCreditAmount",
+          comment: "贷方发生额"
+        }
+      ],
+      rows: [{ "RcbBankStatement.totalCreditAmount": 1280 }],
+      totalRows: 1
+    });
+
+    expect(table?.groupLabel).toBe("农商银行流水");
+    expect(table?.columns[0]).toMatchObject({
+      key: "RcbBankStatement.totalCreditAmount",
+      title: "贷方发生额"
+    });
+  });
+
+  it("falls back to the English table name when no Chinese label exists", () => {
+    const table = normalizeDataHubTableResult({
+      tableName: "ContractList",
+      columns: [{ name: "count", title: "count" }],
+      rows: [{ count: 1 }]
+    });
+
+    expect(table?.groupLabel).toBe("ContractList");
+  });
+
+  it("uses the Cube annotation comment as the table label and short titles as column labels", () => {
+    const table = normalizeDataHubTableResult({
+      annotation: {
+        measures: {
+          "ContractList.count": {
+            title: "合同主数据清单，记录合同编号、名称、年度、签约方及金额 记录数",
+            shortTitle: "记录数",
+            type: "number"
+          }
+        },
+        dimensions: {
+          "ContractList.contractYear": {
+            title: "合同主数据清单，记录合同编号、名称、年度、签约方及金额 归属年度",
+            shortTitle: "归属年度",
+            type: "string"
+          }
+        }
+      },
+      data: [{ "ContractList.count": 1, "ContractList.contractYear": "2024年" }]
+    });
+
+    expect(table).toMatchObject({
+      groupLabel: "合同主数据清单，记录合同编号、名称、年度、签约方及金额",
+      columns: [
+        { key: "ContractList.count", title: "记录数" },
+        { key: "ContractList.contractYear", title: "归属年度" }
+      ]
+    });
+  });
+
   it("presents new ask events with real thinking, text, table, and artifacts", () => {
     const events: DataHubStreamEvent[] = [
       {
