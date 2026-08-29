@@ -89,8 +89,8 @@
 /* 大屏名示例：随内容填充阶段淡入 */
 .db-converge__title-text {
   fill: #294469;
-  font-size: 9px;
-  font-weight: 600;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -325,8 +325,8 @@
 .db-arrange__toolbar .db-arrange__name {
   margin-left: 8px;
   color: var(--xs-text-2);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
 }
 
 /* 网格纸画布 */
@@ -455,24 +455,24 @@
 .db-arrange__kpi-label {
   display: block;
   color: var(--xs-text-3);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
 }
 
 .db-arrange__kpi-value {
   display: block;
   margin-top: 2px;
   color: var(--xs-text);
-  font-size: 21px;
-  font-weight: 750;
+  font-size: var(--xs-fs-metric-sm);
+  font-weight: var(--xs-fw-bold);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
 .db-arrange__kpi-trend {
   color: var(--xs-success-ink);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
 }
 
 @keyframes db-arrange-place {
@@ -565,8 +565,8 @@
 
 .db-present__title {
   color: var(--xs-text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.02em;
 }
 
@@ -575,8 +575,8 @@
   align-items: center;
   gap: 5px;
   color: var(--xs-primary);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.08em;
 }
 
@@ -606,16 +606,16 @@
 .db-present__kpis span {
   display: block;
   color: var(--xs-text-3);
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
 }
 
 .db-present__kpis strong {
   display: block;
   margin-top: 1px;
   color: var(--xs-text);
-  font-size: 17px;
-  font-weight: 750;
+  font-size: var(--xs-fs-card);
+  font-weight: var(--xs-fw-bold);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }

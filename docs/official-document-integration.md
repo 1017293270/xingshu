@@ -1,11 +1,13 @@
 # 公文写作集成说明
 
-星数前端只负责模板库、模板校准、结构化草稿、QueryAsset 绑定、PDF 预览和正式导出。DOCX 解析、模板编译、数据冻结、文件生成和持久化均由同级独立服务 `official-document-service` 承担。
+> 前端展示名为「报告智写」。代码里的路由 `/writing`、目录 `officialDocument`、CSS 前缀 `official-document-` 以及后端服务名 `official-document-service` 都保持不变，只有可见文案改了。
+
+星数前端只负责模板库、模板结构、结构化草稿、智写对话、QueryAsset 绑定、PDF 预览和正式导出。DOCX 解析、模板编译、数据冻结、文件生成和持久化均由同级独立服务 `official-document-service` 承担。
 
 ## 当前链路
 
 ```text
-/writing/templates、/writing/drafts
+/writing、/writing/templates、/writing/drafts
   → 同源 /api/official-document 网关
     → official-document-service
     → Syncfusion DocIO 34.1.33（DOCX 分析、编译、生成）
@@ -20,14 +22,15 @@
 
 ## 页面组成
 
-公文写作是独立的全屏 Agent 应用，左侧导航轨只有“模板库”和“草稿箱”两个入口，列表页与详情页严格分离，`/writing` 重定向到 `/writing/templates`。
+报告智写是独立的全屏 Agent 应用，左侧导航轨包含“公文写作”“结构模板”和“草稿箱”三个入口，列表页、写作页与详情页严格分离。
 
 | 路由 | 页面 | 职责 |
 | --- | --- | --- |
+| `/writing` | 公文写作 | 输入写作要求并通过 `@` 单选一篇现有草稿；读取其绑定模板、章节层级和有限文风样本，先生成仅存在于当前会话的临时成稿，用户确认并点击后才保存到草稿箱，原稿不修改 |
 | `/writing/templates` | 模板库列表 | 上传 `.docx`、按状态筛选与搜索、轮询分析进度 |
-| `/writing/templates/:templateId` | 模板校准 | 确认标题、主送、一级至三级标题、正文、附件、落款、日期和版记；设置正文区域起止位置以及表格绑定槽位 |
+| `/writing/templates/:templateId` | 模板结构 | 默认写作视角：左侧可折叠大纲树 + 右侧按角色排版的模板原文，两栏滚动联动。「开始写作」直接用分析推断出的角色映射建草稿，不再要求先人工确认。角色识别有误时点「校准结构」展开第三栏，逐段改角色、正文区域起止与表格绑定槽位 |
 | `/writing/drafts` | 草稿箱列表 | 按状态筛选与搜索草稿，从模板库发起新建草稿 |
-| `/writing/drafts/:draftId` | 结构化起草 | 固定字段与正文节点、QueryAsset 绑定、PDF 预览，以及 DOCX 与 PDF 正式导出 |
+| `/writing/drafts/:draftId` | 结构化起草 | 固定字段与正文节点、智写对话、QueryAsset 绑定、PDF 预览，以及 DOCX 与 PDF 正式导出 |
 
 ## 草稿保存
 
@@ -39,6 +42,14 @@
 - 删除、上移、下移。
 - 切换角色和格式变体。
 - 编辑标题、主送、附件说明、落款和日期等固定字段。
+
+## 智写对话
+
+草稿页右侧常驻「智写助手」（视口 < 1280px 时收起，点页头按钮浮出）。它复用 DataHub 的流式 chat 接口，通过 `chatMode: "writing"` 区分，会话 id 带 `writing-` 前缀 —— 与问表的 `ask-table-` 同构，只发给后端、不进全局模型选择器，也不会出现在问数的历史回放里。常量集中在 `src/services/dataHubWriting.ts`：**后端若把这个模式叫别的名字，改这一个文件即可。**
+
+对话状态是按草稿隔离的组件本地状态（`useWritingChat`），不进 `useUiStore` —— 那里的 `analysisTurns` 是全局单会话的问数对话。回答生成完成后可以「插入到正文」，按空行拆成正文节点一次性追加，只触发一次自动保存。
+
+`/writing` 的一键成稿复用同一流式接口，使用 `action: "REFERENCE_DRAFT"`。参考草稿只提供模板结构、标题层级与限量文风样本，旧固定字段、表格、图表、绑定和正文事实不会复制。模型以 `[[XS_FIXED:slot-id]]` 与 `[[XS_SECTION:section-id]]` 返回结构化结果；前端校验锚点后先保留临时成稿，通过 `/v1/drafts/:preview` 与 `/v1/drafts/:export` 浏览或下载，不创建草稿记录。只有用户点击“保存到草稿箱”时才复用现有创建草稿与内容保存接口。该模式不自动执行问数、问知或找文档，事实不足时保留明确的待补充标记。
 
 ## QueryAsset 绑定
 
@@ -70,4 +81,5 @@ Syncfusion license、数据库凭据、服务间 HMAC 和 QueryAsset 内网地�
 - PDF 预览和正式 PDF 导出由同一公文服务容器中的 LibreOffice 生成。
 - ONLYOFFICE 组件与接口代码保留用于回退，但 `/writing` 不加载编辑器、不创建会话。
 - Aspose 适配器代码保留但生产不启用。
-- 第一版不支持 AI 起草、多人协同、审批、图表写入或复杂 Word 对象编辑。
+- 智写对话依赖 DataHub 侧提供 `writing` 模式；公文服务自身仍不提供 AI 起草接口。
+- 不支持多人协同、审批、图表写入或复杂 Word 对象编辑。

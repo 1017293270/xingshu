@@ -92,7 +92,11 @@
   --xs-fs-display: 40px;
   --xs-fs-title: 24px;
   --xs-fs-metric: 30px;
+  /* 看板主指标：比标准 metric 再大一档，只给一屏一个的营收/总量数字 */
+  --xs-fs-metric-lg: 34px;
   --xs-fs-section: 20px;
+  /* 首页问候：display 太大、title 太小，2026-08-20 定的中间档 */
+  --xs-fs-hero: 28px;
   --xs-fs-card: 17px;
   --xs-fs-body: 15px;
   --xs-fs-label: 13px;
@@ -103,8 +107,10 @@
   --xs-fs-input: 14px;
   /* 行内小数值：卡片里的份数、条数 */
   --xs-fs-metric-sm: 22px;
-  /* 字重四档：正文 400、次要强调 600、强调 700、标题与数值 760 */
+  /* 字重五档：正文 400、外壳导航与行内次要文字 500、次要强调 600、强调 700、标题与数值 760。
+     只有这五个值——系统字体本来就只有有限档位，写 650/720/780 是假精度，渲染出来和邻档同粗。 */
   --xs-fw-regular: 400;
+  --xs-fw-text: 500;
   --xs-fw-medium: 600;
   --xs-fw-bold: 700;
   --xs-fw-display: 760;
@@ -123,7 +129,15 @@
     --xs-fs-display: 30px;
     --xs-fs-title: 22px;
     --xs-fs-metric: 24px;
+    --xs-fs-metric-lg: 30px;
     --xs-fs-section: 18px;
+  }
+}
+
+/* 超宽屏只抬主指标一档，其余保持——大屏上放大正文只会让阅读距离更远 */
+@media (min-width: 1800px) {
+  :root {
+    --xs-fs-metric-lg: 38px;
   }
 }
 

@@ -139,7 +139,7 @@
   background: color-mix(in srgb, var(--xs-text-3) 12%, #ffffff);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   transition:
     color var(--xs-motion-state) var(--xs-motion-ease-out),
     background-color var(--xs-motion-state) var(--xs-motion-ease-out),
@@ -196,7 +196,7 @@
   color: var(--xs-text-2);
   cursor: pointer;
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -402,7 +402,7 @@
 .dashboard-card__versions-title {
   color: var(--xs-text-2);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .dashboard-card__versions-state {
@@ -441,14 +441,14 @@
 .dashboard-card__version-list span {
   color: var(--xs-text);
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .dashboard-card__version-list small {
   margin-top: 2px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 400;
+  font-weight: var(--xs-fw-regular);
 }
 
 .dashboard-card__version-list button {
@@ -460,7 +460,7 @@
   color: var(--xs-interactive-text);
   cursor: pointer;
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
@@ -578,7 +578,7 @@
   justify-self: end;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .dashboard-list__pagination {
@@ -591,7 +591,7 @@
   display: block;
   margin-bottom: 8px;
   color: var(--xs-text-2);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 @media (max-width: 820px) {

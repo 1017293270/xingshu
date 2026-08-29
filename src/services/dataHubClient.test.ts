@@ -246,7 +246,7 @@ describe("dataHubClient", () => {
     ).rejects.toMatchObject({
       name: "DataHubServiceError",
       code: "REQUEST_TIMEOUT",
-      message: "请求超时，请确认 data-hub 登录服务是否可用"
+      message: "服务处理时间较长，请稍后重试"
     });
 
     await vi.advanceTimersByTimeAsync(10);

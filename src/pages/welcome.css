@@ -59,7 +59,7 @@
   gap: 7px;
   color: var(--xs-primary-2);
   font-size: var(--xs-fs-control);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
 }
 
 .welcome-page__trust-icon {
@@ -124,7 +124,7 @@
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   font-size: var(--xs-fs-card);
-  font-weight: 760;
+  font-weight: var(--xs-fw-display);
   text-decoration: none;
   transition:
     color var(--xs-motion-feedback) var(--xs-motion-ease-out),

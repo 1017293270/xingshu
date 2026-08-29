@@ -20,6 +20,10 @@ import type {
   DataHubAgentExecutionCard,
   DataHubExecutionBlock
 } from "@/types/dataHub";
+import {
+  formatDataHubCitationFragment,
+  formatDataHubColumnTitle
+} from "@/services/dataHubFormat";
 import { XsSafeMarkdown } from "../XsSafeMarkdown";
 import {
   asNumber,
@@ -27,8 +31,7 @@ import {
   asString,
   asStringArray,
   executionBlockLabel,
-  formatExecutionTime,
-  formatStructuredContent
+  formatExecutionTime
 } from "./display";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import {
@@ -63,42 +66,46 @@ function blockIcon(block: DataHubExecutionBlock) {
   return FileText;
 }
 
-function startsModelCall(
-  blocks: readonly DataHubExecutionBlock[],
-  index: number
-) {
-  const block = blocks[index];
-  const callIndex = block?.modelCallIndex;
-  if (callIndex === undefined) {
-    return false;
-  }
-  const previous = blocks[index - 1];
-  return (
-    index === 0 ||
-    previous?.modelCallIndex !== callIndex ||
-    previous?.replyId !== block.replyId
-  );
-}
-
 function textContent(content: unknown): string | undefined {
   return asString(content);
 }
 
+const businessToolLabels: Record<string, string> = {
+  list_datasources: "读取可用数据源",
+  locate_datasource: "匹配可用数据源",
+  get_skill: "读取业务语义",
+  get_cube_meta: "读取语义模型",
+  plan_with_datasource_skill: "制定查询方案",
+  generate_query: "生成查询方案",
+  execute_query: "执行数据查询",
+  load_data: "执行数据查询",
+  retrieve_knowledge: "检索知识证据",
+  confirm_answer: "校验并整理回答",
+  find_documents: "定位相关文档",
+  confirm_document_selection: "复核文档结果",
+  invoke_parallel: "分派并行任务"
+};
+
+function safeBusinessSummary(value?: string) {
+  if (!value || /\bselect\b|\bsql\b|query\s*json|datasource\s*id|^(?:\[|\{)/i.test(value)) {
+    return undefined;
+  }
+  return value;
+}
+
 function renderToolBlock(block: DataHubExecutionBlock) {
   const record = asRecord(block.content);
-  const toolName =
+  const rawToolName =
     asString(record?.toolName) ??
     asString(record?.tool) ??
-    asString(record?.name) ??
-    "未命名工具";
+    asString(record?.name);
+  const toolName = rawToolName
+    ? businessToolLabels[rawToolName] ?? "调用企业能力"
+    : "调用企业能力";
   const summary =
-    asString(record?.summary) ??
-    asString(record?.resultSummary) ??
-    asString(record?.status);
-  const detail =
-    block.type === "tool_call"
-      ? record?.args ?? record?.params ?? record?.input
-      : record?.result ?? record?.data ?? record?.output ?? record?.sql;
+    safeBusinessSummary(asString(record?.summary)) ??
+    safeBusinessSummary(asString(record?.resultSummary)) ??
+    (block.type === "tool_call" ? "正在执行该步骤" : "该步骤已完成");
 
   return (
     <div className={`xs-datahub-agent-card__tool xs-datahub-agent-card__tool--${block.type}`}>
@@ -107,13 +114,7 @@ function renderToolBlock(block: DataHubExecutionBlock) {
         <strong>{toolName}</strong>
         <span>{block.type === "tool_call" ? "调用" : "返回"}</span>
       </div>
-      {summary ? <p>{summary}</p> : null}
-      {detail !== undefined ? (
-        <details>
-          <summary>{block.type === "tool_call" ? "查看参数" : "查看结果"}</summary>
-          <pre>{formatStructuredContent(detail)}</pre>
-        </details>
-      ) : null}
+      <p>{summary}</p>
     </div>
   );
 }
@@ -124,6 +125,20 @@ type TablePreview = {
   totalRows?: number;
 };
 
+function tableCell(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => ["string", "number", "boolean"].includes(typeof item))
+      .map(String)
+      .join("、") || "结构化内容";
+  }
+  return "结构化内容";
+}
+
 function tablePreview(content: unknown): TablePreview | undefined {
   const record = asRecord(content);
   const nested = asRecord(record?.table) ?? record;
@@ -131,7 +146,7 @@ function tablePreview(content: unknown): TablePreview | undefined {
   const columns = rawColumns.flatMap((column, index) => {
     const columnName = asString(column);
     if (columnName) {
-      return [{ key: columnName, title: columnName }];
+      return [{ key: columnName, title: formatDataHubColumnTitle(columnName, columnName) }];
     }
     const columnRecord = asRecord(column);
     const key =
@@ -145,11 +160,13 @@ function tablePreview(content: unknown): TablePreview | undefined {
     return [
       {
         key,
-        title:
+        title: formatDataHubColumnTitle(
           asString(columnRecord?.title) ??
-          asString(columnRecord?.label) ??
-          key ??
-          `列 ${index + 1}`
+            asString(columnRecord?.label) ??
+            key ??
+            `列 ${index + 1}`,
+          key
+        )
       }
     ];
   });
@@ -171,7 +188,10 @@ function tablePreview(content: unknown): TablePreview | undefined {
       })
     : [];
   if (!columns.length && rows[0]) {
-    Object.keys(rows[0]).forEach((key) => columns.push({ key, title: key }));
+    Object.keys(rows[0]).forEach((key) => columns.push({
+      key,
+      title: formatDataHubColumnTitle(key, key)
+    }));
   }
   if (!columns.length && !rows.length) {
     return undefined;
@@ -193,7 +213,7 @@ function renderTableBlock(
 ) {
   const preview = tablePreview(block.content);
   if (!preview) {
-    return <pre className="xs-datahub-agent-card__json">{formatStructuredContent(block.content)}</pre>;
+    return <p>查询结果已返回，暂无可预览的表格内容。</p>;
   }
   const visibleRows = preview.rows.slice(0, 5);
   const table = (
@@ -218,7 +238,7 @@ function renderTableBlock(
             {visibleRows.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {preview.columns.map((column) => (
-                  <td key={column.key}>{formatStructuredContent(row[column.key] ?? "—")}</td>
+                  <td key={column.key}>{tableCell(row[column.key])}</td>
                 ))}
               </tr>
             ))}
@@ -276,13 +296,11 @@ function renderDataSource(block: DataHubExecutionBlock) {
     asString(record?.dataSourceName) ??
     asString(record?.name) ??
     "已选择数据源";
-  const id = asString(record?.datasourceId ?? record?.dataSourceId ?? record?.id);
   return (
     <div className="xs-datahub-agent-card__source">
       <Database size={17} weight="duotone" aria-hidden="true" />
       <span>
         <strong>{name}</strong>
-        {id ? <small>ID：{id}</small> : null}
       </span>
     </div>
   );
@@ -300,6 +318,10 @@ function renderCitation(
     asString(record?.docKey) ??
     "引用文档";
   const fragments = asStringArray(record?.fragments);
+  const location = [
+    asString(record?.chapter) ?? asString(record?.sectionName) ?? asString(record?.heading),
+    asString(record?.pageNumber) ?? asString(record?.page_number) ?? asString(record?.page) ?? asString(record?.page_idx)
+  ].filter(Boolean).join(" · ");
   const sourceAvailable = record?.sourceAvailable !== false;
   return (
     <div className="xs-datahub-agent-card__citation">
@@ -316,6 +338,7 @@ function renderCitation(
           {sourceAvailable ? "打开原文" : "原文不可用"}
         </button>
       </div>
+      {location ? <small>{location}</small> : null}
       {fragments.length ? (
         <details>
           <summary>查看引用片段（{fragments.length}）</summary>
@@ -323,7 +346,7 @@ function renderCitation(
             {fragments.map((fragment, index) => (
               <XsSafeMarkdown
                 key={`${block.eventId ?? "citation"}-${index}`}
-                content={fragment}
+                content={formatDataHubCitationFragment(fragment)}
               />
             ))}
           </div>
@@ -347,17 +370,10 @@ function defaultBlockContent(
   const text = textContent(block.content);
   if (isThinking) {
     return (
-      <details className="xs-datahub-agent-card__thinking" open>
-        <summary>
-          <Brain size={15} weight="duotone" aria-hidden="true" />
-          {executionBlockLabel(block)}
-        </summary>
-        {text ? (
-          <XsSafeMarkdown content={text} />
-        ) : (
-          <pre>{formatStructuredContent(block.content)}</pre>
-        )}
-      </details>
+      <div className="xs-datahub-agent-card__thinking">
+        <Brain size={15} weight="duotone" aria-hidden="true" />
+        <p>{block.type === "final_thinking" ? "正在复核查询结果" : "正在理解问题并组织执行步骤"}</p>
+      </div>
     );
   }
   if (block.type === "tool_call" || block.type === "tool_result") {
@@ -375,7 +391,12 @@ function defaultBlockContent(
   if (text) {
     return <XsSafeMarkdown content={text} />;
   }
-  return <pre className="xs-datahub-agent-card__json">{formatStructuredContent(block.content)}</pre>;
+  const record = asRecord(block.content);
+  const summary =
+    safeBusinessSummary(asString(record?.summary)) ??
+    safeBusinessSummary(asString(record?.message)) ??
+    safeBusinessSummary(asString(record?.label));
+  return <p>{summary || `${executionBlockLabel(block)}已记录`}</p>;
 }
 
 export function DataHubAgentExecutionCard({
@@ -399,7 +420,6 @@ export function DataHubAgentExecutionCard({
   const displayItems: DataHubExecutionDisplayItem[] = renderBlock
     ? card.blocks.map((block) => ({ kind: "block", block }))
     : groupDataHubModelActivities(card.blocks);
-  const displayBlocks = displayItems.map((item) => item.block);
   const activityItems = displayItems.filter(
     (
       item
@@ -491,7 +511,6 @@ export function DataHubAgentExecutionCard({
                   {displayItems.map((item, index) => {
                     const block = item.block;
                     const Icon = blockIcon(block);
-                    const modelCallIndex = block.modelCallIndex;
                     const itemKey = displayItemKey(card.id, item, index);
                     const customContent =
                       item.kind === "block"
@@ -509,16 +528,6 @@ export function DataHubAgentExecutionCard({
                         }`}
                         style={{ "--xs-datahub-stagger": index } as CSSProperties}
                       >
-                        {!compact &&
-                        startsModelCall(displayBlocks, index) &&
-                        modelCallIndex !== undefined ? (
-                          <div className="xs-datahub-agent-card__model-call">
-                            <span>第 {modelCallIndex} 次模型调用</span>
-                            {item.kind === "block" && block.replyId ? (
-                              <small title={block.replyId}>回复 {block.replyId}</small>
-                            ) : null}
-                          </div>
-                        ) : null}
                         {item.kind === "block" &&
                         !block.isThinking &&
                         block.type !== "thinking" &&

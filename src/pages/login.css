@@ -145,7 +145,7 @@
   margin: 0 0 16px;
   color: var(--xs-primary-2);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.16em;
 }
 
@@ -231,7 +231,7 @@
   display: block;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.4;
 }
 
@@ -269,7 +269,7 @@
   color: var(--xs-text-2);
   background: rgba(255, 255, 255, 0.82);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .login-access__secure svg {
@@ -290,7 +290,7 @@
   margin: 0;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   letter-spacing: 0.1em;
   text-align: center;
 }
@@ -328,7 +328,7 @@
   margin-bottom: 24px;
   color: var(--xs-primary-2);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.16em;
 }
 
@@ -338,7 +338,7 @@
   gap: 7px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0;
 }
 
@@ -398,7 +398,7 @@
 .login-panel__form .ant-form-item-label > label {
   color: var(--xs-text);
   font-size: var(--xs-fs-control);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .login-panel__form .ant-input-affix-wrapper {
@@ -447,7 +447,7 @@
   margin-top: 7px;
   color: var(--xs-danger-ink);
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   animation: login-feedback-enter 160ms var(--xs-motion-ease-out) backwards;
 }
 
@@ -458,7 +458,7 @@
   background: var(--xs-primary-2);
   box-shadow: var(--xs-shadow-button);
   font-size: var(--xs-fs-control-lg);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   transition:
     transform var(--xs-motion-fast) var(--xs-motion-ease-out),
     box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -485,7 +485,7 @@
   color: var(--xs-primary-2);
   background: transparent;
   font-size: var(--xs-fs-control);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   cursor: pointer;
   text-decoration: none;
 }
@@ -512,7 +512,7 @@
   border-top: 1px solid #eaf1fb;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
 }
 
 /* 等高策略：表单吸收 min-height 余量，底栏自然贴底且保留最小间距 */

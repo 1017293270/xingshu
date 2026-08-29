@@ -1,6 +1,11 @@
 import type { EChartsOption } from "echarts";
 import type { DataHubTableColumn } from "@/types/dataHub";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
+import {
+  isLightDashboardSurface,
+  resolveDashboardWidgetStyle,
+  xingshuIceSeriesColors
+} from "./dashboardChartThemes";
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -109,13 +114,88 @@ function metricName(binding: DashboardDataBinding, key: string) {
   return binding.table.columns.find((column) => column.key === key)?.title || key;
 }
 
-const defaultSeriesColors = ["#22c55e", "#f59e0b", "#f87171", "#a78bfa", "#38bdf8"];
-
 function chartPalette(widget: DashboardWidget) {
   const colors = widget.style.seriesColors?.filter(Boolean) ?? [];
   return colors.length > 0
     ? colors
-    : [widget.style.accent ?? "#38bdf8", ...defaultSeriesColors];
+    : [widget.style.accent ?? xingshuIceSeriesColors[0], ...xingshuIceSeriesColors.slice(1)];
+}
+
+export function formatDashboardCategoryLabel(value: string) {
+  const text = value.trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?/);
+  if (iso) {
+    return `${Number(iso[2])}/${Number(iso[3])}`;
+  }
+
+  const compact = text.match(/^(\d{4})[./](\d{1,2})[./](\d{1,2})(?:\s.*)?$/);
+  if (compact) {
+    return `${Number(compact[2])}/${Number(compact[3])}`;
+  }
+
+  return text;
+}
+
+function withAlpha(color: string, alpha: number) {
+  const hex = color.trim().match(/^#([0-9a-f]{6})$/i);
+  if (!hex) {
+    return color;
+  }
+
+  const value = hex[1];
+  return `rgba(${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}, ${alpha})`;
+}
+
+function areaFill(color: string, top: number, bottom: number) {
+  return {
+    color: {
+      type: "linear" as const,
+      x: 0,
+      y: 0,
+      x2: 0,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: withAlpha(color, top) },
+        { offset: 1, color: withAlpha(color, bottom) }
+      ]
+    }
+  };
+}
+
+function chartChrome(background?: string, color?: string) {
+  const light = isLightDashboardSurface(background, color);
+  return {
+    light,
+    splitLine: light ? "rgba(22, 119, 255, 0.08)" : "rgba(148, 163, 184, 0.2)",
+    axisLine: light ? "#DCE8FB" : "rgba(148, 163, 184, 0.42)",
+    tooltipBackground: light ? "#FFFFFF" : "rgba(15, 23, 42, 0.92)",
+    tooltipBorder: light ? "#E3ECF9" : "rgba(56, 189, 248, 0.22)",
+    tooltipText: light ? "#294469" : "#dbeafe",
+    axisPointer: light ? "#C7D9F6" : "rgba(148, 163, 184, 0.45)"
+  };
+}
+
+function axisLabel(categories: string[], fontColor: string) {
+  const dense = categories.length > 8;
+  return {
+    color: fontColor,
+    fontSize: 11,
+    hideOverlap: true,
+    interval: dense ? "auto" as const : 0,
+    formatter: (value: string) => formatDashboardCategoryLabel(String(value)),
+    width: dense ? 64 : 88,
+    overflow: "truncate" as const
+  };
+}
+
+function tooltipStyle(chrome: ReturnType<typeof chartChrome>) {
+  return {
+    backgroundColor: chrome.tooltipBackground,
+    borderColor: chrome.tooltipBorder,
+    borderWidth: 1,
+    textStyle: { color: chrome.tooltipText, fontSize: 12 },
+    extraCssText: "border-radius:12px;box-shadow:0 10px 28px rgba(22,119,255,0.08);"
+  };
 }
 
 function mappedColumnKey(
@@ -165,15 +245,19 @@ export function buildDashboardChartOption(
     return null;
   }
 
-  const fontColor = widget.style.color ?? "#dbeafe";
-  const accentColor = widget.style.accent ?? "#38bdf8";
-  const palette = chartPalette(widget);
+  const style = resolveDashboardWidgetStyle(widget.style);
+  const fontColor = style.color ?? "#294469";
+  const accentColor = style.accent ?? "#1677FF";
+  const resolvedWidget = { ...widget, style };
+  const palette = chartPalette(resolvedWidget);
   const primaryColor = palette[0] ?? accentColor;
-  const variant = widget.style.chartVariant ?? "";
+  const variant = style.chartVariant ?? "";
+  const chrome = chartChrome(style.background, fontColor);
+  const tooltip = tooltipStyle(chrome);
   const base: EChartsOption = {
     color: palette,
     animation: options.animation === false ? false : undefined,
-    textStyle: { color: fontColor }
+    textStyle: { color: fontColor, fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif' }
   };
 
   if (widget.type === "pie") {
@@ -188,7 +272,7 @@ export function buildDashboardChartOption(
     const showOutsideLabels = (isSolid || isRose) && !hasDenseCategories;
     return {
       ...base,
-      tooltip: { trigger: "item" },
+      tooltip: { trigger: "item", ...tooltip },
       legend: isSolid
         ? {
             type: hasDenseCategories ? "scroll" : "plain",
@@ -196,12 +280,12 @@ export function buildDashboardChartOption(
             top: hasDenseCategories ? 12 : "middle",
             bottom: hasDenseCategories ? 12 : undefined,
             orient: "vertical",
-            textStyle: { color: fontColor }
+            textStyle: { color: fontColor, fontSize: 11 }
           }
         : {
             type: hasDenseCategories ? "scroll" : "plain",
             bottom: 0,
-            textStyle: { color: fontColor }
+            textStyle: { color: fontColor, fontSize: 11 }
           },
       series: [
         {
@@ -227,14 +311,20 @@ export function buildDashboardChartOption(
     return {
       ...base,
       color: [primaryColor],
-      tooltip: { trigger: "item" },
+      tooltip: { trigger: "item", ...tooltip },
       radar: {
         radius: isCompact ? "56%" : "64%",
         center: ["50%", "50%"],
         indicator: categories.map((name) => ({ name, max: Math.ceil(maximum * 1.25) })),
         axisName: { color: fontColor, fontSize: isCompact ? 10 : 12 },
-        splitLine: { lineStyle: { color: "rgba(148, 163, 184, 0.2)" } },
-        splitArea: { areaStyle: { color: ["rgba(148, 163, 184, 0.04)", "rgba(148, 163, 184, 0.08)"] } }
+        splitLine: { lineStyle: { color: chrome.splitLine } },
+        splitArea: {
+          areaStyle: {
+            color: chrome.light
+              ? ["rgba(22, 119, 255, 0.03)", "rgba(22, 119, 255, 0.07)"]
+              : ["rgba(148, 163, 184, 0.04)", "rgba(148, 163, 184, 0.08)"]
+          }
+        }
       },
       series: [{
         type: "radar",
@@ -259,18 +349,30 @@ export function buildDashboardChartOption(
     });
     return {
       ...base,
-      tooltip: { trigger: "item" },
-      legend: isMinimal ? undefined : { bottom: 0, textStyle: { color: fontColor } },
+      tooltip: { trigger: "item", ...tooltip },
+      legend: isMinimal ? undefined : { bottom: 0, textStyle: { color: fontColor, fontSize: 11 } },
       series: [{
         name: widget.title,
         type: "funnel",
-        left: isPipeline ? "6%" : "10%",
-        top: isMinimal ? 24 : 20,
-        bottom: isMinimal ? 24 : 48,
-        width: isPipeline ? "88%" : "80%",
+        left: isPipeline ? "8%" : "12%",
+        top: isMinimal ? 20 : 16,
+        bottom: isMinimal ? 20 : 44,
+        width: isPipeline ? "84%" : "76%",
         sort: isPipeline ? "none" : "descending",
-        gap: isMinimal ? 1 : 3,
-        label: { color: fontColor, position: isPipeline ? "inside" : "outer" },
+        gap: isMinimal ? 2 : 4,
+        minSize: "18%",
+        maxSize: "100%",
+        label: {
+          color: "#FFFFFF",
+          position: "inside",
+          fontSize: 12,
+          fontWeight: 600,
+          formatter: "{b}"
+        },
+        itemStyle: {
+          borderColor: chrome.light ? "#FFFFFF" : "rgba(255,255,255,0.16)",
+          borderWidth: 2
+        },
         data
       }]
     } as EChartsOption;
@@ -291,79 +393,114 @@ export function buildDashboardChartOption(
     if (horizontal) {
       return {
         ...base,
-        tooltip: { trigger: "axis" },
-        grid: { left: 88, right: 20, top: 28, bottom: 30 },
+        tooltip: { trigger: "axis", ...tooltip },
+        grid: { left: 96, right: 20, top: 24, bottom: 24, containLabel: true },
         xAxis: {
           type: "value",
-          axisLabel: { color: fontColor },
-          splitLine: { lineStyle: { color: "rgba(148, 163, 184, 0.16)" } }
+          axisLabel: { color: fontColor, fontSize: 11 },
+          splitLine: { lineStyle: { color: chrome.splitLine } },
+          axisLine: { show: false }
         },
         yAxis: {
           type: "category",
           data: categories,
-          axisLabel: { color: fontColor },
-          axisLine: { lineStyle: { color: "rgba(148, 163, 184, 0.42)" } }
+          axisLabel: axisLabel(categories, fontColor),
+          axisLine: { lineStyle: { color: chrome.axisLine } },
+          axisTick: { show: false }
         },
-        series: [{ type: "bar", name: widget.title, data: values, barWidth: "46%" }]
+        series: [{
+          type: "bar",
+          name: widget.title,
+          data: values,
+          barWidth: "46%",
+          barMaxWidth: 28,
+          itemStyle: { borderRadius: [0, 8, 8, 0] }
+        }]
       } as EChartsOption;
     }
 
     return {
       ...base,
-      tooltip: { trigger: "axis" },
-      grid: { left: 44, right: 20, top: 32, bottom: 42 },
+      tooltip: { trigger: "axis", ...tooltip },
+      grid: { left: 16, right: 16, top: 28, bottom: 8, containLabel: true },
       xAxis: {
         type: "category",
         data: categories,
-        axisLabel: { color: fontColor },
-        axisLine: { lineStyle: { color: "rgba(148, 163, 184, 0.42)" } }
+        axisLabel: axisLabel(categories, fontColor),
+        axisLine: { lineStyle: { color: chrome.axisLine } },
+        axisTick: { show: false }
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: fontColor },
-        splitLine: { lineStyle: { color: "rgba(148, 163, 184, 0.16)" } }
+        axisLabel: { color: fontColor, fontSize: 11 },
+        splitLine: { lineStyle: { color: chrome.splitLine } },
+        axisLine: { show: false }
       },
       series: [{
         type: "bar",
         name: widget.title,
         data: values,
-        barWidth: variant === "bar-compact" ? "42%" : undefined
+        barWidth: variant === "bar-compact" ? "42%" : "48%",
+        barMaxWidth: 36,
+        itemStyle: { borderRadius: [8, 8, 0, 0] }
       }]
     } as EChartsOption;
   }
 
-  const showLegend = widget.style.showLegend === true && metrics.length > 1;
+  const showLegend = style.showLegend === true && metrics.length > 1;
+  const isArea = widget.type === "area" || (chartType === "line" && variant !== "line-minimal" && variant !== "line-stepped");
 
   return {
     ...base,
     color: metrics.length > 1 ? palette : [primaryColor],
-    tooltip: { trigger: "axis" },
-    legend: showLegend ? { top: 0, textStyle: { color: fontColor } } : undefined,
-    grid: { left: 44, right: 20, top: showLegend ? 44 : 32, bottom: 32 },
+    tooltip: { trigger: "axis", ...tooltip },
+    legend: showLegend ? { top: 0, textStyle: { color: fontColor, fontSize: 11 } } : undefined,
+    axisPointer: { lineStyle: { color: chrome.axisPointer } },
+    grid: { left: 16, right: 16, top: showLegend ? 40 : 24, bottom: 8, containLabel: true },
     xAxis: {
       type: "category",
       data: categories,
-      axisLabel: { color: fontColor },
-      axisLine: { lineStyle: { color: "rgba(148, 163, 184, 0.42)" } }
+      axisLabel: axisLabel(categories, fontColor),
+      axisLine: { lineStyle: { color: chrome.axisLine } },
+      axisTick: { show: false }
     },
     yAxis: {
       type: "value",
-      axisLabel: { color: fontColor },
-      splitLine: { lineStyle: { color: "rgba(148, 163, 184, 0.16)" } }
+      axisLabel: { color: fontColor, fontSize: 11 },
+      splitLine: { lineStyle: { color: chrome.splitLine } },
+      axisLine: { show: false }
     },
-    series: metrics.map((metric) => ({
-      name: metric.name,
-      type: chartType,
-      data: metric.values,
-      smooth: chartType === "line" && variant !== "line-stepped",
-      step: variant === "line-stepped" ? "middle" : undefined,
-      showSymbol: variant !== "line-minimal",
-      barWidth: variant === "bar-compact" ? "42%" : undefined,
-      areaStyle:
-        chartType === "line" && variant !== "line-minimal" && variant !== "line-stepped"
-          ? { opacity: widget.type === "area" ? (variant === "area-wire" ? 0.12 : variant === "area-soft" ? 0.22 : 0.32) : 0.16 }
+    series: metrics.map((metric, index) => {
+      const seriesColor = palette[index % palette.length] ?? primaryColor;
+      return {
+        name: metric.name,
+        type: chartType,
+        data: metric.values,
+        smooth: chartType === "line" && variant !== "line-stepped",
+        step: variant === "line-stepped" ? "middle" : undefined,
+        showSymbol: variant !== "line-minimal",
+        symbol: "circle",
+        symbolSize: 7,
+        barWidth: variant === "bar-compact" ? "42%" : undefined,
+        itemStyle:
+          chartType === "line"
+            ? { borderColor: chrome.light ? "#FFFFFF" : seriesColor, borderWidth: 2 }
+            : { borderRadius: [8, 8, 0, 0] },
+        areaStyle: isArea
+          ? areaFill(
+              seriesColor,
+              widget.type === "area"
+                ? variant === "area-wire"
+                  ? 0.12
+                  : variant === "area-soft"
+                    ? 0.2
+                    : 0.32
+                : 0.16,
+              0.02
+            )
           : undefined,
-      lineStyle: widget.type === "area" ? { width: variant === "area-wire" ? 2 : 3 } : undefined
-    }))
+        lineStyle: widget.type === "area" || chartType === "line" ? { width: variant === "area-wire" || variant === "line-minimal" ? 2 : 2.5 } : undefined
+      };
+    })
   } as EChartsOption;
 }

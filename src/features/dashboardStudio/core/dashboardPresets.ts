@@ -6,6 +6,7 @@ import type {
   DashboardWidgetStyle,
   DashboardWidgetType
 } from "@/types/dashboardStudio";
+import { xingshuTokens } from "@/theme/xingshuTokens";
 import { getDashboardComponentDefinition } from "./dashboardComponentRegistry";
 import { createDashboardMockBinding, getDashboardMockMapping } from "./dashboardMockData";
 
@@ -206,7 +207,7 @@ export function applyDashboardStudioPreset(
       const widget = createPresetWidget(preset.id, seed, dataBindings);
       return { ...widget, style: { ...widget.style, zIndex: index + 1 } };
     }),
-    theme: { name: preset.themeName, colors: preset.colors, fontFamily: "Inter" },
+    theme: { name: preset.themeName, colors: preset.colors, fontFamily: xingshuTokens.fontFamily },
     refresh: { mode: "interval", intervalSeconds: preset.refreshSeconds },
     updatedAt: new Date().toISOString()
   };

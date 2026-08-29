@@ -62,6 +62,9 @@ export const draftStatusColor: Record<OfficialDocumentDraftStatus, string> = {
 };
 
 export const calibrationRoleLabel: Record<OfficialDocumentMappingRole, string> = {
+  ISSUING_AUTHORITY: "发文机关（红头）",
+  TABLE_TEXT: "表格文字",
+  HEADER_FOOTER: "页眉页脚文字",
   TITLE: "标题",
   BODY: "正文",
   HEADING_1: "一级标题",
@@ -172,7 +175,12 @@ export function buildOfficialDocumentMappings(
   bodyRegionEnd?: number
 ): OfficialDocumentMappingDefinition[] {
   const mappedParagraphs = nodes.filter((node) => node.paragraphIndex !== undefined);
-  const mappedTables = nodes.filter((node) => node.tableIndex !== undefined && node.dataBinding);
+  const mappedDataTables = nodes.filter((node) => node.tableIndex !== undefined
+    && node.tableRowIndex === undefined && node.dataBinding);
+  const mappedTableText = nodes.filter((node) => node.tableIndex !== undefined
+    && node.tableRowIndex !== undefined && node.slotType === "FIXED_TABLE_TEXT");
+  const mappedHeaderFooterText = nodes.filter((node) => node.headerFooterIndex !== undefined
+    && node.slotType === "FIXED_HEADER_FOOTER_TEXT");
   const paragraphMappings: OfficialDocumentMappingDefinition[] = mappedParagraphs.map((node) => ({
     slotId: node.slotId!,
     nodeId: node.id,
@@ -193,9 +201,9 @@ export function buildOfficialDocumentMappings(
     endParagraphIndex: node.paragraphIndex === bodyRegionStart ? bodyRegionEnd : node.paragraphIndex,
     metadata: {}
   }));
-  const tableMappings: OfficialDocumentMappingDefinition[] = mappedTables.map((node) => ({
+  const tableMappings: OfficialDocumentMappingDefinition[] = mappedDataTables.map((node) => ({
     slotId: node.slotId!,
-    nodeId: node.id,
+    nodeId: `table:${node.tableIndex!}`,
     paragraphIndex: node.tableIndex!,
     role: "BODY",
     variantId: node.variantId ?? `table-${node.tableIndex! + 1}`,
@@ -205,7 +213,35 @@ export function buildOfficialDocumentMappings(
     endParagraphIndex: node.tableIndex,
     metadata: { target: "table" }
   }));
-  return [...paragraphMappings, ...tableMappings];
+  const tableTextMappings: OfficialDocumentMappingDefinition[] = mappedTableText.map((node) => ({
+    slotId: node.slotId!,
+    nodeId: `table:${node.tableIndex!}:cell:${node.tableRowIndex!}:${node.tableColumnIndex!}`,
+    paragraphIndex: node.tableIndex!,
+    role: node.role === "ISSUING_AUTHORITY" ? "ISSUING_AUTHORITY" : "TABLE_TEXT",
+    variantId: node.variantId ?? `table-${node.tableIndex! + 1}-cell`,
+    dataBinding: false,
+    required: false,
+    slotType: "FIXED_TABLE_TEXT",
+    endParagraphIndex: node.tableIndex,
+    metadata: {
+      target: "table-cell",
+      rowIndex: String(node.tableRowIndex),
+      columnIndex: String(node.tableColumnIndex)
+    }
+  }));
+  const headerFooterMappings: OfficialDocumentMappingDefinition[] = mappedHeaderFooterText.map((node) => ({
+    slotId: node.slotId!,
+    nodeId: `header-footer:${node.headerFooterIndex!}`,
+    paragraphIndex: node.headerFooterIndex!,
+    role: "HEADER_FOOTER",
+    variantId: node.variantId ?? `header-footer-${node.headerFooterIndex! + 1}`,
+    dataBinding: false,
+    required: false,
+    slotType: "FIXED_HEADER_FOOTER_TEXT",
+    endParagraphIndex: node.headerFooterIndex,
+    metadata: { target: "header-footer" }
+  }));
+  return [...paragraphMappings, ...tableMappings, ...tableTextMappings, ...headerFooterMappings];
 }
 
 export function useOfficialDocumentWorkspaceKey() {

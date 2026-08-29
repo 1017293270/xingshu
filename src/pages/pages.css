@@ -377,7 +377,7 @@
   background: rgba(255, 255, 255, 0.88);
   font: inherit;
   font-size: var(--xs-fs-control);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   text-align: left;
   cursor: pointer;
   transition:
@@ -470,13 +470,13 @@
 .datahub-thinking-panel__head strong {
   color: var(--xs-text);
   font-size: var(--xs-fs-body);
-  font-weight: 780;
+  font-weight: var(--xs-fw-display);
 }
 
 .datahub-thinking-panel__head span {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .datahub-thinking-progress {
@@ -574,7 +574,7 @@
   color: var(--xs-primary-2);
   background: var(--xs-info-soft);
   font-size: var(--xs-fs-label);
-  font-weight: 800;
+  font-weight: var(--xs-fw-display);
 }
 
 .datahub-step--complete .datahub-step__index {
@@ -611,14 +611,14 @@
 .datahub-result-head span {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .datahub-step__title .ant-tag {
   margin-inline-end: 0;
   border-radius: 999px;
   font-size: var(--xs-fs-caption);
-  font-weight: 760;
+  font-weight: var(--xs-fw-display);
 }
 
 .datahub-step p {
@@ -656,7 +656,7 @@
   color: var(--xs-primary-2);
   cursor: pointer;
   font-size: var(--xs-fs-label);
-  font-weight: 760;
+  font-weight: var(--xs-fw-display);
   list-style: none;
 }
 
@@ -685,7 +685,7 @@
 .datahub-step-details summary small {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .datahub-step-detail-list {
@@ -724,7 +724,7 @@
   margin: 0;
   padding: 14px 16px;
   color: var(--xs-primary-2);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .ai-chart-card {
@@ -789,7 +789,7 @@
   display: block;
   color: var(--xs-text);
   font-size: var(--xs-fs-card);
-  font-weight: 780;
+  font-weight: var(--xs-fw-display);
 }
 
 .ai-chart-card p {
@@ -809,7 +809,7 @@
   color: var(--xs-primary-2);
   background: var(--xs-bg);
   font-size: var(--xs-fs-caption);
-  font-weight: 760;
+  font-weight: var(--xs-fw-display);
 }
 
 .ai-chart-card__chart {
@@ -1217,7 +1217,7 @@
   border-radius: 999px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -1456,13 +1456,13 @@
   margin: 0 0 16px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   line-height: 1.5;
 }
 
 .analysis-task-dynamics > span:first-child {
   color: var(--xs-text-2);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .analysis-card {
@@ -1475,7 +1475,7 @@
   margin: 0 0 8px;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .knowledge-citations--chips {
@@ -1546,4 +1546,3 @@
   gap: 2px;
   margin-left: auto;
 }
-

@@ -36,9 +36,9 @@
 .home-page__hero h1 {
   margin: 0 0 10px;
   color: var(--xs-text);
-  font-size: 28px;
+  font-size: var(--xs-fs-hero);
   line-height: 1.3;
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0;
 }
 
@@ -47,7 +47,7 @@
 .home-page__hero-name {
   display: inline;
   color: var(--xs-interactive-text);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
@@ -245,7 +245,7 @@
   margin: 0 0 18px;
   color: var(--xs-text);
   font-size: var(--xs-fs-body);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0;
 }
 
@@ -318,7 +318,7 @@
   color: var(--xs-text);
   font-size: var(--xs-fs-label);
   line-height: 1.35;
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .home-page .xs-app-card__desc {
@@ -355,7 +355,7 @@
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.92);
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
 }
 
 .home-page__question:hover,

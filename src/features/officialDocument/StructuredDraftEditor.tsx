@@ -15,7 +15,9 @@ import {
   useContext,
   type CSSProperties,
   type ReactElement,
+  type Ref,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,9 +25,14 @@ import {
 } from "react";
 import {
   getOfficialDocumentDraftContent,
-  getOfficialDocumentDraftPreview,
+  getOfficialDocumentTemplatePreview,
   updateOfficialDocumentDraftContent
 } from "@/services/officialDocumentService";
+import {
+  normalizeOfficialDocumentDraftBlocks,
+  officialDocumentVariantId,
+  parseOfficialDocumentAssistantText
+} from "@/services/officialDocumentFullDraft";
 import type {
   OfficialDocumentDraft,
   OfficialDocumentDraftBlockRole,
@@ -37,23 +44,31 @@ import { OfficialDocumentAppActions } from "./OfficialDocumentAppShell";
 
 export type StructuredDraftSaveState = "loading" | "saving" | "saved" | "failed";
 
-const roleOptions: Array<{ value: OfficialDocumentDraftBlockRole; label: string }> = [
+type EditableDraftBlockRole = Exclude<OfficialDocumentDraftBlockRole, "TABLE" | "CHART_IMAGE">;
+
+const roleOptions: Array<{ value: EditableDraftBlockRole; label: string }> = [
   { value: "HEADING_1", label: "一级标题" },
   { value: "HEADING_2", label: "二级标题" },
   { value: "HEADING_3", label: "三级标题" },
   { value: "BODY", label: "正文" }
 ];
 
-const roleLabels = Object.fromEntries(roleOptions.map((option) => [option.value, option.label])) as Record<
-  OfficialDocumentDraftBlockRole,
-  string
->;
+const roleLabels: Record<OfficialDocumentDraftBlockRole, string> = {
+  HEADING_1: "一级标题",
+  HEADING_2: "二级标题",
+  HEADING_3: "三级标题",
+  BODY: "正文",
+  TABLE: "表格",
+  CHART_IMAGE: "图表"
+};
 
 const rolePlaceholders: Record<OfficialDocumentDraftBlockRole, string> = {
   HEADING_1: "输入一级标题",
   HEADING_2: "输入二级标题",
   HEADING_3: "输入三级标题",
-  BODY: "输入正文"
+  BODY: "输入正文",
+  TABLE: "表格",
+  CHART_IMAGE: "图表"
 };
 
 function errorMessage(error: unknown) {
@@ -73,7 +88,7 @@ function AddNodeTypeMenu({
   onSelect
 }: {
   children: ReactElement;
-  onSelect: (role: OfficialDocumentDraftBlockRole) => void;
+  onSelect: (role: EditableDraftBlockRole) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -89,7 +104,7 @@ function AddNodeTypeMenu({
         items: roleOptions.map((option) => ({ key: option.value, label: option.label })),
         onClick: ({ key }) => {
           setOpen(false);
-          onSelect(key as OfficialDocumentDraftBlockRole);
+          onSelect(key as EditableDraftBlockRole);
         }
       }}
     >
@@ -131,9 +146,9 @@ const DraftBlockLabel = memo(function DraftBlockLabel({
 
 /** 卡片只拿到这一份稳定引用，节点增删改不会因为回调换了新函数而击穿 memo。 */
 type DraftBlockActions = {
-  changeRole: (id: string, role: OfficialDocumentDraftBlockRole) => void;
+  changeRole: (id: string, role: EditableDraftBlockRole) => void;
   move: (id: string, direction: -1 | 1) => void;
-  insert: (afterId: string, role: OfficialDocumentDraftBlockRole) => void;
+  insert: (afterId: string, role: EditableDraftBlockRole) => void;
   remove: (id: string) => void;
   setText: (id: string, text: string) => void;
 };
@@ -175,6 +190,7 @@ const DraftBlockCard = memo(function DraftBlockCard({
 }) {
   const label = (text: string) => (ghost ? undefined : text);
   const labelledBy = (id: string) => (ghost ? undefined : id);
+  const structured = block.role === "TABLE" || block.role === "CHART_IMAGE";
   return (
     <article
       className={ghost ? "structured-draft-editor__ghost" : undefined}
@@ -187,16 +203,20 @@ const DraftBlockCard = memo(function DraftBlockCard({
       inert={ghost || undefined}
     >
       <div className="structured-draft-editor__block-tools">
-        <Select
-          aria-labelledby={labelledBy(`draft-block-type-${block.id}`)}
-          size="small"
-          value={block.role}
-          options={roleOptions}
-          popupMatchSelectWidth={false}
-          getPopupContainer={() => document.body}
-          classNames={{ popup: { root: "structured-draft-editor__role-dropdown" } }}
-          onChange={(role) => actions.changeRole(block.id, role)}
-        />
+        {structured ? (
+          <Tag bordered={false} color="blue">{roleLabels[block.role]}</Tag>
+        ) : (
+          <Select
+            aria-labelledby={labelledBy(`draft-block-type-${block.id}`)}
+            size="small"
+            value={block.role as EditableDraftBlockRole}
+            options={roleOptions}
+            popupMatchSelectWidth={false}
+            getPopupContainer={() => document.body}
+            classNames={{ popup: { root: "structured-draft-editor__role-dropdown" } }}
+            onChange={(role: EditableDraftBlockRole) => actions.changeRole(block.id, role)}
+          />
+        )}
         <DraftBlockLabel blockId={block.id} roleLabel={roleLabels[block.role]} fixedOrder={ghostOrder} />
         <Button type="text" size="small" aria-label={label("上移节点")} disabled={isFirst} icon={<ArrowUp size={15} />} onClick={() => actions.move(block.id, -1)} />
         <Button type="text" size="small" aria-label={label("下移节点")} disabled={isLast} icon={<ArrowDown size={15} />} onClick={() => actions.move(block.id, 1)} />
@@ -213,7 +233,27 @@ const DraftBlockCard = memo(function DraftBlockCard({
           onClick={() => actions.remove(block.id)}
         />
       </div>
-      {block.role === "BODY" ? (
+      {block.role === "TABLE" && block.table ? (
+        <div className="structured-draft-editor__table" role="region" aria-label={block.text || "数据表格"}>
+          <table>
+            <thead><tr>{block.table.columns.map((column, index) => <th key={`${column}:${index}`}>{column}</th>)}</tr></thead>
+            <tbody>{block.table.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>{block.table!.columns.map((_, columnIndex) => <td key={columnIndex}>{row[columnIndex] ?? ""}</td>)}</tr>
+            ))}</tbody>
+          </table>
+          {block.table.totalRows > block.table.rows.length ? <small>正文展示前 {block.table.rows.length} 行，共 {block.table.totalRows} 行；完整结果保留在问数资产。</small> : null}
+        </div>
+      ) : block.role === "CHART_IMAGE" && block.chart ? (
+        <figure className="structured-draft-editor__chart">
+          <img
+            src={`data:${block.chart.mimeType};base64,${block.chart.base64}`}
+            width={block.chart.widthPx}
+            height={block.chart.heightPx}
+            alt={block.chart.altText || block.text || "问数图表"}
+          />
+          {block.text ? <figcaption>{block.text}</figcaption> : null}
+        </figure>
+      ) : block.role === "BODY" ? (
         <Input.TextArea
           id={ghost ? undefined : `draft-block-${block.id}`}
           value={block.text}
@@ -239,16 +279,29 @@ const DraftBlockCard = memo(function DraftBlockCard({
   );
 });
 
+export type StructuredDraftEditorHandle = {
+  /** 把回答解析成标题/正文节点后追加；一次提交，只触发一次自动保存。 */
+  appendText: (text: string) => number;
+  getContent: () => OfficialDocumentDraftContent | undefined;
+  saveResearchResults: (results: NonNullable<OfficialDocumentDraftContent["researchResults"]>) => Promise<void>;
+  applyBlocks: (blocks: OfficialDocumentDraftContent["blocks"]) => Promise<void>;
+  normalizeForExport: () => Promise<number>;
+};
+
 export function StructuredDraftEditor({
   draft,
   templateNodes,
   onStatus,
-  onSaveStateChange
+  onSaveStateChange,
+  onContentChange,
+  ref
 }: {
   draft: OfficialDocumentDraft;
   templateNodes: OfficialDocumentStructureNode[];
   onStatus: (tone: "loading" | "success" | "error", message: string) => void;
   onSaveStateChange?: (state: StructuredDraftSaveState) => void;
+  onContentChange?: (content: OfficialDocumentDraftContent) => void;
+  ref?: Ref<StructuredDraftEditorHandle>;
 }) {
   const [content, setContent] = useState<OfficialDocumentDraftContent>();
   const [saveState, setSaveState] = useState<StructuredDraftSaveState>("loading");
@@ -259,13 +312,14 @@ export function StructuredDraftEditor({
   const [fieldsCollapsed, setFieldsCollapsed] = useState(false);
   const [justAddedId, setJustAddedId] = useState<string>();
   const [addNotice, setAddNotice] = useState("");
-  const pendingFocusIdRef = useRef<string>();
+  const pendingFocusIdRef = useRef<string | undefined>(undefined);
   const contentRef = useRef<OfficialDocumentDraftContent | undefined>(undefined);
   const revisionRef = useRef(0);
   const generationRef = useRef(0);
   const saveTimerRef = useRef<number | undefined>(undefined);
   const savingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+  const applyingRef = useRef(false);
   const mountedRef = useRef(true);
   const previewUrlRef = useRef<string | undefined>(undefined);
   const performSaveRef = useRef<() => Promise<void>>(async () => undefined);
@@ -286,6 +340,7 @@ export function StructuredDraftEditor({
   };
 
   const commit = (mutate: (current: OfficialDocumentDraftContent) => OfficialDocumentDraftContent) => {
+    if (applyingRef.current) return;
     const current = contentRef.current;
     if (!current) return;
     const next = mutate(current);
@@ -310,7 +365,8 @@ export function StructuredDraftEditor({
       const saved = await updateOfficialDocumentDraftContent(draft.id, {
         expectedRevision: revisionRef.current,
         fixedValues: snapshot.fixedValues,
-        blocks: normalizeOrders(snapshot.blocks)
+        blocks: normalizeOrders(snapshot.blocks),
+        researchResults: snapshot.researchResults
       });
       revisionRef.current = saved.revision;
       if (!mountedRef.current) return;
@@ -319,6 +375,7 @@ export function StructuredDraftEditor({
         const next = { ...latest, revision: saved.revision };
         contentRef.current = next;
         setContent(next);
+        onContentChange?.(next);
       }
       if (generationRef.current === capturedGeneration) {
         setSaveState("saved");
@@ -348,6 +405,7 @@ export function StructuredDraftEditor({
         generationRef.current = 0;
         contentRef.current = normalized;
         setContent(normalized);
+        onContentChange?.(normalized);
         setSaveState("saved");
       })
       .catch((error) => {
@@ -360,7 +418,7 @@ export function StructuredDraftEditor({
       if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current);
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     };
-  }, [draft.id]);
+  }, [draft.id, onContentChange]);
 
   useEffect(() => {
     onSaveStateChange?.(saveState);
@@ -395,7 +453,7 @@ export function StructuredDraftEditor({
     blocks: current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block)
   }));
 
-  const addBlock = (afterIndex: number | undefined, role: OfficialDocumentDraftBlockRole = "BODY") => {
+  const addBlock = (afterIndex: number | undefined, role: EditableDraftBlockRole = "BODY") => {
     const id = crypto.randomUUID();
     pendingFocusIdRef.current = id;
     setJustAddedId(id);
@@ -404,16 +462,41 @@ export function StructuredDraftEditor({
     commit((current) => {
       const blocks = [...current.blocks];
       const insertionIndex = afterIndex === undefined ? blocks.length : afterIndex + 1;
-      const sample = templateNodes.find((node) => node.role === role);
       blocks.splice(insertionIndex, 0, {
         id,
         order: insertionIndex,
         role,
-        variantId: sample?.variantId ?? "",
+        variantId: officialDocumentVariantId(templateNodes, role),
         text: ""
       });
       return { ...current, blocks };
     });
+  };
+
+  /* 智写插入：先还原标题层级，再一次 commit，避免 N 个节点触发 N 次保存。 */
+  const appendText = (text: string) => {
+    if (/\[\[XS_SECTION:[^\]\r\n]+\]\]/.test(text)) return 0;
+    const parsed = parseOfficialDocumentAssistantText(text);
+    if (!parsed.length) return 0;
+    const created = parsed.map(() => crypto.randomUUID());
+    pendingFocusIdRef.current = created[0];
+    setJustAddedId(created[0]);
+    setAddNotice(`已插入 ${parsed.length} 个结构化节点`);
+    motion.prepare({ kind: "add", blockId: created[0] });
+    commit((current) => ({
+      ...current,
+      blocks: [
+        ...current.blocks,
+        ...parsed.map((block, index) => ({
+          id: created[index],
+          order: current.blocks.length + index,
+          role: block.role as OfficialDocumentDraftBlockRole,
+          variantId: officialDocumentVariantId(templateNodes, block.role, block.text),
+          text: block.text
+        }))
+      ]
+    }));
+    return parsed.length;
   };
 
   const removeBlock = (id: string) => {
@@ -443,9 +526,8 @@ export function StructuredDraftEditor({
     });
   };
 
-  const changeRole = (id: string, role: OfficialDocumentDraftBlockRole) => {
-    const sample = templateNodes.find((node) => node.role === role);
-    updateBlock(id, { role, variantId: sample?.variantId ?? "" });
+  const changeRole = (id: string, role: EditableDraftBlockRole) => {
+    updateBlock(id, { role, variantId: officialDocumentVariantId(templateNodes, role) });
   };
 
   /* 卡片只认这一份稳定的动作表：内部每次都读最新闭包，外部引用永不变 */
@@ -475,20 +557,78 @@ export function StructuredDraftEditor({
     throw new Error("草稿保存超时，请稍后重试");
   };
 
+  const saveResearchResults = async (
+    results: NonNullable<OfficialDocumentDraftContent["researchResults"]>
+  ) => {
+    commit((current) => ({ ...current, researchResults: results }));
+    await flushPendingSave();
+  };
+
+  const applyBlocks = async (blocks: OfficialDocumentDraftContent["blocks"]) => {
+    await flushPendingSave();
+    const snapshot = contentRef.current;
+    if (!snapshot) throw new Error("草稿内容尚未加载");
+    applyingRef.current = true;
+    savingRef.current = true;
+    setSaveState("saving");
+    try {
+      const saved = await updateOfficialDocumentDraftContent(draft.id, {
+        expectedRevision: revisionRef.current,
+        fixedValues: snapshot.fixedValues,
+        blocks: normalizeOrders(blocks),
+        researchResults: snapshot.researchResults
+      });
+      const normalized = { ...saved, blocks: normalizeOrders(saved.blocks) };
+      revisionRef.current = normalized.revision;
+      generationRef.current += 1;
+      contentRef.current = normalized;
+      setContent(normalized);
+      onContentChange?.(normalized);
+      setSaveError("");
+      setSaveState("saved");
+    } catch (error) {
+      setSaveState("failed");
+      setSaveError(errorMessage(error));
+      throw error;
+    } finally {
+      savingRef.current = false;
+      applyingRef.current = false;
+    }
+  };
+
+  const normalizeForExport = async () => {
+    const current = contentRef.current;
+    if (!current) throw new Error("草稿内容尚未加载");
+    const normalized = normalizeOfficialDocumentDraftBlocks(current.blocks, templateNodes);
+    if (!normalized.changedCount) {
+      await flushPendingSave();
+      return 0;
+    }
+    await applyBlocks(normalized.blocks);
+    return normalized.changedCount;
+  };
+
+  useImperativeHandle(ref, () => ({
+    appendText,
+    getContent: () => contentRef.current,
+    saveResearchResults,
+    applyBlocks,
+    normalizeForExport
+  }));
+
   const refreshPreview = async () => {
     if (!content || isPreviewing) return;
     setIsPreviewing(true);
-    onStatus("loading", "正在按模板样式生成草稿 PDF 预览");
+    onStatus("loading", "正在加载当前结构模板 PDF");
     try {
-      if (saveState !== "saved") await flushPendingSave();
-      const blob = await getOfficialDocumentDraftPreview(draft.id);
+      const blob = await getOfficialDocumentTemplatePreview(draft.templateId, draft.templateVersionId);
       const signature = await blob.slice(0, 5).text();
-      if (signature !== "%PDF-") throw new Error("公文服务返回的草稿预览不是有效 PDF");
+      if (signature !== "%PDF-") throw new Error("报告服务返回的模板预览不是有效 PDF");
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;
       setPreviewUrl(url);
-      onStatus("success", "草稿 PDF 预览已更新。编辑内容仍以结构化草稿为准。");
+      onStatus("success", "结构模板 PDF 已打开，仅用于核对版式和结构。");
     } catch (error) {
       onStatus("error", errorMessage(error));
     } finally {
@@ -530,18 +670,18 @@ export function StructuredDraftEditor({
   return (
     <div className="structured-draft-editor-frame">
       <OfficialDocumentAppActions>
-        <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={openPreview}>PDF 预览</Button>
+        <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={openPreview}>模板 PDF 浏览</Button>
       </OfficialDocumentAppActions>
       <section
         className="structured-draft-editor"
-        aria-label="结构化公文编辑器"
+        aria-label="结构化报告编辑器"
         data-fields-collapsed={fieldsCollapsed}
       >
-        <aside className="structured-draft-editor__fields" aria-label="公文固定字段">
+        <aside className="structured-draft-editor__fields" aria-label="报告固定字段">
         <div className="structured-draft-editor__panel-head">
           <div>
             <strong>固定字段</strong>
-            {fieldsCollapsed ? null : <small>标题、主送、落款与日期</small>}
+            {fieldsCollapsed ? null : <small>模板中所有可编辑固定文字</small>}
           </div>
           <Button
             type="text"
@@ -623,26 +763,26 @@ export function StructuredDraftEditor({
 
       <Modal
         className="official-document-preview-modal"
-        title="草稿 PDF 预览"
+        title="模板 PDF 浏览"
         width="min(980px, calc(100vw - 48px))"
         open={previewOpen}
         footer={(
           <div className="official-document-preview-modal__footer">
-            <span>LibreOffice 实际渲染 · 预览前自动保存结构化内容</span>
-            <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={() => void refreshPreview()}>刷新预览</Button>
+            <span>当前绑定结构模板 · 不包含草稿正文</span>
+            <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={() => void refreshPreview()}>重新加载</Button>
           </div>
         )}
         onCancel={() => setPreviewOpen(false)}
       >
         {previewUrl ? (
-          <object data={previewUrl} type="application/pdf" aria-label={`${draft.title} PDF 预览`}>
+          <object data={previewUrl} type="application/pdf" aria-label={`${draft.templateName} 模板 PDF`}>
             <a href={previewUrl} target="_blank" rel="noreferrer">新窗口查看 PDF</a>
           </object>
         ) : (
           <div className="structured-draft-editor__preview-empty">
             <Eye size={28} />
-            <strong>{isPreviewing ? "正在生成预览" : "尚未生成预览"}</strong>
-            <p>保存内容后生成 PDF，查看最终分页和模板格式。</p>
+            <strong>{isPreviewing ? "正在加载模板" : "尚未加载模板"}</strong>
+            <p>打开当前草稿绑定的结构模板 PDF，核对版式和静态元素。</p>
           </div>
         )}
       </Modal>

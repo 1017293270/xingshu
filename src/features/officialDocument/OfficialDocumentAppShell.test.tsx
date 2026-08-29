@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import {
@@ -27,7 +28,7 @@ function renderShell(
       <OfficialDocumentAppShell>
         <ChromeProbe
           stage={options.chrome?.stage ?? "library"}
-          context={options.chrome?.context ?? "模板库"}
+          context={options.chrome?.context ?? "结构模板"}
           contextDetail={options.chrome?.contextDetail}
           actionLabel={options.chrome?.actionLabel}
         />
@@ -37,6 +38,19 @@ function renderShell(
 }
 
 describe("OfficialDocumentAppShell", () => {
+  it("does not flash top-bar actions in the workspace before the portal host mounts", () => {
+    const html = renderToString(
+      <MemoryRouter initialEntries={["/writing/drafts/draft-1"]}>
+        <OfficialDocumentAppShell>
+          <ChromeProbe stage="draft" context="结构化起草" actionLabel="导出 PDF" />
+        </OfficialDocumentAppShell>
+      </MemoryRouter>
+    );
+
+    expect(html).not.toContain("导出 PDF");
+    expect(html).not.toContain("official-document-app__actions--inline");
+  });
+
   it("only allows safe in-app exit paths", () => {
     expect(resolveOfficialDocumentExitPath(undefined)).toBe("/");
     expect(resolveOfficialDocumentExitPath("/dashboard")).toBe("/dashboard");
@@ -49,13 +63,16 @@ describe("OfficialDocumentAppShell", () => {
     expect(resolveOfficialDocumentExitPath("https://evil.example/")).toBe("/");
   });
 
-  it("separates the template library and draft box in the side navigation", () => {
+  it("separates compose, structure templates, and the draft box in the side navigation", () => {
     renderShell("/writing/templates");
 
-    const navigation = screen.getByRole("navigation", { name: "公文写作导航" });
-    const templateLink = within(navigation).getByRole("link", { name: /模板库/ });
+    const navigation = screen.getByRole("navigation", { name: "报告智写导航" });
+    const composeLink = within(navigation).getByRole("link", { name: /公文写作/ });
+    const templateLink = within(navigation).getByRole("link", { name: /结构模板/ });
     const draftLink = within(navigation).getByRole("link", { name: /草稿箱/ });
 
+    expect(composeLink).toHaveAttribute("href", "/writing");
+    expect(composeLink).not.toHaveAttribute("aria-current");
     expect(templateLink).toHaveAttribute("href", "/writing/templates");
     expect(templateLink).toHaveAttribute("aria-current", "page");
     expect(draftLink).toHaveAttribute("href", "/writing/drafts");
@@ -65,18 +82,19 @@ describe("OfficialDocumentAppShell", () => {
   it("marks the draft box as current on draft routes", () => {
     renderShell("/writing/drafts", { chrome: { stage: "drafts", context: "草稿箱" } });
 
-    const navigation = screen.getByRole("navigation", { name: "公文写作导航" });
+    const navigation = screen.getByRole("navigation", { name: "报告智写导航" });
     expect(within(navigation).getByRole("link", { name: /草稿箱/ })).toHaveAttribute("aria-current", "page");
-    expect(within(navigation).getByRole("link", { name: /模板库/ })).not.toHaveAttribute("aria-current");
+    expect(within(navigation).getByRole("link", { name: /结构模板/ })).not.toHaveAttribute("aria-current");
+    expect(within(navigation).getByRole("link", { name: /公文写作/ })).not.toHaveAttribute("aria-current");
   });
 
   it("identifies the workspace with text only, no app-card gradient mark", () => {
     renderShell("/writing/templates");
 
-    const heading = screen.getByRole("heading", { name: "公文写作" });
+    const heading = screen.getByRole("heading", { name: "报告智写" });
     const identity = heading.closest(".official-document-rail__app");
     expect(identity).not.toBeNull();
-    expect(identity).toHaveTextContent("套模板 · 绑数据 · 出定稿");
+    expect(identity).toHaveTextContent("套模板 · 对话成稿 · 出定稿");
     /* 渐变应用图标只属于首页应用卡那一层，不和导航的线性图标同处一列 */
     expect(identity!.querySelector("img")).toBeNull();
   });
@@ -84,12 +102,12 @@ describe("OfficialDocumentAppShell", () => {
   it("shows the library context without a redundant page-header shortcut", async () => {
     renderShell("/writing/templates");
 
-    expect(screen.getByRole("heading", { name: "公文写作" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "报告智写" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/");
-    expect(screen.getByLabelText("公文写作工作台")).toBeInTheDocument();
-    expect(within(screen.getByRole("banner")).queryByRole("link", { name: "模板库" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("报告智写工作台")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).queryByRole("link", { name: "结构模板" })).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("模板库");
+      expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("结构模板");
     });
     expect(screen.queryByText("Agent 应用")).not.toBeInTheDocument();
   });
@@ -103,7 +121,7 @@ describe("OfficialDocumentAppShell", () => {
       </MemoryRouter>
     );
 
-    expect(within(screen.getByRole("banner")).getByRole("link", { name: "模板库" })).toHaveAttribute(
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "结构模板" })).toHaveAttribute(
       "href",
       "/writing/templates"
     );

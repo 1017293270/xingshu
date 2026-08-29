@@ -10,17 +10,20 @@ export type DataAssetKpiIconId =
 
 export type DataAssetOverviewRange = "7D" | "30D" | "6M";
 
+export type DataAssetKpis = {
+  assetCount: number;
+  dataVolumeBytes: number;
+  unstructuredCount: number;
+  tableCount: number;
+  dataSourceCount: number;
+  serviceCallCount: number;
+};
+
 export type DataAssetOverview = {
   updatedAt: string;
   range: DataAssetOverviewRange;
-  kpis: {
-    assetCount: number;
-    dataVolumeBytes: number;
-    unstructuredCount: number;
-    tableCount: number;
-    dataSourceCount: number;
-    serviceCallCount: number;
-  };
+  kpis: DataAssetKpis;
+  previousDayKpis?: DataAssetKpis | null;
   typeDistribution: Array<{ type: string; count: number }>;
   growth: Array<{ date: string; assetCount: number; dataVolumeBytes: number }>;
   sourceDistribution: Array<{ type: string; count: number }>;

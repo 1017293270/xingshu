@@ -2,10 +2,13 @@ import { expireDataHubSession, readDataHubSession } from "@/services/dataHubSess
 import { listQueryAssets } from "@/services/queryAssetService";
 import type { QueryAsset } from "@/types/analytics";
 import type {
+  BindOfficialDocumentContentProfileInput,
   CreateDraftDataBindingInput,
   CreateOfficialDocumentDraftInput,
   DraftDataBinding,
   OfficialDocumentAnalysis,
+  OfficialDocumentContentProfile,
+  OfficialDocumentWritingLogicPlan,
   OfficialDocumentDraft,
   OfficialDocumentDraftContent,
   OfficialDocumentExportFormat,
@@ -13,6 +16,7 @@ import type {
   OfficialDocumentMappingProfile,
   OfficialDocumentRuntimeCapabilities,
   OfficialDocumentServiceState,
+  OfficialDocumentStructureNode,
   OfficialDocumentTemplate,
   OfficialDocumentTemplateVersion,
   OfficialDocumentWorkspaceSnapshot,
@@ -51,22 +55,54 @@ export class OfficialDocumentServiceError extends Error {
   }
 }
 
+export type OfficialDocumentTransientArtifactInput = {
+  templateId: string;
+  templateVersionId: string;
+  title: string;
+  fixedValues: OfficialDocumentDraftContent["fixedValues"];
+  blocks: OfficialDocumentDraftContent["blocks"];
+};
+
 export type OfficialDocumentService = {
   state: OfficialDocumentServiceState;
   loadWorkspace(): Promise<OfficialDocumentWorkspaceSnapshot>;
   getTemplateAnalysis(templateId: string, versionId: string): Promise<OfficialDocumentAnalysis>;
   getTemplatePreview(templateId: string, versionId: string): Promise<Blob>;
   uploadTemplate(file: File): Promise<UploadOfficialDocumentTemplateResult>;
+  listContentProfiles(templateId: string, versionId: string): Promise<OfficialDocumentContentProfile[]>;
+  getContentProfile(profileId: string): Promise<OfficialDocumentContentProfile>;
+  uploadContentProfile(
+    templateId: string,
+    versionId: string,
+    file: File,
+    name?: string
+  ): Promise<OfficialDocumentContentProfile>;
+  createTextContentProfile(
+    templateId: string,
+    versionId: string,
+    input: { name?: string; text: string }
+  ): Promise<OfficialDocumentContentProfile>;
+  saveContentProfileAnalysis(
+    profileId: string,
+    analysis: OfficialDocumentWritingLogicPlan
+  ): Promise<OfficialDocumentContentProfile>;
+  confirmContentProfile(
+    profileId: string,
+    analysis: OfficialDocumentWritingLogicPlan
+  ): Promise<OfficialDocumentContentProfile>;
   updateTemplateMapping(input: UpdateOfficialDocumentMappingInput): Promise<OfficialDocumentMappingProfile>;
   publishTemplate(templateId: string, versionId: string): Promise<OfficialDocumentTemplateVersion>;
   createDraft(input: CreateOfficialDocumentDraftInput): Promise<OfficialDocumentDraft>;
   getDraftContent(draftId: string): Promise<OfficialDocumentDraftContent>;
   updateDraftContent(draftId: string, input: UpdateOfficialDocumentDraftContentInput): Promise<OfficialDocumentDraftContent>;
+  bindContentProfile(draftId: string, input: BindOfficialDocumentContentProfileInput): Promise<OfficialDocumentDraftContent>;
   getDraftPreview(draftId: string): Promise<Blob>;
+  getTransientPreview(input: OfficialDocumentTransientArtifactInput): Promise<Blob>;
   createBinding(draftId: string, input: CreateDraftDataBindingInput): Promise<DraftDataBinding>;
   refreshBindings(draftId: string): Promise<DraftDataBinding[]>;
   detachBinding(draftId: string, bindingId: string): Promise<DraftDataBinding>;
   exportDraft(draftId: string, format: OfficialDocumentExportFormat): Promise<OfficialDocumentExportRecord>;
+  exportTransient(input: OfficialDocumentTransientArtifactInput, format: OfficialDocumentExportFormat): Promise<Blob>;
   downloadExport(exportId: string): Promise<Blob>;
 };
 
@@ -114,7 +150,14 @@ type ApiTemplateAnalysis = {
     engineVersion?: string;
     sections?: unknown[];
     paragraphs?: ApiParagraphFact[];
-    tables?: Array<{ index: number; rowCount: number; columnCount: number; text?: string }>;
+    tables?: Array<{
+      index: number;
+      rowCount: number;
+      columnCount: number;
+      text?: string;
+      cells?: Array<{ rowIndex: number; columnIndex: number; text?: string }>;
+    }>;
+    headersAndFooters?: Array<{ sectionIndex: number; type: number; text?: string }>;
     featureCounts?: Record<string, number>;
     warnings?: string[];
   };
@@ -204,6 +247,7 @@ type ApiDraftSnapshot = {
   status: string;
   fileVersions?: Array<{ versionNumber: number; createdAt: string }>;
   bindings?: ApiDraftBinding[];
+  content?: ApiDraftContent;
 };
 
 type ApiDraftContent = OfficialDocumentDraftContent;
@@ -295,8 +339,17 @@ export function resolveOfficialDocumentErrorMessage(status: number, payload: unk
   }
 
   const raw = typeof payload === "string" ? payload.trim() : "";
+  const bareNotFound = status === 404 && (
+    /^not found$/i.test(statusText.trim())
+    || /^not found$/i.test(raw)
+    || (payload && typeof payload === "object"
+      && String((payload as Record<string, unknown>).error ?? "").toLocaleLowerCase() === "not found")
+  );
+  if (bareNotFound) {
+    return "当前环境尚未启用这项报告能力，请更新报告服务后重试";
+  }
   if (/invalid cors request/i.test(raw)) {
-    return "当前页面地址未被公文服务允许。请通过星数同源代理访问，不要直连公文服务。";
+    return "当前页面地址未被报告服务允许。请通过星数同源代理访问，不要直连报告服务。";
   }
   if (raw && !/^(forbidden|unauthorized|bad request)$/i.test(raw)) {
     return raw;
@@ -307,7 +360,7 @@ export function resolveOfficialDocumentErrorMessage(status: number, payload: unk
   if (status === 401) {
     return "登录状态无效或已过期";
   }
-  return statusText || "公文服务请求失败";
+  return statusText || "报告服务请求失败";
 }
 
 async function requestOfficialDocument<T>(baseUrl: string, path: string, options: RequestOptions = {}) {
@@ -334,11 +387,11 @@ async function requestOfficialDocument<T>(baseUrl: string, path: string, options
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new OfficialDocumentServiceError("公文服务请求超时，请检查服务状态", {
+      throw new OfficialDocumentServiceError("报告服务请求超时，请检查服务状态", {
         code: "REQUEST_TIMEOUT"
       });
     }
-    throw new OfficialDocumentServiceError("无法连接公文服务，请检查服务地址和网络", {
+    throw new OfficialDocumentServiceError("无法连接报告服务，请检查服务地址和网络", {
       code: "SERVICE_UNREACHABLE",
       details: error
     });
@@ -403,6 +456,43 @@ function asArray<T>(payload: unknown, field: string): T[] {
   return [];
 }
 
+/**
+ * 上传/创建接口返回的模板视图。网关有时会包一层信封（data / template / item），
+ * 直接当 ApiTemplateView 用会在 mapTemplate 里抛出原生 TypeError，
+ * 弹窗只能显示一句英文，看不出到底是解析失败还是服务报错。
+ */
+function asTemplateView(payload: unknown): ApiTemplateView {
+  const unwrapped = (() => {
+    let candidate = payload;
+    for (const key of ["data", "template", "item", "result"]) {
+      if (
+        candidate
+        && typeof candidate === "object"
+        && !Array.isArray(candidate)
+        && !("versions" in candidate)
+        && key in (candidate as Record<string, unknown>)
+      ) {
+        candidate = (candidate as Record<string, unknown>)[key];
+      }
+    }
+    return candidate;
+  })();
+
+  if (
+    !unwrapped
+    || typeof unwrapped !== "object"
+    || typeof (unwrapped as ApiTemplateView).id !== "string"
+    || !Array.isArray((unwrapped as ApiTemplateView).versions)
+  ) {
+    throw new OfficialDocumentServiceError("报告服务返回的模板结构无法识别，请把接口响应反馈给管理员", {
+      code: "TEMPLATE_VIEW_MALFORMED",
+      details: payload
+    });
+  }
+
+  return unwrapped as ApiTemplateView;
+}
+
 function capabilityDetail(value: unknown) {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
@@ -440,6 +530,9 @@ function mapRuntimeCapabilities(payload: unknown): OfficialDocumentRuntimeCapabi
 }
 
 const officialRoleLabels: Record<string, string> = {
+  ISSUING_AUTHORITY: "发文机关（红头）",
+  TABLE_TEXT: "表格文字",
+  HEADER_FOOTER: "页眉页脚文字",
   TITLE: "标题",
   RECIPIENT: "主送机关",
   BODY: "正文",
@@ -511,12 +604,39 @@ function styleSummary(paragraph: ApiParagraphFact) {
 
 type SuggestedOfficialDocumentRole = OfficialDocumentAnalysis["structureNodes"][number]["role"];
 
+function looksLikeIssuingAuthority(value: string) {
+  const text = value.replace(/[\s\t]+/g, "").trim();
+  if (!text || text.length > 80) return false;
+  return /(?:公司|集团|人民政府|委员会|办公室|中心|局|院|党组|党委)$/.test(text)
+    || /^[XＸx×*＊＿_]{4,}(?:公司|集团|人民政府|委员会|办公室|中心|局|院)?$/.test(text);
+}
+
+function looksLikeDocumentNumberLine(value: string) {
+  const text = value.replace(/[\s\t]+/g, "").trim();
+  return /〔(?:\d{4}|[XＸx×*＊＿_]{4})〕/.test(text) || /签发人[：:]/.test(text);
+}
+
+function looksLikeDocumentTitle(value: string) {
+  const text = value.replace(/[\s\t]+/g, "").trim();
+  if (!text || text.length > 120) return false;
+  return /^关于.+(?:的)?(?:报告|请示|通知|决定|通报|函|批复|公告)$/.test(text)
+    || /(?:工作报告|工作汇报|情况报告)$/.test(text);
+}
+
+function isRedFormat(paragraph: ApiParagraphFact) {
+  const run = paragraph.runs?.find((item) => Boolean(item.text?.trim())) ?? paragraph.runs?.[0];
+  const color = run?.format?.color?.replace(/\s+/g, "").toLocaleLowerCase() ?? "";
+  return (run?.format?.fontSizePoints ?? 0) >= 30
+    && (color.includes("ff0000") || color.includes("r=255,g=0,b=0") || color.includes("255,0,0"));
+}
+
 function suggestParagraphRoles(paragraphs: ApiParagraphFact[]) {
   const roles = new Map<number, SuggestedOfficialDocumentRole>();
   const normalized = paragraphs.map((paragraph) => paragraph.text?.replace(/\s+/g, "").trim() ?? "");
   const nonEmptyIndexes = paragraphs
     .map((paragraph, index) => ({ paragraph, index }))
     .filter(({ index }) => Boolean(normalized[index]));
+  const ordinalByIndex = new Map(nonEmptyIndexes.map(({ index }, ordinal) => [index, ordinal]));
   let dateIndex: number | undefined;
   for (let cursor = nonEmptyIndexes.length - 1; cursor >= 0; cursor -= 1) {
     const candidate = nonEmptyIndexes[cursor].index;
@@ -528,12 +648,23 @@ function suggestParagraphRoles(paragraphs: ApiParagraphFact[]) {
 
   for (const { paragraph, index } of nonEmptyIndexes) {
     const text = normalized[index];
+    const ordinal = ordinalByIndex.get(index) ?? 0;
+    const previousText = ordinal > 0 ? normalized[nonEmptyIndexes[ordinal - 1].index] : "";
+    const nextText = ordinal + 1 < nonEmptyIndexes.length ? normalized[nonEmptyIndexes[ordinal + 1].index] : "";
+    const framedAuthority = ordinal < 4
+      && (looksLikeDocumentNumberLine(previousText) || looksLikeDocumentTitle(nextText));
     const style = paragraph.format?.styleName?.toLocaleLowerCase() ?? "";
     const outlineLevel = paragraph.format?.outlineLevel;
     const listLevel = paragraph.format?.listLevel;
     let role: SuggestedOfficialDocumentRole = "BODY";
 
-    if (style.includes("主标题") || style === "标题" || style.includes("document title")) {
+    if (looksLikeDocumentNumberLine(text)) {
+      role = "PRESERVE";
+    } else if (looksLikeIssuingAuthority(text) && (isRedFormat(paragraph) || framedAuthority)) {
+      role = "ISSUING_AUTHORITY";
+    } else if (looksLikeDocumentTitle(text)) {
+      role = "TITLE";
+    } else if (style.includes("主标题") || style === "标题" || style.includes("document title")) {
       role = "TITLE";
     } else if (/^(抄送|印发|发至)[：:]/.test(text) || /印发$/.test(text)) {
       role = "IMPRINT";
@@ -596,14 +727,31 @@ function mapAnalysis(
 ): OfficialDocumentAnalysis {
   const profile = source?.structureProfile;
   const capability = source?.engineCapabilityReport;
+  const mappings = mappingProfile?.mappings ?? [];
+  const tableCellKey = (tableIndex: number, rowIndex: number, columnIndex: number) =>
+    `${tableIndex}:${rowIndex}:${columnIndex}`;
   const mappingByParagraph = new Map(
-    (mappingProfile?.mappings ?? [])
-      .filter((mapping) => mapping.slotType !== "DATA_TABLE")
+    mappings
+      .filter((mapping) => !["DATA_TABLE", "FIXED_TABLE_TEXT", "FIXED_HEADER_FOOTER_TEXT"].includes(mapping.slotType ?? ""))
       .map((mapping) => [mapping.paragraphIndex, mapping])
   );
-  const mappingByTable = new Map(
-    (mappingProfile?.mappings ?? [])
+  const dataTableMappingByIndex = new Map(
+    mappings
       .filter((mapping) => mapping.slotType === "DATA_TABLE")
+      .map((mapping) => [mapping.paragraphIndex, mapping])
+  );
+  const fixedTableMappingByCell = new Map(
+    mappings
+      .filter((mapping) => mapping.slotType === "FIXED_TABLE_TEXT")
+      .map((mapping) => [tableCellKey(
+        mapping.paragraphIndex,
+        Number(mapping.metadata?.rowIndex ?? 0),
+        Number(mapping.metadata?.columnIndex ?? 0)
+      ), mapping])
+  );
+  const headerFooterMappingByIndex = new Map(
+    mappings
+      .filter((mapping) => mapping.slotType === "FIXED_HEADER_FOOTER_TEXT")
       .map((mapping) => [mapping.paragraphIndex, mapping])
   );
   const suggestedRoles = suggestParagraphRoles(profile?.paragraphs ?? []);
@@ -629,65 +777,207 @@ function mapAnalysis(
       styleSummary: styleSummary(paragraph)
     };
   });
-  const tableNodes = (profile?.tables ?? []).map((table, index) => {
-    const mapping = mappingByTable.get(table.index);
-    return {
-      id: mapping?.nodeId ?? `table:${table.index}`,
-      order: structureNodes.length + index + 1,
+  let supplementalOrder = structureNodes.length;
+  const tableNodes = (profile?.tables ?? []).flatMap((table) => {
+    const dataMapping = dataTableMappingByIndex.get(table.index);
+    const nodes: OfficialDocumentStructureNode[] = [{
+      id: dataMapping?.nodeId ?? `table:${table.index}:layout`,
+      order: ++supplementalOrder,
       tableIndex: table.index,
-      slotId: mapping?.slotId ?? stableUuid(`${versionId}:table:${table.index}`),
-      variantId: mapping?.variantId ?? `table-${table.index + 1}`,
-      slotType: mapping?.slotType,
-      endParagraphIndex: mapping?.endParagraphIndex,
-      role: mapping ? "BODY" as const : "UNKNOWN" as const,
-      roleLabel: mapping ? `表格 ${table.index + 1}（问数小表）` : `表格 ${table.index + 1}（静态保留）`,
+      slotId: dataMapping?.slotId ?? stableUuid(`${versionId}:table:${table.index}`),
+      variantId: dataMapping?.variantId ?? `table-${table.index + 1}`,
+      slotType: dataMapping?.slotType,
+      endParagraphIndex: dataMapping?.endParagraphIndex,
+      role: dataMapping ? "BODY" : "UNKNOWN",
+      roleLabel: dataMapping ? `表格 ${table.index + 1}（问数小表）` : `表格 ${table.index + 1}（版式）`,
       preview: table.text?.trim() || `${table.rowCount} 行 × ${table.columnCount} 列`,
       empty: false,
-      editable: Boolean(mapping),
-      dataBinding: Boolean(mapping?.dataBinding),
+      editable: Boolean(dataMapping),
+      dataBinding: Boolean(dataMapping?.dataBinding),
       required: false,
       styleSummary: [`${table.rowCount} 行`, `${table.columnCount} 列`]
-    };
+    }];
+    for (const cell of table.cells ?? []) {
+      const preview = cell.text?.trim() ?? "";
+      if (!preview) continue;
+      const mapping = fixedTableMappingByCell.get(tableCellKey(table.index, cell.rowIndex, cell.columnIndex));
+      const inferredEditable = !mapping && !dataMapping && status !== "PUBLISHED";
+      const redHead = table.index === 0 && cell.rowIndex === 0 && cell.columnIndex === 0
+        && looksLikeIssuingAuthority(preview);
+      const role = mapping && officialRoleLabels[mapping.role]
+        ? mapping.role as OfficialDocumentStructureNode["role"]
+        : inferredEditable ? redHead ? "ISSUING_AUTHORITY" : "TABLE_TEXT" : "UNKNOWN";
+      nodes.push({
+        id: mapping?.nodeId ?? `table:${table.index}:cell:${cell.rowIndex}:${cell.columnIndex}`,
+        order: ++supplementalOrder,
+        tableIndex: table.index,
+        tableRowIndex: cell.rowIndex,
+        tableColumnIndex: cell.columnIndex,
+        slotId: mapping?.slotId ?? stableUuid(`${versionId}:table:${table.index}:cell:${cell.rowIndex}:${cell.columnIndex}`),
+        variantId: mapping?.variantId ?? `table-${table.index + 1}-cell-${cell.rowIndex + 1}-${cell.columnIndex + 1}`,
+        slotType: mapping?.slotType ?? (inferredEditable ? "FIXED_TABLE_TEXT" : undefined),
+        endParagraphIndex: mapping?.endParagraphIndex,
+        role,
+        roleLabel: role === "ISSUING_AUTHORITY"
+          ? officialRoleLabels.ISSUING_AUTHORITY
+          : `表格 ${table.index + 1} · 第 ${cell.rowIndex + 1} 行第 ${cell.columnIndex + 1} 列`,
+        preview,
+        empty: false,
+        editable: role !== "UNKNOWN",
+        dataBinding: false,
+        required: false,
+        styleSummary: [`表格 ${table.index + 1}`, `第 ${cell.rowIndex + 1} 行`, `第 ${cell.columnIndex + 1} 列`]
+      });
+    }
+    return nodes;
+  });
+  const headerFooterNodes = (profile?.headersAndFooters ?? []).flatMap((fact, index) => {
+    const preview = fact.text?.trim() ?? "";
+    if (!preview) return [];
+    const mapping = headerFooterMappingByIndex.get(index);
+    const pageNumberOnly = /^[\s—–-]*\d+[\s—–-]*$/.test(preview);
+    const inferredEditable = !mapping && !pageNumberOnly && status !== "PUBLISHED";
+    const role = mapping ? "HEADER_FOOTER" : inferredEditable ? "HEADER_FOOTER" : "PRESERVE";
+    return [{
+      id: mapping?.nodeId ?? `header-footer:${index}`,
+      order: ++supplementalOrder,
+      headerFooterIndex: index,
+      slotId: mapping?.slotId ?? stableUuid(`${versionId}:header-footer:${index}`),
+      variantId: mapping?.variantId ?? `header-footer-${index + 1}`,
+      slotType: mapping?.slotType ?? (inferredEditable ? "FIXED_HEADER_FOOTER_TEXT" as const : undefined),
+      role,
+      roleLabel: `第 ${fact.sectionIndex + 1} 节页眉页脚文字`,
+      preview,
+      empty: false,
+      editable: role === "HEADER_FOOTER",
+      dataBinding: false,
+      required: false,
+      styleSummary: [`第 ${fact.sectionIndex + 1} 节`, `页眉页脚 ${fact.type + 1}`]
+    } satisfies OfficialDocumentStructureNode];
   });
 
-  const risks: OfficialDocumentAnalysis["risks"] = [];
-  for (const [index, finding] of (source?.ooxmlAuditReport?.findings ?? []).entries()) {
-    risks.push({
-      id: `ooxml:${finding.code}:${index}`,
-      code: finding.code,
-      severity: finding.severity === "BLOCKING" ? "BLOCKING" : finding.severity === "WARNING" ? "WARNING" : "INFO",
-      title: finding.code,
-      detail: finding.message,
-      scope: finding.part
+  type RiskSeverity = OfficialDocumentAnalysis["risks"][number]["severity"];
+  const severityWeight: Record<RiskSeverity, number> = { INFO: 0, WARNING: 1, BLOCKING: 2 };
+  const risksByKey = new Map<string, OfficialDocumentAnalysis["risks"][number]>();
+  const friendlyRisk = (code: string, detail: string, severity: RiskSeverity) => {
+    const prefixedCode = detail.match(/^\s*([A-Z][A-Z0-9_]*(?:\[[^\]]+\])?)\s*:/)?.[1]
+      ?.replace(/\[.*$/, "");
+    const effectiveCode = (code === "ENGINE_WARNING" && prefixedCode ? prefixedCode : code).toUpperCase();
+
+    if (["OLE_PRESENT", "OLE_EMBEDDING", "STATIC_COMPLEX_OBJECT"].includes(effectiveCode)) {
+      return {
+        key: "preserved-complex-content",
+        severity: "INFO" as const,
+        title: "复杂内容将原样保留",
+        detail: "检测到 Excel 等嵌入对象、公式或图形。系统会保留原样，但暂不编辑其中内容。"
+      };
+    }
+    if (effectiveCode === "MACRO_PRESENT" || effectiveCode === "MACRO") {
+      return {
+        key: "macro-content",
+        severity,
+        title: "文档包含宏",
+        detail: "系统不会运行宏，只会保留原始内容。请确认文件来源可靠。"
+      };
+    }
+    if (["EXTERNAL_RELATIONSHIP", "EXTERNAL_RESOURCE_BLOCKED"].includes(effectiveCode)) {
+      return {
+        key: "external-content",
+        severity,
+        title: "外部内容不会自动加载",
+        detail: "为保证安全，文档引用的外部文件、图片或地址不会被系统主动访问。"
+      };
+    }
+    if (effectiveCode === "RELATIONSHIP_TARGET_OUTSIDE_PACKAGE") {
+      return {
+        key: effectiveCode,
+        severity: "BLOCKING" as const,
+        title: "文档内部引用不完整",
+        detail: "暂时无法安全处理这份文档，请使用 Word 重新另存为 DOCX 后上传。"
+      };
+    }
+    if (effectiveCode === "STYLES_PART_MISSING") {
+      return {
+        key: effectiveCode,
+        severity,
+        title: "部分样式需要确认",
+        detail: "文档没有完整保存样式信息，请通过原稿预览确认字体和段落效果。"
+      };
+    }
+    if (effectiveCode === "FONT_SUBSTITUTION") {
+      return {
+        key: effectiveCode,
+        severity,
+        title: "部分字体可能有差异",
+        detail: "当前环境缺少原稿中的部分字体，预览或导出时可能使用相近字体。"
+      };
+    }
+    if (effectiveCode === "LIBREOFFICE_UNAVAILABLE") {
+      return {
+        key: effectiveCode,
+        severity,
+        title: "PDF 暂不可用",
+        detail: "当前仍可编辑并导出 Word，PDF 预览和导出暂不可用。"
+      };
+    }
+    if (severity === "BLOCKING") {
+      return {
+        key: `${effectiveCode}:${detail.trim()}`,
+        severity,
+        title: "文档暂时无法处理",
+        detail: "检测到无法安全处理的文档结构，请重新保存为标准 DOCX 后上传。"
+      };
+    }
+    return {
+      key: `${effectiveCode}:${detail.trim()}`,
+      severity,
+      title: "请确认文档预览",
+      detail: "检测到可能影响版式的内容，请通过原稿预览确认实际效果。"
+    };
+  };
+  const addRisk = (
+    id: string,
+    code: string,
+    severity: RiskSeverity,
+    detail: string,
+    scope?: string
+  ) => {
+    const copy = friendlyRisk(code, detail, severity);
+    const existing = risksByKey.get(copy.key);
+    if (existing && severityWeight[existing.severity] >= severityWeight[copy.severity]) return;
+    risksByKey.set(copy.key, {
+      id,
+      code,
+      severity: copy.severity,
+      title: copy.title,
+      detail: copy.detail,
+      scope
     });
+  };
+  for (const [index, finding] of (source?.ooxmlAuditReport?.findings ?? []).entries()) {
+    addRisk(
+      `ooxml:${finding.code}:${index}`,
+      finding.code,
+      finding.severity === "BLOCKING" ? "BLOCKING" : finding.severity === "WARNING" ? "WARNING" : "INFO",
+      finding.message,
+      finding.part
+    );
   }
   for (const [index, warning] of [...(source?.warnings ?? []), ...(profile?.warnings ?? []), ...(capability?.warnings ?? [])].entries()) {
-    risks.push({
-      id: `warning:${index}`,
-      code: "ENGINE_WARNING",
-      severity: "WARNING",
-      title: "格式能力警告",
-      detail: warning
-    });
+    addRisk(`warning:${index}`, "ENGINE_WARNING", "WARNING", warning);
   }
   for (const [index, reason] of (capability?.blockingReasons ?? []).entries()) {
-    risks.push({
-      id: `engine-blocking:${index}`,
-      code: "ENGINE_BLOCKING_REASON",
-      severity: "BLOCKING",
-      title: "Word 引擎错误",
-      detail: reason
-    });
+    addRisk(`engine-blocking:${index}`, "ENGINE_BLOCKING_REASON", "BLOCKING", reason);
   }
   if (["BLOCKED", "ENGINE_UNAVAILABLE", "FAILED"].includes(status) && analysisJob?.message) {
-    risks.push({
-      id: `analysis-job:${analysisJob.code ?? status}`,
-      code: analysisJob.code ?? status,
-      severity: "BLOCKING",
-      title: status === "ENGINE_UNAVAILABLE" ? "Word 引擎不可用" : "模板分析未通过",
-      detail: analysisJob.message
-    });
+    addRisk(
+      `analysis-job:${analysisJob.code ?? status}`,
+      analysisJob.code ?? status,
+      "BLOCKING",
+      analysisJob.message
+    );
   }
+  const risks = [...risksByKey.values()];
 
   const extractedFeatureCount = Object.values(profile?.featureCounts ?? {}).reduce(
     (sum, count) => sum + (Number.isFinite(count) ? count : 0),
@@ -704,7 +994,7 @@ function mapAnalysis(
   return {
     templateVersionId: versionId,
     sectionCount: profile?.sections?.length ?? 0,
-    structureNodes: [...structureNodes, ...tableNodes],
+    structureNodes: [...structureNodes, ...tableNodes, ...headerFooterNodes],
     mappingProfile: mapMappingProfile(mappingProfile, versionId),
     risks,
     capability: {
@@ -736,7 +1026,8 @@ function mapTemplateVersion(version: ApiTemplateVersion): OfficialDocumentTempla
 }
 
 function mapTemplate(view: ApiTemplateView): OfficialDocumentTemplate {
-  const version = [...view.versions].sort((left, right) => right.versionNumber - left.versionNumber)[0];
+  const versions = Array.isArray(view.versions) ? view.versions : [];
+  const version = [...versions].sort((left, right) => right.versionNumber - left.versionNumber)[0];
   if (!version) {
     throw new OfficialDocumentServiceError("模板没有可用版本", { code: "TEMPLATE_VERSION_MISSING" });
   }
@@ -796,7 +1087,8 @@ function mapDraft(snapshot: ApiDraftSnapshot, templateNames: Map<string, string>
     source: "LIVE",
     templateId: snapshot.templateId,
     templateVersionId: snapshot.templateVersionId,
-    templateName: templateNames.get(snapshot.templateId) ?? "公文模板",
+    templateName: templateNames.get(snapshot.templateId) ?? "报告模板",
+    contentProfileId: snapshot.content?.contentProfileId || undefined,
     currentFileVersionNo: currentFileVersion?.versionNumber ?? 1,
     updatedAt: currentFileVersion?.createdAt ?? snapshot.createdAt,
     bindings: (snapshot.bindings ?? []).map(mapBinding)
@@ -806,7 +1098,7 @@ function mapDraft(snapshot: ApiDraftSnapshot, templateNames: Map<string, string>
 function authenticatedActor() {
   const user = readDataHubSession().user;
   if (!user) {
-    throw new OfficialDocumentServiceError("登录信息缺失，不能创建公文草稿或编辑会话", {
+    throw new OfficialDocumentServiceError("登录信息缺失，不能创建报告草稿或编辑会话", {
       status: 401,
       code: "ACTOR_REQUIRED"
     });
@@ -845,7 +1137,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
     state: {
       configured: true,
       mode: "live",
-      label: "公文服务地址已配置",
+      label: "报告服务地址已配置",
       message: "正在以 /v1/capabilities 的实际结果判断 Syncfusion、PDF 和问数能力。"
     },
     async loadWorkspace() {
@@ -899,7 +1191,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       assertDocxTemplate(file);
       const formData = new FormData();
       formData.set("file", file);
-      const view = await requestOfficialDocument<ApiTemplateView>(baseUrl, "/v1/templates", {
+      const payload = await requestOfficialDocument<unknown>(baseUrl, "/v1/templates", {
         method: "POST",
         body: formData,
         timeoutMs: 60_000
@@ -907,9 +1199,57 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       return {
         source: "LIVE",
         persisted: true,
-        template: mapTemplate(view),
+        template: mapTemplate(asTemplateView(payload)),
         message: "模板已上传，正在执行安全检查和格式分析。"
       };
+    },
+    async listContentProfiles(templateId, versionId) {
+      return requestOfficialDocument<OfficialDocumentContentProfile[]>(
+        baseUrl,
+        `/v1/templates/${encodeURIComponent(templateId)}/versions/${encodeURIComponent(versionId)}/content-profiles`
+      );
+    },
+    async getContentProfile(profileId) {
+      return requestOfficialDocument<OfficialDocumentContentProfile>(
+        baseUrl,
+        `/v1/content-profiles/${encodeURIComponent(profileId)}`
+      );
+    },
+    async uploadContentProfile(templateId, versionId, file, name) {
+      assertDocxTemplate(file);
+      const formData = new FormData();
+      formData.set("file", file);
+      if (name?.trim()) formData.set("name", name.trim());
+      return requestOfficialDocument<OfficialDocumentContentProfile>(
+        baseUrl,
+        `/v1/templates/${encodeURIComponent(templateId)}/versions/${encodeURIComponent(versionId)}/content-profiles`,
+        { method: "POST", body: formData, timeoutMs: 60_000 }
+      );
+    },
+    async createTextContentProfile(templateId, versionId, input) {
+      return requestOfficialDocument<OfficialDocumentContentProfile>(
+        baseUrl,
+        `/v1/templates/${encodeURIComponent(templateId)}/versions/${encodeURIComponent(versionId)}/content-profiles`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name: input.name?.trim() || undefined, text: input.text.trim() }),
+          timeoutMs: 60_000
+        }
+      );
+    },
+    async saveContentProfileAnalysis(profileId, analysis) {
+      return requestOfficialDocument<OfficialDocumentContentProfile>(
+        baseUrl,
+        `/v1/content-profiles/${encodeURIComponent(profileId)}/analysis`,
+        { method: "PUT", body: JSON.stringify(analysis) }
+      );
+    },
+    async confirmContentProfile(profileId, analysis) {
+      return requestOfficialDocument<OfficialDocumentContentProfile>(
+        baseUrl,
+        `/v1/content-profiles/${encodeURIComponent(profileId)}/analysis:confirm`,
+        { method: "POST", body: JSON.stringify(analysis) }
+      );
     },
     async updateTemplateMapping(input) {
       const profile = await requestOfficialDocument<ApiMappingProfile>(
@@ -927,7 +1267,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       );
       const mapped = mapMappingProfile(profile, input.templateVersionId);
       if (!mapped) {
-        throw new OfficialDocumentServiceError("公文服务没有返回映射版本", {
+        throw new OfficialDocumentServiceError("报告服务没有返回映射版本", {
           code: "MAPPING_PROFILE_MISSING"
         });
       }
@@ -947,7 +1287,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         method: "POST",
         body: JSON.stringify(input)
       });
-      return mapDraft(snapshot, new Map([[input.templateId, "公文模板"]]));
+      return mapDraft(snapshot, new Map([[input.templateId, "报告模板"]]));
     },
     async getDraftContent(draftId) {
       return requestOfficialDocument<ApiDraftContent>(
@@ -962,11 +1302,41 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         { method: "PUT", body: JSON.stringify(input) }
       );
     },
+    async bindContentProfile(draftId, input) {
+      return requestOfficialDocument<ApiDraftContent>(
+        baseUrl,
+        `/v1/drafts/${encodeURIComponent(draftId)}/content-profile`,
+        { method: "PUT", body: JSON.stringify(input) }
+      );
+    },
     async getDraftPreview(draftId) {
       return requestOfficialDocument<Blob>(
         baseUrl,
         `/v1/drafts/${encodeURIComponent(draftId)}/preview`,
         { method: "POST", responseType: "blob", timeoutMs: 90_000 }
+      );
+    },
+    async getTransientPreview(input) {
+      return requestOfficialDocument<Blob>(
+        baseUrl,
+        "/v1/drafts/:preview",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            templateId: input.templateId,
+            templateVersionId: input.templateVersionId,
+            title: input.title,
+            content: {
+              revision: 0,
+              fixedValues: input.fixedValues,
+              blocks: input.blocks,
+              contentProfileId: "",
+              researchResults: []
+            }
+          }),
+          responseType: "blob",
+          timeoutMs: EXPORT_TIMEOUT_MS
+        }
       );
     },
     async createBinding(draftId, input) {
@@ -1018,6 +1388,30 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       );
       return mapExportRecord(record);
     },
+    async exportTransient(input, format) {
+      return requestOfficialDocument<Blob>(
+        baseUrl,
+        "/v1/drafts/:export",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            templateId: input.templateId,
+            templateVersionId: input.templateVersionId,
+            title: input.title,
+            format,
+            content: {
+              revision: 0,
+              fixedValues: input.fixedValues,
+              blocks: input.blocks,
+              contentProfileId: "",
+              researchResults: []
+            }
+          }),
+          responseType: "blob",
+          timeoutMs: EXPORT_TIMEOUT_MS
+        }
+      );
+    },
     async downloadExport(exportId) {
       return requestOfficialDocument<Blob>(
         baseUrl,
@@ -1030,7 +1424,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
 
 function createUnconfiguredService(): OfficialDocumentService {
   const unavailable = async (): Promise<never> => {
-    throw new OfficialDocumentServiceError("线上公文服务地址未配置，已停止请求且不会切换演示数据", {
+    throw new OfficialDocumentServiceError("线上报告服务地址未配置，已停止请求且不会切换演示数据", {
       code: "OFFICIAL_DOCUMENT_API_NOT_CONFIGURED"
     });
   };
@@ -1038,23 +1432,32 @@ function createUnconfiguredService(): OfficialDocumentService {
     state: {
       configured: false,
       mode: "live",
-      label: "线上公文服务未配置",
+      label: "线上报告服务未配置",
       message: "请配置 VITE_OFFICIAL_DOCUMENT_API_BASE_URL；生产模式不会自动切换本地演示数据。"
     },
     loadWorkspace: unavailable,
     getTemplateAnalysis: unavailable,
     getTemplatePreview: unavailable,
     uploadTemplate: unavailable,
+    listContentProfiles: unavailable,
+    getContentProfile: unavailable,
+    uploadContentProfile: unavailable,
+    createTextContentProfile: unavailable,
+    saveContentProfileAnalysis: unavailable,
+    confirmContentProfile: unavailable,
     updateTemplateMapping: unavailable,
     publishTemplate: unavailable,
     createDraft: unavailable,
     getDraftContent: unavailable,
     updateDraftContent: unavailable,
+    bindContentProfile: unavailable,
     getDraftPreview: unavailable,
+    getTransientPreview: unavailable,
     createBinding: unavailable,
     refreshBindings: unavailable,
     detachBinding: unavailable,
     exportDraft: unavailable,
+    exportTransient: unavailable,
     downloadExport: unavailable
   };
 }
@@ -1073,6 +1476,29 @@ export const getOfficialDocumentTemplateAnalysis = (templateId: string, versionI
 export const getOfficialDocumentTemplatePreview = (templateId: string, versionId: string) =>
   officialDocumentService.getTemplatePreview(templateId, versionId);
 export const uploadOfficialDocumentTemplate = (file: File) => officialDocumentService.uploadTemplate(file);
+export const listOfficialDocumentContentProfiles = (templateId: string, versionId: string) =>
+  officialDocumentService.listContentProfiles(templateId, versionId);
+export const getOfficialDocumentContentProfile = (profileId: string) =>
+  officialDocumentService.getContentProfile(profileId);
+export const uploadOfficialDocumentContentProfile = (
+  templateId: string,
+  versionId: string,
+  file: File,
+  name?: string
+) => officialDocumentService.uploadContentProfile(templateId, versionId, file, name);
+export const createOfficialDocumentTextContentProfile = (
+  templateId: string,
+  versionId: string,
+  input: { name?: string; text: string }
+) => officialDocumentService.createTextContentProfile(templateId, versionId, input);
+export const saveOfficialDocumentContentProfileAnalysis = (
+  profileId: string,
+  analysis: OfficialDocumentWritingLogicPlan
+) => officialDocumentService.saveContentProfileAnalysis(profileId, analysis);
+export const confirmOfficialDocumentContentProfile = (
+  profileId: string,
+  analysis: OfficialDocumentWritingLogicPlan
+) => officialDocumentService.confirmContentProfile(profileId, analysis);
 export const updateOfficialDocumentTemplateMapping = (input: UpdateOfficialDocumentMappingInput) =>
   officialDocumentService.updateTemplateMapping(input);
 export const publishOfficialDocumentTemplate = (templateId: string, versionId: string) =>
@@ -1083,8 +1509,14 @@ export const getOfficialDocumentDraftContent = (draftId: string) =>
   officialDocumentService.getDraftContent(draftId);
 export const updateOfficialDocumentDraftContent = (draftId: string, input: UpdateOfficialDocumentDraftContentInput) =>
   officialDocumentService.updateDraftContent(draftId, input);
+export const bindOfficialDocumentContentProfile = (
+  draftId: string,
+  input: BindOfficialDocumentContentProfileInput
+) => officialDocumentService.bindContentProfile(draftId, input);
 export const getOfficialDocumentDraftPreview = (draftId: string) =>
   officialDocumentService.getDraftPreview(draftId);
+export const getOfficialDocumentTransientPreview = (input: OfficialDocumentTransientArtifactInput) =>
+  officialDocumentService.getTransientPreview(input);
 export const createOfficialDocumentBinding = (draftId: string, input: CreateDraftDataBindingInput) =>
   officialDocumentService.createBinding(draftId, input);
 export const refreshOfficialDocumentBindings = (draftId: string) =>
@@ -1093,5 +1525,9 @@ export const detachOfficialDocumentBinding = (draftId: string, bindingId: string
   officialDocumentService.detachBinding(draftId, bindingId);
 export const exportOfficialDocumentDraft = (draftId: string, format: OfficialDocumentExportFormat) =>
   officialDocumentService.exportDraft(draftId, format);
+export const exportOfficialDocumentTransient = (
+  input: OfficialDocumentTransientArtifactInput,
+  format: OfficialDocumentExportFormat
+) => officialDocumentService.exportTransient(input, format);
 export const downloadOfficialDocumentExport = (exportId: string) =>
   officialDocumentService.downloadExport(exportId);

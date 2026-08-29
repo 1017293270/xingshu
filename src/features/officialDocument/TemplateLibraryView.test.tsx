@@ -13,7 +13,7 @@ vi.mock("@/services/officialDocumentService", () => ({
   officialDocumentServiceState: {
     configured: true,
     mode: "live",
-    label: "测试公文服务",
+    label: "测试报告服务",
     message: "测试环境未返回模板数据。"
   },
   loadOfficialDocumentWorkspace: () => loadOfficialDocumentWorkspace(),
@@ -91,10 +91,10 @@ describe("TemplateLibraryView", () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
     renderLibrary();
 
-    expect(screen.getByLabelText("公文模板库")).toBeInTheDocument();
-    expect(await screen.findByText("还没有可用的公文模板")).toBeInTheDocument();
+    expect(screen.getByLabelText("报告模板库")).toBeInTheDocument();
+    expect(await screen.findByText("还没有可用的报告模板")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "上传 DOCX 模板" }).length).toBeGreaterThan(0);
-    expect(screen.queryByText("请联系管理员上传并发布公文模板。")).not.toBeInTheDocument();
+    expect(screen.queryByText("请联系管理员上传并发布报告模板。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /打开模板/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
   });
@@ -132,7 +132,7 @@ describe("TemplateLibraryView", () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
     renderLibrary();
 
-    await screen.findByText("还没有可用的公文模板");
+    await screen.findByText("还没有可用的报告模板");
     expect(screen.queryByText("把文件拖到这里")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getAllByRole("button", { name: "上传 DOCX 模板" })[0]);
@@ -147,12 +147,12 @@ describe("TemplateLibraryView", () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(populatedWorkspace);
     renderLibrary();
 
-    const list = await screen.findByRole("list", { name: "公文模板列表" });
+    const list = await screen.findByRole("list", { name: "报告模板列表" });
     const row = within(list).getByRole("button", { name: "打开模板 季度工作通知" });
     expect(within(row).getByText("可用")).toBeInTheDocument();
     expect(within(row).getByText("v2 · 季度工作通知.docx")).toBeInTheDocument();
 
-    expect(screen.queryByRole("list", { name: "公文草稿列表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "报告草稿列表" })).not.toBeInTheDocument();
     expect(screen.queryByText("关于联调进展的通报")).not.toBeInTheDocument();
   });
 });

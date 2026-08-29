@@ -18,6 +18,7 @@ const OfficialDocumentAppLayout = lazy(() =>
     default: module.OfficialDocumentAppLayout
   }))
 );
+const WritingPage = lazy(() => import("@/pages/WritingPage").then((module) => ({ default: module.WritingPage })));
 const WritingTemplatesPage = lazy(() =>
   import("@/pages/WritingTemplatesPage").then((module) => ({ default: module.WritingTemplatesPage }))
 );
@@ -115,7 +116,7 @@ export function AppRoutes() {
             <Route path="/cloud/:kbId" element={<CloudKnowledgeDetailPage />} />
           </Route>
           <Route element={<ProtectedRoute><OfficialDocumentAppLayout /></ProtectedRoute>}>
-            <Route path="/writing" element={<Navigate to="/writing/templates" replace />} />
+            <Route path="/writing" element={<WritingPage />} />
             <Route path="/writing/templates" element={<WritingTemplatesPage />} />
             <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
             <Route path="/writing/drafts" element={<WritingDraftsPage />} />

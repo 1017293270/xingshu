@@ -42,7 +42,7 @@ describe("dataHubAskDataService", () => {
     );
   });
 
-  it.each(["ask", "rag", "document_lookup", "agent", "ask_table"] as const)(
+  it.each(["ask", "rag", "document_lookup", "agent", "ask_table", "writing"] as const)(
     "keeps the strict five-field request for %s mode",
     (chatMode) => {
       const request = buildDataHubChatRequest({
@@ -66,6 +66,21 @@ describe("dataHubAskDataService", () => {
       expect(request).not.toHaveProperty("datasourceId");
     }
   );
+
+  it("keeps the current draft context for writing requests", () => {
+    const writingContext = {
+      action: "DRAFT_ASSIST",
+      currentDraft: [{ role: "BODY", text: "第三季度经营情况" }]
+    };
+
+    expect(buildDataHubChatRequest({
+      message: "复述第三季度内容",
+      sessionId: "writing-session",
+      chatId: "writing-chat",
+      chatMode: "writing",
+      writingContext
+    }).writingContext).toBe(writingContext);
+  });
 
   it("parses complete SSE data blocks and keeps incomplete rest", () => {
     const parsed = parseDataHubSseBlocks(

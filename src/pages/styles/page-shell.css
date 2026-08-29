@@ -129,7 +129,7 @@
   margin: 8px 0 2px;
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   text-decoration: none;
 }
 
@@ -253,7 +253,7 @@
   overflow: hidden;
   color: var(--xs-text);
   font-size: var(--xs-fs-body);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -277,7 +277,7 @@
 .datahub-result-meta dt {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
 }
 
 .datahub-result-meta dd {
@@ -286,7 +286,7 @@
   overflow: hidden;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -304,12 +304,12 @@
   color: var(--xs-text-3);
   background: var(--xs-surface-soft);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
 }
 
 .total-row td {
   color: var(--xs-primary-2);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-tag {
@@ -321,7 +321,7 @@
   color: var(--xs-primary-2);
   background: var(--xs-info-soft);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-echart {

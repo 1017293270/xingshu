@@ -48,21 +48,15 @@ export function getXsCommandModelMeta(value: DataHubChatMode) {
 type XsCommandModelSelectProps = {
   value: DataHubChatMode;
   onChange: (value: DataHubChatMode) => void;
-  capabilitiesOnly?: boolean;
 };
 
 export function XsCommandModelSelect({
   value,
-  onChange,
-  capabilitiesOnly = false
+  onChange
 }: XsCommandModelSelectProps) {
-  const options = capabilitiesOnly
-    ? XS_COMMAND_MODEL_OPTIONS.filter((option) => option.value !== "agent")
-    : XS_COMMAND_MODEL_OPTIONS;
-
   return (
     <div className="xs-command-model-select" role="group" aria-label="选择能力">
-      {options.map((option) => {
+      {XS_COMMAND_MODEL_OPTIONS.map((option) => {
         const selected = option.value === value;
         return (
           <button

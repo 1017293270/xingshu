@@ -97,7 +97,7 @@ describe("AppRoutes", () => {
     ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "智能制表", "最近制表"],
-    ["/writing", "公文写作", "公文写作工作台"],
+    ["/writing", "报告智写", "报告智写工作台"],
     ["/dashboard", "看板广场", "看板广场空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
@@ -186,31 +186,32 @@ describe("AppRoutes", () => {
     renderRoute("/writing");
 
     expect(
-      await screen.findByRole("heading", { name: "公文写作" }, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+      await screen.findByRole("heading", { name: "报告智写" }, { timeout: ROUTE_LOAD_TIMEOUT_MS })
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/");
-    expect(screen.getByLabelText("公文写作工作台")).toBeInTheDocument();
+    expect(screen.getByLabelText("报告智写工作台")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开主导航" })).not.toBeInTheDocument();
 
-    const agentNavigation = screen.getByRole("navigation", { name: "公文写作导航" });
-    expect(within(agentNavigation).getByRole("link", { name: /模板库/ })).toHaveAttribute(
+    const agentNavigation = screen.getByRole("navigation", { name: "报告智写导航" });
+    expect(within(agentNavigation).getByRole("link", { name: /公文写作/ })).toHaveAttribute(
       "aria-current",
       "page"
     );
-    expect(await screen.findByLabelText("公文模板库")).toBeInTheDocument();
-    expect(screen.queryByLabelText("公文草稿箱")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("公文写作")).toBeInTheDocument();
+    expect(screen.queryByLabelText("报告模板库")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("报告草稿箱")).not.toBeInTheDocument();
   });
 
   it("opens the draft box as a separate page inside the official document app", async () => {
     renderRoute("/writing/drafts");
 
     expect(
-      await screen.findByLabelText("公文草稿箱", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+      await screen.findByLabelText("报告草稿箱", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("公文模板库")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("报告模板库")).not.toBeInTheDocument();
 
-    const agentNavigation = screen.getByRole("navigation", { name: "公文写作导航" });
+    const agentNavigation = screen.getByRole("navigation", { name: "报告智写导航" });
     expect(within(agentNavigation).getByRole("link", { name: /草稿箱/ })).toHaveAttribute(
       "aria-current",
       "page"
@@ -250,7 +251,7 @@ describe("AppRoutes", () => {
     const navigationDialog = screen.getByRole("dialog", { name: "星数主导航" });
     expect(navigationDialog).toBeVisible();
     expect(within(navigationDialog).getByRole("link", { name: "历史对话" })).toHaveAttribute("href", "/history");
-    expect(within(navigationDialog).getByRole("link", { name: "公文写作" })).toHaveAttribute("href", "/writing");
+    expect(within(navigationDialog).getByRole("link", { name: "报告智写" })).toHaveAttribute("href", "/writing");
     expect(within(navigationDialog).getByRole("link", { name: "数据资产管理" })).toHaveAttribute(
       "href",
       "/data-management"

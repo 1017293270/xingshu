@@ -28,8 +28,9 @@
   border-radius: 14px;
   color: #2272e8;
   display: inline-flex;
+  /* 48px 图标底板里的字形尺寸，不是排版字号 */
   font-size: 22px;
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   height: 48px;
   justify-content: center;
   margin-bottom: 18px;
@@ -38,14 +39,14 @@
 
 .app-error-boundary__eyebrow {
   color: #5c7ca7;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.14em;
   margin: 0 0 8px;
 }
 
 .app-error-boundary h1 {
-  font-size: 24px;
+  font-size: var(--xs-fs-title);
   margin: 0;
 }
 
@@ -69,7 +70,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   justify-content: center;
   min-height: 42px;
   padding: 0 20px;

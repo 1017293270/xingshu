@@ -37,7 +37,13 @@ export type DataHubChatMode = "ask" | "rag" | "document_lookup" | "agent";
 /** DataHub 问表模式。总记录接口用 sessionId 前缀 `ask-table-` 与问数会话隔离。 */
 export type DataHubAskTableChatMode = "ask_table";
 
-export type DataHubRequestChatMode = DataHubChatMode | DataHubAskTableChatMode;
+/** 报告智写模式。同问表：只发给后端，不进全局模型选择器；sessionId 前缀 `writing-`。 */
+export type DataHubWritingChatMode = "writing";
+
+export type DataHubRequestChatMode =
+  | DataHubChatMode
+  | DataHubAskTableChatMode
+  | DataHubWritingChatMode;
 
 export type DataHubChatRequest = {
   message: string;
@@ -45,6 +51,7 @@ export type DataHubChatRequest = {
   globalSessionId: string;
   chatId: string;
   chatMode: DataHubRequestChatMode;
+  writingContext?: Record<string, unknown>;
 };
 
 export type DataHubChatSession = {

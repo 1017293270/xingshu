@@ -54,19 +54,9 @@ export function DataDashboardPage() {
   return (
     <PageFrame
       title="数据资产看板"
-      subtitle="统计当前空间内，由当前登录用户本人创建或上传的一级数据资产"
+      subtitle="统计当前空间内的全部数据资产"
       actions={
         <>
-          <Segmented
-            aria-label="统计范围"
-            options={[
-              { label: "近7天", value: "7D" },
-              { label: "近30天", value: "30D" },
-              { label: "近6个月", value: "6M" }
-            ]}
-            value={range}
-            onChange={(value) => setRange(value as DataAssetOverviewRange)}
-          />
           <time dateTime={overview?.updatedAt}>数据更新于 {formatUpdatedAt(overview?.updatedAt)}</time>
           <Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link>
         </>
@@ -79,7 +69,7 @@ export function DataDashboardPage() {
         empty={!overview || !dashboardView}
         emptyDescription="暂无可展示的数据资产汇总。"
         errorTitle="数据资产看板加载失败"
-        error="无法取得当前用户的真实数据资产汇总，请检查 DPS 和文档元数据汇总接口。"
+        error="无法取得当前空间的真实数据资产汇总，请检查 DPS 和文档元数据汇总接口。"
         onRetry={() => void overviewQuery.refetch()}
         loadingVariant="metrics"
         contentKey={overviewQuery.dataUpdatedAt}
@@ -103,7 +93,28 @@ export function DataDashboardPage() {
             {/* 五张面板同属一个栅格：四张图两两成对，排行表在底部通栏收口，不留空格子 */}
             <section className="data-dashboard-grid" aria-label="数据资产图表与排行">
               <XsChartCard title="数据资产类型分布" {...dashboardView.charts.donut} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
-              <XsChartCard title="数据资产增长趋势" {...dashboardView.charts.growth} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
+              <XsChartCard
+                title="数据资产增长趋势"
+                {...dashboardView.charts.growth}
+                action={(
+                  <Segmented
+                    aria-label="增长趋势统计范围"
+                    options={[
+                      { label: "近7天", value: "7D" },
+                      { label: "近30天", value: "30D" },
+                      { label: "近6个月", value: "6M" }
+                    ]}
+                    value={range}
+                    onChange={(value) => setRange(value as DataAssetOverviewRange)}
+                  />
+                )}
+                headingLevel={2}
+                className="data-card"
+                chartClassName="chart-large"
+                motionPreset="subtle"
+                controlsPlacement="head"
+                showDataTable={false}
+              />
               <XsChartCard title="数据来源分布" {...dashboardView.charts.source} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
               <XsChartCard title="数据应用场景" {...dashboardView.charts.usage} headingLevel={2} className="data-card" chartClassName="chart-large" motionPreset="subtle" controlsPlacement="head" showDataTable={false} />
               <article className="xs-card data-card data-card--hot data-table">

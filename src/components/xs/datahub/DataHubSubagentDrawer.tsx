@@ -216,6 +216,7 @@ export function DataHubSubagentDrawer({
                           key={card.id}
                           card={card}
                           compact
+                          expandLatestActivity={false}
                           staggerIndex={index}
                           onCitationOpen={onCitationOpen}
                           renderBlock={renderBlock}
@@ -238,7 +239,7 @@ export function DataHubSubagentDrawer({
                 <div className="xs-datahub-subagent-drawer__placeholder">
                   <TreeStructure size={34} weight="duotone" aria-hidden="true" />
                   <strong>选择一个子智能体</strong>
-                  <p>查看其模型调用、思考、工具执行和业务结果。</p>
+                  <p>查看该子任务的业务步骤、来源和执行结果。</p>
                 </div>
               )}
             </div>

@@ -149,7 +149,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("main").contains(screen.getByRole("button", { name: "收起侧边栏" }))).toBe(true);
     expect(within(navigation).getByText("历史对话")).toBeInTheDocument();
     expect(within(navigation).getByText("智能制表")).toBeInTheDocument();
-    expect(within(navigation).getByText("公文写作")).toBeInTheDocument();
+    expect(within(navigation).getByText("报告智写")).toBeInTheDocument();
     expect(within(navigation).getByText("我的看板")).toBeInTheDocument();
     expect(within(navigation).getByText("我的云盘")).toBeInTheDocument();
     expect(within(navigation).getByText("数据资产看板")).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     const { container } = renderHomePage();
 
-    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "公文写作", "会议纪要", "更多应用"];
+    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "报告智写", "会议纪要", "更多应用"];
 
     for (const appName of expectedApps) {
       expect(screen.getByRole("button", { name: new RegExp(`打开 ${appName}`) })).toHaveAttribute(
@@ -181,6 +181,7 @@ describe("HomePage", () => {
     const dataChatButton = screen.getByRole("button", { name: /打开 智能问数/ });
     await user.click(dataChatButton);
     expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换到编排模型" })).toBeInTheDocument();
     expect(screen.queryByText("已切换为问数模型")).not.toBeInTheDocument();
     expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
     expect(screen.getByRole("heading", { name: "从一个经营数据问题开始" })).toBeInTheDocument();
@@ -224,13 +225,14 @@ describe("HomePage", () => {
     expect(screen.getByRole("textbox", { name: "命令输入" })).toHaveValue("");
     expect(screen.queryByText("已切换为问数模型")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换到编排模型" })).toBeInTheDocument();
     expect(screen.getByLabelText("当前应用路径")).toHaveTextContent("/");
     expect(useUiStore.getState().homeChatMode).toBe("ask");
   });
 
   it.each([
     ["报表生成", "/table"],
-    ["公文写作", "/writing"]
+    ["报告智写", "/writing"]
   ])("routes %s to its product workspace", async (appName, expectedPath) => {
     const user = userEvent.setup();
     renderHomePage();

@@ -7,6 +7,7 @@ import {
   assignSubagentTones,
   flattenSubagentTree,
   formatExecutionTime,
+  sessionActivitySummary,
   sessionDisplayName
 } from "./display";
 import { DataHubAgentAvatar } from "./DataHubAgentAvatar";
@@ -65,9 +66,9 @@ export function DataHubSubagentTree({
             />
             <span className="xs-datahub-subagent-tree__identity">
               <strong>{name}</strong>
-              <small title={session.sessionId}>
-                {startedAt || "时间未知"}
-                {session.sessionId ? ` · ${session.sessionId}` : ""}
+              <small>
+                {sessionActivitySummary(session)}
+                {startedAt ? ` · ${startedAt}` : ""}
               </small>
             </span>
             <DataHubExecutionStatus status={session.status} compact />

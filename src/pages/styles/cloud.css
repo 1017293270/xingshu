@@ -225,7 +225,7 @@
   max-width: 220px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.5;
 }
 
@@ -240,7 +240,7 @@
 
 .cloud-detail__crumb a {
   color: var(--xs-primary-2);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .cloud-detail__crumb a:hover {
@@ -534,7 +534,7 @@
 .cloud-preview__rail-item strong {
   overflow: hidden;
   font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -543,7 +543,7 @@
 .cloud-preview__rail-item small {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .cloud-preview__rail-item:hover {
@@ -627,7 +627,7 @@
   padding: 0 14px;
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   background: var(--xs-surface);

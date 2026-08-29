@@ -77,7 +77,7 @@ describe("data asset actions", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("shows the current user's real overview mapping without detail placeholders", async () => {
+  it("shows the current space overview with local trend range and yesterday comparison", async () => {
     const user = userEvent.setup();
     const overviewSpy = vi.spyOn(dataAssetService, "getDataAssetOverview").mockResolvedValue({
       updatedAt: "2026-08-11T08:00:00Z",
@@ -90,19 +90,37 @@ describe("data asset actions", () => {
         dataSourceCount: 1,
         serviceCallCount: 3
       },
+      previousDayKpis: {
+        assetCount: 4,
+        dataVolumeBytes: 768,
+        unstructuredCount: 1,
+        tableCount: 3,
+        dataSourceCount: 1,
+        serviceCallCount: 2
+      },
       typeDistribution: [{ type: "STRUCTURED", count: 4 }, { type: "DOCUMENT", count: 2 }],
-      growth: [{ date: "2026-08-11", assetCount: 6, dataVolumeBytes: 1024 }],
+      growth: [
+        { date: "2026-08-10", assetCount: 4, dataVolumeBytes: 768 },
+        { date: "2026-08-11", assetCount: 6, dataVolumeBytes: 1024 }
+      ],
       sourceDistribution: [{ type: "DATABASE", count: 1 }],
       usageByScenario: [{ scenario: "ASK_DATA", count: 3 }],
       hotAssets: [{ assetId: "asset-1", assetName: "订单表", assetType: "STRUCTURED", callCount: 3 }]
     });
     renderRoute("/data-dashboard");
 
-    expect((await screen.findAllByText("本人一级资产", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })).length).toBeGreaterThan(0);
-    expect(screen.getByText("非结构化数据资产数量")).toBeInTheDocument();
+    expect(await screen.findByText("统计当前空间内的全部数据资产", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })).toBeInTheDocument();
+    expect(screen.queryByText(/本人创建|本人上传|本人一级资产/)).not.toBeInTheDocument();
+    expect(await screen.findByText("非结构化数据资产数量", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })).toBeInTheDocument();
     expect(screen.getByText("数据源数量")).toBeInTheDocument();
     expect(screen.getByText(/数据更新于/)).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "统计范围" })).toBeInTheDocument();
+    const growthCard = screen.getByRole("heading", { name: "数据资产增长趋势" }).closest("article");
+    expect(growthCard).not.toBeNull();
+    expect(within(growthCard!).getByRole("radiogroup", { name: "增长趋势统计范围" })).toBeInTheDocument();
+    const assetCountCard = screen.getByText("数据资产总量").closest("article");
+    expect(assetCountCard).not.toBeNull();
+    expect(within(assetCountCard!).getByText("较昨日 ↑ 50.0%")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("数据资产指标")).getAllByText(/较昨日/)).toHaveLength(6);
     expect(screen.queryByText(/演示数据|查看明细|即将开放/)).not.toBeInTheDocument();
     expect(screen.queryByText("查看数据")).not.toBeInTheDocument();
     const hotAssetsTable = screen.getByRole("table", { name: "按调用次数排序的热门数据资产" });

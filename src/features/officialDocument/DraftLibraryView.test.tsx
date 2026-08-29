@@ -11,7 +11,7 @@ vi.mock("@/services/officialDocumentService", () => ({
   officialDocumentServiceState: {
     configured: true,
     mode: "live",
-    label: "测试公文服务",
+    label: "测试报告服务",
     message: "测试环境未返回草稿数据。"
   },
   loadOfficialDocumentWorkspace: () => loadOfficialDocumentWorkspace()
@@ -70,8 +70,8 @@ describe("DraftLibraryView", () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
     renderDraftBox();
 
-    expect(screen.getByLabelText("公文草稿箱")).toBeInTheDocument();
-    expect(await screen.findByText("还没有公文草稿")).toBeInTheDocument();
+    expect(screen.getByLabelText("报告草稿箱")).toBeInTheDocument();
+    expect(await screen.findByText("还没有报告草稿")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "去模板库" })).toBeInTheDocument();
   });
 
@@ -79,19 +79,19 @@ describe("DraftLibraryView", () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(populatedWorkspace);
     renderDraftBox();
 
-    const list = await screen.findByRole("list", { name: "公文草稿列表" });
+    const list = await screen.findByRole("list", { name: "报告草稿列表" });
     const row = within(list).getByRole("button", { name: "打开草稿 关于联调进展的通报" });
     expect(within(row).getByText("可导出")).toBeInTheDocument();
     expect(within(row).getByText("季度工作通知")).toBeInTheDocument();
 
-    expect(screen.queryByRole("list", { name: "公文模板列表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "报告模板列表" })).not.toBeInTheDocument();
   });
 
   it("warns instead of navigating when no usable template exists", async () => {
     loadOfficialDocumentWorkspace.mockResolvedValue(populatedWorkspace);
     renderDraftBox();
 
-    await screen.findByRole("list", { name: "公文草稿列表" });
+    await screen.findByRole("list", { name: "报告草稿列表" });
     screen.getByRole("button", { name: /新建草稿/ }).click();
 
     expect(await screen.findByText(/还没有可用模板/)).toBeInTheDocument();

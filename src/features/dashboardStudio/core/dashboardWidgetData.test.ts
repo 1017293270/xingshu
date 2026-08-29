@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
+import { xingshuIceSeriesColors } from "./dashboardChartThemes";
 import {
   buildDashboardChartOption,
+  formatDashboardCategoryLabel,
   formatDashboardMetric,
   inferDashboardBindingColumns,
   resolveDashboardMetric
@@ -53,7 +55,7 @@ describe("dashboardWidgetData", () => {
     const option = buildDashboardChartOption(widget("line"), binding, { animation: false });
     const series = option?.series as Array<{ type?: string; data?: unknown[]; smooth?: boolean }>;
 
-    expect(option?.color).toEqual(["#38bdf8"]);
+    expect(option?.color).toEqual([xingshuIceSeriesColors[0]]);
     expect(option?.animation).toBe(false);
     expect(series).toEqual([
       expect.objectContaining({ type: "line", data: [120, 180], smooth: true })
@@ -159,5 +161,35 @@ describe("dashboardWidgetData", () => {
     expect(formatDashboardMetric(128000000)).toEqual({ value: "1.28", unit: "亿" });
     expect(formatDashboardMetric(28400)).toEqual({ value: "2.84", unit: "万" });
     expect(formatDashboardMetric(null)).toEqual({ value: "—", unit: "" });
+  });
+
+  it("formats ISO timestamps and prefers Chinese table names in category labels", () => {
+    expect(formatDashboardCategoryLabel("2026-08-08T00:00:00.000")).toBe("8/8");
+    expect(formatDashboardCategoryLabel("2026-08-12T00:00:00.000Z")).toBe("8/12");
+
+    const trend = buildDashboardChartOption(
+      {
+        ...widget("line"),
+        mapping: { dimensionKey: "date", metricKeys: ["count"], valueMode: "latest" }
+      },
+      {
+        ...binding,
+        resultKind: "time-series",
+        table: {
+          ...binding.table,
+          columns: [
+            { key: "date", title: "日期", type: "date" },
+            { key: "count", title: "上报数量", type: "number" }
+          ],
+          rows: [
+            { date: "2026-08-08T00:00:00.000", count: 12 },
+            { date: "2026-08-09T00:00:00.000", count: 18 }
+          ],
+          totalRows: 2
+        }
+      }
+    );
+    const axisLabel = (trend?.xAxis as { axisLabel?: { formatter?: (value: string) => string } }).axisLabel;
+    expect(axisLabel?.formatter?.("2026-08-08T00:00:00.000")).toBe("8/8");
   });
 });

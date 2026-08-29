@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getDashboardChartVariantGroups, dashboardChartVariants } from "./dashboardChartPresets";
-import { dashboardChartThemes, getMatchingDashboardChartThemeId } from "./dashboardChartThemes";
+import { dashboardChartThemes, getMatchingDashboardChartThemeId, resolveDashboardWidgetStyle } from "./dashboardChartThemes";
 
 describe("dashboard chart catalog", () => {
   it("keeps all 18 original chart variants in the original six groups", () => {
@@ -27,5 +27,25 @@ describe("dashboard chart catalog", () => {
       borderColor: theme.border,
       seriesColors: [theme.seriesColors[0]!]
     })).toBe("");
+  });
+
+  it("lifts legacy dark command-default widgets onto the Xingshu ice surface", () => {
+    expect(getMatchingDashboardChartThemeId({
+      chartTheme: "command-default",
+      background: "rgba(15, 23, 42, 0.82)",
+      color: "#dbeafe",
+      accent: "#38bdf8"
+    })).toBe("command-default");
+
+    expect(resolveDashboardWidgetStyle({
+      chartTheme: "command-default",
+      background: "rgba(15, 23, 42, 0.82)",
+      color: "#dbeafe",
+      accent: "#fb7185"
+    })).toMatchObject({
+      background: "#FFFFFF",
+      color: "#294469",
+      accent: "#1677FF"
+    });
   });
 });

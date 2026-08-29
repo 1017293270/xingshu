@@ -13,7 +13,7 @@ import {
   requestDataHubAiChartPlan,
   type DataHubAiChartPlanner
 } from "@/services/dataHubAiChartService";
-import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
+import { formatDataHubColumnTitle, formatDataHubTableTitle } from "@/services/dataHubFormat";
 
 type PlanAiChartOptions = {
   dataHubPlanner?: DataHubAiChartPlanner;
@@ -177,7 +177,7 @@ function summarizeTable(table: DataHubTableResult, index: number): AiChartTableS
 
   return {
     tableIndex: table.tableIndex ?? index,
-    title: table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : index + 1}`,
+    title: formatDataHubTableTitle(table, index),
     totalRows: table.totalRows,
     columns,
     sampleRows: pickSampleRows(table, columns)
@@ -539,8 +539,7 @@ function getTableIndex(table: DataHubTableResult, tables: DataHubTableResult[]) 
 }
 
 function getTableTitle(table: DataHubTableResult, tables: DataHubTableResult[]) {
-  const tableIndex = getTableIndex(table, tables);
-  return table.groupLabel || `结果表 ${tableIndex + 1}`;
+  return formatDataHubTableTitle(table, getTableIndex(table, tables));
 }
 
 function resolveChartSelection(plan: AiChartPlanResult, tables: DataHubTableResult[]) {

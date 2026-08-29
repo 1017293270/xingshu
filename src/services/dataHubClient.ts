@@ -170,7 +170,7 @@ export async function requestDataHub<T>(path: string, options: DataHubRequestOpt
     payload = await parseJson(response);
   } catch (error) {
     if (didTimeout) {
-      throw new DataHubServiceError("请求超时，请确认 data-hub 登录服务是否可用", {
+      throw new DataHubServiceError("服务处理时间较长，请稍后重试", {
         code: "REQUEST_TIMEOUT"
       });
     }

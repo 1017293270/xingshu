@@ -172,4 +172,21 @@ describe("XsCommandBox", () => {
     await user.click(screen.getByRole("button", { name: "切换到问数模型" }));
     expect(onModelModeChange).toHaveBeenCalledWith("ask");
   });
+
+  it("keeps orchestration available after switching to a capability", () => {
+    render(
+      <XsCommandBox
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        modelMode="ask"
+        onModelModeChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "选择模型，当前问数模型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换到编排模型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换到问知模型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换到找文档模型" })).toBeInTheDocument();
+  });
 });

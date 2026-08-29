@@ -4,6 +4,7 @@ import {
   getDataHubEventPayload
 } from "@/services/dataHubEventAdapter";
 import { isAskTableSession } from "@/services/dataHubAskTable";
+import { isWritingSessionId } from "@/services/dataHubWriting";
 import { readDataHubSession } from "@/services/dataHubSession";
 import type {
   DataHubChatEvent,
@@ -74,18 +75,30 @@ function formatDateTime(value?: string) {
   return value.replace("T", " ").slice(0, 16);
 }
 
+/**
+ * 问表与智写都是靠 sessionId 前缀隔离的辅助会话：它们不是问数会话，
+ * 不能带着 chatMode 去做回放，否则会被送进 /ask-data 重放成问数对话。
+ */
+function replayableChatMode(session: DataHubChatSession): DataHubChatMode | undefined {
+  const chatMode = session.chatMode;
+  if (chatMode === "ask_table" || chatMode === "writing") return undefined;
+  if (isWritingSessionId(session.sessionId)) return undefined;
+  return chatMode;
+}
+
 function mapDataHubSession(session: DataHubChatSession): HistorySession {
   const title = session.title?.trim() || "未命名对话";
+  const chatMode = replayableChatMode(session);
 
   return {
     id: session.sessionId,
     sessionId: session.sessionId,
     title,
     summary: "来自 data-hub 的历史会话，点击后查看完整过程与结果。",
-    category: resolveHistoryCategory(session.chatMode === "ask_table" ? "ask" : session.chatMode, title),
+    category: resolveHistoryCategory(chatMode ?? "ask", title),
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
     source: "data-hub",
-    chatMode: session.chatMode === "ask_table" ? undefined : session.chatMode
+    chatMode
   };
 }
 
@@ -216,7 +229,11 @@ export async function listHistorySessions(): Promise<HistorySession[]> {
     spaceId: session.spaceId
   });
 
-  return sessions.filter((item) => !isAskTableSession(item)).map(mapDataHubSession);
+  return sessions
+    .filter((item) => !isAskTableSession(item)
+      && item.chatMode !== "writing"
+      && !isWritingSessionId(item.sessionId || item.id))
+    .map(mapDataHubSession);
 }
 
 export async function filterHistorySessions(filter: HistoryFilter) {

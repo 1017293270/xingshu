@@ -321,8 +321,7 @@ export function DataHubSubagentDag({
             const { session } = entry;
             const status = session.status;
             const elapsed = sessionElapsedMs(session, now);
-            const activity =
-              status === "running" ? sessionActivitySummary(session) : "";
+            const activity = sessionActivitySummary(session);
             return (
               <button
                 key={entry.id}

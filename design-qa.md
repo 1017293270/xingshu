@@ -35,6 +35,59 @@ final result: passed
 
 ---
 
+## 公文写作：对话成稿与文件卡（2026-08-28）
+
+source visual truth path:
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-534a2fb7-d73c-4146-bf65-7ad43f5d81a1.png`（对话消息区与底部常驻输入框）
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-01d40d83-2c6e-4852-9cfd-332541cb3177.png`（文件结果卡）
+
+implementation screenshot path:
+- `outputs/report-writing/compose-file-card-qa.png`
+- `outputs/report-writing/compose-file-card-1440.png`
+- `outputs/report-writing/compose-file-card-1920.png`
+- `outputs/report-writing/compose-file-card-mobile.png`
+- `outputs/report-writing/compose-file-card-focus.jpg`
+- `outputs/report-writing/compose-preview-modal-qa.png`
+
+viewport and normalization:
+- Source full view: 1862 x 1456 px；source file-card crop: 1120 x 202 px。
+- Implementation: 1440 x 900、1920 x 1080、390 x 844 CSS px；截图像素与 CSS 尺寸一致，device scale 1，无密度换算。
+- Full-view comparison保留星数侧栏与顶栏，以检查产品结构约束；focused comparison使用 `compose-file-card-focus.jpg` 与源文件卡裁切，避免文件卡在全屏图中过小。
+
+state:
+- `/writing` 已登录真实工作区，完成一次 `@参考草稿 → 生成 → 另存`；成功后 URL 保持 `/writing`。
+- 用户要求显示在右侧气泡；星数生成阶段与成功回复显示在左侧；紧凑输入框固定在消息区底部。
+- 成稿显示为可点击文件卡；实测点击后打开当前页 PDF 预览 Modal（5 页），下载菜单提供 Word/PDF，Word 下载成功。
+- 390px 移动端保留完整消息、文件卡和底部输入；下载按钮收敛为图标，无横向溢出。
+
+**Required Fidelity Surfaces**
+- Fonts and typography: 对话正文继续使用星数中文无衬线字体与 14px/1.7 行高；文件名 14px 中等字重、状态和模板名 11px，接近源文件卡的三层信息层级。未照搬 Claude 英文衬线正文，因为成稿正文由 PDF 文件预览承担，应用 UI 需保持星数设计体系。
+- Spacing and layout rhythm: 对话轨为 840px；消息区独立滚动；底部输入框 64px 高、18px 圆角并占固定末行。文件卡最大 560px、14px 圆角、44px 图标槽，桌面与移动端均未遮挡持久控件。
+- Colors and visual tokens: 保留白底、中性灰气泡、细灰边框与低阴影；源图橙色识别标记替换为星数蓝，文件图标使用冰蓝底板。
+- Image quality and asset fidelity: 页面只使用正式星数 Logo 和 Phosphor `AsteriskSimple`、`FileText`、`DownloadSimple` 图标；无占位图、手工 SVG、CSS 图形或新增插画。PDF 预览使用浏览器原生渲染器，页面缩略图和正文清晰。
+- Copy and content: 所有提示改为真实中文业务语义；明确“原参考草稿没有被修改”，文件卡提供“已生成 · 点击浏览”，下载完成在同一回复下反馈。
+
+**Full-view Comparison Evidence**
+- 源图的关键结构是“内容流占满可滚动区域 + 输入框始终贴底”；实现最终截图在 1440/1920 与 390 三档均保持同一结构。
+- 星数侧栏与应用顶栏是用户要求保留的产品框架，属于有意差异；其余主工作区不新增营销元素、说明卡或第二套编辑器。
+
+**Focused Region Comparison Evidence**
+- 源文件卡和 `compose-file-card-focus.jpg` 均为单层细边框卡：左侧文件图标、中部状态/标题、右侧动作。
+- 实现把源图不相关的“撤销/审核”替换为本任务所需“点击浏览/下载”；卡片点击热区、下载菜单、加载态与错误反馈均为真实交互。
+
+**Comparison History**
+- Pass 1 [P2]: 成功态虽然已经使用对话和文件卡，但父级异步面板仍 `align-content: center`，导致紧凑输入框停在页面中下部，没有真正贴底。Fix: 将内容轨改为 stretch，让对话态的 `minmax(0, 1fr) auto` 占满工作区。
+- Pass 2: 在相同成功态重新捕获 1440 x 900；输入框距离工作区底部约 16px，消息区独立滚动，P2 已消除。
+- Pass 3: 1920 x 1080 与 390 x 844 复核无横向溢出；实测文件卡预览和 Word 下载完成。
+
+**Findings**
+- 无剩余 P0/P1/P2。
+- [P3] 源文件卡只有单一截图裁切，未给出 hover、下载菜单或预览层；实现使用星数现有按钮和 Modal token 补足这些状态，属于产品约束下的合理延展。
+
+final result: passed
+
+---
+
 source visual truth path:
 - `D:\xwechat_files\wxid_nsedghikq70t22_3393\temp\RWTemp\2026-07\2c4d7c88bcd8ba45afa64e1ba2f55766.png`
 - `E:\starmath\outputs\xingshu-homepage-system\references\03-source-home.png`
@@ -320,3 +373,170 @@ final result: passed for 会话栏与加载态 scope
 - [P1] 本轮全量 `npx vitest run` 有 3 例失败：`AppRoutes.test.tsx`（2）与 `DataAssetActions.test.tsx`（1）。涉及 `src/pages/DataManagementPage.tsx`（+147/−137）、`src/services/dataAssetService.ts`、`src/types/dataAsset.ts` 的工作树未提交改动，均不在本轮制表范围内，未做修改。
 
 final result: passed for 制表模块 scope；数据资产管理 3 例失败属并行改动，需由该改动的作者处理
+
+---
+
+## 公文写作：Claude 风格首页与 @ 草稿选择器（2026-08-28）
+
+source visual truth path:
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-2955923a-f200-4139-acce-a19e848a7cfd.png`
+- `outputs/report-writing/chatgpt-attachment-menu-reference.png`（仅作为 @ 浮层交互参考）
+
+implementation screenshot path:
+- `outputs/report-writing/compose-claude-reference-qa.png`
+- `outputs/report-writing/compose-claude-picker-qa.png`
+- `outputs/report-writing/compose-dialogue-generating-qa.png`
+- `outputs/report-writing/compose-dialogue-stopped-qa.png`
+
+viewport and normalization:
+- Source: 1452 x 578 px，桌面空白输入态。
+- Implementation full viewport: 1512 x 695 CSS px，device scale 1。
+- Full-view comparison裁切主工作区为 1312 x 522 px；按源图 1452:578 等比例裁切，比较时不计星数侧栏与应用顶栏。
+- Mobile evidence: Chrome viewport 390 x 844，已选草稿 + 有输入内容状态；无横向溢出。
+
+state:
+- `/writing` 已登录真实工作区，空白输入态。
+- `@` 后打开草稿选择器；选择真实草稿后显示上下文附件、输入内容并启用发送按钮。
+- 生成中显示右侧用户气泡与左侧星数进度回复；停止后错误留在同一轮对话，可直接重试。
+- 浏览器控制台无 error。
+
+**Required Fidelity Surfaces**
+- Fonts and typography: 中文问候使用 `Songti SC / STSong / Noto Serif CJK SC`，对应源图的衬线标题；正文输入与工具栏继续使用星数无衬线体系。收到实屏反馈后压缩为桌面 34–44px、移动端 26px，均无截断。
+- Spacing and layout rhythm: 主轨最大 920px；标题与输入面板间距 36px；输入面板约 150px 高、20px 圆角、细边框与低阴影。移动端保持单行问候。
+- Colors and tokens: 源图橙色识别标记替换为 `--xs-primary` 星数蓝；其余保持白、近黑与中性灰。焦点态仅提升外轮廓，不再出现内部蓝色竖线。
+- Image and icon fidelity: 页面无位图资产。源图放射标记使用已安装 Phosphor `AsteriskSimple`，避免生成新品牌图或手工 SVG；形状存在轻微差异，列为可接受 P3。
+- Copy and content: 将英文个性化问候改为业务文案“想写一篇什么公文？”，输入提示、另存说明与 `@` 草稿语义均保持真实可用。
+
+**Focused Region Comparison**
+- `@` 选择器采用 360px 白色浮层、16px 圆角、细边框、低阴影和 52px 左右的资源行；标题、模板名、更新时间、滚动与选中勾选均可读。
+- 与 ChatGPT 附件菜单相比，为承载长草稿名而加宽；信息密度、图标槽、分组标题和浮层材质一致。弹层覆盖输入区左侧但不再遮挡问候标题。
+
+**Comparison History**
+- Pass 1 [P1]: 原实现是冰蓝光晕、大图标、大卡片式输入框，与用户选定的 Claude 源图层级不一致。Fix: 删除光晕与说明段，改为白底、大号衬线问候和宽输入面板。
+- Pass 2 [P2]: `@` 浮层向上展开遮挡问候；移动端标题换行；Mentions 内部焦点边框形成两条蓝线。Fix: 浮层改为向下展开，移动端标题/图标缩小，textarea 明确清除内部 border/outline/shadow。
+- Pass 3: 同视口重新捕获后，上述 P1/P2 均不再出现。
+- Pass 4 [P1]: 用户在 3024 x 1406 实屏截图中指出标题与输入面板整体过大。Fix: 主轨 1120→920px、标题上限 58→44px、输入区 118→72px、圆角 26→20px，并同步压缩移动端。
+- Pass 5 [P2]: 用户要求输入框继续略矮，并把生成过程设计成对话。Fix: 输入区 72→60px、Mentions 3→2 行；生成态改为用户气泡 + 星数阶段回复，覆盖读取、生成、另存、停止与失败重试。
+
+**Findings**
+- 无剩余 P0/P1/P2。
+- [P3] Phosphor 星号只有较少射线，未逐像素复制 Claude 的品牌图形；为避免冒用外部品牌资产并遵守本地图标体系，保留为星数蓝库图标。
+
+final result: passed
+
+---
+
+## 公文详情：操作按钮统一进入顶栏（2026-08-28）
+
+source visual truth path:
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-75b728e8-eb99-4a3c-931e-b1b6c57fb5ca.png`（错误态：内容方案与导出操作落到页面底部）
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-38954e41-8058-4f3c-a26d-a8f2ec5dbef5.png`（错误态：模板 PDF 浏览紧贴编辑区顶边）
+- 用户文字目标：全部操作进入顶部操作栏，并保留顶部正常间距。
+
+implementation screenshot path:
+- `outputs/report-writing/draft-actions-loading-qa.png`
+- `outputs/report-writing/draft-actions-top-qa.png`
+- `outputs/report-writing/draft-actions-top-1440.png`
+- `outputs/report-writing/draft-actions-top-1672.png`
+- `outputs/report-writing/draft-actions-top-1920.png`
+- `outputs/report-writing/draft-actions-top-mobile.png`
+
+viewport and normalization:
+- Source defect crops: 1322 x 200、1958 x 156 px。
+- Implementation: Chrome 1512 x 695、1440 x 900、1672 x 941、1920 x 1080、390 x 844 CSS px；截图像素与 CSS 尺寸一致，device scale 1。
+- 源图是局部缺陷裁切，因此比较以操作按钮所属区域和相邻边距为准，不对无关页面内容做像素判断。
+
+state:
+- `/writing/drafts/21c1649c-8635-4f8c-8d58-c307bf3c2a30` 已登录真实草稿详情。
+- 首次加载骨架态：顶栏插槽尚未就绪，所有操作暂不渲染，页面底部和编辑器顶边均无错误按钮。
+- 数据就绪态：内容方案、导出检查、导出 DOCX、导出 PDF、模板 PDF 浏览统一进入应用顶栏。
+- 390px 移动端：按钮在标题下方分两行排列，保持顶部归属、正常间距和可点击尺寸。
+
+**Required Fidelity Surfaces**
+- Fonts and typography: 按钮继续使用星数现有 13px 控件字号、正常字重和 Phosphor 图标，无字体或文案漂移。
+- Spacing and layout rhythm: 就绪态复用 `.official-document-app__bar` 的 14px 垂直、28px 水平内边距和 8px 操作间距；加载态不再在正文原位置占位。
+- Colors and visual tokens: 白色顶栏、细边框、低阴影按钮和深蓝文字全部复用现有 token，未引入新样式。
+- Image quality and asset fidelity: 无新增位图或插画；按钮图标继续来自既有 Phosphor 图标库。
+- Copy and content: 内容方案、导出检查、导出 DOCX、导出 PDF、模板 PDF 浏览的功能和文案保持不变，仅修正渲染位置。
+
+**Full-view Comparison Evidence**
+- `draft-actions-loading-qa.png` 证明顶栏挂载前，错误按钮不会短暂出现在详情底部或编辑器顶边。
+- `draft-actions-top-qa.png` 证明数据就绪后全部操作集中在顶部，且按钮与视口顶边、顶栏边框之间保留一致留白。
+
+**Focused Region Comparison Evidence**
+- 两张源图已是按钮区域的高分辨率局部裁切，按钮位置与边距清晰可辨，无需另做二次裁切。
+
+**Comparison History**
+- Pass 1 [P1]: 共享操作插槽在 host 尚未挂载时使用 inline fallback，导致不同调用点把按钮短暂渲染到底部或编辑器顶边。Fix: 仅在完全脱离应用壳时保留 inline fallback；位于应用壳内但 host 未就绪时返回空，host 就绪后再 portal 到顶栏。
+- Pass 2: 强制刷新真实详情页并分别捕获加载态、就绪态；错误位置不再出现，顶栏间距正常。
+- Pass 3: 1440、1672、1920 与 390px 复核；桌面单行、移动端两行，均无按钮回落或横向裁切。
+
+**Findings**
+- 无剩余 P0/P1/P2。
+- [P3] 极慢网络下操作按钮会在数据与顶栏插槽就绪后一次出现，而不是预留灰色按钮位；这避免了不可用按钮闪烁，符合当前页面加载策略。
+
+final result: passed
+
+---
+
+## 公文写作：重复固定字段锚点恢复（2026-08-28）
+
+source visual truth path:
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-0cd1f5dd-33aa-4ea6-8675-200047f190b4.png`
+
+implementation screenshot path:
+- `outputs/report-writing/duplicate-fixed-anchor-recovered-qa.png`
+
+viewport:
+- Chrome 1512 x 695 CSS px，device scale 1。
+
+state:
+- 使用截图中的参考草稿“请示 - 新草稿122112”和原始要求“帮我完整的写一篇给领导的请假请示”重放真实生成链路。
+- 生成结果包含同值重复固定字段锚点时安全归并，最终展示未保存临时成稿；没有创建草稿。
+- 冲突值重复仍由解析器拒绝；文件卡保留浏览、保存到草稿箱和下载三个操作。
+
+**Comparison History**
+- Pass 1 [P1]: 解析器对任何重复固定字段锚点一律报错，即使两个有效值完全一致。Fix: 只归并标准化后相同的固定字段值；不同值继续拒绝，并在提示词中明确每个 slot-id 只能出现一次。
+- Pass 2 [P2]: 文件卡新增的主保存按钮继承了通用深色文字，蓝底对比不足。Fix: 主按钮恢复白字。
+- Pass 3: 原始请求重放成功，临时成稿文件卡可见，保存按钮对比度正常。
+
+**Findings**
+- 无剩余 P0/P1/P2。
+
+final result: passed
+
+---
+
+## 公文写作：星标保存按钮（2026-08-28）
+
+source visual truth path:
+- `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-7a767844-9ba3-4a17-a7b8-990b9b24b026.png`
+
+implementation screenshot path:
+- `outputs/report-writing/compose-star-save-qa.png`
+- `outputs/report-writing/compose-star-save-focus-qa.png`
+
+viewport and normalization:
+- Source crop: 194 x 68 px。
+- Implementation viewport: Chrome 1512 x 695 CSS px，device scale 1；focused crop 584 x 100 px。
+- 比较对象只取文件卡操作区；源图左侧方框属于相邻功能，不要求复制。
+
+state:
+- 未保存临时成稿，文件卡包含浏览、空心星标保存和下载。
+- 星标 tooltip/无障碍名称为“保存到草稿箱”；未点击保存，不创建草稿。
+
+**Required Fidelity Surfaces**
+- Fonts and typography: 保存动作不再显示可见文字，文件卡原有标题、状态和下载文字保持不变。
+- Spacing and layout rhythm: 星标点击区 36 x 36px，图标 20px，与下载动作垂直居中；没有大块主按钮占位。
+- Colors and visual tokens: 使用低饱和蓝灰空心星，无实心蓝色背景；保存后才切换为品牌蓝实心星。
+- Image quality and asset fidelity: 使用已安装 Phosphor `Star` 线性图标，与参考图同类轮廓，不使用手工 SVG、字符星号或新增位图。
+- Copy and content: 可见“保存到草稿箱”移入 title 与 aria-label，鼠标和读屏仍能理解动作。
+
+**Comparison History**
+- Pass 1 [P2]: 保存动作是宽蓝色主按钮，视觉重量远高于文件卡其他操作。Fix: 替换为空心星标图标按钮；保存中沿用 loading，保存后显示实心星。
+- Pass 2: 真实临时成稿重放后捕获 focused crop；星标形状、尺寸、颜色和间距与参考方向一致，控制台无 error/warn。
+
+**Findings**
+- 无剩余 P0/P1/P2。
+
+final result: passed

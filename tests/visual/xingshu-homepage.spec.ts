@@ -91,6 +91,14 @@ const dataAssetOverviewFixture = {
     dataSourceCount: 2,
     serviceCallCount: 8
   },
+  previousDayKpis: {
+    assetCount: 5,
+    dataVolumeBytes: 6_442_450_944,
+    unstructuredCount: 1,
+    tableCount: 4,
+    dataSourceCount: 1,
+    serviceCallCount: 6
+  },
   typeDistribution: [
     { type: "STRUCTURED", count: 4 },
     { type: "DOCUMENT", count: 2 }
@@ -355,7 +363,7 @@ const pages: SmokePage[] = [
   { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
-  { slug: "writing", path: "/writing", heading: "公文写作", charts: 0, shell: false },
+  { slug: "writing", path: "/writing", heading: "报告智写", charts: 0, shell: false },
   { slug: "dashboard", path: "/dashboard", heading: "看板广场", readyText: "暂无看板", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
@@ -516,6 +524,9 @@ test.describe("xingshu page visual smoke", () => {
         if (pageCase.charts > 0) {
           await ensureChartsReady(page, pageCase.charts);
           await expect(page.locator('[data-echarts-renderer="canvas"]')).toHaveCount(pageCase.charts);
+        }
+        if (pageCase.shell !== false) {
+          await page.locator(".xs-shell__main").evaluate((element) => element.scrollTo({ top: 0 }));
         }
 
         await settleResponsiveLayout(page);
@@ -1496,7 +1507,7 @@ test("mobile navigation reaches every product destination and account route", as
   }> = [
     { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
     { label: "智能制表", path: "/table", heading: "智能制表" },
-    { label: "公文写作", path: "/writing", heading: "公文写作" },
+    { label: "报告智写", path: "/writing", heading: "报告智写" },
     { label: "我的看板", path: "/dashboard", heading: "看板广场", readyText: "暂无看板" },
     { label: "我的云盘", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },

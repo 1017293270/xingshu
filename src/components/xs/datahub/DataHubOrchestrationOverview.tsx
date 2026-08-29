@@ -41,6 +41,22 @@ function sourceResultStatus(result: DataHubAdaptiveSourceResult) {
   return labels[result.status ?? ""] ?? result.status ?? "处理中";
 }
 
+const businessRouteLabels: Record<string, string> = {
+  adaptive_team: "多个企业能力协同",
+  ask_data: "问数能力",
+  ask_knowledge: "问知能力",
+  document_lookup: "找文档能力",
+  SIMPLE: "单任务执行",
+  COMPLEX: "多任务协同",
+  CHAIN: "顺序执行",
+  PARALLEL: "并行执行"
+};
+
+function businessRouteLabel(value?: string) {
+  if (!value) return undefined;
+  return businessRouteLabels[value] ?? (/^[a-z0-9_-]+$/i.test(value) ? undefined : value);
+}
+
 /** 记录上一次的字符串值，供数字滚动从上一次值继续动画。 */
 function usePreviousValue(value: string) {
   const ref = useRef<string | undefined>(undefined);
@@ -57,25 +73,27 @@ export function DataHubOrchestrationOverview({
   subagentCount
 }: DataHubOrchestrationOverviewProps) {
   const titleId = useId();
-  const intent = routeValue(session, "routing_intent", "intentLabel", "intent", "summary");
-  const skill = routeValue(
+  const intent = businessRouteLabel(routeValue(session, "routing_intent", "message", "summary", "intentLabel", "intent"));
+  const skill = businessRouteLabel(routeValue(
     session,
     "routing_skill",
+    "message",
+    "summary",
     "skillLabel",
     "skillName",
-    "skill",
-    "summary"
-  );
-  const strategy = routeValue(
+    "skill"
+  ));
+  const strategy = businessRouteLabel(routeValue(
     session,
     "routing_strategy",
+    "message",
+    "summary",
     "strategyLabel",
-    "strategy",
-    "summary"
-  );
+    "strategy"
+  ));
   const decompose = session.orchestration.decompose;
   const subQuestions = decompose?.subQuestions ?? [];
-  const executionMode = asString(decompose?.executionMode);
+  const executionMode = businessRouteLabel(asString(decompose?.executionMode));
   const hasRouting = Boolean(intent || skill || strategy || executionMode || subQuestions.length);
   const done = session.done;
   const coverage = done?.coverage;
@@ -195,7 +213,9 @@ export function DataHubOrchestrationOverview({
         <section className="xs-datahub-overview__coverage" aria-label="自适应团队覆盖情况">
           <header>
             <h4>任务覆盖</h4>
-            {done?.completion ? <span>{done.completion}</span> : null}
+            {done?.completion ? (
+              <span>{done.completion === "complete" ? "已覆盖" : done.completion === "partial" ? "部分覆盖" : "覆盖情况待确认"}</span>
+            ) : null}
           </header>
           {coverage ? (
             <dl>

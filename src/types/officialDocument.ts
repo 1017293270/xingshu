@@ -26,6 +26,9 @@ export type OfficialDocumentRisk = {
 };
 
 export type OfficialDocumentRole =
+  | "ISSUING_AUTHORITY"
+  | "TABLE_TEXT"
+  | "HEADER_FOOTER"
   | "TITLE"
   | "RECIPIENT"
   | "BODY"
@@ -44,9 +47,12 @@ export type OfficialDocumentStructureNode = {
   order: number;
   paragraphIndex?: number;
   tableIndex?: number;
+  tableRowIndex?: number;
+  tableColumnIndex?: number;
+  headerFooterIndex?: number;
   slotId?: string;
   variantId?: string;
-  slotType?: "FIXED_TEXT" | "BODY_REGION" | "DATA_TEXT" | "DATA_TABLE" | "PRESERVE";
+  slotType?: "FIXED_TEXT" | "FIXED_TABLE_TEXT" | "FIXED_HEADER_FOOTER_TEXT" | "BODY_REGION" | "DATA_TEXT" | "DATA_TABLE" | "PRESERVE";
   endParagraphIndex?: number;
   role: OfficialDocumentRole;
   roleLabel: string;
@@ -69,7 +75,7 @@ export type OfficialDocumentMappingDefinition = {
   variantId?: string;
   dataBinding: boolean;
   required: boolean;
-  slotType?: "FIXED_TEXT" | "BODY_REGION" | "DATA_TEXT" | "DATA_TABLE" | "PRESERVE";
+  slotType?: "FIXED_TEXT" | "FIXED_TABLE_TEXT" | "FIXED_HEADER_FOOTER_TEXT" | "BODY_REGION" | "DATA_TEXT" | "DATA_TABLE" | "PRESERVE";
   endParagraphIndex?: number;
   metadata?: Record<string, string>;
 };
@@ -123,6 +129,74 @@ export type OfficialDocumentTemplate = {
   updatedAt: string;
 };
 
+export type OfficialDocumentContentProfileStatus =
+  | "EXTRACTING"
+  | "EXTRACTED"
+  | "READY_FOR_REVIEW"
+  | "CONFIRMED"
+  | "FAILED";
+
+export type OfficialDocumentContentSourceBlock = {
+  id: string;
+  order: number;
+  kind: "PARAGRAPH" | "TABLE";
+  text: string;
+  headingHint: string;
+  columns: string[];
+  rows: string[][];
+};
+
+export type OfficialDocumentWritingLogicPlan = {
+  summary: string;
+  sections: Array<{
+    id: string;
+    order: number;
+    headingRole: "HEADING_1" | "HEADING_2" | "HEADING_3";
+    title: string;
+    purpose: string;
+    keyPoints: string[];
+    sourceBlockIds: string[];
+  }>;
+  researchNeeds: Array<{
+    id: string;
+    sectionId: string;
+    kind: "ASK_DATA" | "ASK_KNOWLEDGE";
+    question: string;
+    reason: string;
+    required: boolean;
+    preferredOutput: "" | "FACT" | "SCALAR" | "TABLE";
+  }>;
+  unassignedSourceBlockIds: string[];
+  warnings: string[];
+};
+
+export type OfficialDocumentContentProfile = {
+  id: string;
+  templateId: string;
+  templateVersionId: string;
+  name: string;
+  originalSha256?: string;
+  originalFileName: string;
+  originalSize: number;
+  status: OfficialDocumentContentProfileStatus;
+  profile: {
+    source?: {
+      sourceSha256: string;
+      blocks: OfficialDocumentContentSourceBlock[];
+      warnings: string[];
+    };
+    analysis?: OfficialDocumentWritingLogicPlan;
+    confirmedPlan?: OfficialDocumentWritingLogicPlan;
+    confirmedAt?: string;
+    confirmedSummarySha256?: string;
+    failureCode?: string;
+    failureMessage?: string;
+  };
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DraftBindingStatus =
   | "ACTIVE"
   | "STALE"
@@ -155,12 +229,60 @@ export type OfficialDocumentDraft = {
   templateId: string;
   templateVersionId: string;
   templateName: string;
+  contentProfileId?: string;
+  contentProfileName?: string;
   currentFileVersionNo: number;
   updatedAt: string;
   bindings: DraftDataBinding[];
 };
 
-export type OfficialDocumentDraftBlockRole = "HEADING_1" | "HEADING_2" | "HEADING_3" | "BODY";
+export type OfficialDocumentDraftBlockRole =
+  | "HEADING_1"
+  | "HEADING_2"
+  | "HEADING_3"
+  | "BODY"
+  | "TABLE"
+  | "CHART_IMAGE";
+
+export type OfficialDocumentDraftSourceReference = {
+  kind: "CONTENT_PROFILE" | "QUERY_ASSET";
+  contentProfileId?: string;
+  sourceBlockIds?: string[];
+  queryAssetId?: string;
+  queryVersionId?: string;
+  outputKey?: string;
+  executionId?: string;
+  snapshotId?: string;
+  dataAsOf?: string;
+};
+
+export type OfficialDocumentResearchResult = {
+  taskId: string;
+  sectionId: string;
+  kind: "ASK_DATA" | "ASK_KNOWLEDGE";
+  question: string;
+  required: boolean;
+  preferredOutput: "" | "FACT" | "SCALAR" | "TABLE";
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "NO_RESULT" | "FAILED" | "SKIPPED";
+  summary: string;
+  table?: { columns: string[]; rows: string[][]; totalRows: number };
+  chart?: {
+    mimeType: "image/png";
+    base64: string;
+    widthPx: number;
+    heightPx: number;
+    altText: string;
+  };
+  querySource?: OfficialDocumentDraftSourceReference;
+  citations: Array<{
+    kbId: string;
+    kbName: string;
+    docId: string;
+    docName: string;
+    fragments: string[];
+    sourceAvailable: boolean;
+  }>;
+};
 
 export type OfficialDocumentDraftContent = {
   revision: number;
@@ -174,13 +296,27 @@ export type OfficialDocumentDraftContent = {
     role: OfficialDocumentDraftBlockRole;
     variantId: string;
     text: string;
+    sectionId?: string;
+    sourceTaskIds?: string[];
+    table?: { columns: string[]; rows: string[][]; totalRows: number };
+    chart?: {
+      mimeType: "image/png";
+      base64: string;
+      widthPx: number;
+      heightPx: number;
+      altText: string;
+    };
+    source?: OfficialDocumentDraftSourceReference;
   }>;
+  contentProfileId?: string;
+  researchResults?: OfficialDocumentResearchResult[];
 };
 
 export type UpdateOfficialDocumentDraftContentInput = {
   expectedRevision: number;
   fixedValues: OfficialDocumentDraftContent["fixedValues"];
   blocks: OfficialDocumentDraftContent["blocks"];
+  researchResults?: OfficialDocumentResearchResult[];
 };
 
 export type QueryBindingCandidate = {
@@ -241,7 +377,13 @@ export type UpdateOfficialDocumentMappingInput = {
 export type CreateOfficialDocumentDraftInput = {
   templateId: string;
   templateVersionId: string;
+  contentProfileId?: string;
   title: string;
+};
+
+export type BindOfficialDocumentContentProfileInput = {
+  expectedRevision: number;
+  contentProfileId: string;
 };
 
 export type CreateDraftDataBindingInput = {

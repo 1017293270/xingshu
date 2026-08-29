@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   filterHistorySessionList,
+  listHistorySessions,
   loadDataHubHistoryReplay,
   resolveHistoryCategory
 } from "./historyService";
@@ -19,6 +20,25 @@ describe("historyService data-hub replay", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     localStorage.clear();
+  });
+
+  it("hides ask-table and writing helper sessions from history", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      code: 200,
+      message: "success",
+      data: [
+        { id: 1, sessionId: "session-normal", chatMode: "ask", title: "经营分析" },
+        { id: 2, sessionId: "ask-table-1", title: "临时制表" },
+        { id: 3, sessionId: "writing-1", title: "智写助手" },
+        { id: 4, sessionId: "legacy-session", title: "旧会话" }
+      ]
+    }))));
+
+    expect((await listHistorySessions()).map((session) => session.id)).toEqual([
+      "session-normal",
+      "legacy-session"
+    ]);
   });
 
   it("loads messages and events into a restorable ask-data turn", async () => {

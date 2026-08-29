@@ -12,7 +12,6 @@ import { useId, type CSSProperties } from "react";
 import {
   formatExecutionDuration,
   formatExecutionTime,
-  formatStructuredContent,
   orchestrationEventsForSession
 } from "./display";
 import type { DataHubExecutionEventView, DataHubExecutionTimelineProps } from "./types";
@@ -53,11 +52,6 @@ export function DataHubExecutionTimeline({ session }: DataHubExecutionTimelinePr
       <ol>
         {items.map((item, index) => {
           const Icon = eventIcon(item);
-          const detail = item.event.content ?? item.event.data;
-          const hasDetail =
-            detail !== undefined &&
-            typeof detail !== "string" &&
-            detail !== null;
           return (
             <li
               key={item.id}
@@ -82,12 +76,6 @@ export function DataHubExecutionTimeline({ session }: DataHubExecutionTimelinePr
                   ) : null}
                 </header>
                 {item.summary ? <p>{item.summary}</p> : null}
-                {hasDetail ? (
-                  <details>
-                    <summary>查看事件详情</summary>
-                    <pre>{formatStructuredContent(detail)}</pre>
-                  </details>
-                ) : null}
               </div>
             </li>
           );

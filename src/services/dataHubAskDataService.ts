@@ -13,6 +13,7 @@ export type DataHubAskDataInput = {
   globalSessionId?: string;
   chatId?: string;
   chatMode?: DataHubRequestChatMode;
+  writingContext?: Record<string, unknown>;
 };
 
 export type DataHubAskDataStreamHandlers = {
@@ -37,7 +38,8 @@ export function buildDataHubChatRequest(input: DataHubAskDataInput): DataHubChat
     sessionId,
     globalSessionId: input.globalSessionId || sessionId,
     chatId: input.chatId || createDataHubClientId("chat"),
-    chatMode: input.chatMode ?? "ask"
+    chatMode: input.chatMode ?? "ask",
+    ...(input.writingContext === undefined ? {} : { writingContext: input.writingContext })
   };
 }
 

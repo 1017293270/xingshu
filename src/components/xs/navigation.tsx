@@ -24,7 +24,7 @@ export type XsNavigationItem = {
 export const primaryNavigation: XsNavigationItem[] = [
   { label: "历史对话", to: "/history", icon: ClockCounterClockwise },
   { label: "智能制表", to: "/table", icon: Table },
-  { label: "公文写作", to: "/writing", icon: NotePencil },
+  { label: "报告智写", to: "/writing", icon: NotePencil },
   { label: "我的看板", to: "/dashboard", icon: ChartBar },
   { label: "我的云盘", to: "/cloud", icon: Cloud }
 ];
@@ -44,8 +44,8 @@ export const routeTitles: Record<string, string> = {
   "/history": "历史对话",
   "/table": "智能制表",
   "/writing": "公文写作",
-  "/writing/templates": "公文模板",
-  "/writing/drafts": "公文草稿",
+  "/writing/templates": "结构模板",
+  "/writing/drafts": "报告草稿",
   "/dashboard": "我的看板",
   "/dashboard-editor": "看板编辑器",
   "/dashboard-view": "大屏浏览",

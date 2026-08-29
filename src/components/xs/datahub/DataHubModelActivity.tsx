@@ -188,7 +188,7 @@ function activitySummary(activity: DataHubModelActivity) {
     return summary;
   }
   if (activity.status === "failed") {
-    return `${activity.label}失败，请查看技术详情`;
+    return `${activity.label}失败，请查看执行信息`;
   }
   if (activity.status === "success") {
     return `${activity.label}已完成`;
@@ -223,10 +223,10 @@ function activityStatusLabel(status: DataHubActivityStatus) {
 function activityKindLabel(record: UnknownRecord) {
   const kind = asString(record.kind)?.toLowerCase();
   if (kind === "tool") {
-    return "工具调用";
+    return "企业能力";
   }
   if (kind === "model") {
-    return "模型推理";
+    return "任务分析";
   }
   return "执行步骤";
 }
@@ -327,12 +327,12 @@ export function DataHubModelActivityCard({
         <section className="xs-datahub-agent-card__activity-detail">
           <div className="xs-datahub-agent-card__activity-detail-title">
             <Code size={13} aria-hidden="true" />
-            技术详情
+            执行信息
           </div>
           <dl
             className="xs-datahub-agent-card__activity-detail-list"
             role="group"
-            aria-label="技术详情"
+            aria-label="执行信息"
           >
             {technicalDetails.map((detail) => (
               <div key={detail.label}>

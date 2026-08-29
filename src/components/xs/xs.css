@@ -335,7 +335,7 @@
   border-radius: 10px;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   background: transparent;
   box-shadow: none;
   transition:
@@ -414,7 +414,7 @@
   border-inline-end: 0 !important;
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
 }
 
 .xs-sidebar__menu.ant-menu-inline .ant-menu-item,
@@ -430,7 +430,7 @@
   border-left: 3px solid transparent;
   border-radius: 10px;
   color: var(--xs-text-2);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   letter-spacing: 0.01em;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -453,7 +453,7 @@
   color: var(--xs-primary-2) !important;
   border-left-color: var(--xs-primary);
   background: var(--xs-info-soft) !important;
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
 }
 
 .xs-sidebar__menu.ant-menu-inline .ant-menu-item-selected::after {
@@ -479,6 +479,7 @@
   align-items: center;
   justify-content: center;
   min-width: 18px;
+  /* 图标字形尺寸，不是排版字号，不要接 --xs-fs-* */
   font-size: 18px;
 }
 
@@ -633,7 +634,7 @@
 .xs-mobile-drawer .ant-drawer-title {
   color: var(--xs-text);
   font-size: var(--xs-fs-card);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-mobile-drawer .ant-drawer-body {
@@ -654,7 +655,7 @@
   border-radius: var(--xs-radius-control);
   color: var(--xs-primary-2);
   background: var(--xs-surface-soft);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   box-shadow: none;
 }
 
@@ -679,7 +680,7 @@
   border: 1px solid transparent;
   border-radius: var(--xs-radius-control);
   text-decoration: none;
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -710,7 +711,7 @@
   padding: 0 12px 4px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.06em;
 }
 
@@ -791,7 +792,7 @@
 .xs-sidebar__user strong {
   overflow: hidden;
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   color: var(--xs-text);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1036,6 +1037,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
+  /* 收起占位文字用，不是排版字号 */
   font-size: 0;
   box-shadow: none;
   pointer-events: none;
@@ -1121,7 +1123,7 @@
   margin-top: 6px;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.55;
 }
 
@@ -1150,7 +1152,7 @@
   color: var(--xs-interactive-text);
   cursor: pointer;
   font-size: var(--xs-fs-label);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
   margin-left: auto;
 }
 
@@ -1165,7 +1167,7 @@
   color: var(--xs-text-2);
   text-align: left;
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-chart-card__table-scroll .xs-table {
@@ -1202,7 +1204,7 @@
   border: 0;
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-chart-card__fullscreen {
@@ -1325,7 +1327,7 @@
   overflow: hidden;
   color: var(--xs-text);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1333,7 +1335,7 @@
 .xs-command-box__attachment small {
   color: currentColor;
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   white-space: nowrap;
 }
 
@@ -1377,7 +1379,7 @@
 .xs-command-box__hint {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-command-box__suggestions {
@@ -1393,7 +1395,7 @@
   flex: 0 0 auto;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .xs-command-box__suggestions button {
@@ -1402,7 +1404,7 @@
   padding: 4px 0;
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   cursor: pointer;
   border: 0;
   border-bottom: 1px solid transparent;
@@ -1449,7 +1451,7 @@
   border-radius: 999px;
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: 500;
+  font-weight: var(--xs-fw-text);
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -1765,7 +1767,7 @@
   margin-top: 8px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-control);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.5;
 }
 
@@ -1861,7 +1863,7 @@
   display: block;
   color: var(--xs-text);
   font-size: var(--xs-fs-control);
-  font-weight: 750;
+  font-weight: var(--xs-fw-bold);
   line-height: 1.45;
 }
 
@@ -2571,7 +2573,7 @@
     overflow: hidden;
     color: var(--xs-text);
     font-size: var(--xs-fs-body);
-    font-weight: 700;
+    font-weight: var(--xs-fw-bold);
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2738,7 +2740,7 @@
   gap: 8px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
   letter-spacing: 0.02em;
 }
 
@@ -2760,7 +2762,7 @@
   color: var(--xs-primary-2);
   background: #eff6ff;
   font-size: var(--xs-fs-caption);
-  font-weight: 600;
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-ask-demo__thread {
@@ -2915,7 +2917,7 @@
   color: var(--xs-text);
   font-size: var(--xs-fs-label);
   line-height: 1.7;
-  font-weight: 550;
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-ask-demo__caret {

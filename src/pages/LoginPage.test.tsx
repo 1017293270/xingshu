@@ -73,6 +73,15 @@ describe("LoginPage", () => {
     expect(container.querySelectorAll(".login-star-convergence__p")).toHaveLength(12);
   });
 
+  it("redirects an existing authenticated session away from the login page", async () => {
+    useDataHubAuthStore.getState().setSession(userFixture, spaceFixture.id);
+
+    renderLoginRoute();
+
+    expect(await screen.findByRole("heading", { name: /您好，alice/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "登录星数" })).not.toBeInTheDocument();
+  });
+
   it("validates required fields before calling data-hub", async () => {
     const user = userEvent.setup();
     renderLoginRoute();

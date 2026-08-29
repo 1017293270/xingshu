@@ -17,6 +17,7 @@ export type DataHubExecutionPanelProps = {
   projection: DataHubExecutionProjection;
   subagentTree?: readonly DataHubSubagentTreeNode[];
   title?: string;
+  intent?: string;
   className?: string;
   emptyDescription?: string;
   defaultExpanded?: boolean;

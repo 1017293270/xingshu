@@ -17,7 +17,7 @@ vi.mock("@/services/officialDocumentService", () => ({
   officialDocumentServiceState: {
     configured: true,
     mode: "live",
-    label: "测试公文服务",
+    label: "测试报告服务",
     message: "测试环境没有返回演示数据。"
   },
   loadOfficialDocumentWorkspace: mocks.loadOfficialDocumentWorkspace,
@@ -95,7 +95,7 @@ describe("DraftDetailView", () => {
   it("does not invent a demo draft when the live workspace is empty", async () => {
     renderDraftDetail("draft-missing");
 
-    expect(await screen.findByText("未找到该公文草稿")).toBeInTheDocument();
+    expect(await screen.findByText("未找到该报告草稿")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回草稿箱" })).toHaveAttribute("href", "/writing/drafts");
     expect(screen.queryByText(/示例/)).not.toBeInTheDocument();
   });
@@ -119,7 +119,7 @@ describe("DraftDetailView", () => {
     expect(await screen.findByText("已保存")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /问数与导出/ }));
+    await user.click(screen.getByRole("button", { name: /导出检查/ }));
     expect(await screen.findByRole("button", { name: "转为普通文本" })).toBeDisabled();
   });
 
@@ -144,7 +144,7 @@ describe("DraftDetailView", () => {
       expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeEnabled();
     });
     expect(screen.getByRole("button", { name: "导出 PDF" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: /问数与导出/ }));
+    await user.click(screen.getByRole("button", { name: /导出检查/ }));
     expect(await screen.findByRole("button", { name: "转为普通文本" })).toBeEnabled();
   });
 

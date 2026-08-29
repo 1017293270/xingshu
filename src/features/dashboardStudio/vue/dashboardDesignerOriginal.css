@@ -3,7 +3,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   color: var(--studio-text);
   background: var(--studio-bg);
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--xs-font-family);
 }
 
 .xs-dashboard-designer *,

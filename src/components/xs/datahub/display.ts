@@ -152,7 +152,7 @@ export function formatStructuredContent(value: unknown): string {
 
 export function executionBlockLabel(block: DataHubExecutionBlock): string {
   if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
-    return block.type === "final_thinking" ? "最终思考" : "思考过程";
+    return block.type === "final_thinking" ? "结果复核" : "任务分析";
   }
   const labels: Record<string, string> = {
     content: "正式回答",
@@ -161,9 +161,9 @@ export function executionBlockLabel(block: DataHubExecutionBlock): string {
     routing_skill: "能力路由",
     routing_strategy: "执行策略",
     routing_decompose: "任务拆解",
-    react_step: "推理步骤",
-    tool_call: "工具调用",
-    tool_result: "工具结果",
+    react_step: "执行步骤",
+    tool_call: "调用企业能力",
+    tool_result: "执行结果",
     data_source_selected: "数据源",
     table: "查询结果",
     chart: "数据图表",
@@ -209,13 +209,32 @@ function eventStatus(event: DataHubStreamEvent): DataHubExecutionEventView["stat
   return "running";
 }
 
+const businessToolLabels: Record<string, string> = {
+  list_datasources: "读取可用数据源",
+  locate_datasource: "匹配可用数据源",
+  reselect_datasource: "重新匹配数据源",
+  get_skill: "读取业务语义",
+  get_cube_meta: "读取语义模型",
+  plan_with_datasource_skill: "制定查询方案",
+  generate_query: "生成查询方案",
+  execute_query: "执行数据查询",
+  load_data: "执行数据查询",
+  nl2sql_fallback: "使用备用查询能力",
+  retrieve_knowledge: "检索知识证据",
+  confirm_answer: "校验并整理回答",
+  find_documents: "定位相关文档",
+  confirm_document_selection: "复核文档结果",
+  invoke_parallel: "分派并行任务"
+};
+
 function toolName(record?: UnknownRecord): string | undefined {
-  return (
+  const name = (
     asString(record?.toolName) ??
     asString(record?.tool) ??
     asString(record?.name) ??
     asString(record?.action)
   );
+  return name ? businessToolLabels[name] ?? "调用企业能力" : undefined;
 }
 
 function executionEventCopy(event: DataHubStreamEvent): {
@@ -231,28 +250,31 @@ function executionEventCopy(event: DataHubStreamEvent): {
       return {
         title: "识别用户意图",
         summary:
+          asString(record?.message) ??
+          asString(record?.summary) ??
           asString(record?.intentLabel) ??
           asString(record?.intent) ??
-          asString(record?.summary) ??
           raw
       };
     case "routing_skill":
       return {
         title: "匹配执行能力",
         summary:
+          asString(record?.message) ??
+          asString(record?.summary) ??
           asString(record?.skillLabel) ??
           asString(record?.skillName) ??
           asString(record?.skill) ??
-          asString(record?.summary) ??
           raw
       };
     case "routing_strategy":
       return {
         title: "制定执行策略",
         summary:
+          asString(record?.message) ??
+          asString(record?.summary) ??
           asString(record?.strategyLabel) ??
           asString(record?.strategy) ??
-          asString(record?.summary) ??
           raw
       };
     case "routing_decompose": {
@@ -274,7 +296,7 @@ function executionEventCopy(event: DataHubStreamEvent): {
           record?.stepNum
       );
       return {
-        title: round !== undefined ? `第 ${round} 轮推理` : "执行推理步骤",
+        title: round !== undefined ? `第 ${round} 步` : "执行任务步骤",
         summary:
           asString(record?.actionLabel) ??
           asString(record?.action) ??
@@ -287,14 +309,14 @@ function executionEventCopy(event: DataHubStreamEvent): {
     case "tool_call": {
       const name = toolName(record);
       return {
-        title: name ? `调用工具：${name}` : "调用工具",
+        title: name ? `开始：${name}` : "开始执行任务",
         summary: asString(record?.summary) ?? asString(record?.step)
       };
     }
     case "tool_result": {
       const name = toolName(record);
       return {
-        title: name ? `工具返回：${name}` : "工具返回结果",
+        title: name ? `完成：${name}` : "任务步骤已完成",
         summary:
           asString(record?.summary) ??
           asString(record?.resultSummary) ??
@@ -448,8 +470,27 @@ export function latestExecutionBlock(
 
 export function executionBlockSummary(block: DataHubExecutionBlock): string {
   const record = asRecord(block.content);
+  if (block.isThinking || block.type === "thinking") {
+    return "正在理解问题并组织执行步骤";
+  }
+  if (block.type === "final_thinking") {
+    return "正在复核查询结果";
+  }
+  if (block.type === "table") {
+    return "已返回结构化查询结果";
+  }
+  if (block.type === "citation_document" || block.type === "document_url") {
+    return "已复核知识来源";
+  }
+  if (block.type === "content" || block.type === "text") {
+    return "正在整理最终回答";
+  }
+  if (block.type === "data_source_selected") {
+    return asString(record?.datasourceName)
+      ? `已选择数据源：${asString(record?.datasourceName)}`
+      : "已选择可用数据源";
+  }
   return (
-    asString(block.content) ??
     asString(record?.summary) ??
     asString(record?.resultSummary) ??
     asString(record?.message) ??
@@ -464,7 +505,21 @@ export function sessionActivitySummary(session: DataHubExecutionSession): string
     return session.error?.message || "执行失败，请查看详情";
   }
   if (session.status === "done") {
-    return session.done?.summary || "子任务已完成";
+    if (session.done?.summary) {
+      return session.done.summary;
+    }
+    for (let cardIndex = session.cards.length - 1; cardIndex >= 0; cardIndex -= 1) {
+      const blocks = session.cards[cardIndex]?.blocks ?? [];
+      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+        const block = blocks[blockIndex];
+        if (block.type !== "activity") continue;
+        const record = asRecord(block.content);
+        const label = asString(record?.label) ?? asString(record?.actionLabel);
+        if (label) return label;
+      }
+    }
+    const block = latestExecutionBlock(session);
+    return block ? executionBlockSummary(block) : "子任务已完成";
   }
   const block = latestExecutionBlock(session);
   if (block) {

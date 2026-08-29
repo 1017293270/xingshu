@@ -50,6 +50,36 @@ describe("officialDocumentMeta template usage", () => {
         dataBinding: true,
         required: false,
         styleSummary: ["2 行", "2 列"]
+      },
+      {
+        id: "table:1",
+        order: 4,
+        tableIndex: 1,
+        tableRowIndex: 0,
+        tableColumnIndex: 0,
+        slotId: "44444444-4444-4444-4444-444444444444",
+        slotType: "FIXED_TABLE_TEXT",
+        role: "ISSUING_AUTHORITY",
+        roleLabel: "发文机关（红头）",
+        preview: "XXXXXXXXXX公司",
+        editable: true,
+        dataBinding: false,
+        required: false,
+        styleSummary: ["1 行", "1 列"]
+      },
+      {
+        id: "header-footer:0",
+        order: 5,
+        headerFooterIndex: 0,
+        slotId: "55555555-5555-5555-5555-555555555555",
+        slotType: "FIXED_HEADER_FOOTER_TEXT",
+        role: "HEADER_FOOTER",
+        roleLabel: "第 1 节页眉页脚文字",
+        preview: "善治数字科技有限公司",
+        editable: true,
+        dataBinding: false,
+        required: false,
+        styleSummary: ["第 1 节"]
       }
     ];
 
@@ -71,6 +101,18 @@ describe("officialDocumentMeta template usage", () => {
         slotId: "33333333-3333-3333-3333-333333333333",
         slotType: "DATA_TABLE",
         dataBinding: true
+      }),
+      expect.objectContaining({
+        slotId: "44444444-4444-4444-4444-444444444444",
+        role: "ISSUING_AUTHORITY",
+        slotType: "FIXED_TABLE_TEXT",
+        dataBinding: false
+      }),
+      expect.objectContaining({
+        slotId: "55555555-5555-5555-5555-555555555555",
+        role: "HEADER_FOOTER",
+        slotType: "FIXED_HEADER_FOOTER_TEXT",
+        dataBinding: false
       })
     ]);
   });
@@ -122,4 +164,3 @@ describe("officialDocumentMeta template usage", () => {
     }))).toBe("这篇草稿还不能导出。内容保存完成后即可导出 Word");
   });
 });
-

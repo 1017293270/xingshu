@@ -81,7 +81,7 @@
 .sheet-prompt__shortcut {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
 }
 
 .sheet-prompt .ant-btn {
@@ -89,7 +89,7 @@
   padding: 0 16px;
   border-radius: var(--xs-radius-small);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   transition:
     transform var(--xs-motion-feedback) var(--xs-motion-ease-out),
     box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
@@ -146,7 +146,7 @@
 .sheet-suggestions > span {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
 }
 
 .sheet-suggestions button {
@@ -157,7 +157,7 @@
   color: var(--xs-text-2);
   background: var(--xs-surface);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
   cursor: pointer;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -193,7 +193,7 @@
   margin: 0;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
 }
 
 .sheet-result__empty--error {
@@ -416,7 +416,7 @@
 .agent-trace__title {
   flex: none;
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .agent-trace__summary {
@@ -424,7 +424,7 @@
   overflow: hidden;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -474,7 +474,7 @@
 .agent-trace__label {
   color: var(--xs-text);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .agent-trace__step[data-status="error"] .agent-trace__label {
@@ -523,7 +523,7 @@
   width: max-content;
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-caption);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
   cursor: pointer;
 }
 
@@ -889,7 +889,7 @@
   color: var(--xs-primary-2);
   font-family: var(--xs-font-mono);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.08em;
 }
 
@@ -908,7 +908,7 @@
   border-radius: var(--xs-radius-small);
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-label);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 .table-agent__export.ant-btn:not(:disabled):hover {
@@ -946,7 +946,7 @@
   padding: 0 8px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   letter-spacing: 0.02em;
 }
 
@@ -956,7 +956,7 @@
   border-radius: var(--xs-radius-small);
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
   line-height: 1.45;
   text-decoration: none;
   text-overflow: ellipsis;
@@ -974,7 +974,7 @@
 .agent-rail__item[data-active="true"] {
   color: var(--xs-text);
   background: #e6ecf5;
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
 }
 
 /* 会话栏的加载态就是"什么都不显示"：≤8 条短导航项，
@@ -987,7 +987,7 @@
   padding: 0 8px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: 620;
+  font-weight: var(--xs-fw-medium);
 }
 
 .agent-rail__note > button {
@@ -996,7 +996,7 @@
   color: var(--xs-interactive-text);
   background: transparent;
   font-size: var(--xs-fs-caption);
-  font-weight: 700;
+  font-weight: var(--xs-fw-bold);
   cursor: pointer;
 }
 
@@ -1097,7 +1097,7 @@
 .writing-panel__types-label {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-label);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
 }
 
 .writing-tabs {
@@ -1298,7 +1298,7 @@
   align-items: center;
   gap: 8px;
   color: var(--xs-text);
-  font-weight: 650;
+  font-weight: var(--xs-fw-medium);
 }
 
 .doc-table__name svg {

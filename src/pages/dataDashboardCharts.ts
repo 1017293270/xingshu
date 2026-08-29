@@ -25,7 +25,7 @@ export const scenarioLabels: Record<string, string> = {
   ASK_DATA: "问数",
   DOCUMENT_SEARCH: "找文档",
   TABLE_GENERATION: "智能制表",
-  OFFICIAL_DOCUMENT: "公文写作"
+  OFFICIAL_DOCUMENT: "报告智写"
 };
 
 export type DashboardKpi = {
@@ -58,6 +58,15 @@ export function formatBytes(value: number) {
   return `${scaled >= 100 || index === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[index]}`;
 }
 
+function formatYesterday(current: number, previous?: number | null, formatValue = formatCount) {
+  if (previous === undefined || previous === null) return "较昨日 暂无快照";
+  if (current === previous) return "较昨日 持平";
+  if (previous === 0) return `较昨日 ↑ 新增 ${formatValue(current)}`;
+  const direction = current > previous ? "↑" : "↓";
+  const percentage = Math.abs((current - previous) / previous * 100);
+  return `较昨日 ${direction} ${percentage.toFixed(1)}%`;
+}
+
 function chartTable(
   groupLabel: string,
   columns: DataHubTableResult["columns"],
@@ -67,13 +76,14 @@ function chartTable(
 }
 
 export function buildKpis(overview: DataAssetOverview): DashboardKpi[] {
+  const previous = overview.previousDayKpis;
   return [
-    { id: "data-assets", label: "数据资产总量", value: formatCount(overview.kpis.assetCount), note: "本人一级资产", tone: "blue" },
-    { id: "data-volume", label: "数据总量", value: formatBytes(overview.kpis.dataVolumeBytes), note: "本人一级资产", tone: "green" },
-    { id: "media-documents", label: "非结构化数据资产数量", value: formatCount(overview.kpis.unstructuredCount), note: "READY 文件", tone: "purple" },
-    { id: "data-tables", label: "数据表数量", value: formatCount(overview.kpis.tableCount), note: "已选择数据表", tone: "cyan" },
-    { id: "data-apis", label: "数据源数量", value: formatCount(overview.kpis.dataSourceCount), note: "本人创建且有效", tone: "orange" },
-    { id: "service-calls", label: "数据服务调用量", value: formatCount(overview.kpis.serviceCallCount), note: `近 ${overview.range}`, tone: "blue" }
+    { id: "data-assets", label: "数据资产总量", value: formatCount(overview.kpis.assetCount), note: formatYesterday(overview.kpis.assetCount, previous?.assetCount), tone: "blue" },
+    { id: "data-volume", label: "数据总量", value: formatBytes(overview.kpis.dataVolumeBytes), note: formatYesterday(overview.kpis.dataVolumeBytes, previous?.dataVolumeBytes, formatBytes), tone: "green" },
+    { id: "media-documents", label: "非结构化数据资产数量", value: formatCount(overview.kpis.unstructuredCount), note: formatYesterday(overview.kpis.unstructuredCount, previous?.unstructuredCount), tone: "purple" },
+    { id: "data-tables", label: "数据表数量", value: formatCount(overview.kpis.tableCount), note: formatYesterday(overview.kpis.tableCount, previous?.tableCount), tone: "cyan" },
+    { id: "data-apis", label: "数据源数量", value: formatCount(overview.kpis.dataSourceCount), note: formatYesterday(overview.kpis.dataSourceCount, previous?.dataSourceCount), tone: "orange" },
+    { id: "service-calls", label: "数据服务调用量", value: formatCount(overview.kpis.serviceCallCount), note: formatYesterday(overview.kpis.serviceCallCount, previous?.serviceCallCount), tone: "blue" }
   ];
 }
 
@@ -105,7 +115,7 @@ export function buildChartViews(overview: DataAssetOverview) {
   const volumeUnit = volumeDivisor === 1024 ** 4 ? "TB" : volumeDivisor === 1024 ** 3 ? "GB" : "MB";
 
   const donut: ChartView = {
-    summary: `当前共 ${formatCount(overview.kpis.assetCount)} 项本人一级数据资产。`,
+    summary: `当前空间共 ${formatCount(overview.kpis.assetCount)} 项一级数据资产。`,
     option: {
       color: ["#2C75FF", "#75C9F2", "#91DFAD", "#F1DB3D", "#E9A7FF"],
       legend: { orient: "vertical", right: 0, top: "middle", textStyle: { color: "#294469", fontSize: 12 } },
@@ -173,7 +183,7 @@ export function buildChartViews(overview: DataAssetOverview) {
   };
 
   const source: ChartView = {
-    summary: `当前共有 ${formatCount(overview.kpis.dataSourceCount)} 个本人创建的有效数据源。`,
+    summary: `当前空间共有 ${formatCount(overview.kpis.dataSourceCount)} 个有效数据源。`,
     option: {
       grid: { left: 86, right: 48, top: 10, bottom: 10 },
       xAxis: { type: "value", min: 0, show: false },
@@ -203,7 +213,7 @@ export function buildChartViews(overview: DataAssetOverview) {
   };
 
   const usage: ChartView = {
-    summary: `当前范围共记录 ${formatCount(overview.kpis.serviceCallCount)} 次成功数据调用。`,
+    summary: `当前空间累计记录 ${formatCount(overview.kpis.serviceCallCount)} 次成功数据调用。`,
     option: {
       grid: { left: 42, right: 42, top: 20, bottom: 34 },
       xAxis: {

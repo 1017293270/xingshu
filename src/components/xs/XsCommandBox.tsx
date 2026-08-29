@@ -133,7 +133,6 @@ export function XsCommandBox({
           <XsCommandModelSelect
             value={modelMode}
             onChange={onModelModeChange}
-            capabilitiesOnly={modelMode !== "agent"}
           />
         ) : null}
         <div className="xs-command-box__actions">

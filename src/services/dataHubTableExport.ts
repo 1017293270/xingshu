@@ -1,4 +1,4 @@
-import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
+import { formatDataHubColumnTitle, formatDataHubTableTitle } from "@/services/dataHubFormat";
 import type { DataHubTableResult } from "@/types/dataHub";
 
 export function formatDataHubTableCell(value: unknown): string {
@@ -34,7 +34,7 @@ function escapeCsvCell(value: unknown) {
 export function buildDataHubTablesCsv(tables: DataHubTableResult[]) {
   return tables
     .map((table, index) => {
-      const title = table.groupLabel || `结果表 ${table.tableIndex !== undefined ? table.tableIndex + 1 : index + 1}`;
+      const title = formatDataHubTableTitle(table, index);
       const header = table.columns
         .map((column) => escapeCsvCell(formatDataHubColumnTitle(column.title, column.key)))
         .join(",");

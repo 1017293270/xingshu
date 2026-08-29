@@ -75,24 +75,24 @@ export function DraftLibraryView() {
   const handleCreateDraft = () => {
     if (usableTemplateCount === 0) {
       setOperationTone("warning");
-      setOperationStatus("还没有可用模板，请先在模板库上传 DOCX。");
+      setOperationStatus("还没有可用结构，请先上传并发布结构 DOCX。");
       return;
     }
     navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH, {
       state: {
-        notice: "选择一个模板，进入详情后点击“按模板新建草稿”。",
+        notice: "选择已发布结构创建草稿，内容方案在草稿中上传并确认。",
         noticeTone: "info"
       }
     });
   };
 
   return (
-    <section className="official-document-view" aria-label="公文草稿箱">
+    <section className="official-document-view" aria-label="报告草稿箱">
       <OfficialDocumentAppActions>
         <Button type="primary" icon={<Plus size={16} />} onClick={handleCreateDraft}>新建草稿</Button>
       </OfficialDocumentAppActions>
 
-      <OfficialDocumentViewHead description="草稿继承创建时的模板版本。正文有误时直接在草稿里改。" />
+      <OfficialDocumentViewHead description="新草稿先绑定已发布结构；内容方案在草稿中上传、确认并冻结。" />
 
       {operationStatus ? (
         <XsStatusBar
@@ -105,12 +105,12 @@ export function DraftLibraryView() {
       <XsAsyncPanel
         status={status}
         empty={drafts.length === 0}
-        emptyTitle="还没有公文草稿"
-        emptyDescription="从可用模板创建第一份草稿。"
-        emptyActionLabel="去模板库"
+        emptyTitle="还没有报告草稿"
+        emptyDescription="选择已发布结构创建第一份草稿，再在草稿中配置内容方案。"
+        emptyActionLabel="去结构模板"
         onEmptyAction={() => navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH)}
         errorTitle="草稿箱不可用"
-        error={query.error instanceof Error ? query.error.message : "无法加载公文草稿。"}
+        error={query.error instanceof Error ? query.error.message : "无法加载报告草稿。"}
         onRetry={() => void query.refetch()}
         loadingVariant="rows"
         contentKey={query.dataUpdatedAt}
@@ -137,7 +137,7 @@ export function DraftLibraryView() {
           />
           {visibleDrafts.length ? (
             <OfficialDocumentList
-              ariaLabel="公文草稿列表"
+              ariaLabel="报告草稿列表"
               columns={draftColumns}
               gridTemplate={DRAFT_GRID}
             >

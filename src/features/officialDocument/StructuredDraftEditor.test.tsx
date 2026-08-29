@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as officialDocumentService from "@/services/officialDocumentService";
 import { setReducedMotion } from "@/test/setup";
 import type { OfficialDocumentDraft, OfficialDocumentStructureNode } from "@/types/officialDocument";
 import { OfficialDocumentAppShell } from "./OfficialDocumentAppShell";
-import { StructuredDraftEditor } from "./StructuredDraftEditor";
+import { StructuredDraftEditor, type StructuredDraftEditorHandle } from "./StructuredDraftEditor";
 
 const draft: OfficialDocumentDraft = {
   id: "draft-1",
@@ -124,7 +125,7 @@ describe("StructuredDraftEditor", () => {
     });
     expect(screen.getByDisplayValue("原正文")).toBeInTheDocument();
     expect(screen.getByText("已保存").closest(".structured-draft-editor__canvas-head")).not.toBeNull();
-    expect(screen.getByLabelText("结构化公文编辑器").querySelector(":scope > .ant-tag")).toBeNull();
+    expect(screen.getByLabelText("结构化报告编辑器").querySelector(":scope > .ant-tag")).toBeNull();
 
     fireEvent.change(screen.getByLabelText("正文节点 1"), { target: { value: "更新后的正文" } });
     await act(async () => {
@@ -138,6 +139,121 @@ describe("StructuredDraftEditor", () => {
       blocks: [expect.objectContaining({ id: "body-1", order: 0, text: "更新后的正文" })]
     }));
     expect(screen.getByText("已保存")).toBeInTheDocument();
+  });
+
+  it("turns assistant markdown headings into template-styled structure nodes", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: []
+    });
+    const save = vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({ revision: 2, fixedValues: input.fixedValues, blocks: input.blocks })
+    );
+    const structuredNodes: OfficialDocumentStructureNode[] = [
+      ...nodes,
+      {
+        id: "paragraph:2",
+        order: 3,
+        paragraphIndex: 2,
+        variantId: "heading-1-main",
+        role: "HEADING_1",
+        roleLabel: "一级标题",
+        preview: "一级标题",
+        editable: true,
+        dataBinding: false,
+        required: false,
+        styleSummary: []
+      },
+      {
+        id: "paragraph:3",
+        order: 4,
+        paragraphIndex: 3,
+        variantId: "heading-2-main",
+        role: "HEADING_2",
+        roleLabel: "二级标题",
+        preview: "二级标题",
+        editable: true,
+        dataBinding: false,
+        required: false,
+        styleSummary: []
+      },
+      {
+        id: "paragraph:4",
+        order: 5,
+        paragraphIndex: 4,
+        endParagraphIndex: 20,
+        slotType: "BODY_REGION",
+        variantId: "body-region-main",
+        role: "BODY",
+        roleLabel: "正文区域",
+        preview: "正文区域",
+        editable: true,
+        dataBinding: false,
+        required: false,
+        styleSummary: []
+      }
+    ];
+    const ref = createRef<StructuredDraftEditorHandle>();
+
+    render(<StructuredDraftEditor ref={ref} draft={draft} templateNodes={structuredNodes} onStatus={vi.fn()} />);
+    await screen.findByText("已保存");
+    act(() => {
+      expect(ref.current?.appendText("[[XS_SECTION:section-1]]\n# 完整章节\n\n正文内容")).toBe(0);
+      expect(ref.current?.appendText("# 一级标题\n\n## 二级标题\n\n正文内容")).toBe(3);
+    });
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith("draft-1", expect.objectContaining({
+        blocks: [
+          expect.objectContaining({ role: "HEADING_1", variantId: "heading-1-main", text: "一级标题" }),
+          expect.objectContaining({ role: "HEADING_2", variantId: "heading-2-main", text: "二级标题" }),
+          expect.objectContaining({ role: "BODY", variantId: "body-region-main", text: "正文内容" })
+        ]
+      }));
+    });
+  });
+
+  it("normalizes plain numbered headings and body variants before export", async () => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 1,
+      fixedValues: [],
+      blocks: [
+        { id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "（一）重点工作" },
+        { id: "body-2", order: 1, role: "BODY", variantId: "body-main", text: "**1.1 产品能力建设**" },
+        { id: "body-3", order: 2, role: "BODY", variantId: "body-main", text: "正文内容。" }
+      ]
+    });
+    const save = vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(
+      async (_draftId, input) => ({
+        revision: input.expectedRevision + 1,
+        fixedValues: input.fixedValues,
+        blocks: input.blocks
+      })
+    );
+    const structuredNodes: OfficialDocumentStructureNode[] = [
+      ...nodes,
+      { ...nodes[1], id: "heading-2", order: 3, role: "HEADING_2", roleLabel: "二级标题", variantId: "heading-2-main" },
+      { ...nodes[1], id: "heading-3", order: 4, role: "HEADING_3", roleLabel: "三级标题", variantId: "heading-3-main" },
+      {
+        ...nodes[1], id: "body-region", order: 5, paragraphIndex: 4, endParagraphIndex: 20,
+        slotType: "BODY_REGION", variantId: "body-region-main"
+      }
+    ];
+    const ref = createRef<StructuredDraftEditorHandle>();
+
+    render(<StructuredDraftEditor ref={ref} draft={draft} templateNodes={structuredNodes} onStatus={vi.fn()} />);
+    await screen.findByText("已保存");
+    await act(async () => {
+      expect(await ref.current?.normalizeForExport()).toBe(3);
+    });
+
+    const savedBlocks = save.mock.calls.at(-1)?.[1].blocks;
+    expect(savedBlocks).toEqual([
+      expect.objectContaining({ role: "HEADING_2", variantId: "heading-2-main", text: "（一）重点工作" }),
+      expect.objectContaining({ role: "HEADING_3", variantId: "heading-3-main", text: "1.1 产品能力建设" }),
+      expect.objectContaining({ role: "BODY", variantId: "body-region-main", text: "正文内容。" })
+    ]);
   });
 
   it("keeps the save chip in the canvas header and portals PDF preview to the app bar", async () => {
@@ -162,10 +278,10 @@ describe("StructuredDraftEditor", () => {
     expect(screen.getByText("已保存").closest(".structured-draft-editor__canvas-head")).not.toBeNull();
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__bar .official-document-app__actions")).toContainElement(
-        screen.getByRole("button", { name: "PDF 预览" })
+        screen.getByRole("button", { name: "模板 PDF 浏览" })
       );
     });
-    expect(screen.getByLabelText("结构化公文编辑器").querySelector(":scope > .ant-btn")).toBeNull();
+    expect(screen.getByLabelText("结构化报告编辑器").querySelector(":scope > .ant-btn")).toBeNull();
   });
 
   it("asks for a node type before inserting a new block", async () => {

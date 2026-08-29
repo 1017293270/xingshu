@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, Stack } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowSquareOut, FileText, NotePencil, Stack } from "@phosphor-icons/react";
 import {
   createContext,
   useContext,
@@ -13,20 +13,22 @@ import { Link, Outlet, useLocation } from "react-router";
 import "./official-document.css";
 import "./official-document-workspace.css";
 
-export type OfficialDocumentAppStage = "library" | "drafts" | "template" | "draft";
+export type OfficialDocumentAppStage = "compose" | "library" | "drafts" | "template" | "draft";
 
 export type OfficialDocumentAppChrome = {
   stage: OfficialDocumentAppStage;
   context: string;
   contextDetail?: string;
+  contextTo?: string;
 };
 
 export const OFFICIAL_DOCUMENT_TEMPLATES_PATH = "/writing/templates";
 export const OFFICIAL_DOCUMENT_DRAFTS_PATH = "/writing/drafts";
+export const OFFICIAL_DOCUMENT_COMPOSE_PATH = "/writing";
 
 const defaultChrome: OfficialDocumentAppChrome = {
-  stage: "library",
-  context: "模板库"
+  stage: "compose",
+  context: "公文写作"
 };
 
 /* 列表页的页头只说"你在哪一栏"，标题已经和左侧导航一一对应，不再压一行静态说明 */
@@ -37,17 +39,24 @@ const stageEyebrow: Partial<Record<OfficialDocumentAppStage, string>> = {
 
 /** 详情态在页头保留一级返回入口，和左侧导航互为补充。 */
 const stageParent: Partial<Record<OfficialDocumentAppStage, { label: string; to: string }>> = {
-  template: { label: "模板库", to: OFFICIAL_DOCUMENT_TEMPLATES_PATH },
+  template: { label: "结构模板", to: OFFICIAL_DOCUMENT_TEMPLATES_PATH },
   draft: { label: "草稿箱", to: OFFICIAL_DOCUMENT_DRAFTS_PATH }
 };
 
 const navItems = [
   {
+    key: "compose",
+    label: "公文写作",
+    to: OFFICIAL_DOCUMENT_COMPOSE_PATH,
+    icon: NotePencil,
+    matches: (pathname: string) => pathname === OFFICIAL_DOCUMENT_COMPOSE_PATH
+  },
+  {
     key: "templates",
-    label: "模板库",
+    label: "结构模板",
     to: OFFICIAL_DOCUMENT_TEMPLATES_PATH,
     icon: Stack,
-    matches: (pathname: string) => pathname === "/writing" || pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)
+    matches: (pathname: string) => pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)
   },
   {
     key: "drafts",
@@ -101,16 +110,16 @@ export function useOfficialDocumentAppChrome(chrome: OfficialDocumentAppChrome) 
   useEffect(() => {
     if (!setChrome) return;
     setChrome(chrome);
-  }, [chrome.context, chrome.contextDetail, chrome.stage, setChrome]);
+  }, [chrome.context, chrome.contextDetail, chrome.contextTo, chrome.stage, setChrome]);
 }
 
 export function OfficialDocumentAppActions({ children }: { children?: ReactNode }) {
-  const host = useContext(OfficialDocumentAppContext)?.actionsHost;
+  const context = useContext(OfficialDocumentAppContext);
   if (children == null) return null;
-  if (!host) {
+  if (!context) {
     return <div className="official-document-app__actions official-document-app__actions--inline">{children}</div>;
   }
-  return createPortal(children, host);
+  return context.actionsHost ? createPortal(children, context.actionsHost) : null;
 }
 
 export function OfficialDocumentAppShell({ children }: { children: ReactNode }) {
@@ -130,17 +139,17 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
   return (
     <OfficialDocumentAppContext.Provider value={value}>
       <div className="official-document-app">
-        <a className="xs-skip-link" href="#official-document-workspace">跳到公文工作区</a>
+        <a className="xs-skip-link" href="#official-document-workspace">跳到报告工作区</a>
         <aside className="official-document-rail">
           <div className="official-document-rail__brand">
             <img src={logoSource} alt="星数" width={400} height={183} />
             {/* 应用身份只用文字：渐变应用图标属于首页应用卡那一层，和下面的线性导航图标不同体系 */}
             <div className="official-document-rail__app">
-              <h1>公文写作</h1>
-              <p>套模板 · 绑数据 · 出定稿</p>
+              <h1>报告智写</h1>
+              <p>套模板 · 对话成稿 · 出定稿</p>
             </div>
           </div>
-          <nav className="official-document-rail__nav" aria-label="公文写作导航">
+          <nav className="official-document-rail__nav" aria-label="报告智写导航">
             {navItems.map((item) => {
               const active = item.matches(location.pathname);
               const Icon = item.icon;
@@ -165,7 +174,7 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
           </div>
         </aside>
         <div className="official-document-app__main">
-          <header className="official-document-app__bar">
+          <header className="official-document-app__bar" data-stage={chrome.stage}>
             <div className="official-document-app__context">
               {parent || eyebrow ? (
                 <p className="official-document-app__eyebrow">
@@ -178,7 +187,14 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
                   {eyebrow ? <span>{eyebrow}</span> : null}
                 </p>
               ) : null}
-              <p className="official-document-app__context-title">{chrome.context}</p>
+              <p className="official-document-app__context-title">
+                {chrome.contextTo ? (
+                  <Link className="official-document-app__context-link" to={chrome.contextTo} title={chrome.context}>
+                    <span>{chrome.context}</span>
+                    <ArrowSquareOut size={15} aria-hidden="true" />
+                  </Link>
+                ) : chrome.context}
+              </p>
               {chrome.contextDetail ? <small>{chrome.contextDetail}</small> : null}
             </div>
             <div className="official-document-app__actions" ref={setActionsHost} />
@@ -186,7 +202,7 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
           <section
             className="official-document-app__workspace"
             id="official-document-workspace"
-            aria-label="公文写作工作台"
+            aria-label="报告智写工作台"
             data-stage={chrome.stage}
           >
             {children}

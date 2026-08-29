@@ -74,9 +74,9 @@ const recommendedApps: RecommendedApp[] = [
   },
   {
     id: "writing",
-    title: "公文写作",
-    description: "套用上传模板并绑定问数结果",
-    prompt: "从共享模板库创建一份公文",
+    title: "报告智写",
+    description: "套用模板对话成稿并绑定问数结果",
+    prompt: "从共享模板库创建一份报告",
     routeTo: "/writing",
     imageSrc: appWritingIcon,
     imageSource: "xingshu-home-apps-image2-v1",

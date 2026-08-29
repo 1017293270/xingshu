@@ -1,7 +1,7 @@
 import { Button, Form, Input } from "antd";
 import { ChartLineUp, Check, Database, LockKey, Notebook, ShieldCheck, SquaresFour, User } from "@phosphor-icons/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import logo from "@/assets/brand/xingshu-logo-2x.png";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -58,6 +58,7 @@ export function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
   const navigate = useNavigate();
   const location = useLocation();
+  const token = useDataHubAuthStore((state) => state.token);
   const setSession = useDataHubAuthStore((state) => state.setSession);
   const clearAuthState = useDataHubAuthStore((state) => state.clearAuthState);
   const sessionExpired = useDataHubAuthStore((state) => state.sessionExpired);
@@ -148,6 +149,10 @@ export function LoginPage() {
 
   function handleForgotPassword() {
     setStatusMessage("请联系企业管理员重置密码");
+  }
+
+  if (token) {
+    return <Navigate to={returnPath} replace />;
   }
 
   return (

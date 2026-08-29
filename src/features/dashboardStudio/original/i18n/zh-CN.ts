@@ -201,7 +201,7 @@ export const bigScreenText = {
     selected: '已选',
     titles: {
       calmTech: '冷静科技',
-      commandDefault: '默认指挥舱',
+      commandDefault: '星数冰蓝',
       executiveGold: '经营金色',
       growthContrast: '增长对比',
       highContrast: '高对比',

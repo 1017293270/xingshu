@@ -40,7 +40,7 @@ const templateFilters: Array<{ key: TemplateFilter; label: string }> = [
 ];
 
 const templateColumns: OfficialDocumentListColumn[] = [
-  { key: "name", label: "模板" },
+  { key: "name", label: "结构模板" },
   { key: "status", label: "状态" },
   { key: "structure", label: "结构", optional: true },
   { key: "file", label: "文件", optional: true },
@@ -52,7 +52,7 @@ const TEMPLATE_GRID = "minmax(0, 2.4fr) 92px minmax(0, 1.1fr) 88px 112px 18px";
 export function TemplateLibraryView() {
   const navigate = useNavigate();
   const location = useLocation();
-  useOfficialDocumentAppChrome({ stage: "library", context: "模板库" });
+  useOfficialDocumentAppChrome({ stage: "library", context: "结构模板" });
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const { query, status } = useOfficialDocumentWorkspace();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -89,14 +89,14 @@ export function TemplateLibraryView() {
   };
 
   return (
-    <section className="official-document-view" aria-label="公文模板库">
+    <section className="official-document-view" aria-label="结构模板库">
       <OfficialDocumentAppActions>
         <Button type="primary" icon={<UploadSimple size={17} />} onClick={handleUploadClick}>
-          上传 DOCX 模板
+          上传结构 DOCX
         </Button>
       </OfficialDocumentAppActions>
 
-      <OfficialDocumentViewHead description="上传 DOCX 后，结构分析完成即可起草。角色或问数槽位有误时，打开模板直接改。" />
+      <OfficialDocumentViewHead description="上传 DOCX 后解析并发布结构版本，再为该版本上传、确认一个或多个内容方案。示例文字不会进入草稿。" />
 
       {operationStatus ? (
         <XsStatusBar
@@ -109,12 +109,12 @@ export function TemplateLibraryView() {
       <XsAsyncPanel
         status={status}
         empty={templates.length === 0}
-        emptyTitle="还没有可用的公文模板"
-        emptyDescription="上传一份 DOCX，分析完成后即可起草。"
-        emptyActionLabel="上传 DOCX 模板"
+        emptyTitle="还没有可用的结构模板"
+        emptyDescription="上传一份结构 DOCX，分析、校准并发布版本。"
+        emptyActionLabel="上传结构 DOCX"
         onEmptyAction={handleUploadClick}
-        errorTitle="模板库不可用"
-        error={query.error instanceof Error ? query.error.message : "无法加载公文模板。"}
+        errorTitle="结构模板不可用"
+        error={query.error instanceof Error ? query.error.message : "无法加载结构模板。"}
         onRetry={() => void query.refetch()}
         loadingVariant="rows"
         contentKey={query.dataUpdatedAt}
@@ -143,7 +143,7 @@ export function TemplateLibraryView() {
           />
           {visibleTemplates.length ? (
             <OfficialDocumentList
-              ariaLabel="公文模板列表"
+              ariaLabel="结构模板列表"
               columns={templateColumns}
               gridTemplate={TEMPLATE_GRID}
             >
@@ -194,13 +194,13 @@ export function TemplateLibraryView() {
 
       <XsUploadDialog
         open={uploadOpen}
-        title="上传 DOCX 模板"
-        description="上传后自动做安全检查和结构分析，完成即可起草。"
+        title="上传结构 DOCX"
+        description="上传后自动做安全检查和结构分析；示例文字只用于识别结构。"
         accept={[".docx"]}
         acceptMimeTypes={["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}
         maxBytes={25 * 1024 * 1024}
         submitLabel="上传并分析"
-        hint="模板里的角色与问数槽位可在分析完成后调整"
+        hint="结构角色与问数槽位可在发布前校准"
         inputTestId="official-document-template-file"
         onUpload={handleUpload}
         onClose={() => setUploadOpen(false)}

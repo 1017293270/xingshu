@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
 import { formatDashboardMetric, resolveDashboardMetric } from "../../core/dashboardWidgetData";
+import { isLightDashboardSurface, resolveDashboardWidgetStyle } from "../../core/dashboardChartThemes";
 
 const props = defineProps<{ widget: DashboardWidget; binding?: DashboardDataBinding }>();
 
@@ -63,18 +64,20 @@ const trend = computed(() => {
 });
 /* 非时序数据不展示趋势：生成器可显式关闭，避免把排名差值误读为趋势 */
 const showTrendChip = computed(() => props.widget.style.showTrend !== false);
+const style = computed(() => resolveDashboardWidgetStyle(props.widget.style));
+const light = computed(() => isLightDashboardSurface(style.value.background, style.value.color));
 const cardStyle = computed(() => ({
-  backgroundColor: props.widget.style.background ?? "rgba(15, 23, 42, 0.86)",
-  color: props.widget.style.color ?? "#e5f0ff",
-  borderColor: `color-mix(in srgb, ${props.widget.style.accent ?? "#38bdf8"} 34%, transparent)`,
-  borderRadius: props.widget.style.borderRadius ? `${props.widget.style.borderRadius}px` : undefined,
-  "--metric-accent": props.widget.style.accent ?? "#38bdf8",
-  backdropFilter: props.widget.style.backgroundBlur ? `blur(${props.widget.style.backgroundBlur}px)` : undefined
+  backgroundColor: style.value.background ?? "#FFFFFF",
+  color: style.value.color ?? "#294469",
+  borderColor: style.value.borderColor ?? `color-mix(in srgb, ${style.value.accent ?? "#1677FF"} 34%, transparent)`,
+  borderRadius: `${style.value.borderRadius ?? 12}px`,
+  "--metric-accent": style.value.accent ?? "#1677FF",
+  backdropFilter: style.value.backgroundBlur ? `blur(${style.value.backgroundBlur}px)` : undefined
 }));
 </script>
 
 <template>
-  <section class="metric-card-renderer" :style="cardStyle" :aria-busy="loading">
+  <section class="metric-card-renderer" :class="{ 'is-light': light }" :style="cardStyle" :aria-busy="loading">
     <template v-if="loading">
       <div class="metric-card-renderer__skeleton metric-card-renderer__skeleton--title" />
       <div class="metric-card-renderer__skeleton metric-card-renderer__skeleton--value" />
@@ -99,12 +102,13 @@ const cardStyle = computed(() => ({
 </template>
 
 <style scoped>
-.metric-card-renderer { box-sizing:border-box; display:grid; align-content:space-between; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; padding:18px; border:1px solid; border-radius:8px; }
+.metric-card-renderer { box-sizing:border-box; display:grid; align-content:space-between; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; padding:18px; border:1px solid; border-radius:12px; }
+.metric-card-renderer.is-light { box-shadow:0 10px 28px rgba(22, 119, 255, 0.08); }
 .metric-card-renderer p { min-width:0; margin:0; overflow-wrap:anywhere; }
-.metric-card-renderer__label { display:flex; align-items:center; gap:7px; color:color-mix(in srgb,currentColor 72%,transparent); font-size:13px; font-weight:700; text-transform:uppercase; }
+.metric-card-renderer__label { display:flex; align-items:center; gap:7px; color:color-mix(in srgb,currentColor 72%,transparent); font-size:13px; font-weight:600; }
 .metric-card-renderer__label::before { width:3px; height:12px; flex:0 0 auto; border-radius:2px; background:var(--metric-accent); content:""; }
-.metric-card-renderer__value { font-size:34px; font-weight:800; line-height:1.05; }
-.metric-card-renderer__trend { width:fit-content; max-width:100%; padding:4px 8px; border-radius:6px; background:color-mix(in srgb,var(--metric-accent) 18%,transparent); color:var(--metric-accent); font-size:13px; font-weight:700; }
+.metric-card-renderer__value { font-size:34px; font-weight:700; line-height:1.05; }
+.metric-card-renderer__trend { width:fit-content; max-width:100%; padding:4px 8px; border-radius:6px; background:color-mix(in srgb,var(--metric-accent) 18%,transparent); color:var(--metric-accent); font-size:13px; font-weight:600; }
 .metric-card-renderer__trend.is-negative { color:#f87171; }
 .metric-card-renderer__state { color:color-mix(in srgb,currentColor 74%,transparent); font-size:14px; }
 .metric-card-renderer__skeleton { border-radius:6px; background:color-mix(in srgb,currentColor 14%,transparent); }

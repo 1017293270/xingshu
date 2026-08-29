@@ -42,6 +42,7 @@ import { useNow } from "@/components/xs/datahub/useNow";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
+import { copyText } from "@/services/clipboard";
 import { invalidateDataAssetOverview } from "@/services/dataAssetService";
 import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import {
@@ -233,19 +234,6 @@ function stripMarkdownTables(markdown: string) {
     .replace(/(^|\n)(?:[ \t]*\|.*\|[ \t]*\n)+/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-async function copyText(text: string) {
-  const value = text.trim();
-  if (!value) {
-    return false;
-  }
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function citationSourceLabel(citation: DataHubCitationDocument) {
@@ -2002,7 +1990,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           projection={executionProjection}
                           title="智能编排执行"
                           className="analysis-orchestration-panel"
-                          defaultExpanded
+                          defaultExpanded={false}
                           showMainDocumentBlocks
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
