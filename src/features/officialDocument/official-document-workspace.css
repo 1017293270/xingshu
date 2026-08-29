@@ -397,198 +397,6 @@
   gap: 16px;
   padding: 28px 0 16px;
 }
-
-.official-document-compose__conversation {
-  display: flex;
-  min-height: 0;
-  overflow-y: auto;
-  flex-direction: column;
-  gap: 22px;
-  padding: 8px 4px 28px;
-  scroll-padding-bottom: 28px;
-  scrollbar-width: thin;
-}
-
-.official-document-compose__user-turn {
-  display: grid;
-  align-self: flex-end;
-  gap: 6px;
-  max-width: 72%;
-  padding: 11px 15px;
-  border-radius: 18px 18px 4px 18px;
-  background: #f2f3f5;
-}
-
-.official-document-compose__user-turn small {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 5px;
-  overflow: hidden;
-  color: #6b7280;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-compose__user-turn p,
-.official-document-compose__assistant-turn p {
-  margin: 0;
-  color: var(--xs-text);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-/* 多行写作要求必须按用户敲的样子回显，压成一段连排会读不出结构 */
-.official-document-compose__user-turn p {
-  white-space: pre-wrap;
-}
-
-.official-document-compose__turn {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.official-document-compose__assistant-turn {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  align-self: stretch;
-  gap: 10px;
-}
-
-.official-document-compose__assistant-mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  color: var(--xs-primary);
-}
-
-.official-document-compose__assistant-turn > div {
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-  width: min(640px, 100%);
-  max-width: 88%;
-  padding-top: 3px;
-}
-
-.official-document-compose__assistant-turn > div[data-error] p {
-  color: var(--xs-danger-ink);
-}
-
-.official-document-compose__assistant-turn small {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #737373;
-  font-size: 12px;
-}
-
-.official-document-compose__artifact {
-  display: flex;
-  width: min(560px, 100%);
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  margin-top: 5px;
-  padding: 10px 12px;
-  border: 1px solid #e1e6ed;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 38, 74, 0.05);
-}
-
-.official-document-compose__artifact-open {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 12px;
-  padding: 0;
-  color: inherit;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.official-document-compose__artifact-open:focus-visible {
-  border-radius: 10px;
-  outline: 2px solid color-mix(in srgb, var(--xs-primary) 48%, white);
-  outline-offset: 3px;
-}
-
-.official-document-compose__artifact-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  place-items: center;
-  color: var(--xs-primary-2);
-  border-radius: 11px;
-  background: #edf5ff;
-}
-
-.official-document-compose__artifact-copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.official-document-compose__artifact-copy strong,
-.official-document-compose__artifact-copy span,
-.official-document-compose__artifact-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-compose__artifact-copy strong {
-  color: var(--xs-text);
-  font-size: 14px;
-  font-weight: var(--xs-fw-medium);
-}
-
-.official-document-compose__artifact-copy span,
-.official-document-compose__artifact-copy small {
-  color: #7b8798;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.official-document-compose__artifact .ant-btn {
-  flex: none;
-  color: var(--xs-text-2);
-}
-
-.official-document-compose__artifact-save.ant-btn {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  padding: 0;
-  color: #526b8e;
-}
-
-.official-document-compose__artifact-save.ant-btn[data-saved] {
-  color: var(--xs-primary);
-}
-
-.official-document-compose__artifact-status[data-error] {
-  color: var(--xs-danger-ink);
-}
-
-.official-document-compose__spinner {
-  color: var(--xs-primary);
-  animation: official-document-compose-spin 900ms linear infinite;
-}
-
-@keyframes official-document-compose-spin {
-  to { transform: rotate(360deg); }
-}
-
 .official-document-compose__content h2 {
   margin: 0;
   color: #111;
@@ -597,72 +405,6 @@
   font-weight: 400;
   letter-spacing: -0.04em;
   line-height: 1.15;
-}
-
-.official-document-compose__box {
-  position: relative;
-  width: 100%;
-  margin-bottom: 28px;
-  overflow: visible;
-  border: 1px solid #c9c9c9;
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
-  transition:
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.official-document-compose__box:focus-within {
-  border-color: #9ebce3;
-  box-shadow: 0 12px 34px rgba(30, 100, 181, 0.11);
-}
-
-.official-document-compose__box[data-busy] {
-  border-color: #c9d8ed;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__box {
-  min-height: 64px;
-  margin: 0 0 2px;
-  border-radius: 18px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__input textarea {
-  min-height: 62px;
-  max-height: 200px;
-  padding: 19px 58px 15px 54px;
-  font-size: 14px;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__toolbar {
-  position: absolute;
-  inset: auto 0 0;
-  height: 62px;
-  min-height: 62px;
-  padding: 0 12px 0 14px;
-  pointer-events: none;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__toolbar > span {
-  width: 30px;
-  overflow: hidden;
-  font-size: 0;
-  white-space: nowrap;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__toolbar > span b {
-  margin: 0;
-  font-size: 17px;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__toolbar .ant-btn {
-  pointer-events: auto;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__footnote {
-  display: none;
 }
 
 .official-document-compose__content[data-conversation] .official-document-compose__reference {
@@ -725,86 +467,6 @@
 .official-document-compose__reference button:hover:not(:disabled) {
   color: var(--xs-text);
   background: #e9e9e9;
-}
-
-.official-document-compose__input.ant-mentions {
-  display: block;
-  width: 100%;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.official-document-compose__input.ant-mentions:focus,
-.official-document-compose__input.ant-mentions-focused {
-  border: 0;
-  box-shadow: none;
-}
-
-.official-document-compose__input textarea {
-  display: block;
-  width: 100%;
-  min-height: 60px;
-  padding: 18px 26px 6px;
-  color: var(--xs-text);
-  border: 0;
-  outline: 0;
-  box-shadow: none;
-  font-size: 16px;
-  line-height: 1.5;
-  resize: none;
-}
-
-.official-document-compose__input textarea::placeholder {
-  color: #a2afbf;
-}
-
-.official-document-compose__toolbar {
-  display: flex;
-  min-height: 50px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 5px 12px 9px 20px;
-}
-
-.official-document-compose__toolbar > span {
-  color: #666;
-  font-size: 13px;
-}
-
-.official-document-compose__toolbar > span b {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  margin-right: 6px;
-  place-items: center;
-  color: #4b5563;
-  border: 0;
-  border-radius: 50%;
-  background: #fff;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.official-document-compose__toolbar .ant-btn-primary.ant-btn-circle {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  box-shadow: none;
-}
-
-.official-document-compose__footnote {
-  position: absolute;
-  top: calc(100% + 11px);
-  left: 0;
-  width: 100%;
-  margin: 0;
-  color: #8a8a8a;
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: center;
 }
 
 .official-document-compose__mention-option {
@@ -898,73 +560,6 @@
 
 .official-document-compose__mention-option[data-selected] {
   color: var(--xs-primary-2);
-}
-
-.official-document-compose-preview .ant-modal-content {
-  overflow: hidden;
-  padding: 18px 18px 16px;
-  border-radius: 16px;
-}
-
-.official-document-compose-preview .ant-modal-body {
-  margin: 14px -18px -16px;
-  border-top: 1px solid var(--xs-border);
-  background: #eef3f9;
-}
-
-.official-document-compose-preview iframe {
-  display: block;
-  width: 100%;
-  height: min(72vh, 820px);
-  border: 0;
-  background: #fff;
-}
-
-.official-document-compose__progress {
-  display: flex;
-  width: min(620px, 100%);
-  justify-content: center;
-  gap: 22px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.official-document-compose__progress li {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #96a5b8;
-  font-size: var(--xs-fs-caption);
-}
-
-.official-document-compose__progress i {
-  width: 8px;
-  height: 8px;
-  border: 1px solid #b8c5d4;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.official-document-compose__progress li[data-state="complete"] {
-  color: #4f7f70;
-}
-
-.official-document-compose__progress li[data-state="complete"] i {
-  border-color: #6cb69f;
-  background: #6cb69f;
-}
-
-.official-document-compose__progress li[data-state="active"] {
-  color: var(--xs-primary-2);
-  font-weight: var(--xs-fw-medium);
-}
-
-.official-document-compose__progress li[data-state="active"] i {
-  border-color: var(--xs-primary);
-  background: var(--xs-primary);
-  box-shadow: 0 0 0 4px rgba(57, 139, 232, 0.12);
-  animation: xs-datahub-card-breathe 2.2s ease-in-out infinite;
 }
 
 .official-document-compose__empty {
@@ -1449,16 +1044,7 @@
   .official-document-row__caret {
     transition: none;
   }
-
-  .official-document-compose__progress li[data-state="active"] i {
-    animation: none;
-  }
-
-  .official-document-compose__spinner {
-    animation: none;
-  }
 }
-
 /* ---------- 公文写作对话：流式正文窗与消息级操作 ---------- */
 
 /* 一篇公文几千字。生成中给一个限高窗看着它写，完成后收起来给文件卡让位，
@@ -1555,171 +1141,38 @@
   font-size: var(--xs-fs-caption);
 }
 
-/* 默认压到近乎隐形，hover 或聚焦才浮起来；触屏没有 hover，常显 */
-.official-document-compose__turn-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 2px;
-  opacity: 0.42;
-  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
+/* ---------- 公文写作对共享输入盒的少量特化 ---------- */
 
-.official-document-compose__assistant-turn:hover .official-document-compose__turn-actions,
-.official-document-compose__turn-actions:focus-within {
-  opacity: 1;
-}
-
-.official-document-compose__turn-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  color: #6b7280;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-  font-size: var(--xs-fs-caption);
-}
-
-.official-document-compose__turn-actions button:hover:not(:disabled) {
-  color: var(--xs-text);
-  background: #f2f5f9;
-}
-
-.official-document-compose__turn-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.official-document-compose__turn-actions button:focus-visible {
-  outline: 2px solid rgb(22 119 255 / 40%);
-  outline-offset: 1px;
-}
-
-@media (hover: none) {
-  .official-document-compose__turn-actions {
-    opacity: 1;
-  }
-}
-
-.official-document-compose__version {
-  display: inline-block;
-  margin-left: 7px;
-  padding: 1px 6px;
-  color: var(--xs-primary-2);
-  border-radius: 6px;
-  background: #eaf3ff;
-  font-size: 11px;
-  font-weight: var(--xs-fw-medium);
-  vertical-align: 2px;
-}
-
-/* 贴在输入盒正上方居中，只在用户主动上滚脱离时出现 */
-.official-document-compose__scroll-to-bottom.ant-btn {
-  position: absolute;
-  z-index: 4;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  color: var(--xs-text-2);
-  border: 1px solid var(--xs-border);
-  background: #fff;
-  box-shadow: 0 6px 18px rgba(15, 38, 74, 0.12);
-  transform: translateX(-50%);
-  animation: xs-datahub-pop-in 180ms var(--xs-motion-ease-spring) backwards;
-}
-
-.official-document-compose__scroll-to-bottom.ant-btn:hover {
-  color: var(--xs-primary);
-  border-color: #9ebce3;
-}
-
-/* ---------- 公文预览侧栏 ---------- */
-
-.official-document-viewer {
-  display: flex;
-  flex: 0 0 clamp(440px, 46%, 780px);
-  min-width: 0;
-  min-height: 0;
-  margin: 12px 0;
-  overflow: hidden;
-  flex-direction: column;
-  border: 1px solid var(--xs-border);
-  border-radius: 14px;
-  background: var(--xs-surface);
-  box-shadow: 0 12px 34px rgba(15, 38, 74, 0.08);
-  animation: official-document-viewer-in 220ms var(--xs-motion-ease-spring) backwards;
-}
-
-@keyframes official-document-viewer-in {
-  from {
-    opacity: 0;
-    transform: translateX(18px);
-  }
-}
-
-.official-document-viewer__head {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #eef2f7;
-}
-
-.official-document-viewer__icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: none;
+/* “@ 选择参考草稿”提示里的那枚 @ 圆钮 */
+.official-document-compose__box .xs-composer__lead b {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
   place-items: center;
-  color: var(--xs-primary-2);
-  border-radius: 9px;
-  background: #eaf3ff;
+  color: #4b5563;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.official-document-viewer__title {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  gap: 1px;
-}
-
-.official-document-viewer__title strong,
-.official-document-viewer__title small {
+/* 会话态把整句提示压成一枚 @ 圆钮，把那一条带让给单行输入 */
+.official-document-compose__content[data-conversation] .xs-composer__lead {
+  width: 30px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0;
   white-space: nowrap;
 }
 
-.official-document-viewer__title strong {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
+.official-document-compose__content[data-conversation] .xs-composer__lead b {
+  margin: 0;
+  font-size: 17px;
 }
 
-.official-document-viewer__title small {
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-}
-
-.official-document-viewer__actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-}
-
-.official-document-viewer__body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  background: #f4f7fb;
-}
-
-.official-document-viewer__body iframe {
+/* 公文预览侧栏里的 Word 引擎渲染结果与兜底排版 */
+.xs-side-panel__body iframe {
   width: 100%;
   height: 100%;
   flex: 1;
@@ -1749,22 +1202,4 @@
   border: 1px solid var(--xs-border);
   border-radius: 10px;
   background: #fff;
-}
-
-/* 正在浏览的那一版在对话流里标出来 */
-.official-document-compose__artifact[data-active] {
-  border-color: #9ebce3;
-  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%);
-}
-
-/* 窄屏没有分栏的位置：侧栏盖住对话，靠关闭按钮退出 */
-@media (max-width: 1099px) {
-  .official-document-viewer {
-    position: absolute;
-    z-index: 6;
-    inset: 0;
-    flex-basis: auto;
-    margin: 0;
-    border-radius: 0;
-  }
 }

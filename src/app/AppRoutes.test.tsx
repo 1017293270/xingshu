@@ -96,7 +96,7 @@ describe("AppRoutes", () => {
     ["/document-lookup", "从一份企业文档开始", "空白找文档工作区"],
     ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
-    ["/table", "智能制表", "最近制表"],
+    ["/table", "想做一张什么表？", "最近制表"],
     ["/writing", "报告智写", "报告智写工作台"],
     ["/dashboard", "看板广场", "看板广场空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
@@ -397,7 +397,7 @@ describe("AppRoutes", () => {
     });
     expect(screen.getByText("华南")).toBeInTheDocument();
     expect(useUiStore.getState().analysisTurns).toEqual([]);
-    expect(screen.getByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
     expect(streamSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "生成华南区客户销售排行",

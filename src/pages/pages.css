@@ -6,6 +6,7 @@
 }
 
 .xs-shell__main:has(.analysis-page),
+.xs-shell__main:has(.table-session-page),
 .xs-shell__main:has(.history-page) {
   overflow-y: hidden;
   padding-top: 24px;
@@ -24,10 +25,13 @@
   margin: 0 0 18px;
 }
 
-/* 问表会话是一份可以一直往下读的文档，不是定高的 app 外壳：
-   定高会让结果表在矮视口下被裁掉且无法滚动到。 */
-.table-session-page .table-page__status-slot {
-  margin-top: 16px;
+/* 问表会话现在是定高的对话外壳。当年不敢定高是因为内联的结果表会被裁掉且滚不到，
+   现在表在右侧栏里、侧栏自己有 overflow，对话列与侧栏各自滚动，那条理由不再成立。 */
+.table-session-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 44px);
+  min-height: 0;
 }
 
 .history-page__chrome {

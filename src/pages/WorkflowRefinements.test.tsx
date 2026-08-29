@@ -123,7 +123,7 @@ describe("workflow refinements", () => {
     await user.click(screen.getByRole("button", { name: "生成表格" }));
 
     expect(useUiStore.getState().analysisTurns).toEqual([]);
-    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
     expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
     expect(serviceMocks.streamAgentMessage).toHaveBeenCalledWith(
       expect.objectContaining({ content: "生成销售排行", chatMode: "ask_table" }),
@@ -153,7 +153,7 @@ describe("workflow refinements", () => {
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成销售排行");
     await user.click(screen.getByRole("button", { name: "生成表格" }));
 
-    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /继续制表/ })).toBeDisabled();
     expect(screen.getByRole("region", { name: "继续制表" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent("正在生成结果表");
@@ -245,21 +245,13 @@ describe("workflow refinements", () => {
     renderPage(<TablePage />);
     await user.click(await screen.findByRole("link", { name: "打开制表结果：客户销售排行榜表" }));
 
-    expect(await screen.findByRole("heading", { name: "问表智能体", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
     expect(await screen.findByRole("columnheader", { name: "区域" })).toBeInTheDocument();
     expect(screen.getByText("华东")).toBeInTheDocument();
     expect(serviceMocks.streamAgentMessage).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent("已还原 1 张结果表");
     });
-  });
-
-  it("keeps space between the table preview banner and the workbench", () => {
-    const workflowsCss = readFileSync("src/pages/styles/workflows.css", "utf8");
-    const workbenchRule = workflowsCss.match(/\.sheet-workbench\s*\{(?<declarations>[^}]*)\}/)?.groups?.declarations ?? "";
-
-    expect(workbenchRule).toContain("margin: var(--xs-module-gap) 0 0");
-    expect(workbenchRule).not.toContain("1.62fr");
   });
 
   it("keeps the welcome page on the document scrollport instead of creating a second vertical scroller", () => {

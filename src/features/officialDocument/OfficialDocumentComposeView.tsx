@@ -1,5 +1,4 @@
 import {
-  ArrowDown,
   ArrowsClockwise,
   AsteriskSimple,
   CaretDown,
@@ -19,6 +18,16 @@ import { Button, Dropdown, Mentions } from "antd";
 import type { MentionsOptionProps } from "antd/es/mentions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import {
+  XsArtifactCard,
+  XsChatActionButton,
+  XsChatActions,
+  XsChatAssistant,
+  XsChatTurn,
+  XsChatUserBubble,
+  XsComposerBox,
+  XsSidePanel
+} from "@/components/xs/conversation";
 import { XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
@@ -230,15 +239,6 @@ export function OfficialDocumentComposeView() {
       lines: buildOfficialDocumentPreviewLines(viewerState.raw ?? "", viewerState.plan.fixedFields)
     }
     : undefined;
-
-  useEffect(() => {
-    if (!viewerTurnId) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setViewerTurnId("");
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [viewerTurnId]);
 
   const patchTurn = (turnId: string, patch: Partial<ComposeTurnState>) => {
     setTurnStates((current) => (
@@ -535,79 +535,70 @@ export function OfficialDocumentComposeView() {
     const exporting = busyAction?.turnId === turnId && busyAction.kind === "exporting";
 
     return (
-      <article
-        className="official-document-compose__artifact"
-        aria-label="生成的公文文件"
-        data-active={viewerTurnId === turnId || undefined}
-      >
-        <button
-          type="button"
-          className="official-document-compose__artifact-open"
-          aria-label={`浏览 ${state.artifact.title}`}
-          onClick={() => openViewer(turnId)}
-        >
-          <span className="official-document-compose__artifact-icon"><FileText size={24} aria-hidden="true" /></span>
-          <span className="official-document-compose__artifact-copy">
-            <small>{previewing ? "正在渲染…" : state.savedDraft ? "已保存 · 点击浏览" : "临时成稿 · 点击浏览"}</small>
-            <strong>
-              {state.artifact.title}
-              {state.version > 1 ? (
-                <span className="official-document-compose__version">v{state.version}</span>
-              ) : null}
-            </strong>
-            <span>{state.artifact.templateName} · {state.savedDraft ? "已进入草稿箱" : "未保存"}</span>
-          </span>
-        </button>
-        {state.savedDraft ? (
-          <Button
-            className="official-document-compose__artifact-save"
-            type="text"
-            shape="circle"
-            aria-label="打开已保存草稿"
-            title="已保存到草稿箱，点击打开"
-            data-saved
-            icon={<Star size={20} weight="fill" aria-hidden="true" />}
-            onClick={() => navigate(`/writing/drafts/${state.savedDraft!.id}`)}
-          />
-        ) : state.recoveryDraft ? (
-          <Button
-            className="official-document-compose__artifact-save"
-            type="text"
-            shape="circle"
-            aria-label="打开保存失败的草稿"
-            title="草稿已创建，点击继续修复"
-            icon={<Star size={20} aria-hidden="true" />}
-            onClick={() => navigate(`/writing/drafts/${state.recoveryDraft!.id}`)}
-          />
-        ) : (
-          <Button
-            className="official-document-compose__artifact-save"
-            type="text"
-            shape="circle"
-            aria-label="保存到草稿箱"
-            title="保存到草稿箱"
-            loading={saving}
-            icon={<Star size={20} aria-hidden="true" />}
-            onClick={() => void saveGeneratedArtifact(turnId)}
-          />
-        )}
-        <Dropdown
-          trigger={["click"]}
-          menu={{
-            items: (query.data?.capabilities.exportFormats ?? ["DOCX"]).map((format) => ({
-              key: format,
-              label: format === "PDF" ? "下载 PDF" : "下载 Word"
-            })),
-            onClick: ({ key }) => void downloadGeneratedDraft(turnId, key as OfficialDocumentExportFormat)
-          }}
-        >
-          <Button
-            type="text"
-            loading={exporting}
-            icon={<DownloadSimple size={17} aria-hidden="true" />}
-          >下载</Button>
-        </Dropdown>
-      </article>
+      <XsArtifactCard
+        label="生成的公文文件"
+        icon={<FileText size={24} aria-hidden="true" />}
+        eyebrow={previewing ? "正在渲染…" : state.savedDraft ? "已保存 · 点击浏览" : "临时成稿 · 点击浏览"}
+        title={state.artifact.title}
+        badge={state.version > 1 ? `v${state.version}` : undefined}
+        meta={`${state.artifact.templateName} · ${state.savedDraft ? "已进入草稿箱" : "未保存"}`}
+        active={viewerTurnId === turnId}
+        openLabel={`浏览 ${state.artifact.title}`}
+        onOpen={() => openViewer(turnId)}
+        actions={
+          <>
+            {state.savedDraft ? (
+              <Button
+                className="xs-artifact-card__action"
+                type="text"
+                shape="circle"
+                aria-label="打开已保存草稿"
+                title="已保存到草稿箱，点击打开"
+                data-on
+                icon={<Star size={20} weight="fill" aria-hidden="true" />}
+                onClick={() => navigate(`/writing/drafts/${state.savedDraft!.id}`)}
+              />
+            ) : state.recoveryDraft ? (
+              <Button
+                className="xs-artifact-card__action"
+                type="text"
+                shape="circle"
+                aria-label="打开保存失败的草稿"
+                title="草稿已创建，点击继续修复"
+                icon={<Star size={20} aria-hidden="true" />}
+                onClick={() => navigate(`/writing/drafts/${state.recoveryDraft!.id}`)}
+              />
+            ) : (
+              <Button
+                className="xs-artifact-card__action"
+                type="text"
+                shape="circle"
+                aria-label="保存到草稿箱"
+                title="保存到草稿箱"
+                loading={saving}
+                icon={<Star size={20} aria-hidden="true" />}
+                onClick={() => void saveGeneratedArtifact(turnId)}
+              />
+            )}
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: (query.data?.capabilities.exportFormats ?? ["DOCX"]).map((format) => ({
+                  key: format,
+                  label: format === "PDF" ? "下载 PDF" : "下载 Word"
+                })),
+                onClick: ({ key }) => void downloadGeneratedDraft(turnId, key as OfficialDocumentExportFormat)
+              }}
+            >
+              <Button
+                type="text"
+                loading={exporting}
+                icon={<DownloadSimple size={17} aria-hidden="true" />}
+              >下载</Button>
+            </Dropdown>
+          </>
+        }
+      />
     );
   };
 
@@ -626,9 +617,9 @@ export function OfficialDocumentComposeView() {
     const canCopy = Boolean(answer) && !streaming;
 
     return (
-      <div>
+      <>
         {failed ? (
-          <p data-error="">
+          <p>
             <WarningCircle size={15} weight="bold" aria-hidden="true" />
             {message.error || "公文生成失败，请重试。"}
           </p>
@@ -637,7 +628,7 @@ export function OfficialDocumentComposeView() {
         {streaming && !answer ? (
           <>
             <p>正在按参考草稿生成完整公文…</p>
-            <small><CircleNotch className="official-document-compose__spinner" size={15} aria-hidden="true" />正在处理</small>
+            <small><CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />正在处理</small>
           </>
         ) : null}
 
@@ -661,36 +652,36 @@ export function OfficialDocumentComposeView() {
         {state?.artifact ? renderArtifact(message.id, state) : null}
 
         {streaming ? null : (
-          <div className="official-document-compose__turn-actions">
+          <XsChatActions>
             {canCopy ? (
-              <button type="button" aria-label="复制回答" onClick={() => void copyAnswer(message.id, answer)}>
-                <Copy size={14} aria-hidden="true" />复制
-              </button>
+              <XsChatActionButton
+                icon={<Copy size={14} aria-hidden="true" />}
+                label="复制回答"
+                text="复制"
+                onClick={() => void copyAnswer(message.id, answer)}
+              />
             ) : null}
             {state ? (
-              <button
-                type="button"
-                aria-label={failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
+              <XsChatActionButton
+                icon={<ArrowsClockwise size={14} aria-hidden="true" />}
+                label={failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
                 disabled={composerBusy}
                 onClick={() => void regenerate(message.id, state.parseError ? RETRY_HINT : "")}
-              >
-                <ArrowsClockwise size={14} aria-hidden="true" />
-                {failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
-              </button>
+              />
             ) : null}
-          </div>
+          </XsChatActions>
         )}
 
         {state?.status ? (
           <small
-            className="official-document-compose__artifact-status"
+            className="xs-chat__status"
             role="status"
             data-error={state.status.tone === "error" || undefined}
           >
             {state.status.message}
           </small>
         ) : null}
-      </div>
+      </>
     );
   };
 
@@ -722,7 +713,7 @@ export function OfficialDocumentComposeView() {
 
           {conversationVisible ? (
             <section
-              className="official-document-compose__conversation"
+              className="xs-chat"
               aria-label="公文生成对话"
               tabIndex={-1}
               {...conversation.containerProps}
@@ -730,69 +721,56 @@ export function OfficialDocumentComposeView() {
               {messages.map((message) => {
                 const state = turnStates[message.id];
                 return (
-                  <div className="official-document-compose__turn" key={message.id}>
-                    <article className="official-document-compose__user-turn">
-                      {state ? (
-                        <small>
+                  <XsChatTurn key={message.id}>
+                    <XsChatUserBubble
+                      meta={state ? (
+                        <>
                           <FileText size={14} aria-hidden="true" />
                           @{state.reference.draftTitle} · {state.reference.templateName}
-                        </small>
-                      ) : null}
-                      <p>{message.question}</p>
-                    </article>
-                    <article className="official-document-compose__assistant-turn">
-                      <span className="official-document-compose__assistant-mark">
-                        <AsteriskSimple size={20} weight="bold" aria-hidden="true" />
-                      </span>
-                      <div aria-live="polite">{renderAssistantTurn(message)}</div>
-                    </article>
-                  </div>
+                        </>
+                      ) : undefined}
+                    >
+                      {message.question}
+                    </XsChatUserBubble>
+                    <XsChatAssistant error={message.status === "error"}>
+                      {renderAssistantTurn(message)}
+                    </XsChatAssistant>
+                  </XsChatTurn>
                 );
               })}
 
               {pendingSubmission ? (
-                <div className="official-document-compose__turn">
-                  <article className="official-document-compose__user-turn">
+                <XsChatTurn>
+                  <XsChatUserBubble
+                    meta={(
+                      <>
+                        <FileText size={14} aria-hidden="true" />
+                        @{pendingSubmission.draftTitle} · {pendingSubmission.templateName}
+                      </>
+                    )}
+                  >
+                    {pendingSubmission.requirement}
+                  </XsChatUserBubble>
+                  <XsChatAssistant>
+                    <p>正在读取“{pendingSubmission.draftTitle}”的结构与文风…</p>
                     <small>
-                      <FileText size={14} aria-hidden="true" />
-                      @{pendingSubmission.draftTitle} · {pendingSubmission.templateName}
+                      <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
+                      正在处理
                     </small>
-                    <p>{pendingSubmission.requirement}</p>
-                  </article>
-                  <article className="official-document-compose__assistant-turn">
-                    <span className="official-document-compose__assistant-mark">
-                      <AsteriskSimple size={20} weight="bold" aria-hidden="true" />
-                    </span>
-                    <div aria-live="polite">
-                      <p>正在读取“{pendingSubmission.draftTitle}”的结构与文风…</p>
-                      <small>
-                        <CircleNotch className="official-document-compose__spinner" size={15} aria-hidden="true" />
-                        正在处理
-                      </small>
-                    </div>
-                  </article>
-                </div>
+                  </XsChatAssistant>
+                </XsChatTurn>
               ) : null}
             </section>
           ) : null}
 
           {drafts.length ? (
-            <div
+            <XsComposerBox
               className="official-document-compose__box"
-              data-busy={composerBusy || undefined}
-              data-has-reference={Boolean(selectedDraft) || undefined}
-            >
-              {conversationVisible && conversation.showScrollToBottom ? (
-                <Button
-                  className="official-document-compose__scroll-to-bottom"
-                  shape="circle"
-                  aria-label="回到底部"
-                  title="回到底部"
-                  icon={<ArrowDown size={18} weight="bold" />}
-                  onClick={conversation.scrollToBottom}
-                />
-              ) : null}
-              {selectedDraft ? (
+              mode={conversationVisible ? "chat" : "hero"}
+              busy={composerBusy}
+              showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
+              onScrollToBottom={conversation.scrollToBottom}
+              chip={selectedDraft ? (
                 <div className="official-document-compose__reference" aria-label="已选择参考草稿">
                   <FileText size={17} aria-hidden="true" />
                   <span><strong>@{selectedDraft.title}</strong><small>{selectedDraft.templateName}</small></span>
@@ -806,7 +784,27 @@ export function OfficialDocumentComposeView() {
                     }}
                   ><X size={14} aria-hidden="true" /></button>
                 </div>
-              ) : null}
+              ) : undefined}
+              toolbarLead={<><b>@</b> {conversationVisible ? "更换参考草稿" : "选择参考草稿"}</>}
+              toolbarTail={writingBusy ? (
+                <Button
+                  danger
+                  type="text"
+                  icon={<StopCircle size={18} weight="fill" />}
+                  onClick={cancel}
+                >停止</Button>
+              ) : (
+                <Button
+                  type="primary"
+                  shape="circle"
+                  aria-label="生成完整公文"
+                  disabled={composerBusy || !selectedDraft || !value.trim()}
+                  icon={<PaperPlaneTilt size={18} weight="fill" />}
+                  onClick={() => void submit()}
+                />
+              )}
+              footnote="生成结果先保留在当前会话，确认后再保存到草稿箱。"
+            >
               <Mentions
                 className="official-document-compose__input"
                 aria-label="公文写作要求"
@@ -836,28 +834,7 @@ export function OfficialDocumentComposeView() {
                   void submit();
                 }}
               />
-              <div className="official-document-compose__toolbar">
-                <span><b>@</b> {conversationVisible ? "更换参考草稿" : "选择参考草稿"}</span>
-                {writingBusy ? (
-                  <Button
-                    danger
-                    type="text"
-                    icon={<StopCircle size={18} weight="fill" />}
-                    onClick={cancel}
-                  >停止</Button>
-                ) : (
-                  <Button
-                    type="primary"
-                    shape="circle"
-                    aria-label="生成完整公文"
-                    disabled={composerBusy || !selectedDraft || !value.trim()}
-                    icon={<PaperPlaneTilt size={18} weight="fill" />}
-                    onClick={() => void submit()}
-                  />
-                )}
-              </div>
-              <p className="official-document-compose__footnote">生成结果先保留在当前会话，确认后再保存到草稿箱。</p>
-            </div>
+            </XsComposerBox>
           ) : (
             <div className="official-document-compose__empty">
               <FileText size={28} aria-hidden="true" />
@@ -872,21 +849,21 @@ export function OfficialDocumentComposeView() {
       </XsAsyncPanel>
 
       {viewer ? (
-        <aside
-          className="official-document-viewer"
-          aria-label="公文预览"
-        >
-          <header className="official-document-viewer__head">
-            <span className="official-document-viewer__icon"><FileText size={18} aria-hidden="true" /></span>
-            <span className="official-document-viewer__title">
-              <strong title={viewer.state.artifact?.title}>{viewer.state.artifact?.title}</strong>
-              <small>
-                {viewer.state.artifact?.templateName}
-                {viewer.state.version > 1 ? ` · 第 ${viewer.state.version} 版` : ""}
-                {viewer.state.savedDraft ? " · 已进入草稿箱" : " · 未保存"}
-              </small>
-            </span>
-            <div className="official-document-viewer__actions">
+        <XsSidePanel
+          label="公文预览"
+          icon={<FileText size={18} aria-hidden="true" />}
+          title={viewer.state.artifact?.title}
+          titleHint={viewer.state.artifact?.title}
+          meta={(
+            <>
+              {viewer.state.artifact?.templateName}
+              {viewer.state.version > 1 ? ` · 第 ${viewer.state.version} 版` : ""}
+              {viewer.state.savedDraft ? " · 已进入草稿箱" : " · 未保存"}
+            </>
+          )}
+          onClose={() => setViewerTurnId("")}
+          actions={(
+            <>
               {viewer.state.savedDraft ? (
                 <Button
                   size="small"
@@ -918,41 +895,33 @@ export function OfficialDocumentComposeView() {
                   icon={<DownloadSimple size={15} aria-hidden="true" />}
                 >下载</Button>
               </Dropdown>
-              <Button
-                type="text"
-                size="small"
-                aria-label="关闭预览"
-                icon={<X size={16} aria-hidden="true" />}
-                onClick={() => setViewerTurnId("")}
-              />
-            </div>
-          </header>
-          <div className="official-document-viewer__body">
-            {viewer.state.previewUrl ? (
-              <iframe src={viewer.state.previewUrl} title="生成公文 PDF 预览" />
-            ) : viewer.state.previewError ? (
-              <div className="official-document-viewer__fallback">
-                <p className="official-document-compose__parse-note">
-                  <WarningCircle size={14} aria-hidden="true" />
-                  {viewer.state.previewError}
-                </p>
-                <article className="official-document-compose__page">
-                  {viewer.lines.map((line, index) => (
-                    <p className="official-document-line" data-role={line.role} key={`${index}-${line.role}`}>
-                      {line.text}
-                    </p>
-                  ))}
-                </article>
-                <Button size="small" onClick={() => void ensurePreview(viewer.turnId)}>重新渲染</Button>
-              </div>
-            ) : (
-              <p className="official-document-viewer__loading" role="status">
-                <CircleNotch className="official-document-compose__spinner" size={16} aria-hidden="true" />
-                正在用 Word 引擎渲染全文…
+            </>
+          )}
+        >
+          {viewer.state.previewUrl ? (
+            <iframe src={viewer.state.previewUrl} title="生成公文 PDF 预览" />
+          ) : viewer.state.previewError ? (
+            <div className="official-document-viewer__fallback">
+              <p className="official-document-compose__parse-note">
+                <WarningCircle size={14} aria-hidden="true" />
+                {viewer.state.previewError}
               </p>
-            )}
-          </div>
-        </aside>
+              <article className="official-document-compose__page">
+                {viewer.lines.map((line, index) => (
+                  <p className="official-document-line" data-role={line.role} key={`${index}-${line.role}`}>
+                    {line.text}
+                  </p>
+                ))}
+              </article>
+              <Button size="small" onClick={() => void ensurePreview(viewer.turnId)}>重新渲染</Button>
+            </div>
+          ) : (
+            <p className="official-document-viewer__loading" role="status">
+              <CircleNotch className="xs-chat__spinner" size={16} aria-hidden="true" />
+              正在用 Word 引擎渲染全文…
+            </p>
+          )}
+        </XsSidePanel>
       ) : null}
     </section>
   );

@@ -1,9 +1,10 @@
 import { Button, Input } from "antd";
-import { Check, CopySimple, Lightning } from "@phosphor-icons/react";
+import { AsteriskSimple, Check, CopySimple, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { XsComposerBox } from "@/components/xs/conversation";
 import { xsEnterStep } from "@/components/xs/motion";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
@@ -107,67 +108,64 @@ export function TablePage() {
     setSubmissionStatus(`已填入制表示例：${suggestion}`);
   };
 
-  const promptState = promptPulse === "filled" ? "filled" : submissionTone;
-
   return (
     <PageFrame
       title="智能制表"
-      subtitle="用自然语言描述表格结构，问表智能体帮你生成企业表格"
       className="table-page"
       track="data"
+      hideHeader
     >
-      <div className="sheet-workbench">
-        <section className="xs-card sheet-console xs-page-enter" style={xsEnterStep(1)}>
-          <div className="sheet-console__head">
-            <h2>描述制表需求</h2>
-            <p>写清主题、字段与统计口径。生成后进入独立的问表会话，结果表会标注数据源、字段数与行数。</p>
-          </div>
-          <section
-            className="sheet-prompt xs-focus-glow"
-            aria-label="制表需求输入"
-            data-state={promptState}
-          >
-            <Input.TextArea
-              aria-label="制表需求"
-              variant="borderless"
-              autoSize={{ minRows: 3, maxRows: 10 }}
-              placeholder={tablePromptPlaceholder}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onPressEnter={(event) => {
-                if (event.shiftKey) {
-                  return;
-                }
-                event.preventDefault();
-                handleGenerate();
-              }}
-            />
-            <div className="sheet-prompt__bar">
-              <div className="sheet-suggestions" role="group" aria-label="快捷制表示例">
-                <span>试试</span>
-                {tableSuggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => handleUseSuggestion(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-              <span className="sheet-prompt__shortcut" aria-hidden="true">Enter 生成 · Shift + Enter 换行</span>
-              <Button
-                type="primary"
-                icon={<Lightning size={18} weight="fill" aria-hidden="true" />}
-                disabled={!prompt.trim()}
-                onClick={handleGenerate}
-              >
-                生成表格
-              </Button>
-            </div>
-          </section>
-        </section>
-      </div>
+      {/* 入口和会话是同一套对话：这里只是它的空态 */}
+      <section className="table-hero xs-page-enter" aria-label="制表需求输入" style={xsEnterStep(1)}>
+        <header className="table-hero__head">
+          <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
+          <h1>想做一张什么表？</h1>
+        </header>
+        <XsComposerBox
+          className={`table-hero__composer${promptPulse === "filled" ? " table-hero__composer--filled" : ""}`}
+          mode="hero"
+          toolbarLead="Enter 生成 · Shift + Enter 换行"
+          toolbarTail={(
+            <Button
+              type="primary"
+              icon={<PaperPlaneTilt size={17} weight="fill" aria-hidden="true" />}
+              disabled={!prompt.trim()}
+              onClick={handleGenerate}
+            >
+              生成表格
+            </Button>
+          )}
+          footnote="生成后进入独立的问表会话，结果表会标注数据源、字段数与行数。"
+        >
+          <Input.TextArea
+            aria-label="制表需求"
+            variant="borderless"
+            autoSize={{ minRows: 2, maxRows: 10 }}
+            placeholder={tablePromptPlaceholder}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            onPressEnter={(event) => {
+              if (event.shiftKey) {
+                return;
+              }
+              event.preventDefault();
+              handleGenerate();
+            }}
+          />
+        </XsComposerBox>
+        <div className="sheet-suggestions table-hero__suggestions" role="group" aria-label="快捷制表示例">
+          <span>试试</span>
+          {tableSuggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => handleUseSuggestion(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
           tone={submissionTone}

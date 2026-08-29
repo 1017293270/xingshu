@@ -1,0 +1,561 @@
+/* 星数会话层：公文写作与问表共用的对话外壳。
+   这里只放与业务无关的骨架——气泡、助手侧、消息级操作、产物卡、右侧栏、输入盒。
+   任何"公文纸面"或"结果表"专属的排版都不属于这一层，留在各自的功能样式里。 */
+
+/* ---------- 分栏外壳：对话让出右侧给产物本身 ---------- */
+
+.xs-chat-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.xs-chat-shell[data-panel] {
+  position: relative;
+  gap: 16px;
+}
+
+.xs-chat-shell__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/* ---------- 会话流 ---------- */
+
+.xs-chat {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 22px;
+  padding: 8px 4px 28px;
+  scroll-padding-bottom: 28px;
+  scrollbar-width: thin;
+}
+
+.xs-chat__turn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.xs-chat__user {
+  display: grid;
+  align-self: flex-end;
+  gap: 6px;
+  max-width: 72%;
+  padding: 11px 15px;
+  border-radius: 18px 18px 4px 18px;
+  background: #f2f3f5;
+}
+
+.xs-chat__user small {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xs-chat__user p,
+.xs-chat__assistant p {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 多行输入必须按用户敲的样子回显，压成一段连排会读不出结构 */
+.xs-chat__user p {
+  white-space: pre-wrap;
+}
+
+.xs-chat__assistant {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-self: stretch;
+  gap: 10px;
+}
+
+.xs-chat__mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--xs-primary);
+}
+
+.xs-chat__assistant-body {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  width: min(640px, 100%);
+  max-width: 88%;
+  padding-top: 3px;
+}
+
+.xs-chat__assistant-body[data-error] p {
+  color: var(--xs-danger-ink);
+}
+
+.xs-chat__assistant small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #737373;
+  font-size: 12px;
+}
+
+.xs-chat__status[data-error] {
+  color: var(--xs-danger-ink);
+}
+
+.xs-chat__spinner {
+  color: var(--xs-primary);
+  animation: xs-chat-spin 900ms linear infinite;
+}
+
+@keyframes xs-chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 版本 / 计数徽标 */
+.xs-chat__badge {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  color: var(--xs-primary-2);
+  border-radius: 6px;
+  background: #eaf3ff;
+  font-size: 11px;
+  font-weight: var(--xs-fw-medium);
+  vertical-align: 2px;
+}
+
+/* ---------- 消息级操作：默认压到近乎隐形，hover 或聚焦才浮起来 ---------- */
+
+.xs-chat__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+  opacity: 0.42;
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.xs-chat__assistant:hover .xs-chat__actions,
+.xs-chat__actions:focus-within {
+  opacity: 1;
+}
+
+.xs-chat__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: #6b7280;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+}
+
+.xs-chat__actions button:hover:not(:disabled) {
+  color: var(--xs-text);
+  background: #f2f5f9;
+}
+
+.xs-chat__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.xs-chat__actions button:focus-visible {
+  outline: 2px solid rgb(22 119 255 / 40%);
+  outline-offset: 1px;
+}
+
+/* 触屏没有 hover，常显 */
+@media (hover: none) {
+  .xs-chat__actions {
+    opacity: 1;
+  }
+}
+
+/* ---------- 产物卡：对话流里只留一张紧凑卡片，全文/全表在侧栏看 ---------- */
+
+.xs-artifact-card {
+  display: flex;
+  width: min(560px, 100%);
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  padding: 10px 12px;
+  border: 1px solid #e1e6ed;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 38, 74, 0.05);
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+/* 正在浏览的那一张在对话流里标出来 */
+.xs-artifact-card[data-active] {
+  border-color: #9ebce3;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%);
+}
+
+.xs-artifact-card__open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.xs-artifact-card__open:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 48%, white);
+  outline-offset: 3px;
+}
+
+.xs-artifact-card__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  color: var(--xs-primary-2);
+  border-radius: 11px;
+  background: #edf5ff;
+}
+
+.xs-artifact-card__copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.xs-artifact-card__copy strong,
+.xs-artifact-card__copy span,
+.xs-artifact-card__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xs-artifact-card__copy strong {
+  color: var(--xs-text);
+  font-size: 14px;
+  font-weight: var(--xs-fw-medium);
+}
+
+.xs-artifact-card__copy span,
+.xs-artifact-card__copy small {
+  color: #7b8798;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.xs-artifact-card .ant-btn {
+  flex: none;
+  color: var(--xs-text-2);
+}
+
+.xs-artifact-card__action.ant-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #526b8e;
+}
+
+.xs-artifact-card__action.ant-btn[data-on] {
+  color: var(--xs-primary);
+}
+
+/* ---------- 输入盒 ---------- */
+
+.xs-composer {
+  position: relative;
+  width: 100%;
+  margin-bottom: 28px;
+  overflow: visible;
+  border: 1px solid #c9c9c9;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.xs-composer:focus-within {
+  border-color: #9ebce3;
+  box-shadow: 0 12px 34px rgba(30, 100, 181, 0.11);
+}
+
+.xs-composer[data-busy] {
+  border-color: #c9d8ed;
+}
+
+.xs-composer .ant-mentions,
+.xs-composer .ant-input,
+.xs-composer .ant-input-outlined {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.xs-composer .ant-mentions:focus,
+.xs-composer .ant-mentions-focused,
+.xs-composer .ant-input:focus,
+.xs-composer .ant-input:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.xs-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  padding: 18px 26px 6px;
+  color: var(--xs-text);
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  font-size: 16px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.xs-composer textarea::placeholder {
+  color: #a2afbf;
+}
+
+.xs-composer__toolbar {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 12px 9px 20px;
+}
+
+.xs-composer__lead {
+  color: #666;
+  font-size: 13px;
+}
+
+.xs-composer__tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.xs-composer__toolbar .ant-btn-primary.ant-btn-circle {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  box-shadow: none;
+}
+
+.xs-composer__footnote {
+  position: absolute;
+  top: calc(100% + 11px);
+  left: 0;
+  width: 100%;
+  margin: 0;
+  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 会话态：输入盒压矮，工具条浮到底部那一条带上，和单行文本共用 62px */
+.xs-composer[data-mode="chat"] {
+  min-height: 64px;
+  margin: 0 0 2px;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.xs-composer[data-mode="chat"] textarea {
+  min-height: 62px;
+  max-height: 200px;
+  padding: 19px 58px 15px var(--xs-composer-lead, 54px);
+  font-size: 14px;
+}
+
+.xs-composer[data-mode="chat"] .xs-composer__toolbar {
+  position: absolute;
+  inset: auto 0 0;
+  height: 62px;
+  min-height: 62px;
+  padding: 0 12px 0 14px;
+  pointer-events: none;
+}
+
+.xs-composer[data-mode="chat"] .xs-composer__toolbar .ant-btn {
+  pointer-events: auto;
+}
+
+.xs-composer[data-mode="chat"] .xs-composer__footnote {
+  display: none;
+}
+
+/* 贴在输入盒正上方居中，只在用户主动上滚脱离时出现 */
+.xs-composer__scroll-to-bottom.ant-btn {
+  position: absolute;
+  z-index: 4;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  color: var(--xs-text-2);
+  border: 1px solid var(--xs-border);
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 38, 74, 0.12);
+  transform: translateX(-50%);
+  animation: xs-datahub-pop-in 180ms var(--xs-motion-ease-spring) backwards;
+}
+
+.xs-composer__scroll-to-bottom.ant-btn:hover {
+  color: var(--xs-primary);
+  border-color: #9ebce3;
+}
+
+/* ---------- 产物侧栏 ---------- */
+
+.xs-side-panel {
+  display: flex;
+  flex: 0 0 clamp(440px, 46%, 780px);
+  min-width: 0;
+  min-height: 0;
+  margin: 12px 0;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--xs-border);
+  border-radius: 14px;
+  background: var(--xs-surface);
+  box-shadow: 0 12px 34px rgba(15, 38, 74, 0.08);
+  animation: xs-side-panel-in 220ms var(--xs-motion-ease-spring) backwards;
+}
+
+@keyframes xs-side-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+
+.xs-side-panel__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.xs-side-panel__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  color: var(--xs-primary-2);
+  border-radius: 9px;
+  background: #eaf3ff;
+}
+
+.xs-side-panel__title {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.xs-side-panel__title strong,
+.xs-side-panel__title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xs-side-panel__title strong {
+  color: var(--xs-text);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.xs-side-panel__title small {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.xs-side-panel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.xs-side-panel__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: #f4f7fb;
+}
+
+/* 窄屏没有分栏的位置：侧栏盖住对话，靠关闭按钮退出 */
+@media (max-width: 1099px) {
+  .xs-side-panel {
+    position: absolute;
+    z-index: 6;
+    inset: 0;
+    flex-basis: auto;
+    margin: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-chat__actions,
+  .xs-artifact-card,
+  .xs-composer {
+    transition: none;
+  }
+
+  .xs-chat__spinner {
+    animation: none;
+  }
+
+  .xs-side-panel,
+  .xs-composer__scroll-to-bottom.ant-btn {
+    animation: none;
+  }
+}

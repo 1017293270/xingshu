@@ -12,6 +12,8 @@ import type { DataHubTableColumn, DataHubTableResult } from "@/types/dataHub";
 type DataHubResultTableProps = {
   table: DataHubTableResult;
   onStatus?: (message: string) => void;
+  /** 预览行数上限。默认按对话流里的紧凑预览给 20；整块侧栏在看表时可以放宽。 */
+  rowLimit?: number;
 };
 
 const PREVIEW_ROW_LIMIT = 20;
@@ -31,10 +33,14 @@ function isNumericColumn(column: DataHubTableColumn, rows: Record<string, unknow
   return values.every((text) => numericCellPattern.test(text));
 }
 
-export function DataHubResultTable({ table, onStatus }: DataHubResultTableProps) {
+export function DataHubResultTable({
+  table,
+  onStatus,
+  rowLimit = PREVIEW_ROW_LIMIT
+}: DataHubResultTableProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollEdge, setScrollEdge] = useState<"none" | "start" | "end" | "both">("none");
-  const previewRows = table.rows.slice(0, PREVIEW_ROW_LIMIT);
+  const previewRows = table.rows.slice(0, rowLimit);
   const hiddenRowCount = Math.max(0, table.totalRows - previewRows.length);
   const tableTitle = formatDataHubTableTitle(table);
   const numericColumnKeys = new Set(

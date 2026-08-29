@@ -540,3 +540,46 @@ state:
 - 无剩余 P0/P1/P2。
 
 final result: passed
+
+---
+
+## 智能制表：整页换成对话界面（2026-08-29）
+
+implementation screenshot path:
+- 本轮用「静态 HTML harness + 真实 CSS」在浏览器面板内验证，未落盘截图；harness 为临时文件，验证后已删除。
+- 复现：把 `src/pages/styles/workflows.css`、`src/components/xs/conversation/xs-conversation.css`、`tokens.css`、`xs.css`、`page-shell.css`、`pages.css` 链进一个静态页，铺 `.table-chat` / `.table-hero` 结构即可。
+
+viewport:
+- Desktop: 1440 x 900、1920 x 1000、1440 x 760（矮视口专测滚动）、1000 x 800（侧栏覆盖层临界）。
+
+state:
+- `/table` 入口空态（hero + 快捷示例 + 最近制表列表）。
+- `/table/:sessionId` 两轮会话：第 1 轮完成并自动打开结果表侧栏，第 2 轮流式中。
+
+**设计主张**
+- 制表和公文写作现在是同一套对话：`src/components/xs/conversation/` 抽出 `.xs-chat` / `.xs-artifact-card` / `.xs-side-panel` / `.xs-composer` 与对应组件，两个入口共用，公文写作同轮迁移过去，不留第二份会漂移的样式。
+- **结果表移出对话流，进右侧栏**。这一步解掉了 2026-08-18 第二轮留下的死结：当时的注释写「追问框留在文档流末尾：吸底会盖住结果表的行」，只要表内联，固定输入框就一定挡表。表进侧栏后对话列与侧栏各自滚动，输入框终于能常驻底部。
+- 对话流里每张表只留一张结果卡（表名 · 数据源 · 字段数 · 行数），正在浏览的那张用 `data-active` 标出。一轮出表后侧栏自动打开——制表的交付物就是表，不该再多一次点击。
+- 右侧会话栏收进页头的「切换会话」下拉，仍用现成的 `groupTableSessions` 按今天/昨天/近 7 天分组，右侧整块让给表。
+- 推演轨迹保留，只按 640px 对话栏重排：第一行仍是「序号 · 动作 · 用时」，详情落到第二行整行铺开。
+- `/table` 入口改成同一套对话的空态：`想做一张什么表？` + 圆角输入盒 + 快捷示例；`最近制表` 行式数据表整块保留。
+
+**修复的实现缺陷**
+- 定高外壳的旧顾虑（`pages.css` 注释「定高会让结果表在矮视口下被裁掉」）已在 1440x760 实测排除：`.table-session-page` 定高后 `.xs-chat` `scrollHeight 652 > clientHeight 557` 且可滚到底，页面本身不产生第二个滚动条。
+- 轨迹搬进窄栏后 `用时` 被 `detail` 的 `grid-column: 2 / -1` 挤到下一行；改为显式 `grid-row` 定位。
+- 助手侧的流式提示曾同时播报 `progress`，与轨迹最后一条重复；改为固定文案「结果表就绪后会出现在这里」。
+- `DataHubTableResult.tableIndex` 是可选字段，用它当侧栏定位键会让缺失时的多张表撞键；改用数组下标。
+- `DataHubResultTable` 新增可选 `rowLimit`（默认仍是 20，问数页行为不变），侧栏传 100。
+
+**Verification**
+- `npx vitest run`：723 用例，707 通过，16 失败。16 例与改造前完全一致，全部落在本轮未触碰的文件（`TemplateLibraryView` / `DraftLibraryView` / `TemplateDetailView` 的「报告模板库 → 结构模板库」文案改名、datahub 执行面板、history 分页），属并行未提交改动。
+- 新增 10 例：`TableSessionView.test.tsx`（5）+ `XsConversation.test.tsx`（5）。
+- `npx eslint src`：1 error，为既有的 `CloudDocumentPreview.tsx` `react-hooks/immutability`，与本轮无关。
+- `npm run test:visual:typecheck`：通过。
+- `npm run build`：仍因 `vite.config.ts` 的 `server.proxy` 既有类型错误不通过；`src/` 侧报错文件与改造前同一批，本轮新增文件零报错。
+
+**Findings**
+- [P2] 移动端（390）未做有效验证：harness 用固定 232px 侧栏代替真实的 `XsMobileNav`，宽度不具代表性。真机窄屏需在登录后的真实应用里复核。
+- [P2] 端到端手测未做：需要真实 DataHub 后端与企业账号登录，本轮只验证了排版与滚动契约。
+
+final result: passed for 智能制表 module scope（排版与滚动）；端到端与移动端待真实环境复核

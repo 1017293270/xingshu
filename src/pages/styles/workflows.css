@@ -1,139 +1,5 @@
 /* 智能制表 + 智能写作：企业级工作流页面样式 */
 
-/* ---------- 智能制表：需求工作台 ---------- */
-
-.sheet-workbench {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--xs-module-gap);
-  margin: var(--xs-module-gap) 0 0;
-}
-
-.sheet-console {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  padding: 20px 22px 18px;
-}
-
-.sheet-console .sheet-console__head h2 {
-  margin: 0;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-control-lg);
-  font-weight: var(--xs-fw-medium);
-}
-
-.sheet-console .sheet-console__head p {
-  max-width: 66ch;
-  margin: 5px 0 0;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
-  line-height: 1.6;
-}
-
-.sheet-prompt {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-control);
-  background: var(--xs-surface);
-}
-
-.sheet-prompt .ant-input,
-.sheet-prompt textarea.ant-input,
-.sheet-prompt .ant-input-textarea,
-.sheet-prompt .ant-input-outlined {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.sheet-prompt .ant-input {
-  padding: 14px 16px 10px;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-body);
-  line-height: 1.65;
-  resize: none;
-}
-
-.sheet-prompt .ant-input::placeholder {
-  color: #8fa3c0;
-}
-
-.sheet-prompt .ant-input:focus,
-.sheet-prompt .ant-input:focus-within,
-.sheet-prompt textarea.ant-input:focus {
-  box-shadow: none;
-}
-
-/* 动作条：示例在左、快捷键与主按钮在右，输入框不再是一片空白 */
-.sheet-prompt__bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px 14px;
-  padding: 10px 12px 10px 14px;
-  border-top: 1px solid var(--xs-border);
-  background: var(--xs-surface-soft);
-}
-
-.sheet-prompt__shortcut {
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-}
-
-.sheet-prompt .ant-btn {
-  height: 34px;
-  padding: 0 16px;
-  border-radius: var(--xs-radius-small);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
-  transition:
-    transform var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-.sheet-prompt .ant-btn-primary:not(:disabled) {
-  box-shadow: var(--xs-shadow-button);
-}
-
-.sheet-prompt .ant-btn:not(:disabled):active {
-  transform: translateY(1px);
-}
-
-.sheet-prompt[data-state="filled"] {
-  animation: sheet-submit-highlight var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
-}
-
-.sheet-prompt[data-state="streaming"] {
-  animation: sheet-streaming-glow var(--xs-motion-ambient) var(--xs-motion-ease-ambient) infinite;
-}
-
-@keyframes sheet-submit-highlight {
-  from {
-    border-color: var(--xs-primary);
-    box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.16);
-  }
-
-  to {
-    border-color: var(--xs-border);
-    box-shadow: none;
-  }
-}
-
-@keyframes sheet-streaming-glow {
-  0%,
-  100% {
-    border-color: var(--xs-border);
-  }
-
-  50% {
-    border-color: #9fc8ff;
-  }
-}
-
 /* 快捷示例：填进输入框的一句话，所以做成低调的文本按钮而不是彩色标签 */
 .sheet-suggestions {
   display: flex;
@@ -177,28 +43,6 @@
   opacity: 0.6;
 }
 
-/* ---------- 智能制表：结果区 ---------- */
-/* 这一页只有结果表配拥有卡片材质；轨迹、需求、追问框都是纸面上的排版层级 */
-
-.sheet-result {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-.sheet-result__empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
-}
-
-.sheet-result__empty--error {
-  color: var(--xs-danger-ink);
-}
 
 /* 结果表位常驻：空态和加载中都保持一张"空表"的形状，加载动画发生在框里 */
 .table-placeholder {
@@ -293,84 +137,6 @@
 
   to {
     background-position: -200% 0;
-  }
-}
-
-/* 结论排在表之后：表是交付物，文字是脚注 */
-.sheet-result__answer {
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
-  line-height: 1.7;
-}
-
-.sheet-result__answer > :first-child {
-  margin-top: 0;
-}
-
-.sheet-result__answer > :last-child {
-  margin-bottom: 0;
-}
-
-.sheet-result__tables {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-/* 结果表是这一页唯一被"抬起"的对象 */
-.sheet-result .datahub-table-card {
-  box-shadow: var(--xs-shadow-soft);
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll thead {
-  animation: sheet-table-in var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr {
-  animation: sheet-table-in var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(1) {
-  animation-delay: 40ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(2) {
-  animation-delay: 72ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(3) {
-  animation-delay: 104ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(4) {
-  animation-delay: 136ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(5) {
-  animation-delay: 168ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(6) {
-  animation-delay: 200ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(7) {
-  animation-delay: 232ms;
-}
-
-.sheet-result[data-state="done"] .datahub-table-scroll tbody tr:nth-child(n + 8) {
-  animation-delay: var(--xs-motion-stagger-max);
-}
-
-@keyframes sheet-table-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -541,15 +307,6 @@
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sheet-result[data-state="done"] .datahub-table-scroll thead,
-  .sheet-result[data-state="done"] .datahub-table-scroll tbody tr {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .workflow-status-slot {
@@ -831,212 +588,6 @@
   .sheet-list .sheet-row__copy.ant-btn {
     justify-self: start;
     margin: 6px 0 0 44px;
-  }
-}
-
-/* ---------- 问表智能体：独立会话工作台 ---------- */
-/* 工作台是一张纸，不是卡片：左侧已有白色侧边栏，这里不再叠第二根白柱子 */
-
-.table-agent {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--xs-module-gap);
-  margin-top: 22px;
-}
-
-.table-agent__stage {
-  display: grid;
-  align-content: start;
-  min-width: 0;
-}
-
-.table-agent__turns {
-  display: grid;
-  align-content: start;
-  gap: 26px;
-  min-width: 0;
-}
-
-.table-agent__turn {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.table-agent__turn + .table-agent__turn {
-  padding-top: 26px;
-  border-top: 1px solid var(--xs-border);
-}
-
-/* 需求不是聊天气泡：它是这一轮结果表的口径声明，做成带序号的文档抬头 */
-.table-agent__request {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 5px 16px;
-  min-width: 0;
-}
-
-.table-agent__request-body {
-  display: contents;
-}
-
-.table-agent__request-index {
-  grid-column: 1 / -1;
-}
-
-.table-agent__request-index {
-  color: var(--xs-primary-2);
-  font-family: var(--xs-font-mono);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-  letter-spacing: 0.08em;
-}
-
-.table-agent__user {
-  margin: 0;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-control);
-  font-weight: var(--xs-fw-regular);
-  line-height: 1.55;
-}
-
-.table-agent__export.ant-btn {
-  flex: none;
-  height: 32px;
-  padding: 0 13px;
-  border-radius: var(--xs-radius-small);
-  color: var(--xs-interactive-text);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
-}
-
-.table-agent__export.ant-btn:not(:disabled):hover {
-  border-color: var(--xs-primary);
-  background: var(--xs-bg);
-}
-
-/* 追问框留在文档流末尾：吸底会盖住结果表的行，而表才是这一页的交付物 */
-.table-agent__composer {
-  margin: 26px 0 0;
-  background: var(--xs-surface);
-}
-
-/* 会话栏移到右侧：左边已经有一根白色侧边栏，工作台要拿到页面左缘 */
-.table-agent__rail {
-  display: grid;
-  align-content: start;
-  min-width: 0;
-}
-
-/* 会话栏参考 Claude 的做法：按时间分组、每条只占一行、激活态是低饱和中性底，
-   不用品牌蓝色块——那是这一栏之前最"塑料"的地方 */
-.agent-rail {
-  display: grid;
-  gap: 16px;
-}
-
-.agent-rail__group {
-  display: grid;
-  gap: 1px;
-}
-
-.agent-rail .agent-rail__group-label {
-  margin: 0 0 4px;
-  padding: 0 8px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-  letter-spacing: 0.02em;
-}
-
-.agent-rail__item {
-  overflow: hidden;
-  padding: 7px 8px;
-  border-radius: var(--xs-radius-small);
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
-  line-height: 1.45;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition:
-    color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.agent-rail__item:hover {
-  color: var(--xs-text);
-  background: #eef3fa;
-}
-
-.agent-rail__item[data-active="true"] {
-  color: var(--xs-text);
-  background: #e6ecf5;
-  font-weight: var(--xs-fw-bold);
-}
-
-/* 会话栏的加载态就是"什么都不显示"：≤8 条短导航项，
-   闪一块骨架比直接留白更吵，列表就绪后直接出现。 */
-.agent-rail__note {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0;
-  padding: 0 8px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-}
-
-.agent-rail__note > button {
-  padding: 0;
-  border: 0;
-  color: var(--xs-interactive-text);
-  background: transparent;
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-  cursor: pointer;
-}
-
-.agent-rail__note > button:hover {
-  text-decoration: underline;
-}
-
-@media (min-width: 1181px) {
-  .table-agent {
-    grid-template-columns: minmax(0, 1fr) 232px;
-    gap: 28px;
-    align-items: start;
-  }
-
-  /* 会话栏靠一根细分隔线立住，不做成第二张白卡 */
-  .table-agent__rail {
-    position: sticky;
-    top: 8px;
-    max-height: calc(100dvh - 32px);
-    overflow: auto;
-    padding-left: 24px;
-    border-left: 1px solid var(--xs-border);
-  }
-}
-
-@media (max-width: 1180px) {
-  /* 窄屏会话栏退到底部，先看结果表 */
-  .table-agent__rail {
-    padding-top: 18px;
-    border-top: 1px solid var(--xs-border);
-  }
-}
-
-@media (max-width: 900px) {
-  .table-agent__user {
-    font-size: var(--xs-fs-control);
-  }
-
-  .table-agent__request {
-    flex-wrap: wrap;
   }
 }
 
@@ -1384,5 +935,237 @@
 
   .doc-table .ant-btn-text {
     min-width: 44px;
+  }
+}
+
+/* ---------- 智能制表：入口 hero ---------- */
+/* 入口和会话是同一套对话，这里只是它的空态：一句提问 + 一个输入盒 */
+
+.table-hero {
+  display: grid;
+  width: min(760px, 100%);
+  justify-items: center;
+  gap: 22px;
+  margin: 0 auto;
+  padding: clamp(42px, 7vh, 74px) 0 12px;
+}
+
+.table-hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.table-hero__head svg {
+  flex: none;
+  color: var(--xs-primary);
+}
+
+.table-hero .table-hero__head h1 {
+  margin: 0;
+  color: #111;
+  font-family: "Songti SC", STSong, "Noto Serif CJK SC", serif;
+  font-size: clamp(30px, 2.8vw, 40px);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+/* footnote 是绝对定位的，压在盒子下方；这里留出它的高度，别让它贴到快捷示例上 */
+.table-hero__composer {
+  margin-bottom: 16px;
+}
+
+/* 从最近制表复制要求进来时闪一下，告诉用户字进了哪儿 */
+.table-hero__composer--filled {
+  animation: table-hero-filled 260ms var(--xs-motion-ease-out);
+}
+
+@keyframes table-hero-filled {
+  from {
+    border-color: var(--xs-primary);
+    box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.16);
+  }
+}
+
+.table-hero__suggestions {
+  justify-content: center;
+  margin: 0;
+}
+
+.table-page .table-page__status-slot {
+  margin: 12px 0 var(--xs-module-gap);
+}
+
+/* ---------- 问表智能体：对话工作台 ---------- */
+/* 结果表进了右侧栏，追问框才终于能常驻底部——内联时它一定会盖住表的行 */
+
+.table-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 对话本身限宽居中；侧栏打开时整列一起收窄，不做二次缩放 */
+.table-chat .xs-chat-shell__main > * {
+  width: min(840px, 100%);
+  margin-inline: auto;
+}
+
+.table-chat__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid var(--xs-border);
+}
+
+.table-chat__session-switch {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  max-width: 60%;
+  padding: 5px 10px;
+  color: var(--xs-text);
+  border: 0;
+  border-radius: var(--xs-radius-small);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+}
+
+.table-chat__session-switch > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-chat__session-switch:hover,
+.table-chat__session-switch:focus-visible {
+  background: #eef3fa;
+}
+
+.table-chat__session-switch svg {
+  flex: none;
+  color: var(--xs-text-3);
+}
+
+.table-chat__session-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 260px;
+}
+
+.table-chat__session-item > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-chat__session-item[data-active] {
+  color: var(--xs-primary-2);
+  font-weight: var(--xs-fw-bold);
+}
+
+.table-chat__new {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  color: var(--xs-interactive-text);
+  border-radius: var(--xs-radius-small);
+  text-decoration: none;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.table-chat__new:hover {
+  background: #eef3fa;
+}
+
+/* 追问框没有 @ 圆钮，左侧不用给它让位 */
+.table-chat__composer {
+  --xs-composer-lead: 22px;
+}
+
+.table-chat__empty-error {
+  margin: 0;
+  color: var(--xs-danger-ink);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.table-chat .table-page__status-slot {
+  margin: 2px 0 0;
+}
+
+/* 空表框在对话流里不占满宽，跟其他助手内容对齐 */
+.table-chat .xs-chat .table-placeholder {
+  width: 100%;
+  margin: auto 0;
+}
+
+.table-chat__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.table-chat__panel-body .datahub-table-card {
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+  box-shadow: var(--xs-shadow-soft);
+  animation: table-panel-in var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+}
+
+@keyframes table-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* 轨迹搬进 640px 的对话栏：第一行仍是"序号 · 动作 · 用时"，
+   详情落到第二行整行铺开，而不是把用时挤到下一行去 */
+.xs-chat .agent-trace {
+  width: 100%;
+  max-width: 100%;
+}
+
+.xs-chat .agent-trace__step {
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+}
+
+.xs-chat .agent-trace__index,
+.xs-chat .agent-trace__label {
+  grid-row: 1;
+}
+
+.xs-chat .agent-trace__duration {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.xs-chat .agent-trace__detail {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-hero__composer--filled,
+  .table-chat__panel-body .datahub-table-card {
+    animation: none;
   }
 }
