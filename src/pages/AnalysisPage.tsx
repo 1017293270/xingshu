@@ -39,10 +39,12 @@ import {
   DataHubResultTable
 } from "@/components/xs/datahub";
 import { useNow } from "@/components/xs/datahub/useNow";
+import { XsClarifyCard } from "@/components/xs/conversation";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
-import { streamAgentMessage } from "@/services/agentService";
+import { respondToAgentInteraction, streamAgentMessage } from "@/services/agentService";
 import { copyText } from "@/services/clipboard";
+import { hasPendingClarification } from "@/services/dataHubClarification";
 import { invalidateDataAssetOverview } from "@/services/dataAssetService";
 import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import {
@@ -70,7 +72,7 @@ import {
 import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
-import { useUiStore } from "@/stores/uiStore";
+import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
 import type {
   DataHubAskDataStatus,
@@ -1127,6 +1129,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const cancelAskDataRun = useUiStore((state) => state.cancelAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
+  const resumeAskDataRun = useUiStore((state) => state.resumeAskDataRun);
   const releaseAnalysisTransientBuffers = useUiStore((state) => state.releaseAnalysisTransientBuffers);
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [composerMode, setComposerMode] = useState<DataHubChatMode>(mode);
@@ -1218,6 +1221,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           ]
         : [];
   const lastVisibleTurn = visibleTurns[visibleTurns.length - 1];
+  /* 只有最新一轮可能挂在澄清上；下面的循环本来就要投影每一轮，多投一次不值一提。 */
+  const awaitingClarification = Boolean(
+    isAgentMode && lastVisibleTurn && hasPendingClarification(
+      createDataHubAskTurn(
+        lastVisibleTurn.question,
+        lastVisibleTurn.events,
+        lastVisibleTurn.status,
+        lastVisibleTurn.error,
+        { sessionId: lastVisibleTurn.sessionId, chatId: lastVisibleTurn.chatId }
+      )
+    )
+  );
   const scrollSignature = visibleTurns
     .map((turn) => `${turn.id}:${turn.status}:${turn.events.length}:${turn.error}`)
     .join("|");
@@ -1648,6 +1663,54 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     bindAskDataController(runId, controller);
   };
 
+  /**
+   * 回答一张受控澄清卡。答案打到 interactions/respond，事件继续落回**原来那一轮**——
+   * 后端把选择记成过程事件而不是第二条用户消息，所以这里不能走 streamDataHubQuestion。
+   */
+  const answerClarification = (
+    turn: AnalysisTurnState,
+    interactionId: string | undefined,
+    answer: string
+  ) => {
+    if (!turn.sessionId || !turn.chatId) {
+      setWorkflowStatus("会话身份不完整，无法提交这次确认");
+      return;
+    }
+
+    shouldAutoScrollRef.current = true;
+    setIsScrollToBottomVisible(false);
+    resumeAskDataRun(turn.id);
+    setWorkflowStatus(`已确认：${answer}`);
+
+    const controller = respondToAgentInteraction(
+      {
+        sessionId: turn.sessionId,
+        chatId: turn.chatId,
+        chatMode: "agent",
+        interactionId,
+        answer
+      },
+      {
+        onEvent: (event) => {
+          appendAskDataEvent(turn.id, event);
+          if (event.type === "error" && !event.parentSessionId) {
+            const data = event.data as { message?: string } | string | undefined;
+            failAskDataRun(
+              turn.id,
+              typeof data === "string" ? data : data?.message || "确认提交失败，请重试"
+            );
+          }
+        },
+        onDone: () => {
+          completeAskDataRun(turn.id);
+          void invalidateDataAssetOverview(queryClient, sessionScope);
+        },
+        onError: (error) => failAskDataRun(turn.id, error.message)
+      }
+    );
+    bindAskDataController(turn.id, controller);
+  };
+
   const askDataStatusText = (() => {
     if (isLoadingHistory) {
       return "正在加载历史对话";
@@ -1805,6 +1868,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 : [];
               const visibleAnswerBlocks = [...turnAsk.answerBlocks, ...childAnswerBlocks];
               const hasRenderableResult = Boolean(
+                (isAgentMode && turnAsk.clarifications.length) ||
                 (!isDocumentLookupMode && visibleAnswerBlocks.length) ||
                   (supportsTables && visibleTables.length) ||
                   (supportsCitations && turnAsk.citationDocuments.length) ||
@@ -2067,6 +2131,20 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               ) : null}
                             </div>
                           ) : null}
+                          {isAgentMode && turnAsk.clarifications.length > 0 ? (
+                            <div className="analysis-clarify-stack">
+                              {turnAsk.clarifications.map((clarification, index) => (
+                                <XsClarifyCard
+                                  key={clarification.interactionId || `clarification-${index}`}
+                                  clarification={clarification}
+                                  disabled={displayStatus === "streaming" || isHistoryLoadingTurn}
+                                  onAnswer={(answer) =>
+                                    answerClarification(turn, clarification.interactionId, answer)
+                                  }
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                           {isResultReady && aiChartState.status === "success" ? (
                             <AiChartSuccessCard
                               state={aiChartState}
@@ -2188,7 +2266,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           onChange={setFollowUpDraft}
           onSubmit={handleFollowUp}
           submitOnEnter
-          placeholder={analysisModeMeta[composerMode].placeholder}
+          placeholder={
+            awaitingClarification
+              ? "选择上面的选项，或直接说明你的情况…"
+              : analysisModeMeta[composerMode].placeholder
+          }
           onVoice={() => {
             setWorkflowStatus(voiceInput.state === "recording" ? "正在转写语音" : "正在听取语音");
             voiceInput.toggle();

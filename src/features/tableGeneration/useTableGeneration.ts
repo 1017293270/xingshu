@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { streamAgentMessage } from "@/services/agentService";
+import { respondToAgentInteraction, streamAgentMessage } from "@/services/agentService";
 import { createDataHubAskTurn } from "@/services/dataHubAskDataPresenter";
 import { createDataHubClientId } from "@/services/dataHubAskDataService";
 import { ASK_TABLE_CHAT_MODE, createAskTableSessionId } from "@/services/dataHubAskTable";
@@ -146,6 +146,14 @@ export function useTableGeneration(options: UseTableGenerationOptions = {}) {
     });
   }, []);
 
+  /* 按 chatId 而不是 id 定位：还原出来的轮次 id 来自后端记录，与 chatId 不是同一个值。 */
+  const patchTurnByChatId = useCallback((
+    chatId: string,
+    updater: (current: TableLiveTurn) => TableLiveTurn
+  ) => {
+    setTurns((current) => current.map((item) => (item.chatId === chatId ? updater(item) : item)));
+  }, []);
+
   const stop = useCallback(() => {
     generationIdRef.current += 1;
     controllerRef.current?.abort();
@@ -246,6 +254,77 @@ export function useTableGeneration(options: UseTableGenerationOptions = {}) {
     return true;
   }, [patchActiveTurn, sessionId]);
 
+  /**
+   * 续跑一次挂起的受控澄清。答案打到 interactions/respond，事件继续追加进**原来那一轮**——
+   * 后端把选择记成过程事件而不是第二条用户消息，所以这里不能新起一轮。
+   */
+  const respondToClarification = useCallback((
+    chatId: string,
+    answer: string,
+    interactionId?: string
+  ) => {
+    const trimmedAnswer = answer.trim();
+    const target = turns.find((item) => item.chatId === chatId);
+    if (!trimmedAnswer || !target || !sessionId) {
+      return false;
+    }
+
+    generationIdRef.current += 1;
+    const generationId = generationIdRef.current;
+    controllerRef.current?.abort();
+
+    setErrorMessage("");
+    setStatus("streaming");
+    patchTurnByChatId(chatId, (current) => ({ ...current, status: "streaming", errorMessage: "" }));
+
+    const controller = respondToAgentInteraction(
+      {
+        sessionId,
+        chatId: target.chatId,
+        chatMode: ASK_TABLE_CHAT_MODE,
+        interactionId,
+        answer: trimmedAnswer
+      },
+      {
+        onEvent: (event) => {
+          if (!mountedRef.current || generationId !== generationIdRef.current) {
+            return;
+          }
+
+          patchTurnByChatId(chatId, (current) => ({ ...current, events: [...current.events, event] }));
+          if (event.type === "error" && !event.parentSessionId) {
+            const message = errorText(event.data as { message?: string } | string | undefined, "澄清续跑失败");
+            setErrorMessage(message);
+            setStatus("error");
+            patchTurnByChatId(chatId, (current) => ({ ...current, status: "error", errorMessage: message }));
+          }
+        },
+        onDone: () => {
+          if (!mountedRef.current || generationId !== generationIdRef.current) {
+            return;
+          }
+
+          setStatus((current) => (current === "streaming" ? "done" : current));
+          patchTurnByChatId(chatId, (current) => (
+            current.status === "streaming" ? { ...current, status: "done" } : current
+          ));
+        },
+        onError: (error) => {
+          if (!mountedRef.current || generationId !== generationIdRef.current) {
+            return;
+          }
+
+          const message = error.message || "澄清提交失败，请稍后重试";
+          setErrorMessage(message);
+          setStatus("error");
+          patchTurnByChatId(chatId, (current) => ({ ...current, status: "error", errorMessage: message }));
+        }
+      }
+    );
+    controllerRef.current = controller;
+    return true;
+  }, [patchTurnByChatId, sessionId, turns]);
+
   const restore = useCallback(async (targetSessionId: string) => {
     generationIdRef.current += 1;
     const generationId = generationIdRef.current;
@@ -332,6 +411,7 @@ export function useTableGeneration(options: UseTableGenerationOptions = {}) {
     turns: projectedTurns,
     sessionId,
     generate,
+    respondToClarification,
     restore,
     stop,
     isStreaming: status === "streaming",

@@ -34,6 +34,8 @@ const knownDataHubEventTypes = new Set([
   "document_url",
   "citation_document",
   "hallucination",
+  "clarification",
+  "clarification_response",
   "done",
   "error"
 ]);

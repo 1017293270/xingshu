@@ -45,6 +45,9 @@ export type DataHubRequestChatMode =
   | DataHubAskTableChatMode
   | DataHubWritingChatMode;
 
+/** 后端只在编排与问表两种模式下受理交互式澄清（ChatService.prepareInteraction）。 */
+export type DataHubInteractionChatMode = "agent" | DataHubAskTableChatMode;
+
 export type DataHubChatRequest = {
   message: string;
   sessionId: string;
@@ -127,6 +130,8 @@ export type DataHubSseEventType =
   | "citation_document"
   | "hallucination"
   | "final_thinking"
+  | "clarification"
+  | "clarification_response"
   | "done"
   | "error";
 
@@ -274,9 +279,36 @@ export type DataHubDoneData = {
   documentResults?: unknown[];
   documentSelectionMode?: "single" | "multiple" | "uncertain" | "none" | string;
   adaptiveTeam?: boolean;
+  /** 这一轮不是跑完了，是挂在 ask_user 上等用户选。 */
+  suspended?: boolean;
   completion?: "complete" | "partial" | "unknown" | string;
   coverage?: DataHubAdaptiveCoverageData;
   sourceResults?: DataHubAdaptiveSourceResult[];
+};
+
+/**
+ * 一项候选答案。原生卡（带 interactionId）只有 label，提交的就是 label；
+ * 历史 XML 卡没有 interactionId，必须带 reply，提交的是 reply。
+ */
+export type DataHubClarificationOption = {
+  label: string;
+  reply?: string;
+};
+
+/** DataHub 受控澄清：Agent 调 ask_user 把自己挂起，等用户从候选里选一个。 */
+export type DataHubClarification = {
+  /** AgentScope 原生 ask_user 工具调用 ID；历史 XML 卡片没有这个字段。 */
+  interactionId?: string;
+  question: string;
+  options: DataHubClarificationOption[];
+  allowFreeText: boolean;
+  /** 用户已提交的答案，由 clarification_response 事件回填。 */
+  selectedAnswer?: string;
+};
+
+export type DataHubClarificationResponse = {
+  interactionId?: string;
+  answer: string;
 };
 
 export type DataHubContentBlock = {
@@ -383,6 +415,8 @@ export type DataHubAskTurn = {
   toolResults: DataHubToolResultData[];
   tableResults: DataHubTableResult[];
   chartResults: unknown[];
+  /** 本轮的受控澄清卡，按到达顺序。 */
+  clarifications: DataHubClarification[];
   done?: DataHubDoneData;
   artifact?: AskArtifactRef;
   error?: {

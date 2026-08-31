@@ -5,7 +5,12 @@ import {
   readDataHubSession
 } from "@/services/dataHubSession";
 import { adaptDataHubStreamEvent } from "@/services/dataHubEventAdapter";
-import type { DataHubChatRequest, DataHubRequestChatMode, DataHubStreamEvent } from "@/types/dataHub";
+import type {
+  DataHubChatRequest,
+  DataHubInteractionChatMode,
+  DataHubRequestChatMode,
+  DataHubStreamEvent
+} from "@/types/dataHub";
 
 export type DataHubAskDataInput = {
   message: string;
@@ -81,11 +86,32 @@ export function parseDataHubSseBlocks(text: string): {
   return { events, isDone, rest: buffer };
 }
 
-export function streamDataHubAskData(
-  input: DataHubAskDataInput,
+export const DATA_HUB_CHAT_STREAM_PATH = "/api/agentScore/chat/completions/stream";
+
+/** 续跑一次挂起的受控澄清。答案回到原来那个 chatId，不产生第二条用户消息。 */
+export const DATA_HUB_INTERACTION_RESPOND_PATH = "/api/agentScore/chat/interactions/respond/stream";
+
+export type DataHubInteractionResponseInput = {
+  sessionId: string;
+  chatId: string;
+  chatMode: DataHubInteractionChatMode;
+  /** 原生 ask_user 工具调用 ID；历史 XML 卡片没有，省略即可。 */
+  interactionId?: string;
+  answer: string;
+};
+
+type DataHubAgentStreamRequest = DataHubChatRequest | DataHubInteractionResponseInput;
+
+/**
+ * 两个流式接口共用同一套 XHR + SSE 机器：正常提问走 completions，
+ * 续跑受控澄清走 interactions/respond，事件形状与鉴权头完全一致。
+ */
+function streamDataHubAgentEndpoint(
+  path: string,
+  request: DataHubAgentStreamRequest,
   handlers: DataHubAskDataStreamHandlers
 ): AbortController {
-  const request = buildDataHubChatRequest(input);
+  const globalSessionId = "globalSessionId" in request ? request.globalSessionId : undefined;
   const session = readDataHubSession();
   const controller = new AbortController();
   const xhr = new XMLHttpRequest();
@@ -95,7 +121,7 @@ export function streamDataHubAskData(
   let isAborted = false;
   let hasTransportError = false;
 
-  xhr.open("POST", joinDataHubUrl("/api/agentScore/chat/completions/stream"));
+  xhr.open("POST", joinDataHubUrl(path));
   xhr.setRequestHeader("Content-Type", "application/json");
   xhr.setRequestHeader("Accept", "text/event-stream");
 
@@ -173,7 +199,7 @@ export function streamDataHubAskData(
         data: { code: xhr.status, message: DATA_HUB_SESSION_EXPIRED_MESSAGE },
         content: { code: xhr.status, message: DATA_HUB_SESSION_EXPIRED_MESSAGE },
         sessionId: request.sessionId,
-        globalSessionId: request.globalSessionId,
+        globalSessionId,
         chatId: request.chatId,
         finished: true
       });
@@ -189,7 +215,7 @@ export function streamDataHubAskData(
         data: { code: xhr.status, message },
         content: { code: xhr.status, message },
         sessionId: request.sessionId,
-        globalSessionId: request.globalSessionId,
+        globalSessionId,
         chatId: request.chatId,
         finished: true
       });
@@ -206,4 +232,33 @@ export function streamDataHubAskData(
 
   xhr.send(JSON.stringify(request));
   return controller;
+}
+
+export function streamDataHubAskData(
+  input: DataHubAskDataInput,
+  handlers: DataHubAskDataStreamHandlers
+): AbortController {
+  return streamDataHubAgentEndpoint(
+    DATA_HUB_CHAT_STREAM_PATH,
+    buildDataHubChatRequest(input),
+    handlers
+  );
+}
+
+export function streamDataHubInteractionResponse(
+  input: DataHubInteractionResponseInput,
+  handlers: DataHubAskDataStreamHandlers
+): AbortController {
+  return streamDataHubAgentEndpoint(
+    DATA_HUB_INTERACTION_RESPOND_PATH,
+    {
+      sessionId: input.sessionId,
+      chatId: input.chatId,
+      chatMode: input.chatMode,
+      // interactionId 缺席代表历史 XML 卡片，后端据此走兼容分支；不要补空串。
+      ...(input.interactionId ? { interactionId: input.interactionId } : {}),
+      answer: input.answer
+    },
+    handlers
+  );
 }

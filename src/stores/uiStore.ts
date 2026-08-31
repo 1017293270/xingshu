@@ -59,6 +59,7 @@ type UiStoreActions = {
   completeAskDataRun: (runId: DataHubAskRunId) => void;
   failAskDataRun: (runId: DataHubAskRunId, message: string) => void;
   cancelAskDataRun: (runId: DataHubAskRunId) => void;
+  resumeAskDataRun: (runId: DataHubAskRunId) => void;
   bindAskDataController: (runId: DataHubAskRunId, controller: AbortController) => void;
   restoreAskDataHistory: (input: {
     sessionId: string;
@@ -331,6 +332,37 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         : { analysisTurns };
     });
     releaseAskDataController(runId, true);
+  },
+  /**
+   * 让一个已经结束的回合重新开始收事件。受控澄清续跑要落回原来那一轮：
+   * 后端把用户的选择记成过程事件，不是第二条用户消息，所以不能新建回合。
+   */
+  resumeAskDataRun: (runId) => {
+    flushPendingAskDataEvents(runId);
+    const previousRunId = get().activeAskDataRunId;
+    if (previousRunId && previousRunId !== runId) {
+      get().cancelAskDataRun(previousRunId);
+    }
+
+    set((state) => {
+      const targetTurn = state.analysisTurns.find((turn) => turn.id === runId);
+      if (!targetTurn || targetTurn.status === "streaming") {
+        return {};
+      }
+
+      return {
+        activeAskDataRunId: runId,
+        askDataStatus: "streaming",
+        askDataError: "",
+        askDataEvents: targetTurn.events,
+        analysisTurns: updateTurn(state.analysisTurns, runId, (turn) => ({
+          ...turn,
+          status: "streaming",
+          endedAt: undefined,
+          error: ""
+        }))
+      };
+    });
   },
   bindAskDataController: (runId, controller) => {
     const targetTurn = get().analysisTurns.find((turn) => turn.id === runId);

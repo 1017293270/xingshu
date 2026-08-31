@@ -1544,6 +1544,12 @@
   flex-direction: column;
 }
 
+/* 一轮里可能连着问好几次；卡与卡之间要看得出是分开的两次确认 */
+.analysis-clarify-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .datahub-table-card__actions {
   display: inline-flex;
   align-items: center;

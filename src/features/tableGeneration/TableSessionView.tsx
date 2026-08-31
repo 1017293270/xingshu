@@ -5,7 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import { XsChatAssistant, XsChatTurn, XsChatUserBubble, XsComposerBox, XsSidePanel } from "@/components/xs/conversation";
+import {
+  XsChatAssistant,
+  XsChatTurn,
+  XsChatUserBubble,
+  XsComposerBox,
+  XsSidePanel
+} from "@/components/xs/conversation";
 import { DataHubResultTable } from "@/components/xs/datahub";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { TablePlaceholder } from "@/features/tableGeneration/TablePlaceholder";
@@ -19,6 +25,7 @@ import {
 } from "@/features/tableGeneration/useTableGeneration";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
+import { hasPendingClarification } from "@/services/dataHubClarification";
 import { exportDataHubTablesCsv } from "@/services/dataHubTableExport";
 import { listRecentTables } from "@/services/tableService";
 import type { DataHubAskDataStatus, DataHubAskTurn } from "@/types/dataHub";
@@ -29,6 +36,7 @@ import "@/pages/styles/workflows.css";
 const PANEL_ROW_LIMIT = 100;
 
 const followUpPlaceholder = "继续追问字段、筛选条件或统计口径…";
+const clarifyPlaceholder = "选择上面的选项，或直接说明你的情况…";
 
 function statusToneFor(
   message: string,
@@ -81,7 +89,9 @@ export function TableSessionView() {
     [generation.turn]
   );
   const tableCount = generation.turns.reduce((count, item) => count + item.tableResults.length, 0);
-  const statusMessage = generation.isRestoring
+  /* 挂在 ask_user 上的这一轮状态是 done，但真正的下一步在用户手里。 */
+  const awaitingClarification = generation.turns.some(hasPendingClarification);
+  const baseStatusMessage = generation.isRestoring
     ? "正在还原当时的结果表"
     : generation.restoreError
       ? `制表记录加载失败：${generation.restoreError}`
@@ -96,6 +106,9 @@ export function TableSessionView() {
               : generation.status === "done"
                 ? "未生成结果表，请补充字段、时间或统计口径"
                 : "问表智能体已就绪，可继续追问";
+  const statusMessage = awaitingClarification && !isBusy
+    ? "问表智能体在等你确认"
+    : baseStatusMessage;
 
   const conversationSignature = generation.turns
     .map((item) => `${turnKeyOf(item)}:${item.status}:${item.reactSteps.length}:${item.tableResults.length}`)
@@ -256,6 +269,9 @@ export function TableSessionView() {
                       busy={isBusy}
                       status={turnStatus?.turnId === key ? turnStatus : undefined}
                       onOpenTable={(position) => setViewerKey(tableViewerKey(item, position))}
+                      onAnswerClarification={(answer, interactionId) => {
+                        generation.respondToClarification(key, answer, interactionId);
+                      }}
                       onCopyAnswer={() => void handleCopyAnswer(item)}
                       onRegenerate={() => generation.generate(item.question, sessionId)}
                       onExport={() => handleExport(item)}
@@ -298,7 +314,7 @@ export function TableSessionView() {
               aria-label="继续追问"
               variant="borderless"
               autoSize={{ minRows: 1, maxRows: 6 }}
-              placeholder={followUpPlaceholder}
+              placeholder={awaitingClarification ? clarifyPlaceholder : followUpPlaceholder}
               value={followUp}
               disabled={isBusy}
               onChange={(event) => setFollowUp(event.target.value)}

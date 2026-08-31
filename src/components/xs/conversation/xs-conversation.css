@@ -295,6 +295,173 @@
   color: var(--xs-primary);
 }
 
+/* ---------- 受控澄清卡 ---------- */
+
+/* Agent 挂在 ask_user 上等用户选。左边一根竖条就是「这一轮卡在你身上」的全部提示——
+   不做成整块色卡：多轮对话里一块底色会把上一轮的正文压下去。 */
+.xs-clarify {
+  width: min(560px, 100%);
+  min-width: 0;
+  margin-top: 5px;
+  padding: 13px 15px 14px;
+  border: 1px solid #e1e6ed;
+  border-left: 3px solid var(--xs-primary);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 38 74 / 5%);
+}
+
+.xs-clarify__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.xs-clarify__head strong {
+  color: var(--xs-primary-2);
+  font-size: 12px;
+  font-weight: var(--xs-fw-medium);
+}
+
+.xs-clarify__head small {
+  flex: none;
+  color: #7b8798;
+  font-size: 11px;
+}
+
+.xs-clarify__question {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.xs-clarify__options {
+  display: grid;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.xs-clarify__options button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e1e6ed;
+  border-radius: 12px;
+  background: #fbfcfe;
+  color: var(--xs-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.xs-clarify__options button:hover:not(:disabled) {
+  border-color: #9ebce3;
+  background: #edf5ff;
+}
+
+.xs-clarify__options button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 48%, white);
+  outline-offset: 2px;
+}
+
+.xs-clarify__options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* 序号只是视觉锚点，没有绑数字快捷键——那要跟输入框抢按键 */
+.xs-clarify__index {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  color: var(--xs-primary-2);
+  border-radius: 7px;
+  background: #edf5ff;
+  font-size: 11px;
+  font-weight: var(--xs-fw-medium);
+}
+
+/* 选项文字可以折行：候选答案最长 80 字，截断会让人选错 */
+.xs-clarify__label {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.xs-clarify__go {
+  flex: none;
+  color: #9fb0c6;
+  opacity: 0;
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.xs-clarify__options button:hover:not(:disabled) .xs-clarify__go,
+.xs-clarify__options button:focus-visible .xs-clarify__go {
+  opacity: 1;
+}
+
+.xs-clarify__custom {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.xs-clarify__custom .ant-btn {
+  flex: none;
+}
+
+/* 已答态：整张收成一行历史记录，竖条转成完成色 */
+.xs-clarify[data-answered] {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 13px;
+  border-left-color: var(--xs-success);
+  box-shadow: none;
+}
+
+.xs-clarify[data-answered] svg {
+  align-self: flex-start;
+  margin-top: 3px;
+  color: var(--xs-success);
+}
+
+.xs-clarify[data-answered] small {
+  flex: none;
+  color: #7b8798;
+  font-size: 12px;
+}
+
+.xs-clarify[data-answered] p {
+  margin: 0;
+  min-width: 0;
+  color: var(--xs-text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* 触摸设备没有 hover，箭头常显，否则选项看不出可点 */
+@media (hover: none) {
+  .xs-clarify__go {
+    opacity: 1;
+  }
+}
+
 /* ---------- 输入盒 ---------- */
 
 .xs-composer {

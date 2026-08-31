@@ -18,6 +18,12 @@ import type {
 } from "@/types/dataHub";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import {
+  appendDataHubClarification,
+  applyDataHubClarificationResponse,
+  normalizeDataHubClarification,
+  normalizeDataHubClarificationResponse
+} from "@/services/dataHubClarification";
+import {
   formatDataHubCitationFragment,
   formatDataHubColumnTitle,
   extractChineseTableName,
@@ -989,7 +995,8 @@ export function createDataHubAskTurn(
     toolCalls: [],
     toolResults: [],
     tableResults: [],
-    chartResults: []
+    chartResults: [],
+    clarifications: []
   };
 
   for (const event of events) {
@@ -1070,6 +1077,21 @@ export function createDataHubAskTurn(
 
     if (event.type === "ask_artifact") {
       turn.artifact = normalizeArtifact(payload);
+    }
+
+    /* 受控澄清：Agent 挂在 ask_user 上等用户选，续跑时后端先回一条 response 回填已选。 */
+    if (event.type === "clarification") {
+      const clarification = normalizeDataHubClarification(payload);
+      if (clarification) {
+        appendDataHubClarification(turn.clarifications, clarification);
+      }
+    }
+
+    if (event.type === "clarification_response") {
+      const response = normalizeDataHubClarificationResponse(payload);
+      if (response) {
+        applyDataHubClarificationResponse(turn.clarifications, response);
+      }
     }
 
     if (event.type === "citation_document") {

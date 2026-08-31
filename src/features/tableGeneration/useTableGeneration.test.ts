@@ -9,11 +9,13 @@ import type { DataHubStreamEvent } from "@/types/dataHub";
 
 const streamMocks = vi.hoisted(() => ({
   streamAgentMessage: vi.fn(),
+  respondToAgentInteraction: vi.fn(),
   loadDataHubHistoryReplay: vi.fn()
 }));
 
 vi.mock("@/services/agentService", () => ({
-  streamAgentMessage: streamMocks.streamAgentMessage
+  streamAgentMessage: streamMocks.streamAgentMessage,
+  respondToAgentInteraction: streamMocks.respondToAgentInteraction
 }));
 
 vi.mock("@/services/historyService", () => ({

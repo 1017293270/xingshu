@@ -182,6 +182,7 @@ describe("dashboardGenerationService", () => {
       infoMessages: [],
       dataSources: [],
       citationDocuments: [],
+      clarifications: [],
       routingEvents: [],
       reactSteps: [],
       toolCalls: [],

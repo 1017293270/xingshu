@@ -24,6 +24,7 @@ function completedTurn(): DataHubAskTurn {
     infoMessages: [],
     dataSources: [],
     citationDocuments: [],
+    clarifications: [],
     routingEvents: [],
     reactSteps: [],
     toolCalls: [],

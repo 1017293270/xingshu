@@ -583,3 +583,42 @@ state:
 - [P2] 端到端手测未做：需要真实 DataHub 后端与企业账号登录，本轮只验证了排版与滚动契约。
 
 final result: passed for 智能制表 module scope（排版与滚动）；端到端与移动端待真实环境复核
+
+## 追问确认卡：接入 DataHub 受控澄清（2026-08-30）
+
+**Viewport / 场景**
+- 静态 harness（`.xs-chat__assistant` 内嵌卡）三态：待答态纯选项、待答态含补充输入 + 长选项文案、已答态历史回放。
+- 容器宽度 255 / 528 / 560（上限）三档 —— 见下方 Findings，本轮无法按视口宽度截图。
+
+**设计主张**
+- 卡不做整块色卡，只在左边留一根 3px 品牌蓝竖条。多轮对话里一块底色会把上一轮的正文压下去；竖条足够说明「这一轮卡在你身上」，且和 `.xs-artifact-card` 是同一套白底 / `#e1e6ed` 边 / 14px 圆角 / 低阴影。
+- 选项是 `<button>` 而不是 radio。点一下即提交、没有「先选后确认」这一步，radio 的语义会让读屏用户以为还要再按一次。序号只作视觉锚点，不绑数字快捷键——那要跟输入框抢按键。
+- 已答态收成一行 `✓ 已选择 <答案>`，竖条转 `--xs-success`。已选的卡是历史不是控件，未选中的选项一并收掉。历史回放走同一条渲染路径，旧会话打开就是这个样子。
+- 待答态下输入框 placeholder 换成「选择上面的选项，或直接说明你的情况…」，问表页状态条显示「问表智能体在等你确认」，消息级的「重新生成」禁用——重发会把挂起的 `ask_user` 丢掉。
+- 挂起那一轮后端照常推 `done`，所以「本轮未生成结果表」「本次编排未返回可展示的最终结果」两处空态必须为未答卡让路，否则用户看到的是一轮假的空回合。
+
+**契约（照抄 DataHub `wzx/alpha-integration`，不发挥）**
+- `clarification` / `clarification_response` 两个事件；白名单校验、`question ≤240`、`options 1..4`、`label ≤80`、`answer ≤500` 与 `agentExecution.ts` 的 `isClarificationContent` 逐条对齐，多一个键整张作废。
+- 原生卡（带 `interactionId`）选项只允许 `label`，提交 label；历史 XML 卡必须带 `reply`，提交 reply。
+- 回答走 `POST /api/agentScore/chat/interactions/respond/stream`，落回**原来那个 chatId**，不产生第二条用户消息。
+
+**修复的实现缺陷**
+- 已答态答案换行时对勾被 `align-self: center` 甩到卡片中间；改为 `flex-start` + 3px 上边距钉在第一行。
+- 补充输入的 placeholder 原为「都不合适？补充你的理解」，255px 容器下被截断成半句；缩短为「补充你的理解」。
+- 续跑按 `id` 找回合，但还原出来的轮次 `id` 来自后端记录、与 `chatId` 不是同一个值，点选项会静默失效；改为按 `chatId` 定位。
+- `ASK_TABLE_CHAT_MODE` 原本宽化成 `DataHubRequestChatMode`，收窄为 `DataHubAskTableChatMode`，让「只有 agent / ask_table 支持澄清」这条后端约束在类型上成立。
+
+**Verification**
+- `npm test`：747 用例，731 通过，16 失败。失败集合与改造前逐条一致（`TemplateLibraryView` / `DraftLibraryView` / `TemplateDetailView` / datahub 执行面板 / history 分页 / document lookup presenter），全部落在本轮未触碰的文件。
+- 新增 24 例：`dataHubClarification.test.ts`（11）、`XsConversation.test.tsx`（6）、`dataHubAskDataPresenter.test.ts`（2）、`TableSessionView.test.tsx`（2）、`AnalysisClarification.test.tsx`（3）。
+- `npm run lint`：32 problems（1 error / 31 warnings），与改造前逐字一致；那条 error 是既有的 `CloudDocumentPreview.tsx:109`。
+- `tsc -b`：报错文件集合与改造前完全相同（`vite.config.ts` / `viteProxy.test` / `CloudPage.test` / `dataHubKnowledgeService` / `officialDocumentFullDraft.test` / `dataHubAskDataPresenter.ts:552` 的既有 `.find(hasHanScript)` 重载）；本轮新增文件零报错。
+- `npm run test:visual:typecheck`：通过。
+
+**Findings**
+- [P2] 视口宽度截图未按 AGENTS.md 的 1440 / 1672 / 1920 / 390 四档完成：Browser pane 的视口模拟本轮不生效（`resize_window` 报成功但 `window.innerWidth` 始终是 980）。改为直接驱动容器宽度取 255 / 528 / 560 三档验证——卡的布局只取决于容器宽度，宽视口下它恒定停在 560px 上限（与 `.xs-artifact-card` 同宽），但四档视口的整页构图这一轮确实没截到。
+- [P2] 补充输入用的是 antd `Input size="small"` + `Button size="small"`，harness 里没有 antd 样式表，只验证了 flex 行不溢出，真实控件外观未在应用内核对。
+- [P2] 端到端手测未做：需要真实 DataHub 后端与企业账号登录。挂起→点选→续跑→刷新还原这条链路只在 mock 下验证过。
+- [P1→已上报] 公文写作接不了：后端 `ChatService.prepareInteraction` 只放行 `AGENT` 与 `ASK_TABLE`，`writing` 会被 400 拒。卡与解析层已是共享的，后端放开后接上只需加一个调用点。
+
+final result: passed for 受控澄清 module scope（契约、交互、三态排版）；四档视口构图与端到端待真实环境复核

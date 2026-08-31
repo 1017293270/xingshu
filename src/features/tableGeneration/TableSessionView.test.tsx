@@ -11,6 +11,7 @@ import type { DataHubStreamEvent } from "@/types/dataHub";
 const serviceMocks = vi.hoisted(() => ({
   listRecentTables: vi.fn(),
   streamAgentMessage: vi.fn(),
+  respondToAgentInteraction: vi.fn(),
   loadDataHubHistoryReplay: vi.fn()
 }));
 
@@ -19,7 +20,8 @@ vi.mock("@/services/tableService", () => ({
 }));
 
 vi.mock("@/services/agentService", () => ({
-  streamAgentMessage: serviceMocks.streamAgentMessage
+  streamAgentMessage: serviceMocks.streamAgentMessage,
+  respondToAgentInteraction: serviceMocks.respondToAgentInteraction
 }));
 
 vi.mock("@/services/historyService", () => ({
@@ -88,10 +90,58 @@ function replayWithTable(question = "华东区Q1销售排行") {
   };
 }
 
+/** 一轮挂在 ask_user 上：后端推了 clarification 之后照常推 done，状态是 done 但其实在等人。 */
+function replayAwaitingClarification(question = "帮我做一张区域销售表") {
+  const events: DataHubStreamEvent[] = [
+    { type: "text", data: "我先请您确认统计口径。" },
+    {
+      type: "clarification",
+      data: {
+        interactionId: "tool-call-1",
+        question: "区域按哪个口径？",
+        options: [{ label: "客户区域" }, { label: "签约主体区域" }],
+        allowFreeText: false
+      }
+    },
+    { type: "done", data: { suspended: true } }
+  ];
+
+  return {
+    sessionId: SESSION_ID,
+    chatMode: "ask" as const,
+    question,
+    events,
+    turns: [
+      {
+        id: "turn-1",
+        question,
+        sessionId: SESSION_ID,
+        chatId: "chat-1",
+        chatMode: "ask" as const,
+        status: "done" as const,
+        events,
+        error: ""
+      }
+    ]
+  };
+}
+
+function mockRespond(run: (handlers: DataHubAskDataStreamHandlers) => void) {
+  serviceMocks.respondToAgentInteraction.mockImplementation((
+    _input: unknown,
+    handlers: DataHubAskDataStreamHandlers
+  ) => {
+    const controller = new AbortController();
+    run(handlers);
+    return controller;
+  });
+}
+
 describe("TableSessionView", () => {
   beforeEach(() => {
     serviceMocks.listRecentTables.mockReset();
     serviceMocks.streamAgentMessage.mockReset();
+    serviceMocks.respondToAgentInteraction.mockReset();
     serviceMocks.loadDataHubHistoryReplay.mockReset();
     serviceMocks.listRecentTables.mockResolvedValue([]);
     serviceMocks.loadDataHubHistoryReplay.mockResolvedValue({
@@ -205,5 +255,66 @@ describe("TableSessionView", () => {
 
     expect(await screen.findByText("客户销售排行榜表")).toBeInTheDocument();
     expect(screen.getByText("当前会话")).toBeInTheDocument();
+  });
+
+  it("asks instead of reporting an empty turn, and resumes that same turn when an option is picked", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayAwaitingClarification());
+    mockRespond((handlers) => {
+      handlers.onEvent({
+        type: "clarification_response",
+        data: { interactionId: "tool-call-1", answer: "客户区域" }
+      });
+      handlers.onEvent({ type: "text", data: "好的，按客户区域统计。" });
+      handlers.onDone?.();
+    });
+
+    renderSession();
+
+    const card = await screen.findByRole("region", { name: "需要你确认" });
+    expect(within(card).getByText("区域按哪个口径？")).toBeInTheDocument();
+    // 挂起的一轮不是"没出结果"，那句空态必须让路
+    expect(screen.queryByText("未生成结果表，请补充字段、时间或统计口径")).not.toBeInTheDocument();
+    expect(await screen.findByText("问表智能体在等你确认")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "客户区域" }));
+
+    expect(serviceMocks.respondToAgentInteraction).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.respondToAgentInteraction).toHaveBeenCalledWith(
+      {
+        sessionId: SESSION_ID,
+        chatId: "chat-1",
+        chatMode: "ask_table",
+        interactionId: "tool-call-1",
+        answer: "客户区域"
+      },
+      expect.any(Object)
+    );
+    // 续跑落回原来那一轮：答案是过程事件，不是第二条用户消息
+    expect(serviceMocks.streamAgentMessage).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/^第 \d+ 轮$/)).toHaveLength(1);
+
+    await waitFor(() => {
+      expect(screen.getByText("已选择")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "签约主体区域" })).not.toBeInTheDocument();
+    // 澄清前后的两段文字合并成同一个正文块，所以按子串断言续答确实落进了这一轮
+    expect(await screen.findByText(/好的，按客户区域统计。/)).toBeInTheDocument();
+  });
+
+  it("leaves a resolved clarification as read-only history on replay", async () => {
+    const replay = replayAwaitingClarification();
+    replay.turns[0].events = [
+      ...replay.turns[0].events,
+      { type: "clarification_response", data: { interactionId: "tool-call-1", answer: "客户区域" } }
+    ];
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replay);
+
+    renderSession();
+
+    const card = await screen.findByRole("region", { name: "需要你确认" });
+    expect(within(card).getByText("已选择")).toBeInTheDocument();
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText("问表智能体在等你确认")).not.toBeInTheDocument();
   });
 });

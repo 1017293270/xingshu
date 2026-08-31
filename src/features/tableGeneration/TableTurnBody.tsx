@@ -1,8 +1,14 @@
 import { ArrowsClockwise, CircleNotch, Copy, DownloadSimple, Table, WarningCircle } from "@phosphor-icons/react";
-import { XsArtifactCard, XsChatActionButton, XsChatActions } from "@/components/xs/conversation";
+import {
+  XsArtifactCard,
+  XsChatActionButton,
+  XsChatActions,
+  XsClarifyCard
+} from "@/components/xs/conversation";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
 import { buildTableAgentTrace } from "@/features/tableGeneration/agentTrace";
+import { hasPendingClarification } from "@/services/dataHubClarification";
 import { formatDataHubTableTitle } from "@/services/dataHubFormat";
 import type { DataHubAskTurn } from "@/types/dataHub";
 
@@ -22,6 +28,8 @@ type TableTurnBodyProps = {
   busy: boolean;
   status?: TableTurnStatus;
   onOpenTable: (position: number) => void;
+  /** 回答一张受控澄清卡；会续跑这一轮，而不是新起一轮。 */
+  onAnswerClarification: (answer: string, interactionId?: string) => void;
   onCopyAnswer: () => void;
   onRegenerate: () => void;
   onExport: () => void;
@@ -48,6 +56,7 @@ export function TableTurnBody({
   busy,
   status,
   onOpenTable,
+  onAnswerClarification,
   onCopyAnswer,
   onRegenerate,
   onExport
@@ -60,6 +69,8 @@ export function TableTurnBody({
   const isError = turn.status === "error";
   const isCancelled = turn.status === "cancelled";
   const canExport = hasTables && (isDone || isCancelled);
+  /* 挂在 ask_user 上的这一轮虽然是 done，但其实在等用户选，不能按"跑完了"处理。 */
+  const pendingClarification = hasPendingClarification(turn);
   const retryLabel = isError ? "重试" : isCancelled ? "继续生成" : "重新生成";
 
   return (
@@ -93,6 +104,15 @@ export function TableTurnBody({
 
       {answer && (isDone || isCancelled) ? <XsSafeMarkdown content={answer} /> : null}
 
+      {turn.clarifications.map((clarification, index) => (
+        <XsClarifyCard
+          key={clarification.interactionId || `clarification-${index}`}
+          clarification={clarification}
+          disabled={busy}
+          onAnswer={(value) => onAnswerClarification(value, clarification.interactionId)}
+        />
+      ))}
+
       {turn.tableResults.map((table, position) => {
         const title = formatDataHubTableTitle(table);
         return (
@@ -111,7 +131,9 @@ export function TableTurnBody({
         );
       })}
 
-      {isDone && !hasTables ? <p>未生成结果表，请补充字段、时间或统计口径</p> : null}
+      {isDone && !hasTables && !pendingClarification ? (
+        <p>未生成结果表，请补充字段、时间或统计口径</p>
+      ) : null}
 
       {isStreaming ? null : (
         <XsChatActions>
@@ -126,7 +148,7 @@ export function TableTurnBody({
           <XsChatActionButton
             icon={<ArrowsClockwise size={14} aria-hidden="true" />}
             label={retryLabel}
-            disabled={busy}
+            disabled={busy || pendingClarification}
             onClick={onRegenerate}
           />
           {canExport ? (

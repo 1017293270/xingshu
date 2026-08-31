@@ -1,9 +1,9 @@
-import type { DataHubChatSession, DataHubRequestChatMode } from "@/types/dataHub";
+import type { DataHubAskTableChatMode, DataHubChatSession } from "@/types/dataHub";
 import type { TableTemplate } from "@/types/table";
 
 /** 与 DataHub 问表页一致：会话表不存模式，用 sessionId 前缀做总记录隔离。 */
 export const ASK_TABLE_SESSION_PREFIX = "ask-table-";
-export const ASK_TABLE_CHAT_MODE: DataHubRequestChatMode = "ask_table";
+export const ASK_TABLE_CHAT_MODE: DataHubAskTableChatMode = "ask_table";
 
 const RECENT_ASK_TABLE_LIMIT = 8;
 

@@ -17,6 +17,7 @@ function createTurn(overrides: Partial<DataHubAskTurn> = {}): DataHubAskTurn {
     infoMessages: [],
     dataSources: [],
     citationDocuments: [],
+    clarifications: [],
     routingEvents: [],
     reactSteps: [],
     toolCalls: [],

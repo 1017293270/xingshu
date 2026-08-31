@@ -520,4 +520,52 @@ describe("dataHubAskDataPresenter", () => {
 
     expect(turn.assistantContent).toBe("该合同设备清单共 12 项。");
   });
+  it("projects a controlled clarification and the answer that resumed it", () => {
+    const turn = createDataHubAskTurn(
+      "帮我做一张区域销售表",
+      [
+        { type: "text", data: "我先请您确认统计口径。" },
+        {
+          type: "clarification",
+          data: {
+            interactionId: "tool-call-1",
+            question: "区域按哪个口径？",
+            options: [{ label: "客户区域" }, { label: "签约主体区域" }],
+            allowFreeText: true
+          }
+        },
+        // 挂起也会推 done：这一轮状态是 done，但真正的下一步在用户手里。
+        { type: "done", data: { suspended: true } },
+        { type: "clarification_response", data: { interactionId: "tool-call-1", answer: "客户区域" } },
+        { type: "text", data: "好的，按客户区域统计。" }
+      ],
+      "done"
+    );
+
+    expect(turn.clarifications).toHaveLength(1);
+    expect(turn.clarifications[0].question).toBe("区域按哪个口径？");
+    expect(turn.clarifications[0].selectedAnswer).toBe("客户区域");
+    expect(turn.done?.suspended).toBe(true);
+    expect(turn.error).toBeUndefined();
+  });
+
+  it("ignores a clarification raised inside a subagent session", () => {
+    const turn = createDataHubAskTurn(
+      "帮我做一张区域销售表",
+      [
+        {
+          type: "clarification",
+          parentSessionId: "root-session",
+          data: {
+            question: "区域按哪个口径？",
+            options: [{ label: "客户区域", reply: "按客户所属区域统计" }],
+            allowFreeText: true
+          }
+        }
+      ],
+      "done"
+    );
+
+    expect(turn.clarifications).toEqual([]);
+  });
 });
