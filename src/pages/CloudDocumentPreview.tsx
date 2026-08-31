@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight, DownloadSimple, FileText, X } from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretLeft, CaretRight, DownloadSimple, FileText, X } from "@phosphor-icons/react";
 import { Button, Spin } from "antd";
 import { useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -17,6 +17,8 @@ type CloudDocumentPreviewProps = {
   error?: string;
   onSelect: (document: DataHubKnowledgeDocument) => void;
   onClose: () => void;
+  /** 模态内的次级动作：在新标签打开当前文档原文。 */
+  onOpenExternal?: (document: DataHubKnowledgeDocument) => void;
 };
 
 const focusableSelector = [
@@ -66,7 +68,8 @@ export function CloudDocumentPreview({
   loading,
   error,
   onSelect,
-  onClose
+  onClose,
+  onOpenExternal
 }: CloudDocumentPreviewProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement | null>(null);
@@ -240,6 +243,16 @@ export function CloudDocumentPreview({
                   <DownloadSimple size={16} aria-hidden="true" />
                   下载
                 </a>
+              ) : null}
+              {onOpenExternal ? (
+                <button
+                  type="button"
+                  className="cloud-preview__download"
+                  onClick={() => onOpenExternal(previewDocument)}
+                >
+                  <ArrowSquareOut size={16} aria-hidden="true" />
+                  新标签打开
+                </button>
               ) : null}
               <button
                 ref={closeButtonRef}

@@ -104,3 +104,35 @@ export function getDataHubDocumentLookupResults(
 
   return results;
 }
+
+/**
+ * 编排轮次里各「找文档」子智能体最终结果的聚合。
+ * 沿用 done.documentResults 权威契约（候选与引用不作回退），跨子会话按
+ * docId+docKey 去重；入参用结构类型，避免与执行投影器互相引用。
+ */
+export function getDataHubChildDocumentResults(
+  projection: { subagentSessions: ReadonlyArray<{ done?: DataHubDoneData }> },
+  limit = 5
+): DataHubDocumentLookupResult[] {
+  const results: DataHubDocumentLookupResult[] = [];
+  const seen = new Set<string>();
+
+  for (const session of projection.subagentSessions) {
+    if (!isDataHubDocumentLookupTurn(session.done)) {
+      continue;
+    }
+    for (const result of getDataHubDocumentLookupResults(session.done, limit)) {
+      const identity = JSON.stringify([result.docId, result.docKey ?? ""]);
+      if (seen.has(identity)) {
+        continue;
+      }
+      seen.add(identity);
+      results.push(result);
+      if (results.length >= limit) {
+        return results;
+      }
+    }
+  }
+
+  return results;
+}

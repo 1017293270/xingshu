@@ -35,12 +35,14 @@ import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import {
   DataHubBusinessExplanation,
+  DataHubCitationChips,
   DataHubExecutionPanel,
+  DataHubProcessDock,
   DataHubResultTable
 } from "@/components/xs/datahub";
 import { useNow } from "@/components/xs/datahub/useNow";
 import { useClarifyDock, XsClarifyCard, XsClarifyPanel } from "@/components/xs/conversation";
-import { queryAssetFeatureEnabled } from "@/config/features";
+import { clarifyAllModesEnabled, queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { respondToAgentInteraction, streamAgentMessage } from "@/services/agentService";
 import { copyText } from "@/services/clipboard";
@@ -58,7 +60,10 @@ import {
   buildDataHubBusinessTrace,
   createDataHubAskTurn
 } from "@/services/dataHubAskDataPresenter";
-import { getDataHubDocumentLookupResults } from "@/services/dataHubDocumentLookupPresenter";
+import {
+  getDataHubChildDocumentResults,
+  getDataHubDocumentLookupResults
+} from "@/services/dataHubDocumentLookupPresenter";
 import {
   projectDataHubExecutionEvents
 } from "@/services/dataHubExecutionProjector";
@@ -72,6 +77,8 @@ import {
 import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
+import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
+import { AnalysisCitationPreview } from "./AnalysisCitationPreview";
 import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
 import type {
@@ -888,7 +895,8 @@ function highlightQueryKeywords(text: string, query: string) {
   ));
 }
 
-function DataHubCitationList({
+/** 引用原文片段（答案上方）；引用文档 chips 移到结果底部的 DataHubCitationChips。 */
+function DataHubCitationQuotes({
   citations,
   onOpen,
   onCopyFragment,
@@ -899,66 +907,40 @@ function DataHubCitationList({
   onCopyFragment?: (text: string) => void;
   query: string;
 }) {
-  if (citations.length === 0) {
+  if (!citations.some((citation) => citation.fragments.length > 0)) {
     return null;
   }
 
-  const groups = groupByKnowledgeBase(citations, (citation) => citation.kbName || "企业知识库");
   return (
-    <section className="knowledge-citations knowledge-citations--chips" aria-label="引用文档">
-      {groups.map(([kbName, items]) => (
-        <section className="knowledge-citations__group" key={kbName}>
-          <strong>{kbName}</strong>
-          <div className="knowledge-citations__chips">
-            {items.map((citation) => {
-              const title = citation.docName || citation.fileName || citation.docKey || citation.docId;
-              return (
+    <section className="knowledge-citations" aria-label="引用原文">
+      <div className="knowledge-citations__quotes">
+        {citations.flatMap((citation) =>
+          citation.fragments.map((fragment, index) => (
+            <blockquote key={`${citation.docId}-${index}`}>
+              <p>{highlightQueryKeywords(fragment, query)}</p>
+              <span className="knowledge-citations__quote-actions">
                 <button
                   type="button"
-                  className="knowledge-citation-chip"
-                  key={`${citation.docId}::${citation.docKey ?? ""}`}
-                  aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}`}
+                  className="analysis-icon-button"
+                  aria-label="复制原文"
+                  onClick={() => onCopyFragment?.(fragment)}
+                >
+                  <CopySimple size={15} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="analysis-icon-button"
+                  aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey || citation.docId}`}
                   disabled={!citation.sourceAvailable}
                   onClick={() => onOpen(citation)}
                 >
-                  <FileText size={15} aria-hidden="true" />
-                  <span>{title}</span>
+                  <ArrowSquareOut size={15} aria-hidden="true" />
                 </button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-      {citations.some((citation) => citation.fragments.length > 0) ? (
-        <div className="knowledge-citations__quotes">
-          {citations.flatMap((citation) =>
-            citation.fragments.map((fragment, index) => (
-              <blockquote key={`${citation.docId}-${index}`}>
-                <p>{highlightQueryKeywords(fragment, query)}</p>
-                <span className="knowledge-citations__quote-actions">
-                  <button
-                    type="button"
-                    className="analysis-icon-button"
-                    aria-label="复制原文"
-                    onClick={() => onCopyFragment?.(fragment)}
-                  >
-                    <CopySimple size={15} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="analysis-icon-button"
-                    aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey || citation.docId}`}
-                    disabled={!citation.sourceAvailable}
-                    onClick={() => onOpen(citation)}
-                  >
-                    <ArrowSquareOut size={15} aria-hidden="true" />
-                  </button>
-                </span>
-              </blockquote>
-            ))
-          )}
-        </div>
-      ) : null}
+              </span>
+            </blockquote>
+          ))
+        )}
+      </div>
     </section>
   );
 }
@@ -1137,6 +1119,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [selectedQuickQuestion, setSelectedQuickQuestion] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
+  const [citationPreview, setCitationPreview] = useState<{
+    citations: DataHubCitationDocument[];
+    active: DataHubCitationDocument;
+  } | null>(null);
   const [favoriteStates, setFavoriteStates] = useState<Record<string, AskFavoriteUiState>>({});
   const [isScrollToBottomVisible, setIsScrollToBottomVisible] = useState(false);
   const voiceInput = useVoiceInput({
@@ -1165,6 +1151,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const isDocumentLookupMode = mode === "document_lookup";
   const isAgentMode = mode === "agent";
   const isAskMode = mode === "ask";
+  /* beta0.3 后端放开问数/问知/找文档的 ask_user；旧后端用 feature 开关退回编排单口。 */
+  const supportsClarification = isAgentMode || clarifyAllModesEnabled;
   const modeMeta = analysisModeMeta[mode];
   const taskName = modeMeta.taskName;
   const analysisReturnPath = ["/analysis", "/ask-agent", "/ask-data"].includes(
@@ -1224,7 +1212,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const lastVisibleTurn = visibleTurns[visibleTurns.length - 1];
   /* 只有最新一轮可能挂在澄清上；下面的循环本来就要投影每一轮，多投一次不值一提。 */
   const awaitingClarification = Boolean(
-    isAgentMode && lastVisibleTurn && hasPendingClarification(
+    supportsClarification && lastVisibleTurn && hasPendingClarification(
       createDataHubAskTurn(
         lastVisibleTurn.question,
         lastVisibleTurn.events,
@@ -1235,7 +1223,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     )
   );
   const dock = useClarifyDock(askDataStatus === "streaming");
-  const clarifyTargets = isAgentMode
+  const clarifyTargets = supportsClarification
     ? visibleTurns.flatMap((turn) => {
       const ask = createDataHubAskTurn(turn.question, turn.events, turn.status, turn.error, {
         sessionId: turn.sessionId,
@@ -1708,7 +1696,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       {
         sessionId: turn.sessionId,
         chatId: turn.chatId,
-        chatMode: "agent",
+        chatMode: mode,
         interactionId,
         answer
       },
@@ -1777,7 +1765,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     }
   };
 
-  const handleOpenCitation = async (citation: DataHubCitationDocument) => {
+  /** 次级动作：在新标签打开原文（模态里的「新标签打开」、浏览器内嵌失败时的逃生口）。 */
+  const openCitationInNewTab = async (citation: DataHubCitationDocument) => {
     const previewWindow = window.open("about:blank", "_blank");
     if (!previewWindow) {
       setWorkflowStatus("浏览器阻止了原文预览窗口，请允许弹出窗口后重试");
@@ -1803,6 +1792,24 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       previewWindow.close();
       setWorkflowStatus(error instanceof Error ? `原文打开失败：${error.message}` : "原文打开失败，请稍后重试");
     }
+  };
+
+  /** 主路径：站内弹窗预览原文；group 提供时作为弹窗左侧可切换的文档列表。 */
+  const handleOpenCitation = (
+    citation: DataHubCitationDocument,
+    group?: DataHubCitationDocument[]
+  ) => {
+    const pool = group?.length ? group : [citation];
+    const seen = new Set<string>();
+    const citations = pool.filter((item) => {
+      const key = `${item.docId}::${item.docKey ?? ""}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    setCitationPreview({ citations, active: citation });
   };
 
   const handleOpenDocumentLookupResult = (document: DataHubDocumentLookupResult) =>
@@ -1868,11 +1875,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   : isDocumentLookupMode
                     ? citationsAsLookupResults(turnAsk.citationDocuments)
                     : [];
-              const hasLegacyProcess = !isAgentMode && hasLegacyThinkingProcess(turnAsk);
+              const childDocumentResults = isAgentMode
+                ? getDataHubChildDocumentResults(executionProjection)
+                : [];
+              const hasLegacyProcess = isAskMode && hasLegacyThinkingProcess(turnAsk);
               // 运行中即使编排事件还没到，也先按问数固定阶段链展示（首阶段 active），
               // 否则用户在首个事件到达前看不到任何“正在跑”的证据。
+              // 五阶段链是问数专属：问知/找文档不再套问数阶段文案，改由思考折叠块呈现过程。
               const thinkingPhases =
-                !isAgentMode && (hasLegacyProcess || displayStatus === "streaming")
+                isAskMode && (hasLegacyProcess || displayStatus === "streaming")
                   ? buildThinkingPhases(turnAsk, displayStatus)
                   : [];
               const askTables = isAskMode || isAgentMode
@@ -1890,11 +1901,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 : [];
               const visibleAnswerBlocks = [...turnAsk.answerBlocks, ...childAnswerBlocks];
               const hasRenderableResult = Boolean(
-                (isAgentMode && turnAsk.clarifications.length) ||
+                (supportsClarification && turnAsk.clarifications.length) ||
                 (!isDocumentLookupMode && visibleAnswerBlocks.length) ||
                   (supportsTables && visibleTables.length) ||
                   (supportsCitations && turnAsk.citationDocuments.length) ||
-                  (isDocumentLookupMode && documentLookupResults.length)
+                  (isDocumentLookupMode && documentLookupResults.length) ||
+                  (isAgentMode && childDocumentResults.length)
               );
               const isResultReady =
                 hasRenderableResult || ["done", "error", "cancelled"].includes(displayStatus);
@@ -1995,6 +2007,13 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     }
                   : undefined
               );
+              const answerPreamble = buildDataHubAnswerPreamble(businessKind, businessTrace, answerText);
+              const traceStatus =
+                displayStatus === "streaming" || displayStatus === "idle"
+                  ? ("running" as const)
+                  : displayStatus === "done"
+                    ? ("done" as const)
+                    : displayStatus;
 
               return (
                 <div
@@ -2059,16 +2078,22 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         </div>
                       ) : null}
 
+                      {!isAgentMode && !isHistoryLoadingTurn ? (
+                        <DataHubProcessDock
+                          thinkingContent={turnAsk.thinkingContent}
+                          decompose={turnAsk.decompose}
+                          status={traceStatus}
+                          startedAt={turn.startedAt}
+                          durationMs={durationMs}
+                        />
+                      ) : null}
                       {!isHistoryLoadingTurn ? (
                         <DataHubBusinessExplanation
                           kind={businessKind}
                           intent={turn.question}
                           trace={businessTrace}
-                          status={displayStatus === "streaming" || displayStatus === "idle"
-                            ? "running"
-                            : displayStatus === "done"
-                              ? "done"
-                              : displayStatus}
+                          status={traceStatus}
+                          durationMs={durationMs}
                         />
                       ) : null}
                       {isAgentMode && !isHistoryLoadingTurn ? (
@@ -2084,7 +2109,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               setWorkflowStatus("原文身份信息不完整，暂无法打开");
                               return;
                             }
-                            void handleOpenCitation(citation);
+                            handleOpenCitation(citation);
                           }}
                         />
                       ) : null}
@@ -2118,10 +2143,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             </p>
                           ) : null}
                           {isKnowledgeMode && isResultReady && turnAsk.citationDocuments.length > 0 ? (
-                            <DataHubCitationList
+                            <DataHubCitationQuotes
                               citations={turnAsk.citationDocuments}
                               query={turn.question}
-                              onOpen={(citation) => void handleOpenCitation(citation)}
+                              onOpen={(citation) =>
+                                handleOpenCitation(citation, turnAsk.citationDocuments)
+                              }
                               onCopyFragment={async (text) => {
                                 const copied = await copyText(text);
                                 setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
@@ -2133,6 +2160,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           visibleAnswerBlocks.length > 0 ? (
                             <div className="analysis-answer-block">
                               {isKnowledgeMode ? <p className="knowledge-summary-label">总结</p> : null}
+                              {answerPreamble ? (
+                                <p className="analysis-answer-preamble">{answerPreamble}</p>
+                              ) : null}
                               <DataHubAnswer
                                 blocks={visibleAnswerBlocks}
                                 hideMarkdownTables={visibleTables.length > 0}
@@ -2153,7 +2183,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               ) : null}
                             </div>
                           ) : null}
-                          {isAgentMode && turnAsk.clarifications.length > 0 ? (
+                          {supportsClarification && turnAsk.clarifications.length > 0 ? (
                             <div className="analysis-clarify-stack">
                               {turnAsk.clarifications.map((clarification, index) => {
                                 const key = clarificationKey(turn.id, clarification, index);
@@ -2191,24 +2221,27 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             <AnalysisResultTables tables={visibleTables} onStatus={setWorkflowStatus} />
                           ) : null}
                           {supportsCitations &&
-                          !isKnowledgeMode &&
                           isResultReady &&
                           turnAsk.citationDocuments.length > 0 ? (
-                            <DataHubCitationList
+                            <DataHubCitationChips
                               citations={turnAsk.citationDocuments}
-                              query={turn.question}
-                              onOpen={(citation) => void handleOpenCitation(citation)}
-                              onCopyFragment={async (text) => {
-                                const copied = await copyText(text);
-                                setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
-                              }}
+                              onOpen={(citation) =>
+                                handleOpenCitation(citation, turnAsk.citationDocuments)
+                              }
                             />
                           ) : null}
                           {isDocumentLookupMode && isResultReady && documentLookupResults.length > 0 ? (
                             <DataHubDocumentLookupList
                               documents={documentLookupResults}
                               query={turn.question}
-                              onOpen={(document) => void handleOpenDocumentLookupResult(document)}
+                              onOpen={(document) => handleOpenDocumentLookupResult(document)}
+                            />
+                          ) : null}
+                          {isAgentMode && isResultReady && childDocumentResults.length > 0 ? (
+                            <DataHubDocumentLookupList
+                              documents={childDocumentResults}
+                              query={turn.question}
+                              onOpen={(document) => handleOpenDocumentLookupResult(document)}
                             />
                           ) : null}
                           {displayStatus === "streaming" && !hasRenderableResult ? (
@@ -2346,6 +2379,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           />
         </div>
       </div>
+      <AnalysisCitationPreview
+        open={citationPreview !== null}
+        citations={citationPreview?.citations ?? []}
+        active={citationPreview?.active ?? null}
+        onSelect={(citation) =>
+          setCitationPreview((current) =>
+            current ? { ...current, active: citation } : current
+          )
+        }
+        onClose={() => setCitationPreview(null)}
+        onOpenExternal={(citation) => void openCitationInNewTab(citation)}
+      />
     </PageFrame>
   );
 }

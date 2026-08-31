@@ -1488,6 +1488,46 @@
   margin: 0 0 14px;
 }
 
+/* 结果底部「引用 N 篇文档」折叠头 */
+.knowledge-citations__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  padding: 4px 0;
+  color: var(--xs-text-2);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.knowledge-citations__toggle:hover {
+  color: var(--xs-primary-2);
+}
+
+.knowledge-citations__toggle svg {
+  transition: transform 0.18s ease;
+}
+
+.knowledge-citations__caret--open {
+  transform: rotate(180deg);
+}
+
+.knowledge-citation-chip__location {
+  padding-left: 6px;
+  color: var(--xs-text-3);
+  border-left: 1px solid var(--xs-border);
+  font-size: 12px;
+}
+
+.analysis-answer-preamble {
+  margin: 0 0 4px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+}
+
 .knowledge-citations__chips,
 .document-lookup-results__list--names {
   display: flex;

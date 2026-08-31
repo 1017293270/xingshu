@@ -1,10 +1,16 @@
 export { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
+export {
+  DataHubCitationChips,
+  citationDisplayTitle,
+  citationLocationText
+} from "./DataHubCitationChips";
 export { DataHubResultTable } from "./DataHubResultTable";
 export { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 export { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 export { DataHubBusinessExplanation } from "./DataHubBusinessExplanation";
 export { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
 export { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
+export { DataHubProcessDock } from "./DataHubProcessDock";
 export { DataHubSubagentDag } from "./DataHubSubagentDag";
 export { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
 export { DataHubSubagentTree } from "./DataHubSubagentTree";

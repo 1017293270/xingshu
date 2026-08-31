@@ -133,12 +133,25 @@ describe("AnalysisPage controlled clarification", () => {
     expect(useUiStore.getState().analysisTurns).toHaveLength(1);
   });
 
-  it("stays out of ask mode, which the backend refuses to resume", async () => {
+  it("beta0.3 起问数也受理澄清，续跑按 ask 模式提交", async () => {
+    const user = userEvent.setup();
+    serviceMocks.respondToAgentInteraction.mockImplementation(() => new AbortController());
     restoreSuspendedTurn("ask");
     renderAnalysis("ask");
 
-    await screen.findByText("帮我写一份项目交付报告");
-    expect(screen.queryByRole("region", { name: "需要你确认" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "信息化系统交付" })).not.toBeInTheDocument();
+    const card = await screen.findByRole("region", { name: "需要你确认" });
+    await user.click(within(card).getByRole("button", { name: "信息化系统交付" }));
+
+    expect(serviceMocks.respondToAgentInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        chatId: "chat-1",
+        chatMode: "ask",
+        interactionId: "tool-call-1",
+        answer: "信息化系统交付"
+      }),
+      expect.any(Object)
+    );
+    expect(serviceMocks.streamAgentMessage).not.toHaveBeenCalled();
   });
 });

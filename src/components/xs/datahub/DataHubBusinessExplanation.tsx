@@ -13,7 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { Modal } from "antd";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { formatDataHubCitationFragment } from "@/services/dataHubFormat";
 import type { DataHubBusinessTrace } from "@/types/dataHub";
@@ -29,6 +29,8 @@ export type DataHubBusinessExplanationProps = {
   knowledgeBases?: string[];
   filters?: string[];
   dataAsOf?: string;
+  /** 结束后折叠头展示「用时X秒」。 */
+  durationMs?: number;
 };
 
 const stepLabels: Record<DataHubBusinessExplanationProps["kind"], string[]> = {
@@ -227,11 +229,24 @@ export function DataHubBusinessExplanation({
   columns = [],
   knowledgeBases = [],
   filters = [],
-  dataAsOf
+  dataAsOf,
+  durationMs
 }: DataHubBusinessExplanationProps) {
   const bodyId = useId();
   const [expanded, setExpanded] = useState(status === "running");
   const [selectedDocument, setSelectedDocument] = useState<DataHubBusinessTrace["documents"][number]>();
+  /* running 自动展开、结束自动收成一行；用户点过折叠头后交还控制权（有粘性）。 */
+  const userPinnedRef = useRef(false);
+  const prevStatusRef = useRef(status);
+  useEffect(() => {
+    if (prevStatusRef.current === status) {
+      return;
+    }
+    prevStatusRef.current = status;
+    if (!userPinnedRef.current) {
+      setExpanded(status === "running");
+    }
+  }, [status]);
   const bodyMountedRef = useRef(expanded);
   if (expanded) bodyMountedRef.current = true;
   const content = trace ?? basicTrace({
@@ -270,10 +285,18 @@ export function DataHubBusinessExplanation({
           className="datahub-business-explanation__summary"
           aria-controls={bodyId}
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => {
+            userPinnedRef.current = true;
+            setExpanded((value) => !value);
+          }}
         >
           <span><ListChecks size={16} />查询过程</span>
-          <small>{stateLabel} · {content.steps.length} 步</small>
+          <small>
+            {stateLabel} · {content.steps.length} 步
+            {status !== "running" && durationMs != null
+              ? ` · 用时 ${Math.max(1, Math.round(durationMs / 1000))} 秒`
+              : ""}
+          </small>
           <CaretDown size={15} aria-hidden="true" />
         </button>
       </header>

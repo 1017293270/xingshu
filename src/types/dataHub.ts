@@ -45,8 +45,11 @@ export type DataHubRequestChatMode =
   | DataHubAskTableChatMode
   | DataHubWritingChatMode;
 
-/** 后端只在编排与问表两种模式下受理交互式澄清（ChatService.prepareInteraction）。 */
-export type DataHubInteractionChatMode = "agent" | DataHubAskTableChatMode;
+/**
+ * 后端受理交互式澄清的模式（ChatService.prepareInteraction）。
+ * beta0.3 起除编排/问表外放开问数/问知/找文档；旧后端可用 VITE_CLARIFY_ALL_MODES=false 退回。
+ */
+export type DataHubInteractionChatMode = DataHubChatMode | DataHubAskTableChatMode;
 
 export type DataHubChatRequest = {
   message: string;

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactElement } from "react";
@@ -284,6 +284,9 @@ describe("workflow page actions", () => {
     vi.spyOn(knowledgeService, "loadDataHubCitationDocument").mockResolvedValue({
       url: "https://files.example.com/contract-policy.pdf"
     });
+    vi.spyOn(knowledgeService, "loadDataHubKnowledgeMarkdown").mockResolvedValue({
+      markdown: "## 合同审批\n\n法务审核完成后归档保存。"
+    });
 
     const { container } = renderPage(<AnalysisPage mode="rag" />);
 
@@ -291,21 +294,33 @@ describe("workflow page actions", () => {
     expect(screen.getAllByText("部门审核", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(container.querySelector('img[src="x"]')).not.toBeInTheDocument();
-    expect(screen.getAllByText("合同管理办法.pdf")).toHaveLength(1);
-    expect(screen.queryByText("重复引用.pdf")).not.toBeInTheDocument();
     expect(screen.queryByText("问知表格")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收藏问数" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "打开原文：合同管理办法.pdf" }));
+    // 引用 chips 默认收合在结果底部；去重后只有一篇
+    expect(screen.queryByText("合同管理办法.pdf")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
+    expect(screen.getAllByText("合同管理办法.pdf")).toHaveLength(1);
+    expect(screen.queryByText("重复引用.pdf")).not.toBeInTheDocument();
 
-    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    // 点击 chip 在站内弹窗预览（PDF 不可内嵌时回退 Markdown）
+    await user.click(screen.getByRole("button", { name: "打开原文：合同管理办法.pdf" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(knowledgeService.loadDataHubCitationDocument).toHaveBeenCalledWith(
       expect.objectContaining({ docId: "doc-1", docKey: "contract-policy" })
     );
-    expect(replace).toHaveBeenCalledWith("https://files.example.com/contract-policy.pdf");
+    expect(await screen.findByText("法务审核完成后归档保存。")).toBeInTheDocument();
+    expect(openSpy).not.toHaveBeenCalled();
+
+    // 「新标签打开」降级为模态内次级动作
+    await user.click(screen.getByRole("button", { name: "新标签打开" }));
+    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("https://files.example.com/contract-policy.pdf")
+    );
     expect(close).not.toHaveBeenCalled();
   });
 
@@ -402,7 +417,8 @@ describe("workflow page actions", () => {
     expect(screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")).not.toBeInTheDocument();
   });
 
-  it("renders native knowledge activity, answer and citations in the agent card surface", () => {
+  it("renders native knowledge activity, answer and citations in the agent card surface", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("差旅费超过多少需要复核？", null, "rag");
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
@@ -474,6 +490,8 @@ describe("workflow page actions", () => {
 
     expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
     expect(screen.getByText("单笔差旅费超过 5000 元需复核", { exact: false })).toBeInTheDocument();
+    // 引用 chips 默认收合，点开后能看到引用文档
+    await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
     expect(screen.getByText("财务报销制度（2026）")).toBeInTheDocument();
     expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
   });

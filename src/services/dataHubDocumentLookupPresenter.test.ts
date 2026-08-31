@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getDataHubChildDocumentResults,
   getDataHubDocumentLookupResults,
   isDataHubDocumentLookupTurn
 } from "@/services/dataHubDocumentLookupPresenter";
@@ -96,5 +97,53 @@ describe("dataHubDocumentLookupPresenter", () => {
         ]
       })
     ).toEqual([]);
+  });
+});
+
+describe("getDataHubChildDocumentResults", () => {
+  it("聚合编排下各找文档子智能体的最终结果并跨会话去重", () => {
+    const results = getDataHubChildDocumentResults({
+      subagentSessions: [
+        { done: undefined },
+        {
+          done: {
+            documentLookup: true,
+            documentSelectionMode: "single",
+            documentResults: [{ docId: "doc-1", docKey: "one.pdf", kbId: "kb-1", docName: "制度A" }]
+          }
+        },
+        {
+          // 非找文档子会话（问数）不得混入
+          done: { documentResults: [{ docId: "doc-9", docKey: "nine.pdf", kbId: "kb-9" }] }
+        },
+        {
+          done: {
+            documentLookup: true,
+            documentSelectionMode: "multiple",
+            documentResults: [
+              { docId: "doc-1", docKey: "one.pdf", kbId: "kb-1", docName: "制度A 重复" },
+              { docId: "doc-2", docKey: "two.pdf", kbId: "kb-1", docName: "制度B" }
+            ]
+          }
+        }
+      ]
+    });
+
+    expect(results.map((result) => result.docId)).toEqual(["doc-1", "doc-2"]);
+    expect(results[0].title).toBe("制度A");
+  });
+
+  it("limit 截断聚合总量", () => {
+    const done = {
+      documentLookup: true,
+      documentResults: [
+        { docId: "doc-1", docKey: "1.pdf", kbId: "kb-1" },
+        { docId: "doc-2", docKey: "2.pdf", kbId: "kb-1" },
+        { docId: "doc-3", docKey: "3.pdf", kbId: "kb-1" }
+      ]
+    };
+    expect(
+      getDataHubChildDocumentResults({ subagentSessions: [{ done }, { done }] }, 2)
+    ).toHaveLength(2);
   });
 });
