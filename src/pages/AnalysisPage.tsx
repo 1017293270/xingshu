@@ -39,12 +39,12 @@ import {
   DataHubResultTable
 } from "@/components/xs/datahub";
 import { useNow } from "@/components/xs/datahub/useNow";
-import { XsClarifyCard } from "@/components/xs/conversation";
+import { useClarifyDock, XsClarifyCard, XsClarifyPanel } from "@/components/xs/conversation";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { respondToAgentInteraction, streamAgentMessage } from "@/services/agentService";
 import { copyText } from "@/services/clipboard";
-import { hasPendingClarification } from "@/services/dataHubClarification";
+import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { invalidateDataAssetOverview } from "@/services/dataAssetService";
 import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import {
@@ -1233,6 +1233,27 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       )
     )
   );
+  const dock = useClarifyDock(askDataStatus === "streaming");
+  const clarifyTargets = isAgentMode
+    ? visibleTurns.flatMap((turn) => {
+      const ask = createDataHubAskTurn(turn.question, turn.events, turn.status, turn.error, {
+        sessionId: turn.sessionId,
+        chatId: turn.chatId
+      });
+      return ask.clarifications.map((clarification, index) => ({
+        key: clarificationKey(turn.id, clarification, index),
+        turn,
+        error: turn.status === "error" ? turn.error : undefined,
+        clarification
+      }));
+    })
+    : [];
+  /* 刚点过的那张要继续占着浮层，直到这一轮跑完——否则"已确认"一闪而过没人看得见。 */
+  /* 答完（后端回了 clarification_response）或被收起的都不再占浮层，见 XsClarifyPanel 注释。 */
+  const dockTarget = clarifyTargets.find((item) => (
+    !item.clarification.selectedAnswer && !dock.dismissedKeys.includes(item.key)
+  ));
+
   const scrollSignature = visibleTurns
     .map((turn) => `${turn.id}:${turn.status}:${turn.events.length}:${turn.error}`)
     .join("|");
@@ -2133,16 +2154,30 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           ) : null}
                           {isAgentMode && turnAsk.clarifications.length > 0 ? (
                             <div className="analysis-clarify-stack">
-                              {turnAsk.clarifications.map((clarification, index) => (
-                                <XsClarifyCard
-                                  key={clarification.interactionId || `clarification-${index}`}
-                                  clarification={clarification}
-                                  disabled={displayStatus === "streaming" || isHistoryLoadingTurn}
-                                  onAnswer={(answer) =>
-                                    answerClarification(turn, clarification.interactionId, answer)
-                                  }
-                                />
-                              ))}
+                              {turnAsk.clarifications.map((clarification, index) => {
+                                const key = clarificationKey(turn.id, clarification, index);
+                                const dismissed = dock.dismissedKeys.includes(key);
+                                // 待答且没被收起的那张在输入框上方的浮层里，这里不留副本
+                                if (
+                                  key === dockTarget?.key ||
+                                  (!clarification.selectedAnswer && !dismissed)
+                                ) {
+                                  return null;
+                                }
+
+                                return (
+                                  <XsClarifyCard
+                                    key={key}
+                                    clarification={clarification}
+                                    fresh={key === dock.justAnsweredKey}
+                                    onExpand={
+                                      clarification.selectedAnswer
+                                        ? undefined
+                                        : () => dock.expand(key)
+                                    }
+                                  />
+                                );
+                              })}
                             </div>
                           ) : null}
                           {isResultReady && aiChartState.status === "success" ? (
@@ -2251,7 +2286,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       </div>
 
       <div className="analysis-composer" data-stage={hasConversation ? "conversation" : "empty"}>
-        {hasConversation && isScrollToBottomVisible ? (
+        {hasConversation && isScrollToBottomVisible && !dockTarget ? (
           <Button
             className="analysis-scroll-to-bottom"
             shape="circle"
@@ -2259,6 +2294,21 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
             icon={<ArrowDown size={18} weight="bold" />}
             title="回到底部"
             onClick={handleScrollToBottom}
+          />
+        ) : null}
+        <div className="xs-clarify-anchor">
+        {dockTarget ? (
+          <XsClarifyPanel
+            clarification={dockTarget.clarification}
+            submittingAnswer={
+              dock.submittedKey === dockTarget.key ? dock.submittingAnswer : undefined
+            }
+            error={dockTarget.error || undefined}
+            onAnswer={(answer) => {
+              dock.submit(dockTarget.key, answer);
+              answerClarification(dockTarget.turn, dockTarget.clarification.interactionId, answer);
+            }}
+            onDismiss={() => dock.dismiss(dockTarget.key)}
           />
         ) : null}
         <XsCommandBox
@@ -2285,6 +2335,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
           modelMode={composerMode}
           onModelModeChange={setComposerMode}
         />
+        </div>
         <div className="analysis-composer__status-slot">
           <XsStatusBar
             tone={askDataStatus === "streaming" ? "loading" : "info"}

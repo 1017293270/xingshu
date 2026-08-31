@@ -1,4 +1,4 @@
-import { Button, Input } from "antd";
+import { Button, Input, Tooltip } from "antd";
 import { AsteriskSimple, Check, CopySimple, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -22,8 +22,8 @@ import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 import "./styles/workflows.css";
 
-/** 制表类型图标固定 20px：32 网格的 5/8，笔画落在 1.25px 上，与同尺寸 Phosphor 同重量。 */
-const SHEET_GLYPH_SIZE = 20;
+/** 制表类型图标固定 18px：34 网格里留出呼吸，笔画仍落在 1.25px 上。 */
+const SHEET_GLYPH_SIZE = 18;
 
 const sheetGlyphById: Record<TableTemplateIconId, XsIconComponent> = {
   ranking: XsGlyphTableRanking,
@@ -34,7 +34,43 @@ const sheetGlyphById: Record<TableTemplateIconId, XsIconComponent> = {
 
 const tablePromptPlaceholder = "描述您需要的表格，如「华东区Q1销售排行」「各部门人员通讯录」...";
 
-const tableSuggestions = ["华东区Q1销售排行", "各部门人员通讯录", "月度费用统计报表"];
+function padTwo(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+/**
+ * 最近列表按「今天 / 昨天 / 年内 / 跨年」四档收敛时间：
+ * 完整年月日时分只在跨年记录上出现，近三天的记录一眼就能读出远近。
+ */
+function formatRecentTime(table: TableTemplate) {
+  const raw = table.updatedAt?.trim();
+  if (!raw) {
+    return table.description;
+  }
+
+  const updated = new Date(raw.replace(" ", "T"));
+  if (Number.isNaN(updated.getTime())) {
+    return table.description;
+  }
+
+  const clock = `${padTwo(updated.getHours())}:${padTwo(updated.getMinutes())}`;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const day = new Date(updated.getFullYear(), updated.getMonth(), updated.getDate()).getTime();
+  const dayDistance = Math.round((today - day) / 86_400_000);
+
+  if (dayDistance === 0) {
+    return `今天 ${clock}`;
+  }
+  if (dayDistance === 1) {
+    return `昨天 ${clock}`;
+  }
+  if (updated.getFullYear() === now.getFullYear()) {
+    return `${padTwo(updated.getMonth() + 1)}-${padTwo(updated.getDate())} ${clock}`;
+  }
+
+  return `${updated.getFullYear()}-${padTwo(updated.getMonth() + 1)}-${padTwo(updated.getDate())}`;
+}
 
 export function TablePage() {
   const navigate = useNavigate();
@@ -101,13 +137,6 @@ export function TablePage() {
     copiedTimerRef.current = window.setTimeout(() => setCopiedTemplateId(null), 1200);
   };
 
-  const handleUseSuggestion = (suggestion: string) => {
-    setPrompt(suggestion);
-    pulsePrompt();
-    setSubmissionTone("info");
-    setSubmissionStatus(`已填入制表示例：${suggestion}`);
-  };
-
   return (
     <PageFrame
       title="智能制表"
@@ -153,18 +182,6 @@ export function TablePage() {
             }}
           />
         </XsComposerBox>
-        <div className="sheet-suggestions table-hero__suggestions" role="group" aria-label="快捷制表示例">
-          <span>试试</span>
-          {tableSuggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => handleUseSuggestion(suggestion)}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
       </section>
       <div className="workflow-status-slot table-page__status-slot">
         <XsStatusBar
@@ -174,7 +191,7 @@ export function TablePage() {
           reserveSpace
         />
       </div>
-      <section aria-label="最近制表">
+      <section className="table-recent" aria-label="最近制表">
         <div className="section-title-row section-title-row--compact xs-page-enter" style={xsEnterStep(2)}>
           <h2 className="subsection-title">最近制表</h2>
           <span className="section-title-meta">{recentTables.length} 条记录 · 点击打开当时的结果表</span>
@@ -188,52 +205,60 @@ export function TablePage() {
           loadingVariant="rows"
           contentKey={recentTablesQuery.dataUpdatedAt}
         >
+          {/* 一行一条记录：表名是主角，类型与时间退到副行，动作只在指针进来时现身 */}
           <div className="sheet-list">
-            {/* 列名条只是视觉上的表头，行本身已带完整可访问名称，不做假的 table 语义 */}
-            <div className="sheet-list__head" aria-hidden="true">
-              <span>表名</span>
-              <span>类型</span>
-              <span>更新时间</span>
-              <span>操作</span>
-            </div>
-            {recentTables.map((table, index) => (
-              <article
-                className="xs-page-enter sheet-row"
-                style={xsEnterStep(3 + Math.min(index, 2))}
-                key={table.id}
-                aria-label={`${table.title} ${table.description}`}
-              >
-                <Link
-                  className="sheet-row__main"
-                  to={tableSessionPath(table.id)}
-                  aria-label={`打开制表结果：${table.title}`}
+            {recentTables.map((table, index) => {
+              const timeText = formatRecentTime(table);
+              const copied = copiedTemplateId === table.id;
+
+              return (
+                <article
+                  className="xs-page-enter sheet-row"
+                  style={xsEnterStep(3 + Math.min(index, 2))}
+                  key={table.id}
+                  aria-label={`${table.title} ${timeText}`}
                 >
-                  <span className="sheet-icon" aria-hidden="true">
-                    {(() => {
-                      const SheetGlyph = sheetGlyphById[table.iconId];
-                      return <SheetGlyph size={SHEET_GLYPH_SIZE} />;
-                    })()}
-                  </span>
-                  <h2 className="sheet-row__title" title={table.title}>
-                    {table.title}
-                  </h2>
-                  <span className="sheet-row__type">{table.tag}</span>
-                  <span className="sheet-row__time">{table.description}</span>
-                </Link>
-                <Button
-                  type="text"
-                  className="sheet-row__copy"
-                  icon={
-                    copiedTemplateId === table.id
-                      ? <Check size={15} aria-hidden="true" />
-                      : <CopySimple size={15} aria-hidden="true" />
-                  }
-                  onClick={() => handleCopyTemplate(table)}
-                >
-                  {copiedTemplateId === table.id ? "已复制" : "复制制表要求"}
-                </Button>
-              </article>
-            ))}
+                  <Link
+                    className="sheet-row__main"
+                    to={tableSessionPath(table.id)}
+                    aria-label={`打开制表结果：${table.title}`}
+                  >
+                    <span className="sheet-icon" aria-hidden="true">
+                      {(() => {
+                        const SheetGlyph = sheetGlyphById[table.iconId];
+                        return <SheetGlyph size={SHEET_GLYPH_SIZE} />;
+                      })()}
+                    </span>
+                    <span className="sheet-row__text">
+                      <h3 className="sheet-row__title" title={table.title}>
+                        {table.title}
+                      </h3>
+                      <span className="sheet-row__meta">
+                        <span className="sheet-row__type">{table.tag}</span>
+                        <em aria-hidden="true">·</em>
+                        <time className="sheet-row__time" dateTime={table.updatedAt} title={table.description}>
+                          {timeText}
+                        </time>
+                      </span>
+                    </span>
+                  </Link>
+                  <Tooltip title={copied ? "已复制到制表需求" : "复制制表要求"} placement="top">
+                    <Button
+                      type="text"
+                      className="sheet-row__copy"
+                      data-copied={copied ? "true" : undefined}
+                      aria-label={copied ? "已复制制表要求" : "复制制表要求"}
+                      icon={
+                        copied
+                          ? <Check size={15} aria-hidden="true" />
+                          : <CopySimple size={15} aria-hidden="true" />
+                      }
+                      onClick={() => handleCopyTemplate(table)}
+                    />
+                  </Tooltip>
+                </article>
+              );
+            })}
           </div>
         </XsAsyncPanel>
       </section>

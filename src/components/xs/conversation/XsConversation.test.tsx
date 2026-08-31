@@ -6,6 +6,7 @@ import {
   XsChatActionButton,
   XsChatActions,
   XsClarifyCard,
+  XsClarifyPanel,
   XsComposerBox,
   XsSidePanel
 } from "./index";
@@ -128,61 +129,115 @@ describe("XsComposerBox", () => {
   });
 });
 
-describe("XsClarifyCard", () => {
-  const nativeCard = {
-    interactionId: "tool-call-1",
-    question: "区域按哪个口径？",
-    options: [{ label: "客户区域" }, { label: "签约主体区域" }],
-    allowFreeText: false
-  };
+const nativeCard = {
+  interactionId: "tool-call-1",
+  question: "区域按哪个口径？",
+  options: [{ label: "客户区域" }, { label: "签约主体区域" }],
+  allowFreeText: false
+};
+
+describe("XsClarifyPanel", () => {
+  it("takes focus on the first option so the keyboard works straight away", () => {
+    render(<XsClarifyPanel clarification={nativeCard} onAnswer={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByRole("region", { name: "需要你确认" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /客户区域/ })).toHaveFocus();
+  });
 
   it("submits the option text on a single click, with no extra confirm step", async () => {
     const user = userEvent.setup();
     const onAnswer = vi.fn();
 
-    render(<XsClarifyCard clarification={nativeCard} onAnswer={onAnswer} />);
+    render(<XsClarifyPanel clarification={nativeCard} onAnswer={onAnswer} onDismiss={vi.fn()} />);
 
-    expect(screen.getByRole("region", { name: "需要你确认" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "客户区域" }));
+    await user.click(screen.getByRole("button", { name: /客户区域/ }));
     expect(onAnswer).toHaveBeenCalledWith("客户区域");
   });
 
-  it("submits the legacy reply text rather than the label it shows", async () => {
+  it("shows the legacy reply as the second line and submits it instead of the label", async () => {
     const user = userEvent.setup();
     const onAnswer = vi.fn();
 
     render(
-      <XsClarifyCard
+      <XsClarifyPanel
         clarification={{
           question: "区域按哪个口径？",
           options: [{ label: "客户区域", reply: "按客户所属区域统计" }],
           allowFreeText: false
         }}
         onAnswer={onAnswer}
+        onDismiss={vi.fn()}
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "客户区域" }));
+    expect(screen.getByText("按客户所属区域统计")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /客户区域/ }));
     expect(onAnswer).toHaveBeenCalledWith("按客户所属区域统计");
   });
 
-  it("collapses to the recorded answer once the backend reports one", () => {
-    render(<XsClarifyCard clarification={{ ...nativeCard, selectedAnswer: "客户区域" }} onAnswer={vi.fn()} />);
+  it("marks the clicked option and locks the rest while the answer is in flight", () => {
+    render(
+      <XsClarifyPanel
+        clarification={nativeCard}
+        submittingAnswer="客户区域"
+        onAnswer={vi.fn()}
+        onDismiss={vi.fn()}
+      />
+    );
 
-    expect(screen.getByText("已选择")).toBeInTheDocument();
-    expect(screen.getByText("客户区域")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "签约主体区域" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /客户区域/ })).toHaveAttribute("data-chosen", "true");
+    expect(screen.getByRole("button", { name: /签约主体区域/ })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("正在提交你的选择");
+  });
+
+  it("still lets the reader put the panel away while the answer is in flight", async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+
+    render(
+      <XsClarifyPanel
+        clarification={nativeCard}
+        submittingAnswer="客户区域"
+        onAnswer={vi.fn()}
+        onDismiss={onDismiss}
+      />
+    );
+
+    const dismiss = screen.getByRole("button", { name: "稍后再确认" });
+    expect(dismiss).not.toBeDisabled();
+    await user.click(dismiss);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a failed submission back as a retryable choice", () => {
+    render(
+      <XsClarifyPanel
+        clarification={nativeCard}
+        error="确认提交失败，请重试"
+        onAnswer={vi.fn()}
+        onDismiss={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("确认提交失败，请重试");
+    expect(screen.getByRole("button", { name: /客户区域/ })).not.toBeDisabled();
   });
 
   it("offers a free-text escape hatch only when the card allows it", async () => {
     const user = userEvent.setup();
     const onAnswer = vi.fn();
 
-    const { rerender } = render(<XsClarifyCard clarification={nativeCard} onAnswer={onAnswer} />);
+    const { rerender } = render(
+      <XsClarifyPanel clarification={nativeCard} onAnswer={onAnswer} onDismiss={vi.fn()} />
+    );
     expect(screen.queryByRole("textbox", { name: "补充你的理解" })).not.toBeInTheDocument();
 
     rerender(
-      <XsClarifyCard clarification={{ ...nativeCard, allowFreeText: true }} onAnswer={onAnswer} />
+      <XsClarifyPanel
+        clarification={{ ...nativeCard, allowFreeText: true }}
+        onAnswer={onAnswer}
+        onDismiss={vi.fn()}
+      />
     );
     expect(screen.getByRole("button", { name: "确认提交" })).toBeDisabled();
 
@@ -191,27 +246,40 @@ describe("XsClarifyCard", () => {
     expect(onAnswer).toHaveBeenCalledWith("按大区统计");
   });
 
-  it("stops accepting answers while the turn is busy", async () => {
+  it("walks the options with the arrow keys and steps aside on Escape", async () => {
     const user = userEvent.setup();
-    const onAnswer = vi.fn();
+    const onDismiss = vi.fn();
 
-    render(<XsClarifyCard clarification={nativeCard} disabled onAnswer={onAnswer} />);
+    render(<XsClarifyPanel clarification={nativeCard} onAnswer={vi.fn()} onDismiss={onDismiss} />);
 
-    const option = screen.getByRole("button", { name: "客户区域" });
-    expect(option).toBeDisabled();
-    await user.click(option);
-    expect(onAnswer).not.toHaveBeenCalled();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: /签约主体区域/ })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("button", { name: /客户区域/ })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("XsClarifyCard", () => {
+  it("leaves one line of history once the backend records an answer", () => {
+    render(<XsClarifyCard clarification={{ ...nativeCard, selectedAnswer: "客户区域" }} />);
+
+    expect(screen.getByText("已选择")).toBeInTheDocument();
+    expect(screen.getByText("客户区域")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("walks the options with the arrow keys", async () => {
+  it("keeps a way back to a question the reader put aside", async () => {
     const user = userEvent.setup();
+    const onExpand = vi.fn();
 
-    render(<XsClarifyCard clarification={nativeCard} onAnswer={vi.fn()} />);
+    render(<XsClarifyCard clarification={nativeCard} onExpand={onExpand} />);
 
-    screen.getByRole("button", { name: "客户区域" }).focus();
-    await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("button", { name: "签约主体区域" })).toHaveFocus();
-    await user.keyboard("{ArrowUp}");
-    expect(screen.getByRole("button", { name: "客户区域" })).toHaveFocus();
+    expect(screen.getByText("待确认")).toBeInTheDocument();
+    expect(screen.getByText("区域按哪个口径？")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "去选择" }));
+    expect(onExpand).toHaveBeenCalledTimes(1);
   });
 });

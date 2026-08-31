@@ -1609,10 +1609,10 @@ test.describe("desktop content density", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto("/table");
-    // 最近制表是单列表格式列表：密度体现在列位，不是卡片分栏
-    await expect(page.locator(".sheet-list__head")).toHaveCSS(
+    // 最近制表是单列列表：一行一条记录，密度体现在行内层级，不是卡片分栏
+    await expect(page.locator(".sheet-list")).toHaveCSS(
       "grid-template-columns",
-      /\d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      /^\d+(?:\.\d+)?px$/
     );
 
     await page.route("**/api/v1/chat/sessions/list", (route) =>

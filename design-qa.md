@@ -622,3 +622,62 @@ final result: passed for 智能制表 module scope（排版与滚动）；端到
 - [P1→已上报] 公文写作接不了：后端 `ChatService.prepareInteraction` 只放行 `AGENT` 与 `ASK_TABLE`，`writing` 会被 400 拒。卡与解析层已是共享的，后端放开后接上只需加一个调用点。
 
 final result: passed for 受控澄清 module scope（契约、交互、三态排版）；四档视口构图与端到端待真实环境复核
+
+### 追问卡改成输入框上方的浮层（2026-08-30 第二轮）
+
+反馈两条：卡在对话流里太容易漏掉；点完选项之后"交互非常不明显"。都成立，两条都改了。
+
+**设计主张**
+- **待答的问题不进对话流，浮在输入框正上方**（`.xs-clarify-dock`，`bottom: calc(100% + 12px)` 挂在包住输入控件的 `.xs-clarify-anchor` 上）。这一轮已经停住了，它不是"读到这里的一条消息"，而是"现在轮到你"——得待在用户的手和视线已经在的地方。宽度与左右沿跟输入框严格对齐，实测 gap 12px、同宽同左沿。
+- 浮层出现时把焦点交给第一个选项，↑↓ 与回车立刻可用；Esc 或右上角 ✕ 收起。
+- 收起不等于放弃：对话流里留一行 `待确认 · <问题>` + 「去选择」，随时能把浮层叫回来。后端此时仍挂在 `ask_user` 上，不给回去的入口等于把这一轮做死。
+- 浮层与「回到底部」抢同一块位置，浮层在时后者让路。
+
+**点选之后的反馈链（原来这一段是空的）**
+1. 点下去 → 选中那行立刻自己亮起来（蓝底 + 实心序号圈），其余选项淡到 35% 并锁住，底部一行「正在提交你的选择…」。等后端回话有几百毫秒，这段时间不给反馈，点击就像没生效。
+2. 后端回 `clarification_response` → 同一行转绿 + ✓，文案换成「已确认「X」，正在按这个口径继续」。**浮层不在这一刻消失**——静默消失正是原来那版的问题。
+3. 这一轮真正跑完 → 浮层收掉，对话流里那行 `✓ 已选择 X` 带一次进场高亮（`data-fresh`，1.1s 从成功色淡回白底）。历史回放的旧卡不带 `data-fresh`，不闪。
+4. 状态条同步：待答「问表智能体在等你确认」→ 提交后「正在按你的选择继续」。
+5. 续跑失败 → 浮层留在原地，选项放开可重选，卡内 `role="alert"` 给出原因，而不是卡死在提交中。
+
+**没做的**
+- 参考图右上角的 `1 of 3` 分页没做。后端 `suspendedInteractionEvent` 对 `suspendedCalls.size() != 1` 直接报错，一次挂起只出一张卡，一轮里同时未答的卡不可能超过一个，做了就是死 UI。
+- 参考图的「跳过」没做。后端在等 `ask_user` 的结果，跳过没有对应语义；✕ 只收起、不放弃。
+- 选项没有描述行。契约的 option 是 `hasOnlyKeys(['label','reply'])`，没有描述字段。历史 XML 卡的 `reply` 就是真正发回去的原文，正好当第二行说明用了。
+
+**修复的实现缺陷**
+- `useClarifyDock` 清「正在提交」的 effect 原来只依赖 `busy`。续跑同步结束（测试里就是）时 `busy` 从头到尾是 false，依赖不变、effect 不跑，浮层会永远停在已确认状态。把 `submitted` 一并放进依赖。
+
+**Verification**
+- `npm test`：753 用例 / 737 通过 / 16 失败，失败集合与基线逐条一致。本轮新增 6 例（浮层的提交中态、已确认态、失败可重选、收起→去选择往返、点击到确认的完整链路）。
+- `npm run lint` 32 problems（1 既有 error）、`tsc -b` 报错文件集合、`test:visual:typecheck` 均与基线一致。
+- harness 实测：840px 容器下浮层同宽同左沿、距输入框 12px；335px 容器下标题与选项说明正常折行、无横向溢出。
+
+**Findings**
+- [P2] 依旧没能按 1440 / 1672 / 1920 / 390 四档视口截图：Browser pane 的视口模拟仍然不生效（`resize_window` 报成功但 `window.innerWidth` 不变）。改为驱动容器宽度取 335 / 840 两档。浮层是 `left/right: 0`，宽度完全跟随输入框，宽视口下不存在独立构图。
+- [P2] harness 用假输入盒代替真实 `.xs-composer` / `.xs-command-box`，浮层与输入框之间的贴合是按几何实测的，真实控件下的观感未在应用内核对。
+- [P2] 端到端手测仍未做，同上一轮。
+
+### 答完就让开输入框（2026-08-30 第三轮）
+
+**改的两件事**（用户原话："确定了之后要把这个框收起来呀，而且现在还叉不掉"）
+- 上一轮的第 2、3 步是错的：浮层在后端回执之后还要一直占着输入框，直到整轮跑完。编排一轮几十秒起步，那就是几十秒里输入框被一张答完的卡压着——而且当时 ✕ 是 `disabled={busy}`，`busy` 包含"已确认"，等于连手动关都关不掉。两个症状其实是同一个状态。
+- 现在：**后端回执一到，浮层立刻收掉**，留痕落回对话流那一行 `✓ 已选择 X`（`data-fresh` 进场高亮不变，只是提前到确认时刻，反而更贴近点击）。`dockTarget` 简化成一句"还没被后端收下、也没被收起的那张"，不再由 `submittedKey` 顶着。
+- **✕ 永远可点**，提交中也能收。答案在路上不影响把输入框腾出来；真要看，对话流里那行「待确认 + 去选择」能把浮层叫回来，回来时仍是锁住的提交中态，点不出第二次提交。Esc 同理，不再区分是否提交中。
+
+**保留的**
+- 点下去到回执之间的空档照旧：选中行蓝底 + 转圈序号 + 「正在提交你的选择…」，其余淡出锁住。这段必须留，否则点击没有着落，失败时也没地方说原因。
+- 状态条仍然是 待答「问表智能体在等你确认」→ 提交后「正在按你的选择继续」，这句在浮层收掉之后接着担反馈。
+
+**顺带**
+- 对话流留痕的 `aria-label` 从和浮层同名的「需要你确认」改成「已确认的选择」/「收起的确认问题」。同名的三个区域在读屏里认不出谁是正在等人的那个，而真正要回答的地方只有浮层一处。
+
+**Verification**
+- `npx vitest run XsConversation TableSessionView AnalysisClarification`：27 用例全过。新增/改写 2 例——✕ 在提交中仍可收起；回执到达即收浮层（断言此刻浮层已不在、`已选择` 已出现、状态条已是「正在按你的选择继续」），不再等 `onDone`。删掉的是上一轮那条断言"已确认「X」"常驻的用例。
+- `npm test`：753 用例 / 719 通过 / **34 失败**。比上一轮基线的 16 条多出来的部分不在本轮改动范围内——工作区里出现了本次会话之外的 `src/features/officialDocument/**`、`src/services/officialDocument*`、`src/types/officialDocument.ts` 等改动（另有未跟踪的 `askTableService.ts`、`officialDocumentWritingWorkflow.ts`）。最直接的一处：`officialDocumentService.ts` 新增并被 `OfficialDocumentComposeView.tsx` / `DraftDetailView.tsx` 引用的 `resolveOfficialDocumentTemplateVersion`，没有补进 `OfficialDocumentComposeView.test.tsx` 的 `vi.mock` 工厂，该文件 14 例全挂。这些没动，也不该由澄清这条线代改。
+- `npm run lint` 33 problems / 2 errors：新增的那条是 `officialDocumentResearchService.ts:62` 的 `prefer-const`，同属上面那批改动；澄清相关文件零新增。
+- `npx tsc -b` 报错文件里没有任何澄清相关文件（`XsClarifyPanel` / `useClarifyDock` / `XsClarifyCard` / `TableSessionView` / `AnalysisPage` 均干净）。
+
+**Findings**
+- [P1] 上面那批 officialDocument 改动会让 `npm test` 从 16 红涨到 34 红，其中 `OfficialDocumentComposeView.test.tsx` 是整文件挂掉。修的时候先补 mock 导出。
+- [P2] 四档视口截图、真实输入框贴合、端到端手测，三条与上一轮相同，仍未做。

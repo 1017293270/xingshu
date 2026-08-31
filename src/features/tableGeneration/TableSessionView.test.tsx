@@ -312,9 +312,59 @@ describe("TableSessionView", () => {
 
     renderSession();
 
-    const card = await screen.findByRole("region", { name: "需要你确认" });
+    const card = await screen.findByRole("region", { name: "已确认的选择" });
     expect(within(card).getByText("已选择")).toBeInTheDocument();
     expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "需要你确认" })).not.toBeInTheDocument();
     expect(screen.queryByText("问表智能体在等你确认")).not.toBeInTheDocument();
+  });
+
+  it("puts the panel away as soon as the answer is recorded, not when the run ends", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayAwaitingClarification());
+    let streamHandlers: DataHubAskDataStreamHandlers | undefined;
+    mockRespond((handlers) => {
+      streamHandlers = handlers;
+    });
+
+    renderSession();
+
+    const panel = await screen.findByRole("region", { name: "需要你确认" });
+    await user.click(within(panel).getByRole("button", { name: /客户区域/ }));
+
+    // 后端还没回话的这段时间里，选中那行自己先亮起来，其余锁住
+    expect(within(panel).getByRole("button", { name: /客户区域/ })).toHaveAttribute("data-chosen", "true");
+    expect(within(panel).getByRole("button", { name: /签约主体区域/ })).toBeDisabled();
+    expect(within(panel).getByRole("status")).toHaveTextContent("正在提交你的选择");
+
+    streamHandlers?.onEvent({
+      type: "clarification_response",
+      data: { interactionId: "tool-call-1", answer: "客户区域" }
+    });
+
+    // 回执一到浮层就让开输入框，留痕落回对话流——不必等这一轮跑完
+    await waitFor(() => {
+      expect(screen.getByText("已选择")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("region", { name: "需要你确认" })).not.toBeInTheDocument();
+    expect(screen.getByText("正在按你的选择继续")).toBeInTheDocument();
+
+    streamHandlers?.onDone?.();
+  });
+
+  it("parks a question the reader puts aside and lets them come back to it", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayAwaitingClarification());
+
+    renderSession();
+
+    const panel = await screen.findByRole("region", { name: "需要你确认" });
+    await user.click(within(panel).getByRole("button", { name: "稍后再确认" }));
+
+    expect(screen.queryByRole("button", { name: /签约主体区域/ })).not.toBeInTheDocument();
+    expect(screen.getByText("待确认")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "去选择" }));
+    expect(await screen.findByRole("button", { name: /签约主体区域/ })).toBeInTheDocument();
   });
 });

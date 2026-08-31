@@ -6,9 +6,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import {
+  useClarifyDock,
   XsChatAssistant,
   XsChatTurn,
   XsChatUserBubble,
+  XsClarifyPanel,
   XsComposerBox,
   XsSidePanel
 } from "@/components/xs/conversation";
@@ -25,7 +27,7 @@ import {
 } from "@/features/tableGeneration/useTableGeneration";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
-import { hasPendingClarification } from "@/services/dataHubClarification";
+import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { exportDataHubTablesCsv } from "@/services/dataHubTableExport";
 import { listRecentTables } from "@/services/tableService";
 import type { DataHubAskDataStatus, DataHubAskTurn } from "@/types/dataHub";
@@ -91,6 +93,25 @@ export function TableSessionView() {
   const tableCount = generation.turns.reduce((count, item) => count + item.tableResults.length, 0);
   /* 挂在 ask_user 上的这一轮状态是 done，但真正的下一步在用户手里。 */
   const awaitingClarification = generation.turns.some(hasPendingClarification);
+  const dock = useClarifyDock(isBusy);
+  const clarifyTargets = useMemo(() => generation.turns.flatMap((item) => {
+    const key = turnKeyOf(item);
+    return item.clarifications.map((clarification, index) => ({
+      key: clarificationKey(key, clarification, index),
+      chatId: item.chatId ?? "",
+      error: item.status === "error" ? item.error?.message : undefined,
+      clarification
+    }));
+  }), [generation.turns]);
+  /*
+   * 只有"还没被后端收下、也没被收起"的那张占着浮层。
+   * 提交中的那张 selectedAnswer 还是空的，所以会带着 spinner 继续留在这儿；
+   * clarification_response 一到就自动腾开输入框，留痕由对话流接手。
+   */
+  const dockTarget = clarifyTargets.find((item) => (
+    !item.clarification.selectedAnswer && !dock.dismissedKeys.includes(item.key)
+  ));
+
   const baseStatusMessage = generation.isRestoring
     ? "正在还原当时的结果表"
     : generation.restoreError
@@ -106,9 +127,11 @@ export function TableSessionView() {
               : generation.status === "done"
                 ? "未生成结果表，请补充字段、时间或统计口径"
                 : "问表智能体已就绪，可继续追问";
-  const statusMessage = awaitingClarification && !isBusy
-    ? "问表智能体在等你确认"
-    : baseStatusMessage;
+  const statusMessage = dock.submittedKey && generation.isStreaming
+    ? "正在按你的选择继续"
+    : awaitingClarification && !isBusy
+      ? "问表智能体在等你确认"
+      : baseStatusMessage;
 
   const conversationSignature = generation.turns
     .map((item) => `${turnKeyOf(item)}:${item.status}:${item.reactSteps.length}:${item.tableResults.length}`)
@@ -269,9 +292,11 @@ export function TableSessionView() {
                       busy={isBusy}
                       status={turnStatus?.turnId === key ? turnStatus : undefined}
                       onOpenTable={(position) => setViewerKey(tableViewerKey(item, position))}
-                      onAnswerClarification={(answer, interactionId) => {
-                        generation.respondToClarification(key, answer, interactionId);
-                      }}
+                      turnKey={key}
+                      dockedClarifyKey={dockTarget?.key}
+                      dismissedClarifyKeys={dock.dismissedKeys}
+                      freshClarifyKey={dock.justAnsweredKey}
+                      onExpandClarify={dock.expand}
                       onCopyAnswer={() => void handleCopyAnswer(item)}
                       onRegenerate={() => generation.generate(item.question, sessionId)}
                       onExport={() => handleExport(item)}
@@ -282,12 +307,31 @@ export function TableSessionView() {
             })}
           </section>
 
-          <XsComposerBox
+          <div className="xs-clarify-anchor">
+            {dockTarget ? (
+              <XsClarifyPanel
+                clarification={dockTarget.clarification}
+                submittingAnswer={
+                  dock.submittedKey === dockTarget.key ? dock.submittingAnswer : undefined
+                }
+                error={dockTarget.error}
+                onAnswer={(answer) => {
+                  dock.submit(dockTarget.key, answer);
+                  generation.respondToClarification(
+                    dockTarget.chatId,
+                    answer,
+                    dockTarget.clarification.interactionId
+                  );
+                }}
+                onDismiss={() => dock.dismiss(dockTarget.key)}
+              />
+            ) : null}
+            <XsComposerBox
             className="table-chat__composer"
             mode="chat"
             label="继续制表"
             busy={isBusy}
-            showScrollToBottom={conversation.showScrollToBottom}
+            showScrollToBottom={conversation.showScrollToBottom && !dockTarget}
             onScrollToBottom={conversation.scrollToBottom}
             toolbarTail={(
               <>
@@ -327,6 +371,7 @@ export function TableSessionView() {
               }}
             />
           </XsComposerBox>
+          </div>
 
           <div className="workflow-status-slot table-page__status-slot">
             <XsStatusBar

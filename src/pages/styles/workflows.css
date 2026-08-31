@@ -1,49 +1,5 @@
 /* 智能制表 + 智能写作：企业级工作流页面样式 */
 
-/* 快捷示例：填进输入框的一句话，所以做成低调的文本按钮而不是彩色标签 */
-.sheet-suggestions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-right: auto;
-}
-
-.sheet-suggestions > span {
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-}
-
-.sheet-suggestions button {
-  min-height: 28px;
-  padding: 0 11px;
-  border: 1px solid var(--xs-border);
-  border-radius: 999px;
-  color: var(--xs-text-2);
-  background: var(--xs-surface);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-  cursor: pointer;
-  transition:
-    color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.sheet-suggestions button:not(:disabled):hover,
-.sheet-suggestions button:not(:disabled):focus-visible {
-  color: var(--xs-primary-2);
-  border-color: #9fc8ff;
-  background: var(--xs-bg);
-}
-
-.sheet-suggestions button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-
 /* 结果表位常驻：空态和加载中都保持一张"空表"的形状，加载动画发生在框里 */
 .table-placeholder {
   overflow: hidden;
@@ -397,60 +353,50 @@
 }
 
 /* ---------- 智能制表：最近制表 ---------- */
-/* 制表工具的列表页本身就该是一张表：表头与行共用列宽，字段各就各位 */
+/* 入口页只留一条中轴：列表与上面的输入盒同宽同心，读作输入盒的续篇而不是另起一张全宽数据表。
+   行内也不再排四列——表名是主角，类型与时间退到副行，动作等指针进来再现身。 */
+
+.table-recent {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.table-recent .section-title-row--compact {
+  margin: 0 0 12px;
+  padding-inline: 2px;
+}
 
 .sheet-list {
-  --sheet-col-gap: 14px;
-  --sheet-col-icon: 32px;
-  --sheet-col-type: 84px;
-  --sheet-col-time: 156px;
-  --sheet-col-action: 148px;
   display: grid;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 6px;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
   background: var(--xs-surface);
   box-shadow: var(--xs-shadow-soft);
 }
 
-.sheet-list__head {
-  display: grid;
-  grid-template-columns:
-    var(--sheet-col-icon) minmax(0, 1fr)
-    var(--sheet-col-type) var(--sheet-col-time) var(--sheet-col-action);
-  align-items: center;
-  gap: var(--sheet-col-gap);
-  padding: 0 14px;
-  min-height: 32px;
-  border-bottom: 1px solid var(--xs-border-strong);
-  color: var(--xs-text-3);
-  background: var(--xs-table-head);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-  letter-spacing: 0.02em;
-}
-
-/* 表名列跨过图标槽，让图标与表名读作同一个字段 */
-.sheet-list__head > span:first-child {
-  grid-column: 1 / 3;
-}
-
-.sheet-list__head > span:last-child {
-  text-align: right;
-}
-
 .sheet-row {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--sheet-col-action);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--sheet-col-gap);
-  padding: 0 14px;
-  border-bottom: 1px solid var(--xs-table-grid);
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 10px;
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.sheet-row:last-child {
-  border-bottom: 0;
+/* 分隔线从表名起笔，hover 时让位给整行底色：行之间只需要一条提示，不需要一张网格 */
+.sheet-row + .sheet-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 8px;
+  left: 54px;
+  height: 1px;
+  background: var(--xs-table-grid);
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .sheet-row:hover,
@@ -458,51 +404,75 @@
   background: var(--xs-surface-soft);
 }
 
+.sheet-row:hover::before,
+.sheet-row:focus-within::before,
+.sheet-row:hover + .sheet-row::before,
+.sheet-row:focus-within + .sheet-row::before {
+  opacity: 0;
+}
+
 .sheet-row__main {
   display: grid;
-  grid-template-columns:
-    var(--sheet-col-icon) minmax(0, 1fr)
-    var(--sheet-col-type) var(--sheet-col-time);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
-  gap: var(--sheet-col-gap);
-  min-height: 40px;
+  gap: 12px;
+  min-height: 56px;
+  padding: 9px 0;
   color: inherit;
   text-decoration: none;
 }
 
 .sheet-row__main:focus-visible {
   outline: 2px solid var(--xs-primary-2);
-  outline-offset: -3px;
+  outline-offset: 1px;
   border-radius: var(--xs-radius-small);
+}
+
+.sheet-row__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .sheet-list .sheet-row__title {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--xs-text-2);
+  color: var(--xs-text);
   font-size: var(--xs-fs-control);
-  font-weight: var(--xs-fw-regular);
-  line-height: 1.45;
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sheet-row:hover .sheet-row__title {
+.sheet-row:hover .sheet-row__title,
+.sheet-row:focus-within .sheet-row__title {
   color: var(--xs-interactive-text);
 }
 
-.sheet-row__type {
+.sheet-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-regular);
+  line-height: 1.35;
+}
+
+.sheet-row__meta > em {
+  font-style: normal;
+  opacity: 0.45;
+}
+
+.sheet-row__type {
+  white-space: nowrap;
 }
 
 /* 时间沿用结果表的数值字体：同一套数字语言贯穿列表与结果 */
 .sheet-row__time {
-  color: var(--xs-text-3);
   font-family: var(--xs-font-mono);
-  font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -510,22 +480,43 @@
 .sheet-icon {
   display: grid;
   place-items: center;
-  width: var(--sheet-col-icon);
-  height: var(--sheet-col-icon);
+  width: 34px;
+  height: 34px;
   color: var(--xs-primary-2);
-  border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-small);
-  background: var(--xs-surface-soft);
+  border-radius: 10px;
+  background: var(--xs-info-soft);
+  transition:
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
+.sheet-row:hover .sheet-icon,
+.sheet-row:focus-within .sheet-icon {
+  color: var(--xs-primary);
+  background: #DBEAFF;
+}
+
+/* 一行只有一个动作：常驻文字按钮会把八行都压成按钮列，收成图标后行首的表名才是入口 */
 .sheet-list .sheet-row__copy.ant-btn {
   justify-self: end;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: var(--xs-radius-small);
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 9px;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-regular);
+  opacity: 0;
+  transition:
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.sheet-row:hover .sheet-row__copy.ant-btn,
+.sheet-row:focus-within .sheet-row__copy.ant-btn,
+.sheet-list .sheet-row__copy.ant-btn:focus-visible,
+.sheet-list .sheet-row__copy.ant-btn[data-copied="true"] {
+  opacity: 1;
 }
 
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):hover,
@@ -534,60 +525,34 @@
   background: var(--xs-info-soft);
 }
 
-/* 按钮常驻但压低对比：表头写了"操作"，这一列就不能是空的 */
-.sheet-list .sheet-row__copy.ant-btn:not(:disabled) {
-  opacity: 0.62;
-  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+.sheet-list .sheet-row__copy.ant-btn[data-copied="true"] {
+  color: var(--xs-success);
+  background: var(--xs-success-soft);
 }
 
-.sheet-row:hover .sheet-row__copy.ant-btn:not(:disabled),
-.sheet-row:focus-within .sheet-row__copy.ant-btn:not(:disabled) {
-  opacity: 1;
+/* 触屏没有 hover：动作常驻，并留够点按面积 */
+@media (pointer: coarse) {
+  .sheet-list .sheet-row__copy.ant-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    opacity: 1;
+  }
 }
 
-/* 窄屏没有横向列位，回到堆叠卡片式行 */
-@media (max-width: 900px) {
-  .sheet-list__head {
-    display: none;
+@media (max-width: 640px) {
+  .sheet-row {
+    padding: 0 4px;
   }
 
-  .sheet-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding: 12px 14px;
+  .sheet-row + .sheet-row::before {
+    right: 4px;
+    left: 50px;
   }
 
   .sheet-row__main {
-    grid-template-columns: var(--sheet-col-icon) auto minmax(0, 1fr);
-    grid-template-areas:
-      "icon title title"
-      "icon type  time";
-    align-items: center;
-    gap: 3px 12px;
-    min-height: 0;
-  }
-
-  .sheet-row__main .sheet-icon {
-    grid-area: icon;
-  }
-
-  .sheet-list .sheet-row__title {
-    grid-area: title;
-    white-space: normal;
-  }
-
-  .sheet-row__type {
-    grid-area: type;
-  }
-
-  .sheet-row__time {
-    grid-area: time;
-    justify-self: start;
-  }
-
-  .sheet-list .sheet-row__copy.ant-btn {
-    justify-self: start;
-    margin: 6px 0 0 44px;
+    gap: 10px;
+    min-height: 52px;
   }
 }
 
@@ -926,7 +891,6 @@
 }
 
 @media (pointer: coarse) {
-  .sheet-row__copy.ant-btn,
   .writing-panel__controls .ant-btn,
   .writing-panel__actions-bar .ant-btn,
   .doc-table .ant-btn-text {
@@ -990,13 +954,10 @@
   }
 }
 
-.table-hero__suggestions {
-  justify-content: center;
-  margin: 0;
-}
-
+/* 复制反馈与列表同轴：状态条压在输入盒和最近制表之间，宽度跟着这条中轴走 */
 .table-page .table-page__status-slot {
-  margin: 12px 0 var(--xs-module-gap);
+  width: min(760px, 100%);
+  margin: 12px auto var(--xs-module-gap);
 }
 
 /* ---------- 问表智能体：对话工作台 ---------- */

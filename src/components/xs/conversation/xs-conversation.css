@@ -295,169 +295,291 @@
   color: var(--xs-primary);
 }
 
-/* ---------- 受控澄清卡 ---------- */
+/* ---------- 受控澄清 ---------- */
 
-/* Agent 挂在 ask_user 上等用户选。左边一根竖条就是「这一轮卡在你身上」的全部提示——
-   不做成整块色卡：多轮对话里一块底色会把上一轮的正文压下去。 */
-.xs-clarify {
-  width: min(560px, 100%);
-  min-width: 0;
-  margin-top: 5px;
-  padding: 13px 15px 14px;
-  border: 1px solid #e1e6ed;
-  border-left: 3px solid var(--xs-primary);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgb(15 38 74 / 5%);
-}
-
-.xs-clarify__head {
+/* 浮层的定位锚点：包住输入控件本身，bottom: 100% 才会正好贴在它上沿 */
+.xs-clarify-anchor {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
+  min-width: 0;
+  flex-direction: column;
 }
 
-.xs-clarify__head strong {
-  color: var(--xs-primary-2);
-  font-size: 12px;
-  font-weight: var(--xs-fw-medium);
+
+/* 浮在输入框正上方的选择浮层。这一轮已经停住了，问题不该躺在对话流里等人翻回去；
+   它是"现在轮到你"，得待在用户的手和视线已经在的地方。 */
+.xs-clarify-dock {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: calc(100% + 12px);
+  left: 0;
+  padding: 6px;
+  border: 1px solid #e4e9f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 20px 48px rgb(15 38 74 / 14%),
+    0 2px 8px rgb(15 38 74 / 6%);
+  animation: xs-clarify-dock-in 200ms var(--xs-motion-ease-out) both;
 }
 
-.xs-clarify__head small {
-  flex: none;
-  color: #7b8798;
-  font-size: 11px;
+@keyframes xs-clarify-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.xs-clarify__question {
+.xs-clarify-dock__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 8px 10px 12px;
+}
+
+.xs-clarify-dock__head h3 {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   color: var(--xs-text);
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  font-size: 16px;
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.xs-clarify__options {
-  display: grid;
-  gap: 8px;
-  margin-top: 11px;
+.xs-clarify-dock__head .ant-btn {
+  flex: none;
+  color: #8794a6;
 }
 
-.xs-clarify__options button {
+.xs-clarify-dock__options {
+  display: grid;
+  gap: 2px;
+}
+
+.xs-clarify-dock__options button {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid #e1e6ed;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
   border-radius: 12px;
-  background: #fbfcfe;
-  color: var(--xs-text);
+  background: transparent;
+  color: inherit;
   font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background var(--xs-motion-fast) var(--xs-motion-ease-out);
+    background var(--xs-motion-fast) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.xs-clarify__options button:hover:not(:disabled) {
-  border-color: #9ebce3;
-  background: #edf5ff;
+.xs-clarify-dock__options button:hover:not(:disabled),
+.xs-clarify-dock__options button:focus-visible {
+  background: #f4f6f9;
+  outline: none;
 }
 
-.xs-clarify__options button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--xs-primary) 48%, white);
-  outline-offset: 2px;
-}
-
-.xs-clarify__options button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+/* 键盘走位要看得出焦点在哪，光靠背景色在浅底上不够 */
+.xs-clarify-dock__options button:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--xs-primary) 40%, white);
 }
 
 /* 序号只是视觉锚点，没有绑数字快捷键——那要跟输入框抢按键 */
-.xs-clarify__index {
+.xs-clarify-dock__index {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   flex: none;
   place-items: center;
-  color: var(--xs-primary-2);
-  border-radius: 7px;
-  background: #edf5ff;
-  font-size: 11px;
+  color: #8794a6;
+  border-radius: 50%;
+  background: #f1f3f6;
+  font-size: 12px;
   font-weight: var(--xs-fw-medium);
+  transition:
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-/* 选项文字可以折行：候选答案最长 80 字，截断会让人选错 */
-.xs-clarify__label {
+.xs-clarify-dock__copy {
+  display: grid;
   min-width: 0;
   flex: 1;
+  gap: 1px;
+}
+
+.xs-clarify-dock__copy strong {
+  color: var(--xs-text);
+  font-size: 15px;
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.xs-clarify__go {
+/* 历史 XML 卡的 reply 就是真正发回去的原文，正好当第二行说明 */
+.xs-clarify-dock__copy small {
+  color: #7b8798;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.xs-clarify-dock__go {
   flex: none;
   color: #9fb0c6;
   opacity: 0;
   transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.xs-clarify__options button:hover:not(:disabled) .xs-clarify__go,
-.xs-clarify__options button:focus-visible .xs-clarify__go {
+.xs-clarify-dock__options button:hover:not(:disabled) .xs-clarify-dock__go,
+.xs-clarify-dock__options button:focus-visible .xs-clarify-dock__go {
   opacity: 1;
 }
 
-.xs-clarify__custom {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
+/* 点下去之后：选中那行立刻自己亮起来，其余淡出。
+   等后端回话有几百毫秒，这段时间里不给反馈的话，点击像是没生效。 */
+.xs-clarify-dock[data-busy] .xs-clarify-dock__options button:not([data-chosen]) {
+  opacity: 0.35;
 }
 
-.xs-clarify__custom .ant-btn {
+.xs-clarify-dock__options button[data-chosen] {
+  background: #edf5ff;
+}
+
+.xs-clarify-dock__options button[data-chosen] .xs-clarify-dock__index {
+  color: #fff;
+  background: var(--xs-primary);
+}
+
+.xs-clarify-dock__custom {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px 10px;
+}
+
+.xs-clarify-dock__custom .ant-btn {
   flex: none;
 }
 
-/* 已答态：整张收成一行历史记录，竖条转成完成色 */
-.xs-clarify[data-answered] {
+.xs-clarify-dock__progress,
+.xs-clarify-dock__error {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 9px 13px;
-  border-left-color: var(--xs-success);
-  box-shadow: none;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 14px 10px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.xs-clarify[data-answered] svg {
+.xs-clarify-dock__progress {
+  color: var(--xs-text-2);
+}
+
+.xs-clarify-dock__error {
+  color: var(--xs-danger-ink);
+}
+
+/* ---------- 对话流里的留痕 ---------- */
+
+/* 答完之后剩下的一行历史，以及用户收起浮层时留下的回去入口。
+   都做成窄条而不是卡片：它们是脚注，不该和结果卡抢分量。 */
+.xs-clarify {
+  display: flex;
+  width: min(560px, 100%);
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 9px 13px;
+  border: 1px solid #e1e6ed;
+  border-left: 3px solid var(--xs-success);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.xs-clarify[data-collapsed] {
+  border-left-color: var(--xs-primary);
+}
+
+.xs-clarify svg {
   align-self: flex-start;
   margin-top: 3px;
   color: var(--xs-success);
 }
 
-.xs-clarify[data-answered] small {
+.xs-clarify[data-collapsed] svg {
+  color: var(--xs-primary);
+}
+
+.xs-clarify small {
   flex: none;
   color: #7b8798;
   font-size: 12px;
 }
 
-.xs-clarify[data-answered] p {
+.xs-clarify p {
   margin: 0;
   min-width: 0;
+  flex: 1;
   color: var(--xs-text);
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-/* 触摸设备没有 hover，箭头常显，否则选项看不出可点 */
+.xs-clarify .ant-btn {
+  flex: none;
+  align-self: center;
+  padding: 0;
+  height: auto;
+}
+
+/* 刚答完的那张进场时亮一下，别让"我到底点没点上"这个问题留在用户脑子里。
+   历史回放的旧卡不带 data-fresh，不闪。 */
+.xs-clarify[data-fresh] {
+  animation: xs-clarify-settle 1100ms var(--xs-motion-ease-out) both;
+}
+
+@keyframes xs-clarify-settle {
+  0% {
+    border-color: var(--xs-success-line);
+    background: var(--xs-success-soft);
+  }
+
+  35% {
+    border-color: var(--xs-success-line);
+    background: var(--xs-success-soft);
+  }
+
+  100% {
+    border-color: #e1e6ed;
+    background: #fff;
+  }
+}
+
+@media (max-width: 1099px) {
+  .xs-clarify-dock__head h3 {
+    font-size: 15px;
+  }
+
+  .xs-clarify-dock__copy strong {
+    font-size: 14px;
+  }
+}
+
+/* 触摸设备没有 hover，箭头常显，否则一行行文字看不出可点 */
 @media (hover: none) {
-  .xs-clarify__go {
+  .xs-clarify-dock__go {
     opacity: 1;
   }
 }

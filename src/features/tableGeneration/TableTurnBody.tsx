@@ -8,7 +8,7 @@ import {
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
 import { buildTableAgentTrace } from "@/features/tableGeneration/agentTrace";
-import { hasPendingClarification } from "@/services/dataHubClarification";
+import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { formatDataHubTableTitle } from "@/services/dataHubFormat";
 import type { DataHubAskTurn } from "@/types/dataHub";
 
@@ -28,8 +28,15 @@ type TableTurnBodyProps = {
   busy: boolean;
   status?: TableTurnStatus;
   onOpenTable: (position: number) => void;
-  /** 回答一张受控澄清卡；会续跑这一轮，而不是新起一轮。 */
-  onAnswerClarification: (answer: string, interactionId?: string) => void;
+  /** 这一轮在会话里的键，澄清卡的身份要靠它拼出来。 */
+  turnKey: string;
+  /** 正在输入框上方浮层里展示的那张，对话流里就别重复一遍了。 */
+  dockedClarifyKey?: string;
+  /** 被用户收起的澄清卡，留一行带"去选择"的窄条。 */
+  dismissedClarifyKeys: string[];
+  /** 刚答完的那张，进场闪一下。 */
+  freshClarifyKey?: string;
+  onExpandClarify: (key: string) => void;
   onCopyAnswer: () => void;
   onRegenerate: () => void;
   onExport: () => void;
@@ -56,7 +63,11 @@ export function TableTurnBody({
   busy,
   status,
   onOpenTable,
-  onAnswerClarification,
+  turnKey,
+  dockedClarifyKey,
+  dismissedClarifyKeys,
+  freshClarifyKey,
+  onExpandClarify,
   onCopyAnswer,
   onRegenerate,
   onExport
@@ -104,14 +115,23 @@ export function TableTurnBody({
 
       {answer && (isDone || isCancelled) ? <XsSafeMarkdown content={answer} /> : null}
 
-      {turn.clarifications.map((clarification, index) => (
-        <XsClarifyCard
-          key={clarification.interactionId || `clarification-${index}`}
-          clarification={clarification}
-          disabled={busy}
-          onAnswer={(value) => onAnswerClarification(value, clarification.interactionId)}
-        />
-      ))}
+      {turn.clarifications.map((clarification, index) => {
+        const key = clarificationKey(turnKey, clarification, index);
+        const dismissed = dismissedClarifyKeys.includes(key);
+        // 待答且没被收起的那张在浮层里，这里不留副本
+        if (key === dockedClarifyKey || (!clarification.selectedAnswer && !dismissed)) {
+          return null;
+        }
+
+        return (
+          <XsClarifyCard
+            key={key}
+            clarification={clarification}
+            fresh={key === freshClarifyKey}
+            onExpand={clarification.selectedAnswer ? undefined : () => onExpandClarify(key)}
+          />
+        );
+      })}
 
       {turn.tableResults.map((table, position) => {
         const title = formatDataHubTableTitle(table);

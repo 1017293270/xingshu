@@ -152,6 +152,18 @@ export function applyDataHubClarificationResponse(
   }
 }
 
+/**
+ * 澄清卡在整个会话里的唯一标识。浮层、收起状态、进场高亮都按它来认人，
+ * 所以对话流和输入框上方那一份必须用同一个函数算，不能各写各的。
+ */
+export function clarificationKey(
+  turnKey: string,
+  clarification: DataHubClarification,
+  index: number
+) {
+  return `${turnKey}:clarify:${clarification.interactionId || index}`;
+}
+
 /** 已选的卡是历史；只有未选的卡才卡着这一轮。 */
 export function hasPendingClarification(turn: { clarifications?: DataHubClarification[] }) {
   return (turn.clarifications ?? []).some((item) => !item.selectedAnswer);
