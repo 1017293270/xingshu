@@ -153,7 +153,7 @@ describe("reference draft generation", () => {
       }],
       fixedFields: [{
         slotId: "title-slot",
-        role: "TITLE",
+        role: "TITLE" as const,
         roleLabel: "标题",
         required: true,
         preview: ""

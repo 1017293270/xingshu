@@ -40,7 +40,7 @@ describe("datahub execution display", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
       type: "react_step",
-      title: "执行推理步骤",
+      title: "执行任务步骤",
       summary: "分派并行任务",
       status: "done"
     });

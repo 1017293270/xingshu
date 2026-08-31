@@ -37,13 +37,40 @@ describe("dataHubDocumentLookupPresenter", () => {
         docId: 7,
         docKey: "policy.pdf",
         kbId: "kb-policy",
+        kbName: undefined,
         title: "销售管理制度",
         contentType: undefined,
         excerpt: "这是最匹配的最新版制度。",
+        matchReason: "这是最匹配的最新版制度。",
+        snippet: undefined,
+        score: undefined,
         docStatus: undefined,
         sourceAvailable: true
       }
     ]);
+  });
+
+  it("keeps a result without docKey but marks it not openable", () => {
+    const results = getDataHubDocumentLookupResults({
+      documentLookup: true,
+      documentSelectionMode: "single",
+      documentResults: [
+        {
+          docId: "doc-a6",
+          kbId: "kb-policy",
+          docName: "PRD A-6 之后的检索结果",
+          sourceAvailable: true
+        }
+      ]
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      docId: "doc-a6",
+      docKey: undefined,
+      title: "PRD A-6 之后的检索结果",
+      sourceAvailable: false
+    });
   });
 
   it.each(["none", "uncertain"] as const)(

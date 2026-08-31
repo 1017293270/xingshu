@@ -725,13 +725,14 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
   const docId = asString(record.docId).trim();
   const docKey = asString(record.docKey).trim();
   const kbId = asString(record.kbId).trim();
-  if (!docId || !docKey || !kbId) {
+  // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能整条丢引用。
+  if (!docId || !kbId) {
     return undefined;
   }
 
   return {
     docId,
-    docKey,
+    docKey: docKey || undefined,
     kbId,
     kbName: asString(record.kbName).trim() || undefined,
     docName: asString(record.docName).trim() || undefined,
@@ -747,7 +748,7 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
       asString(record.page).trim() ||
       asString(record.page_idx).trim() ||
       undefined,
-    sourceAvailable: record.sourceAvailable !== false,
+    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey),
     markdownAvailable:
       typeof record.markdownAvailable === "boolean" ? record.markdownAvailable : undefined,
     fragments: Array.isArray(record.fragments)
@@ -958,8 +959,8 @@ function appendCitationDocument(
     return;
   }
 
-  const identity = `${citation.docId}::${citation.docKey}`;
-  if (citations.some((item) => `${item.docId}::${item.docKey}` === identity)) {
+  const identity = `${citation.docId}::${citation.docKey ?? ""}`;
+  if (citations.some((item) => `${item.docId}::${item.docKey ?? ""}` === identity)) {
     return;
   }
 

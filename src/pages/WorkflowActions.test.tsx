@@ -520,7 +520,8 @@ describe("workflow page actions", () => {
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
   });
 
-  it("uses the execution panel as the only agent process surface", () => {
+  it("uses the execution panel as the only agent process surface", async () => {
+    const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("联合分析销售数据与制度", null, "agent");
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
@@ -579,10 +580,20 @@ describe("workflow page actions", () => {
     expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
     expect(screen.queryByText("Agent 正在思考")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "智能体执行卡" })).not.toBeInTheDocument();
+
+    /* 编排面板默认收起，子智能体细节要展开后才挂载 */
+    await user.click(screen.getByRole("button", { name: /智能编排执行/ }));
+    const openDetail = await screen.findByRole("button", { name: "打开 制度研究员执行详情" });
+
+    /* 子智能体的执行细节收在详情抽屉里 */
+    await user.click(openDetail);
+    const drawer = await screen.findByRole("dialog", { name: "子智能体执行详情" });
     expect(
-      screen.getByRole("button", { name: "打开 制度研究员执行详情" })
+      within(drawer).getByRole("treeitem", { name: /制度研究员/ })
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(drawer).getByRole("list", { name: "制度研究员执行时间轴" })
     ).toBeInTheDocument();
-    expect(screen.getByText("正在核对销售费用制度。")).toBeInTheDocument();
   });
 
   it("settles the execution panel when the request ends without a root done event", () => {
@@ -706,8 +717,11 @@ describe("workflow page actions", () => {
     expect(panel).toHaveAttribute("data-status", "cancelled");
     expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
     expect(within(panel as HTMLElement).getAllByLabelText("已停止").length).toBeGreaterThan(0);
+
+    /* 面板默认收起，总用时明细要展开后才挂载 */
+    await user.click(within(panel as HTMLElement).getByRole("button", { name: /智能编排执行/ }));
     expect(
-      within(panel as HTMLElement).getByText("1m 15s", { selector: "dd" })
+      await within(panel as HTMLElement).findByText("1m 15s", { selector: "dd" })
     ).toBeVisible();
   });
 

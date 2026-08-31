@@ -72,7 +72,7 @@ describe("DraftLibraryView", () => {
 
     expect(screen.getByLabelText("报告草稿箱")).toBeInTheDocument();
     expect(await screen.findByText("还没有报告草稿")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "去模板库" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "去结构模板" })).toBeInTheDocument();
   });
 
   it("lists drafts only and keeps templates on their own page", async () => {
@@ -84,7 +84,7 @@ describe("DraftLibraryView", () => {
     expect(within(row).getByText("可导出")).toBeInTheDocument();
     expect(within(row).getByText("季度工作通知")).toBeInTheDocument();
 
-    expect(screen.queryByRole("list", { name: "报告模板列表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "结构模板列表" })).not.toBeInTheDocument();
   });
 
   it("warns instead of navigating when no usable template exists", async () => {
@@ -94,6 +94,6 @@ describe("DraftLibraryView", () => {
     await screen.findByRole("list", { name: "报告草稿列表" });
     screen.getByRole("button", { name: /新建草稿/ }).click();
 
-    expect(await screen.findByText(/还没有可用模板/)).toBeInTheDocument();
+    expect(await screen.findByText(/还没有可用结构/)).toBeInTheDocument();
   });
 });

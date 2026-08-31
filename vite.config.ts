@@ -41,19 +41,33 @@ export function resolveRagImageProxyTarget({ env, processEnv }: Pick<ProxyTarget
 
 export const RAG_IMAGE_PROXY_PATH = "/data-source/rag-source/images";
 
-export function stripBrowserOriginHeaders(proxyReq: { removeHeader: (name: string) => void }) {
+type HeaderFilteringProxyRequest = { removeHeader: (name: string) => void };
+
+/**
+ * 条件代理工厂的返回必须收敛成 Record：`{} | { key: entry }` 联合会让
+ * server.proxy 推断出带 `?: undefined` 键的联合类型，defineConfig 直接拒收。
+ */
+export type HeaderFilteringProxyEntry = {
+  target: string;
+  changeOrigin: boolean;
+  configure: (proxy: {
+    on: (event: string, listener: (proxyReq: HeaderFilteringProxyRequest) => void) => void;
+  }) => void;
+};
+
+export function stripBrowserOriginHeaders(proxyReq: HeaderFilteringProxyRequest) {
   proxyReq.removeHeader("origin");
   proxyReq.removeHeader("referer");
 }
 
-export function stripRagImageForwardHeaders(proxyReq: { removeHeader: (name: string) => void }) {
+export function stripRagImageForwardHeaders(proxyReq: HeaderFilteringProxyRequest) {
   proxyReq.removeHeader("authorization");
   proxyReq.removeHeader("cookie");
   proxyReq.removeHeader("origin");
   proxyReq.removeHeader("referer");
 }
 
-export function createOfficialDocumentBrowserProxy(target: string) {
+export function createOfficialDocumentBrowserProxy(target: string): Record<string, HeaderFilteringProxyEntry> {
   if (!target) {
     return {};
   }
@@ -62,7 +76,7 @@ export function createOfficialDocumentBrowserProxy(target: string) {
     "/api/official-document": {
       target,
       changeOrigin: true,
-      configure(proxy: { on: (event: string, listener: (proxyReq: { removeHeader: (name: string) => void }) => void) => void }) {
+      configure(proxy) {
         proxy.on("proxyReq", (proxyReq) => {
           stripBrowserOriginHeaders(proxyReq);
         });
@@ -71,7 +85,7 @@ export function createOfficialDocumentBrowserProxy(target: string) {
   };
 }
 
-export function createRagImageBrowserProxy(target: string) {
+export function createRagImageBrowserProxy(target: string): Record<string, HeaderFilteringProxyEntry> {
   if (!target) {
     return {};
   }
@@ -80,7 +94,7 @@ export function createRagImageBrowserProxy(target: string) {
     [RAG_IMAGE_PROXY_PATH]: {
       target,
       changeOrigin: true,
-      configure(proxy: { on: (event: string, listener: (proxyReq: { removeHeader: (name: string) => void }) => void) => void }) {
+      configure(proxy) {
         proxy.on("proxyReq", (proxyReq) => {
           stripRagImageForwardHeaders(proxyReq);
         });

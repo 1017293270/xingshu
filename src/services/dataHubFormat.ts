@@ -200,8 +200,8 @@ const dataHubEnglishTableTitles: Record<string, string> = {
   wechatyuserinfo: "微信机器人用户信息表"
 };
 
-export function hasHanScript(value: string) {
-  return /\p{Script=Han}/u.test(value);
+export function hasHanScript(value: string | null | undefined): value is string {
+  return typeof value === "string" && /\p{Script=Han}/u.test(value);
 }
 
 export function pickHanLabel(values: Array<string | undefined>, maxLength = 48) {

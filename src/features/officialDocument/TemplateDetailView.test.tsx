@@ -133,8 +133,8 @@ describe("TemplateDetailView", () => {
   it("does not invent a demo template when the live workspace is empty", async () => {
     renderTemplateDetail("template-missing");
 
-    expect(await screen.findByText("未找到该报告模板")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回模板库" })).toHaveAttribute("href", "/writing/templates");
+    expect(await screen.findByText("未找到该结构模板")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回结构模板" })).toHaveAttribute("href", "/writing/templates");
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe("TemplateDetailView", () => {
 
     const outline = await screen.findByRole("list", { name: "模板大纲" });
     expect(within(outline).getByText("关于示范项目的请示")).toBeInTheDocument();
-    expect(screen.getByLabelText("模板原文")).toBeInTheDocument();
+    expect(screen.getByLabelText("结构模板原文")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /段落角色/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "校准结构" }));
@@ -161,7 +161,7 @@ describe("TemplateDetailView", () => {
     );
   });
 
-  it("lets an analyzed template create a draft without a calibration or publish step", async () => {
+  it("publishes the structure and then creates a draft without opening calibration", async () => {
     mocks.loadOfficialDocumentWorkspace.mockResolvedValue({
       ...emptyWorkspace,
       templates: [reviewTemplate]
@@ -190,25 +190,26 @@ describe("TemplateDetailView", () => {
     renderTemplateDetail(reviewTemplate.id);
     const user = userEvent.setup();
 
-    const createButton = await screen.findByRole("button", { name: "开始写作" });
-    await waitFor(() => expect(createButton).toBeEnabled());
-    expect(screen.queryByRole("button", { name: "保存角色映射" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "发布模板" })).not.toBeInTheDocument();
+    const publishButton = await screen.findByRole("button", { name: "发布结构" });
+    await waitFor(() => expect(publishButton).toBeEnabled());
     /* 写作视角默认不展开逐段检查器，校准只在点开后出现 */
     expect(screen.queryByRole("combobox", { name: /段落角色/ })).not.toBeInTheDocument();
 
-    await user.click(createButton);
-    expect(await screen.findByRole("dialog", { name: "从模板创建报告草稿" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "创建草稿" }));
-
+    await user.click(publishButton);
     await waitFor(() => {
       expect(mocks.updateOfficialDocumentTemplateMapping).toHaveBeenCalled();
       expect(mocks.publishOfficialDocumentTemplate).toHaveBeenCalledWith(
         reviewTemplate.id,
         reviewTemplate.currentVersion.id
       );
-      expect(mocks.createOfficialDocumentDraft).toHaveBeenCalled();
     });
+
+    const createButton = await screen.findByRole("button", { name: "按此结构新建草稿" });
+    await user.click(createButton);
+    expect(await screen.findByRole("dialog", { name: "按结构创建报告草稿" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+
+    await waitFor(() => expect(mocks.createOfficialDocumentDraft).toHaveBeenCalled());
     expect(await screen.findByText("草稿页")).toBeInTheDocument();
   });
 });

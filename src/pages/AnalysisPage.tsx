@@ -239,7 +239,7 @@ function stripMarkdownTables(markdown: string) {
 }
 
 function citationSourceLabel(citation: DataHubCitationDocument) {
-  const name = citation.docName || citation.fileName || citation.docKey;
+  const name = citation.docName || citation.fileName || citation.docKey || citation.docId;
   const blob = [name, ...citation.fragments].join(" ");
   const chapter = citation.chapter || blob.match(/第[\d一二三四五六七八九十百千]+章[^，。\s]*/)?.[0];
   const page = citation.pageNumber || blob.match(/第?\s*\d+\s*页/)?.[0];
@@ -253,7 +253,7 @@ function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHub
     docKey: citation.docKey,
     kbId: citation.kbId,
     kbName: citation.kbName,
-    title: citation.docName || citation.fileName || citation.docKey,
+    title: citation.docName || citation.fileName || citation.docKey || citation.docId,
     sourceAvailable: citation.sourceAvailable
   }));
 }
@@ -485,13 +485,14 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
   const docId = identityText(record.docId);
   const docKey = identityText(record.docKey);
   const kbId = identityText(record.kbId);
-  if (!docId || !docKey || !kbId) {
+  // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能整条丢引用。
+  if (!docId || !kbId) {
     return undefined;
   }
 
   return {
     docId,
-    docKey,
+    docKey: docKey || undefined,
     kbId,
     kbName: optionalText(record.kbName),
     docName: optionalText(record.docName) || optionalText(record.title),
@@ -506,7 +507,7 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
       identityText(record.page) ||
       identityText(record.page_idx) ||
       undefined,
-    sourceAvailable: record.sourceAvailable !== false,
+    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey),
     markdownAvailable:
       typeof record.markdownAvailable === "boolean"
         ? record.markdownAvailable
@@ -910,12 +911,12 @@ function DataHubCitationList({
           <strong>{kbName}</strong>
           <div className="knowledge-citations__chips">
             {items.map((citation) => {
-              const title = citation.docName || citation.fileName || citation.docKey;
+              const title = citation.docName || citation.fileName || citation.docKey || citation.docId;
               return (
                 <button
                   type="button"
                   className="knowledge-citation-chip"
-                  key={`${citation.docId}::${citation.docKey}`}
+                  key={`${citation.docId}::${citation.docKey ?? ""}`}
                   aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}`}
                   disabled={!citation.sourceAvailable}
                   onClick={() => onOpen(citation)}
@@ -946,7 +947,7 @@ function DataHubCitationList({
                   <button
                     type="button"
                     className="analysis-icon-button"
-                    aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey}`}
+                    aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey || citation.docId}`}
                     disabled={!citation.sourceAvailable}
                     onClick={() => onOpen(citation)}
                   >
@@ -987,7 +988,7 @@ function DataHubDocumentLookupList({
               <button
                 type="button"
                 className="document-lookup-card"
-                key={`${String(document.docId)}::${document.docKey}`}
+                key={`${String(document.docId)}::${document.docKey ?? ""}`}
                 aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
                 disabled={document.sourceAvailable === false}
                 onClick={() => onOpen(document)}
@@ -1789,7 +1790,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       // Some browsers make opener read-only; the authenticated preview can still proceed.
     }
 
-    setWorkflowStatus(`正在打开原文：${citation.docName || citation.fileName || citation.docKey}`);
+    setWorkflowStatus(`正在打开原文：${citation.docName || citation.fileName || citation.docKey || citation.docId}`);
 
     try {
       const access = await loadDataHubCitationDocument(citation);

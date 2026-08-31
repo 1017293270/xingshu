@@ -61,11 +61,12 @@ export function getDataHubDocumentLookupResults(
 
     const { docId, kbId } = rawResult;
     const docKey = optionalText(rawResult.docKey);
-    if (!isDocumentIdentifier(docId) || !docKey || !isDocumentIdentifier(kbId)) {
+    // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能丢结果。
+    if (!isDocumentIdentifier(docId) || !isDocumentIdentifier(kbId)) {
       continue;
     }
 
-    const identity = JSON.stringify([docId, docKey]);
+    const identity = JSON.stringify([docId, docKey ?? ""]);
     if (seen.has(identity)) {
       continue;
     }
@@ -79,7 +80,8 @@ export function getDataHubDocumentLookupResults(
       title:
         optionalText(rawResult.docName) ||
         optionalText(rawResult.fileName) ||
-        docKey,
+        docKey ||
+        String(docId),
       contentType: optionalText(rawResult.contentType, 80),
       excerpt: optionalText(rawResult.snippet) || optionalText(rawResult.matchReason),
       matchReason: optionalText(rawResult.matchReason),
@@ -88,10 +90,11 @@ export function getDataHubDocumentLookupResults(
         ? rawResult.score
         : undefined,
       docStatus: optionalText(rawResult.docStatus, 40),
-      sourceAvailable:
-        typeof rawResult.sourceAvailable === "boolean"
+      sourceAvailable: docKey
+        ? typeof rawResult.sourceAvailable === "boolean"
           ? rawResult.sourceAvailable
           : undefined
+        : false
     });
 
     if (results.length >= limit) {

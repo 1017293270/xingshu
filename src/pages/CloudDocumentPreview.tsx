@@ -106,7 +106,7 @@ export function CloudDocumentPreview({
     }
 
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.style.setProperty("overflow", "hidden");
     window.requestAnimationFrame(() => closeButtonRef.current?.focus());
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -147,7 +147,7 @@ export function CloudDocumentPreview({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.style.setProperty("overflow", previousOverflow);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [open, previous, next]);

@@ -148,7 +148,7 @@ describe("DataHubExecutionPanel", () => {
       />
     );
 
-    expect(screen.getAllByText("ASK_DATA")).toHaveLength(2);
+    expect(screen.getAllByText("ASK_DATA")).toHaveLength(1);
     expect(screen.getByText("确认统计口径")).toBeInTheDocument();
     expect(screen.getByText("调度问数智能体")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "智能体执行卡" })).not.toBeInTheDocument();
@@ -374,11 +374,11 @@ describe("DataHubExecutionPanel", () => {
     expect(within(activity).getByText("问题分析完成")).toBeVisible();
 
     const technicalDetails = within(activity).getByRole("group", {
-      name: "技术详情"
+      name: "执行信息"
     });
     expect(technicalDetails).toBeVisible();
-    expect(within(activity).getByText("技术详情")).toBeVisible();
-    expect(within(technicalDetails).getByText("模型推理")).toBeVisible();
+    expect(within(activity).getByText("执行信息")).toBeVisible();
+    expect(within(technicalDetails).getByText("任务分析")).toBeVisible();
     expect(within(technicalDetails).getByText("理解数据问题")).toBeVisible();
     expect(within(technicalDetails).getByText("已完成")).toBeVisible();
     expect(within(technicalDetails).getByText(formatExecutionTime("2026-07-31T16:00:32.283+08:00"))).toBeVisible();

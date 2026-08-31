@@ -165,7 +165,7 @@ export async function executeOfficialDocumentResearch(
       kbId: citation.kbId,
       kbName: citation.kbName || "企业知识库",
       docId: citation.docId,
-      docName: citation.docName || citation.fileName || citation.docKey,
+      docName: citation.docName || citation.fileName || citation.docKey || citation.docId,
       fragments: citation.fragments,
       sourceAvailable: citation.sourceAvailable
     }));

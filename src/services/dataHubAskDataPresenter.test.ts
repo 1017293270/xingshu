@@ -366,6 +366,33 @@ describe("dataHubAskDataPresenter", () => {
     expect(turn.citationDocuments.map((citation) => citation.docId)).toEqual(["doc-1", "doc-2"]);
   });
 
+  it("keeps citations without a docKey but marks their source unavailable", () => {
+    const turn = createDataHubAskTurn(
+      "审批流程？",
+      [
+        {
+          type: "citation_document",
+          data: {
+            docId: "doc-a6",
+            kbId: "kb-1",
+            docName: "PRD A-6 之后的引用.pdf",
+            sourceAvailable: true,
+            fragments: ["docKey 缺席的引用不能被丢弃。"]
+          }
+        }
+      ],
+      "done"
+    );
+
+    expect(turn.citationDocuments).toHaveLength(1);
+    expect(turn.citationDocuments[0]).toMatchObject({
+      docId: "doc-a6",
+      docKey: undefined,
+      sourceAvailable: false,
+      fragments: ["docKey 缺席的引用不能被丢弃。"]
+    });
+  });
+
   it("does not let a child-agent session replace the bound user session", () => {
     const turn = createDataHubAskTurn(
       "主问题",

@@ -245,7 +245,7 @@ describe("HistoryPage", () => {
 
   it("paginates history sessions and avoids refetching when filters change", async () => {
     const user = userEvent.setup();
-    const sessions = Array.from({ length: 10 }, (_, index) => ({
+    const sessions = Array.from({ length: 20 }, (_, index) => ({
       id: `history-${index + 1}`,
       title: `历史对话 ${index + 1}`,
       summary: `第 ${index + 1} 条历史内容`,
@@ -256,18 +256,18 @@ describe("HistoryPage", () => {
     renderHistoryPageWithIsolatedQuery();
 
     expect(await screen.findByRole("heading", { name: "历史对话 1" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "历史对话 8" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "历史对话 9" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "历史对话 16" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "历史对话 17" })).not.toBeInTheDocument();
 
     await user.click(screen.getByTitle("2"));
 
-    expect(await screen.findByRole("heading", { name: "历史对话 9" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "历史对话 17" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "历史对话 1" })).not.toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "历史搜索" }), "10");
 
     expect(await screen.findByRole("heading", { name: "历史对话 10" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "历史对话 9" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "历史对话 17" })).not.toBeInTheDocument();
     expect(listSpy).toHaveBeenCalledTimes(1);
   });
 });

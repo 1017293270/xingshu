@@ -57,7 +57,8 @@ function disabledAppLinks() {
     manageUrl: null,
     canAdd: false,
     addDisabledReason: "无法从当前登录配置确定 DataHub 地址",
-    detailUrlFor: () => null
+    detailUrlFor: () => null,
+    usesSameOriginUi: false
   };
 }
 
@@ -66,7 +67,8 @@ function enabledAppLinks() {
     manageUrl: "https://datahub.example.test/knowledge?space_id=7",
     canAdd: true,
     addDisabledReason: undefined,
-    detailUrlFor: (kbId: string) => `https://datahub.example.test/knowledge/${kbId}?space_id=7`
+    detailUrlFor: (kbId: string) => `https://datahub.example.test/knowledge/${kbId}?space_id=7`,
+    usesSameOriginUi: false
   };
 }
 

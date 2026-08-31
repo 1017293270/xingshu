@@ -38,7 +38,8 @@ function sourceDocumentParams(spaceId: number, citation: DataHubCitationDocument
   return new URLSearchParams({
     space_id: String(spaceId),
     kb_id: citation.kbId,
-    doc_key: citation.docKey
+    // requireSourceIdentity 已保证非空；?? "" 仅收窄类型
+    doc_key: citation.docKey ?? ""
   });
 }
 
@@ -61,7 +62,7 @@ const safeInlineSourceTypes = new Set([
   "image/webp"
 ]);
 
-function sniffInlineSourceType(bytes: Uint8Array) {
+function sniffInlineSourceType(bytes: Uint8Array<ArrayBuffer>) {
   if (bytes.length >= 5) {
     const head = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]);
     if (head.startsWith("%PDF")) {
@@ -83,7 +84,7 @@ function sniffInlineSourceType(bytes: Uint8Array) {
   return undefined;
 }
 
-function makeSafeSourceBlob(bytes: Uint8Array, contentType: string) {
+function makeSafeSourceBlob(bytes: Uint8Array<ArrayBuffer>, contentType: string) {
   const sniffed = sniffInlineSourceType(bytes);
   const normalizedType = (sniffed || contentType.split(";", 1)[0].trim()).toLowerCase();
   if (safeInlineSourceTypes.has(normalizedType)) {

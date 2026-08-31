@@ -60,7 +60,7 @@ describe("dataHubKnowledgeService", () => {
   });
 
   it("opens a source document with only doc_key", async () => {
-    const fetchMock = vi.fn(async () => new Response(
+    const fetchMock = vi.fn(async (_input: string | URL | Request) => new Response(
       JSON.stringify({
         mode: "direct",
         url: "https://files.example.com/contract.pdf"
