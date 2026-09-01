@@ -240,7 +240,8 @@ describe("TableSessionView", () => {
     renderSession();
     await screen.findByRole("complementary", { name: "结果表预览" });
 
-    await user.click(screen.getByRole("button", { name: "关闭预览" }));
+    // 收起入口在结果台头部右上角，不再是工具条里那颗叉
+    await user.click(screen.getByRole("button", { name: "收起结果表预览" }));
     await waitFor(() => {
       expect(screen.queryByRole("complementary", { name: "结果表预览" })).not.toBeInTheDocument();
     });

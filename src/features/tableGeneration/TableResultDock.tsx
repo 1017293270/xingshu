@@ -1,4 +1,4 @@
-import { CaretDown, Copy, DownloadSimple, FloppyDisk, X } from "@phosphor-icons/react";
+import { ArrowLineRight, CaretDown, Copy, DownloadSimple, FloppyDisk } from "@phosphor-icons/react";
 import { Button, Dropdown } from "antd";
 import { useEffect } from "react";
 import { DataHubResultTable } from "@/components/xs/datahub";
@@ -21,6 +21,8 @@ type TableResultDockProps = {
   active: TableViewerItem;
   /** 面板预览行数上限，比对话流里宽松得多。 */
   rowLimit: number;
+  /** 已经点了收起、正在滑出的那一帧：留在 DOM 里只为了放完过渡，不再可交互。 */
+  exiting?: boolean;
   onSelect: (key: string) => void;
   onClose: () => void;
   onCopy: () => void;
@@ -36,6 +38,7 @@ export function TableResultDock({
   items,
   active,
   rowLimit,
+  exiting,
   onSelect,
   onClose,
   onCopy,
@@ -43,12 +46,13 @@ export function TableResultDock({
   onSaveTemplate
 }: TableResultDockProps) {
   useEffect(() => {
+    if (exiting) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [exiting, onClose]);
 
   const title = formatDataHubTableTitle(active.table);
   const datasourceName = active.turn.dataSources.at(-1)?.datasourceName ?? "";
@@ -56,7 +60,12 @@ export function TableResultDock({
   const truncated = active.table.totalRows > previewRows;
 
   return (
-    <aside className="tgs__dock" aria-label="结果表预览">
+    <aside
+      className="tgs__dock"
+      aria-label="结果表预览"
+      data-state={exiting ? "exiting" : undefined}
+      aria-hidden={exiting || undefined}
+    >
       <header className="tgs-dock__head">
         <div className="tgs-dock__identity">
           <h2 title={title}>{title}</h2>
@@ -66,6 +75,15 @@ export function TableResultDock({
             {datasourceName ? ` · ${datasourceName}` : ""}
           </p>
         </div>
+        <button
+          type="button"
+          className="tgs-dock__collapse"
+          aria-label="收起结果表预览"
+          onClick={onClose}
+        >
+          <ArrowLineRight size={14} weight="bold" aria-hidden="true" />
+          收起
+        </button>
       </header>
 
       {items.length > 1 ? (
@@ -125,15 +143,6 @@ export function TableResultDock({
         >
           存为模板
         </Button>
-        <span className="tgs-dock__tools-spacer" />
-        <Button
-          className="tgs-dock__close"
-          type="text"
-          size="small"
-          aria-label="关闭预览"
-          icon={<X size={15} aria-hidden="true" />}
-          onClick={onClose}
-        />
       </div>
 
       <div className="tgs-dock__body">

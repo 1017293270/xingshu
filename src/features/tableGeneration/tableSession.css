@@ -13,12 +13,16 @@
   --tgs-soft-2: #FAFBFD;
   --tgs-column: 840px;
   --tgs-gutter: 24px;
+  /* 结果台宽度只在这儿定义一次：展开靠 width，收起靠等值的负外边距 */
+  --tgs-dock-w: clamp(400px, 48%, 760px);
 
   display: flex;
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
   align-items: stretch;
+  /* 结果台收起时整块滑到右侧界外，这里负责裁掉 */
+  overflow: clip;
   background: var(--xs-surface);
 }
 
@@ -37,18 +41,14 @@
 
 /* ---------- 左列：顶栏 / 对话流 / 输入条 ---------- */
 
+/* 结果台打开时这不是浮层，是分栏工作区。对话列不写死比例，
+   吃掉结果台让出来的剩余宽度即可——收合过程中宽度才能连续变化。 */
 .tgs__main {
   display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-}
-
-/* 结果台打开：这不是浮层，是分栏工作区——对话列让到 40%，右侧通高 */
-.tgs[data-dock] .tgs__main {
-  flex: 0 0 40%;
-  max-width: 40%;
 }
 
 .tgs__topbar {
@@ -697,13 +697,15 @@
   box-shadow: none;
 }
 
+/* autoSize 会把算出来的 height/min-height 写成行内样式，所以单行高度由
+   padding + line-height 决定：12 + 21.7 ≈ 34px，加上外框的 4+4+2 正好 44px。 */
 .tgs-composer textarea {
   display: block;
   width: 100%;
-  min-height: 34px;
+  min-height: 32px;
   /* 单行起步，最多长到约 6 行，再多就自己滚 */
   max-height: 140px;
-  padding: 7px 0;
+  padding: 6px 0;
   border: 0;
   outline: 0;
   box-shadow: none;
@@ -725,22 +727,48 @@
   padding-bottom: 1px;
 }
 
-.tgs-composer__send.ant-btn {
+/* 页面层有 `.xs-page .ant-btn { min-height: 44px }`，同特异度压不过它，
+   发送钮会被拉成 32×44 的竖条、纸飞机跟着偏。这里补一层 .xs-page 把方形焊死。 */
+.xs-page .tgs-composer__send.ant-btn {
+  display: inline-flex;
   width: 32px;
   min-width: 32px;
+  max-width: 32px;
   height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border-radius: var(--xs-radius-small);
   box-shadow: none;
 }
 
-.tgs-composer__stop.ant-btn {
+/* 图标槽默认是 block + 继承行高，会比 svg 高出一截，把按钮里的十字居中顶歪 */
+.tgs-composer__send.ant-btn .ant-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline: 0;
+  line-height: 0;
+}
+
+.tgs-composer__send.ant-btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.xs-page .tgs-composer__stop.ant-btn {
   height: 30px;
+  min-height: 30px;
   padding: 0 9px;
   font-size: var(--xs-fs-caption);
 }
 
-.tgs-scroll-bottom.ant-btn {
+/* 同上：不加 .xs-page 这颗圆钮会被 min-height 拉成椭圆 */
+.xs-page .tgs-scroll-bottom.ant-btn {
   position: absolute;
   z-index: 4;
   bottom: calc(100% + 10px);
@@ -748,6 +776,7 @@
   width: 30px;
   min-width: 30px;
   height: 30px;
+  min-height: 30px;
   border: 1px solid var(--tgs-line);
   background: var(--xs-surface);
   box-shadow: 0 4px 12px rgb(15 38 74 / 10%);
@@ -811,14 +840,34 @@
 
 /* ---------- 结果台 ---------- */
 
+/* 展开/收起都作用在外边距上：面板自身的宽度全程不变，
+   里头那张表就不会跟着抽搐，让位与补位由对话列的 flex 自动完成。 */
 .tgs__dock {
   display: flex;
+  width: var(--tgs-dock-w);
   min-width: 0;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: none;
   flex-direction: column;
   border-left: 1px solid var(--tgs-line);
   background: var(--xs-surface);
+  animation: tgs-dock-enter var(--xs-motion-enter) var(--xs-motion-ease-out) backwards;
+  transition:
+    margin-right var(--xs-motion-state) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-state) var(--xs-motion-ease-out);
+}
+
+.tgs__dock[data-state="exiting"] {
+  margin-right: calc(-1 * var(--tgs-dock-w));
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes tgs-dock-enter {
+  from {
+    margin-right: calc(-1 * var(--tgs-dock-w));
+    opacity: 0;
+  }
 }
 
 .tgs-dock__head {
@@ -828,6 +877,52 @@
   gap: 10px;
   padding: 11px 14px 10px;
   border-bottom: 1px solid var(--tgs-line);
+}
+
+/* 收起入口放在头部右上角：图标加字的次级按钮，比工具条里那颗孤零零的叉好找。
+   刻意不用 antd Button——页面层的 min-height 会把它拉高。 */
+.tgs-dock__collapse {
+  display: inline-flex;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--tgs-line);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface);
+  color: var(--tgs-ink-2);
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-dock__collapse:hover {
+  border-color: var(--xs-primary);
+  background: var(--xs-info-soft);
+  color: var(--xs-primary-2);
+}
+
+.tgs-dock__collapse:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
+  outline-offset: 1px;
+}
+
+.tgs-dock__collapse svg {
+  display: block;
+  flex: none;
+}
+
+@media (pointer: coarse) {
+  .tgs-dock__collapse {
+    height: 36px;
+  }
 }
 
 .tgs-dock__identity {
@@ -926,16 +1021,6 @@
   color: var(--xs-primary-2);
 }
 
-.tgs-dock__tools-spacer {
-  flex: 1 1 auto;
-}
-
-.tgs-dock__close.ant-btn {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-}
-
 .tgs-dock__body {
   display: flex;
   min-height: 0;
@@ -1003,17 +1088,23 @@
     --tgs-gutter: 16px;
   }
 
-  .tgs[data-dock] .tgs__main {
-    flex: 1 1 auto;
-    max-width: none;
-  }
-
+  /* 覆盖抽屉不占位，负外边距那套让位逻辑在这儿没有意义，换成上下淡入淡出 */
   .tgs__dock {
     position: absolute;
     z-index: 6;
     inset: 0;
+    width: auto;
+    margin-right: 0;
     border-left: 0;
     animation: tgs-dock-in var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+    transition:
+      transform var(--xs-motion-state) var(--xs-motion-ease-out),
+      opacity var(--xs-motion-state) var(--xs-motion-ease-out);
+  }
+
+  .tgs__dock[data-state="exiting"] {
+    margin-right: 0;
+    transform: translateY(8px);
   }
 }
 
@@ -1060,12 +1151,19 @@
     animation: none;
   }
 
+  /* 收起不再有滑出过程，就别让面板在原地干等一帧 */
   .tgs__dock {
     animation: none;
+    transition: none;
+  }
+
+  .tgs__dock[data-state="exiting"] {
+    display: none;
   }
 
   .tgs-artifact,
   .tgs-composer,
+  .tgs-dock__collapse,
   .tgs-turn__actions {
     transition: none;
   }

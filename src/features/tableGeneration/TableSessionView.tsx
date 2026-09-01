@@ -41,6 +41,9 @@ import "@/features/tableGeneration/tableSession.css";
 /** 结果台里的表比对话列宽得多，预览行数跟着放宽——结果台存在的意义就是把表看全。 */
 const PANEL_ROW_LIMIT = 100;
 
+/** 结果台滑出的时长，比 CSS 里的 --xs-motion-state(180ms) 多留一点余量再卸载。 */
+const DOCK_EXIT_MS = 220;
+
 const followUpPlaceholder = "继续追问字段、筛选条件或统计口径…";
 const clarifyPlaceholder = "选择上面的选项，或直接说明你的情况…";
 
@@ -175,6 +178,24 @@ export function TableSessionView() {
     }))),
   [generation.turns]);
   const viewer = viewerItems.find((candidate) => candidate.key === viewerKey);
+  /* 收起要看得见过程：面板得在关掉之后再多活一个过渡，滑出去了才卸载。 */
+  const [closingViewer, setClosingViewer] = useState<TableViewerItem | null>(null);
+  const shownViewer = viewer ?? closingViewer;
+
+  useEffect(() => {
+    if (!closingViewer) return;
+    const timer = window.setTimeout(() => setClosingViewer(null), DOCK_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [closingViewer]);
+
+  const closeViewer = () => {
+    /* 滑出中的面板对读屏是隐形的，焦点不能留在里面 */
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setClosingViewer(viewer ?? null);
+    setViewerKey("");
+  };
 
   const handleFollowUp = () => {
     if (isBusy) {
@@ -270,7 +291,7 @@ export function TableSessionView() {
       title="问表智能体"
       hideHeader
     >
-      <div className="tgs" data-dock={viewer ? "" : undefined}>
+      <div className="tgs">
         <div className="tgs__main">
           <TableSessionTopBar
             title={activeQuestion || "新制表"}
@@ -386,20 +407,21 @@ export function TableSessionView() {
           </div>
         </div>
 
-        {viewer ? (
+        {shownViewer ? (
           <TableResultDock
             items={viewerItems}
-            active={viewer}
+            active={shownViewer}
             rowLimit={PANEL_ROW_LIMIT}
+            exiting={!viewer}
             onSelect={setViewerKey}
-            onClose={() => setViewerKey("")}
-            onCopy={() => void handleCopyTable(viewer)}
-            onExport={(format) => exportTables([viewer.table], viewer.turn, format)}
+            onClose={closeViewer}
+            onCopy={() => void handleCopyTable(shownViewer)}
+            onExport={(format) => exportTables([shownViewer.table], shownViewer.turn, format)}
             onSaveTemplate={() =>
               setTemplateDraft({
-                name: viewer.turn.question.trim().slice(0, 100) || "制表模板",
-                prompt: viewer.turn.question.trim() || "按当前表结构生成",
-                structureJson: buildTableStructureJson(viewer.table.columns)
+                name: shownViewer.turn.question.trim().slice(0, 100) || "制表模板",
+                prompt: shownViewer.turn.question.trim() || "按当前表结构生成",
+                structureJson: buildTableStructureJson(shownViewer.table.columns)
               })
             }
           />
