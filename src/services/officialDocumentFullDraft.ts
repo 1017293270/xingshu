@@ -125,6 +125,8 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
   content: OfficialDocumentDraftContent;
   templateNodes: OfficialDocumentStructureNode[];
   userRequirement: string;
+  /** 前端已执行的资料研究结果；提供时注入 writingContext 并放开 allowResearch。 */
+  researchResults?: OfficialDocumentResearchResult[];
 }): OfficialDocumentReferenceWritingPlan {
   const userRequirement = input.userRequirement.trim();
   if (!userRequirement) throw new Error("请描述要生成的公文内容");
@@ -210,6 +212,12 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
   }
 
   const templateOutline = summarizeOfficialDocumentTemplate(input.templateNodes);
+  // 研究由前端在生成前执行并注入（图表 base64 不进上下文，占位引用即可）；
+  // 有注入材料时 allowResearch 表示「本轮已带研究材料」，模型仍不得自行发起检索。
+  const researchResults = (input.researchResults ?? []).map((result) => ({
+    ...result,
+    chart: result.chart ? { ...result.chart, base64: undefined } : undefined
+  }));
   return {
     sections,
     fixedFields,
@@ -228,6 +236,7 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         columns: [],
         rows: []
       }],
+      ...(researchResults.length ? { researchResults } : {}),
       templateOutline,
       structureRoles: templateOutline,
       outputRules: {
@@ -236,10 +245,38 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
-        allowResearch: false
+        allowResearch: researchResults.length > 0
       }
     }
   };
+}
+
+/**
+ * 把按「内容大纲」标注的研究结果映射到参考草稿的实际章节锚点上：
+ * 标题相同（去空白/标点差异）优先，其次同序号，都对不上时保留原 sectionId
+ * 让模型按语义就近安放。写作提示词按 sectionId 分配材料，映射错位只降低精度不丢材料。
+ */
+export function mapResearchResultsToReferenceSections(
+  results: OfficialDocumentResearchResult[],
+  analyzedSections: Array<{ id: string; order: number; title: string }>,
+  referenceSections: OfficialDocumentReferenceSection[]
+): OfficialDocumentResearchResult[] {
+  const normalize = (value: string) => value.replace(/[\s、，。：:.\-·（）()一二三四五六七八九十\d]/g, "");
+  const byTitle = new Map(referenceSections.map((section) => [normalize(section.title), section.id]));
+  const analyzedById = new Map(analyzedSections.map((section) => [section.id, section]));
+
+  return results.map((result) => {
+    const analyzed = analyzedById.get(result.sectionId);
+    if (!analyzed) {
+      return result;
+    }
+    const titleMatch = byTitle.get(normalize(analyzed.title));
+    if (titleMatch) {
+      return { ...result, sectionId: titleMatch };
+    }
+    const orderMatch = referenceSections.find((section) => section.order === analyzed.order);
+    return orderMatch ? { ...result, sectionId: orderMatch.id } : result;
+  });
 }
 
 export function officialDocumentVariantId(

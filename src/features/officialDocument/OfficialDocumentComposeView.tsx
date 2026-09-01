@@ -14,7 +14,7 @@ import {
   WarningCircle,
   X
 } from "@phosphor-icons/react";
-import { Button, Dropdown, Mentions } from "antd";
+import { Button, Dropdown, Mentions, Popover } from "antd";
 import type { MentionsOptionProps } from "antd/es/mentions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -47,6 +47,7 @@ import {
 import {
   buildOfficialDocumentPreviewLines,
   buildOfficialDocumentReferenceWritingPlan,
+  mapResearchResultsToReferenceSections,
   MAX_REFERENCE_REQUIREMENT_CHARS,
   parseOfficialDocumentReferenceGeneration,
   stripOfficialDocumentAnchors,
@@ -54,12 +55,17 @@ import {
   type OfficialDocumentReferenceFixedField,
   type OfficialDocumentReferenceWritingPlan
 } from "@/services/officialDocumentFullDraft";
+import { analyzeOfficialDocumentContent } from "@/services/writingContentAnalysisService";
+import { executeOfficialDocumentResearchPlan } from "@/services/officialDocumentResearchService";
 import type {
   OfficialDocumentDraft,
   OfficialDocumentExportFormat,
+  OfficialDocumentResearchResult,
   OfficialDocumentStructureNode,
-  OfficialDocumentTemplate
+  OfficialDocumentTemplate,
+  OfficialDocumentWritingLogicPlan
 } from "@/types/officialDocument";
+import { ComposeOutlineCard } from "./ComposeOutlineCard";
 import { formatDate, operationErrorMessage, useUpdateOfficialDocumentWorkspaceCache } from "./officialDocumentMeta";
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
@@ -93,6 +99,8 @@ type ComposeTurnState = {
   referenceDraft: OfficialDocumentDraft;
   template: OfficialDocumentTemplate;
   templateNodes: OfficialDocumentStructureNode[];
+  /** 这一轮带的研究材料；重新生成时原样复用，不再重跑问数/问知。 */
+  research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
   artifact?: GeneratedArtifact;
   savedDraft?: OfficialDocumentDraft;
   recoveryDraft?: OfficialDocumentDraft;
@@ -117,6 +125,24 @@ type PendingSubmission = {
   draftTitle: string;
   templateName: string;
 };
+
+/** 大纲确认环：分析完成后停在 confirm 等用户拍板，确认后进入 researching 逐条补资料。 */
+type ComposePlanning = {
+  requirement: string;
+  referenceDraft: OfficialDocumentDraft;
+  template: OfficialDocumentTemplate;
+  plan: OfficialDocumentWritingLogicPlan;
+  phase: "confirm" | "researching";
+  progressText?: string;
+  failureCount: number;
+};
+
+/** 只把有内容的研究结果注入写作上下文；失败项由正文写「[待补充]」。 */
+function usableResearchResults(results: OfficialDocumentResearchResult[]) {
+  return results.filter((result) => (
+    result.status !== "FAILED" && (result.summary.trim() || result.table || result.chart)
+  ));
+}
 
 type DraftMentionOption = MentionsOptionProps & {
   key: string;
@@ -197,16 +223,26 @@ export function OfficialDocumentComposeView() {
   const [selectedDraftId, setSelectedDraftId] = useState("");
   const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>({});
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission>();
+  const [analyzingSubmission, setAnalyzingSubmission] = useState<PendingSubmission>();
+  const [planning, setPlanning] = useState<ComposePlanning | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [composerError, setComposerError] = useState("");
   const [viewerTurnId, setViewerTurnId] = useState("");
   const finalizedTurnsRef = useRef(new Set<string>());
+  /* 「跳过大纲」要能作废一次在途分析：token 不一致的分析结果直接丢弃。 */
+  const analyzeTokenRef = useRef(0);
   const drafts = query.data?.drafts ?? EMPTY_DRAFTS;
   const templates = query.data?.templates ?? EMPTY_TEMPLATES;
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId);
   const { messages, busy: writingBusy, send, stop } = useWritingChat(COMPOSE_CHAT_KEY);
-  const composerBusy = writingBusy || Boolean(pendingSubmission);
-  const conversationVisible = messages.length > 0 || Boolean(pendingSubmission);
+  const composerBusy = writingBusy
+    || Boolean(pendingSubmission)
+    || Boolean(analyzingSubmission)
+    || planning !== null;
+  const conversationVisible = messages.length > 0
+    || Boolean(pendingSubmission)
+    || Boolean(analyzingSubmission)
+    || planning !== null;
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
 
@@ -214,7 +250,7 @@ export function OfficialDocumentComposeView() {
     .map((message) => `${message.id}:${message.status}:${message.ask.assistantContent.length}`)
     .join("|");
   const conversation = useStickToBottom<HTMLDivElement>({
-    signature: `${scrollSignature}|${pendingSubmission ? "pending" : ""}`,
+    signature: `${scrollSignature}|${pendingSubmission ? "pending" : ""}|${analyzingSubmission ? "analyzing" : ""}|${planning ? `${planning.phase}:${planning.progressText ?? ""}` : ""}`,
     enabled: conversationVisible
   });
 
@@ -331,7 +367,8 @@ export function OfficialDocumentComposeView() {
     requirement: string,
     referenceDraft: OfficialDocumentDraft,
     template: OfficialDocumentTemplate,
-    extraInstruction = ""
+    extraInstruction = "",
+    research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] }
   ) => {
     setPendingSubmission({
       requirement,
@@ -341,7 +378,7 @@ export function OfficialDocumentComposeView() {
     try {
       const content = await getOfficialDocumentDraftContent(referenceDraft.id);
       const templateNodes = template.currentVersion.analysis!.structureNodes;
-      const plan = buildOfficialDocumentReferenceWritingPlan({
+      const planInput = {
         referenceDraft: {
           id: referenceDraft.id,
           title: referenceDraft.title,
@@ -350,7 +387,20 @@ export function OfficialDocumentComposeView() {
         content,
         templateNodes,
         userRequirement: requirement
-      });
+      };
+      /* 研究结果按内容大纲标注章节，先建一次计划拿到参考章节锚点再做映射注入。 */
+      const basePlan = buildOfficialDocumentReferenceWritingPlan(planInput);
+      const injectable = research ? usableResearchResults(research.results) : [];
+      const plan = injectable.length
+        ? buildOfficialDocumentReferenceWritingPlan({
+            ...planInput,
+            researchResults: mapResearchResultsToReferenceSections(
+              injectable,
+              research!.plan.sections,
+              basePlan.sections
+            )
+          })
+        : basePlan;
       const turnId = send(
         extraInstruction ? `${requirement}\n\n${extraInstruction}` : requirement,
         { writingContext: plan.writingContext, purpose: "full-draft", displayQuestion: requirement }
@@ -365,7 +415,8 @@ export function OfficialDocumentComposeView() {
           plan,
           referenceDraft,
           template,
-          templateNodes
+          templateNodes,
+          research
         }
       }));
       setPendingSubmission(undefined);
@@ -380,6 +431,10 @@ export function OfficialDocumentComposeView() {
     item.id === draft.templateId && item.currentVersion.id === draft.templateVersionId
   ));
 
+  /**
+   * 提交先走大纲确认环：分析出章节与研究清单让用户拍板，确认后自动补资料再生成。
+   * 分析失败或返回空大纲时退回一步到位的老路径，不挡用户。
+   */
   const submit = async () => {
     const requirement = value.trim();
     if (composerBusy) return;
@@ -399,15 +454,138 @@ export function OfficialDocumentComposeView() {
 
     setComposerError("");
     setValue("");
-    await runGeneration(requirement, selectedDraft, template);
+    const referenceDraft = selectedDraft;
+    const token = ++analyzeTokenRef.current;
+    setAnalyzingSubmission({
+      requirement,
+      draftTitle: referenceDraft.title,
+      templateName: referenceDraft.templateName
+    });
+    try {
+      const logicPlan = await analyzeOfficialDocumentContent({
+        structureNodes: template.currentVersion.analysis.structureNodes,
+        sourceBlocks: [{
+          id: "user-requirement",
+          order: 0,
+          kind: "PARAGRAPH",
+          text: requirement,
+          headingHint: "USER_REQUIREMENT",
+          columns: [],
+          rows: []
+        }]
+      });
+      if (analyzeTokenRef.current !== token) return;
+      setAnalyzingSubmission(undefined);
+      if (!logicPlan.sections.length) {
+        await runGeneration(requirement, referenceDraft, template);
+        return;
+      }
+      setPlanning({
+        requirement,
+        referenceDraft,
+        template,
+        plan: logicPlan,
+        phase: "confirm",
+        failureCount: 0
+      });
+    } catch {
+      if (analyzeTokenRef.current !== token) return;
+      setAnalyzingSubmission(undefined);
+      await runGeneration(requirement, referenceDraft, template);
+    }
   };
 
-  /** 重试、重新生成、停止后继续、重出完整版都是「用同一要求再来一轮」。 */
+  const skipAnalyzing = async () => {
+    const current = analyzingSubmission;
+    if (!current || !selectedDraft) return;
+    const template = resolveTemplate(selectedDraft);
+    if (!template?.currentVersion.analysis) return;
+    analyzeTokenRef.current += 1;
+    setAnalyzingSubmission(undefined);
+    await runGeneration(current.requirement, selectedDraft, template);
+  };
+
+  const updatePlanningSectionTitle = (sectionId: string, title: string) => {
+    setPlanning((current) => current && ({
+      ...current,
+      plan: {
+        ...current.plan,
+        sections: current.plan.sections.map((section) => (
+          section.id === sectionId ? { ...section, title } : section
+        ))
+      }
+    }));
+  };
+
+  const removePlanningSection = (sectionId: string) => {
+    setPlanning((current) => {
+      if (!current) return current;
+      const sections = current.plan.sections.filter((section) => section.id !== sectionId);
+      return {
+        ...current,
+        plan: {
+          ...current.plan,
+          sections,
+          // 章节删了，挂在它名下的研究需求一并作废
+          researchNeeds: current.plan.researchNeeds.filter((need) => (
+            sections.some((section) => section.id === need.sectionId)
+          ))
+        }
+      };
+    });
+  };
+
+  const confirmPlanning = async () => {
+    const current = planning;
+    if (!current || current.phase !== "confirm") return;
+    if (!current.plan.researchNeeds.length) {
+      setPlanning(null);
+      await runGeneration(current.requirement, current.referenceDraft, current.template, "", {
+        plan: current.plan,
+        results: []
+      });
+      return;
+    }
+
+    setPlanning({ ...current, phase: "researching", progressText: "正在补充资料…", failureCount: 0 });
+    const results = await executeOfficialDocumentResearchPlan(current.plan.researchNeeds, {
+      onProgress: (progress) => {
+        setPlanning((state) => state && ({
+          ...state,
+          progressText: progress.status === "running"
+            ? `正在补充资料 ${progress.index + 1}/${progress.total}：${progress.need.question.slice(0, 40)}`
+            : state.progressText,
+          failureCount: state.failureCount + (progress.status === "failed" ? 1 : 0)
+        }));
+      }
+    });
+    setPlanning(null);
+    await runGeneration(current.requirement, current.referenceDraft, current.template, "", {
+      plan: current.plan,
+      results
+    });
+  };
+
+  const skipPlanning = async () => {
+    const current = planning;
+    if (!current || current.phase !== "confirm") return;
+    setPlanning(null);
+    await runGeneration(current.requirement, current.referenceDraft, current.template);
+  };
+
+  const cancelPlanning = () => {
+    const current = planning;
+    if (!current || current.phase !== "confirm") return;
+    setPlanning(null);
+    setValue((existing) => existing || current.requirement);
+  };
+
+  /** 重试、重新生成、停止后继续、重出完整版都是「用同一要求再来一轮」，研究材料原样复用。 */
   const regenerate = async (turnId: string, extraInstruction = "") => {
     const state = turnStates[turnId];
     if (!state || composerBusy) return;
     setComposerError("");
-    await runGeneration(state.requirement, state.referenceDraft, state.template, extraInstruction);
+    await runGeneration(state.requirement, state.referenceDraft, state.template, extraInstruction, state.research);
   };
 
   const cancel = () => {
@@ -456,6 +634,8 @@ export function OfficialDocumentComposeView() {
         savedDraft: created,
         status: { tone: "success", message: "已保存到草稿箱" }
       });
+      // 成稿可编辑是主路径：保存成功直接进入草稿编辑页继续加工
+      navigate(`/writing/drafts/${created.id}`);
     } catch (caught) {
       patchTurn(turnId, {
         recoveryDraft: created,
@@ -707,7 +887,10 @@ export function OfficialDocumentComposeView() {
           {!conversationVisible ? (
             <header>
               <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
-              <h2>想写一篇什么公文？</h2>
+              <h2>公文模板化复刻</h2>
+              <p className="official-document-compose__hero-sub">
+                选一篇参考草稿，按它的结构与文风生成新公文；生成前先确认大纲、自动补齐数据资料。
+              </p>
             </header>
           ) : null}
 
@@ -738,6 +921,63 @@ export function OfficialDocumentComposeView() {
                   </XsChatTurn>
                 );
               })}
+
+              {analyzingSubmission ? (
+                <XsChatTurn>
+                  <XsChatUserBubble
+                    meta={(
+                      <>
+                        <FileText size={14} aria-hidden="true" />
+                        @{analyzingSubmission.draftTitle} · {analyzingSubmission.templateName}
+                      </>
+                    )}
+                  >
+                    {analyzingSubmission.requirement}
+                  </XsChatUserBubble>
+                  <XsChatAssistant>
+                    <p>正在梳理写作大纲与资料需求…</p>
+                    <small>
+                      <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
+                      正在分析
+                    </small>
+                    <XsChatActions>
+                      <XsChatActionButton
+                        icon={<PaperPlaneTilt size={14} aria-hidden="true" />}
+                        label="跳过大纲直接生成"
+                        onClick={() => void skipAnalyzing()}
+                      />
+                    </XsChatActions>
+                  </XsChatAssistant>
+                </XsChatTurn>
+              ) : null}
+
+              {planning ? (
+                <XsChatTurn>
+                  <XsChatUserBubble
+                    meta={(
+                      <>
+                        <FileText size={14} aria-hidden="true" />
+                        @{planning.referenceDraft.title} · {planning.referenceDraft.templateName}
+                      </>
+                    )}
+                  >
+                    {planning.requirement}
+                  </XsChatUserBubble>
+                  <XsChatAssistant>
+                    <ComposeOutlineCard
+                      plan={planning.plan}
+                      phase={planning.phase}
+                      progressText={planning.progressText}
+                      failureCount={planning.failureCount}
+                      onChangeSectionTitle={updatePlanningSectionTitle}
+                      onRemoveSection={removePlanningSection}
+                      onConfirm={() => void confirmPlanning()}
+                      onSkip={() => void skipPlanning()}
+                      onCancel={cancelPlanning}
+                    />
+                  </XsChatAssistant>
+                </XsChatTurn>
+              ) : null}
 
               {pendingSubmission ? (
                 <XsChatTurn>
@@ -784,7 +1024,44 @@ export function OfficialDocumentComposeView() {
                     }}
                   ><X size={14} aria-hidden="true" /></button>
                 </div>
-              ) : undefined}
+              ) : (
+                <Popover
+                  trigger="click"
+                  placement="topLeft"
+                  overlayClassName="official-document-compose-picker"
+                  content={(
+                    <div className="official-document-compose__picker" aria-label="选择参考草稿">
+                      <header><strong>选择参考草稿</strong><small>按更新时间排序</small></header>
+                      <ul>
+                        {drafts.slice(0, 8).map((draft) => (
+                          <li key={draft.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDraftId(draft.id);
+                                setComposerError("");
+                              }}
+                            >
+                              <FileText size={16} aria-hidden="true" />
+                              <span><strong>{draft.title}</strong><small>{draft.templateName} · {formatDate(draft.updatedAt)}</small></span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="official-document-compose__mode-chip"
+                    aria-label="公文写作：选择参考草稿"
+                    disabled={composerBusy}
+                  >
+                    <FileText size={15} aria-hidden="true" />
+                    公文写作 · 选参考草稿
+                  </button>
+                </Popover>
+              )}
               toolbarLead={<><b>@</b> {conversationVisible ? "更换参考草稿" : "选择参考草稿"}</>}
               toolbarTail={writingBusy ? (
                 <Button
@@ -845,6 +1122,44 @@ export function OfficialDocumentComposeView() {
           )}
 
           {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
+
+          {!conversationVisible && drafts.length ? (
+            <section className="official-document-compose__drafts" aria-label="我的文稿">
+              <header>
+                <h3>我的文稿</h3>
+                <Button type="link" size="small" onClick={() => navigate("/writing/drafts")}>
+                  查看全部
+                </Button>
+              </header>
+              <div className="official-document-compose__drafts-grid">
+                {drafts.slice(0, 8).map((draft) => (
+                  <article key={draft.id}>
+                    <button
+                      type="button"
+                      className="official-document-compose__draft-card"
+                      aria-label={`打开文稿：${draft.title}`}
+                      onClick={() => navigate(`/writing/drafts/${draft.id}`)}
+                    >
+                      <FileText size={18} aria-hidden="true" />
+                      <strong>{draft.title}</strong>
+                      <small>{draft.templateName} · {formatDate(draft.updatedAt)}</small>
+                    </button>
+                    <Button
+                      size="small"
+                      type="text"
+                      aria-label={`以「${draft.title}」为参考写新公文`}
+                      onClick={() => {
+                        setSelectedDraftId(draft.id);
+                        setComposerError("");
+                      }}
+                    >
+                      设为参考
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
       </XsAsyncPanel>
 

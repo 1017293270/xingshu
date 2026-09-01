@@ -32,7 +32,10 @@ import {
   type OfficialDocumentFullDraftPreview,
   type OfficialDocumentWritingAction
 } from "@/services/officialDocumentFullDraft";
-import type { OfficialDocumentGeneratedDataAsset } from "@/services/officialDocumentResearchService";
+import {
+  MAX_OFFICIAL_DOCUMENT_CHARTS,
+  type OfficialDocumentGeneratedDataAsset
+} from "@/services/officialDocumentResearchService";
 import {
   StructuredDraftEditor,
   type StructuredDraftEditorHandle,
@@ -210,7 +213,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
     block.role === "CHART_IMAGE" && !(block.sourceTaskIds?.length)
   )).length;
   const researchChartCount = researchResults.filter((result) => Boolean(result.chart)).length;
-  const chartAllowed = standaloneChartCount + researchChartCount < 3;
+  const chartAllowed = standaloneChartCount + researchChartCount < MAX_OFFICIAL_DOCUMENT_CHARTS;
   const canGenerateFullDraft = Boolean(contentProfile && draftContent) && researchReady;
   const generateDisabledReason = !contentProfile
     ? "草稿没有可用的已确认内容方案"

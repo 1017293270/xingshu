@@ -26,6 +26,9 @@ import type {
 
 type ResearchNeed = OfficialDocumentWritingLogicPlan["researchNeeds"][number];
 
+/** 一篇公文最多嵌入的图表数；成稿里已有的与研究新产的合并计数。 */
+export const MAX_OFFICIAL_DOCUMENT_CHARTS = 3;
+
 export type OfficialDocumentGeneratedDataAsset = Pick<
   OfficialDocumentResearchResult,
   "summary" | "table" | "chart" | "querySource" | "citations"
@@ -209,6 +212,67 @@ export async function executeOfficialDocumentResearch(
     querySource,
     citations: []
   };
+}
+
+export type OfficialDocumentResearchProgress = {
+  need: ResearchNeed;
+  index: number;
+  total: number;
+  status: "running" | "success" | "failed";
+  error?: string;
+};
+
+/**
+ * 按研究清单逐条执行问数/问知并汇成 researchResults。
+ * 串行执行（每条都是一次完整的流式会话）；单条失败不阻塞后续，
+ * 以 FAILED 记录留给正文写「[待补充]」。图表配额全程共享 3 张上限。
+ */
+export async function executeOfficialDocumentResearchPlan(
+  needs: ResearchNeed[],
+  options: {
+    existingChartCount?: number;
+    onProgress?: (progress: OfficialDocumentResearchProgress) => void;
+  } = {}
+): Promise<OfficialDocumentResearchResult[]> {
+  const results: OfficialDocumentResearchResult[] = [];
+  let chartCount = options.existingChartCount ?? 0;
+
+  for (const [index, need] of needs.entries()) {
+    options.onProgress?.({ need, index, total: needs.length, status: "running" });
+    const base = {
+      taskId: need.id,
+      sectionId: need.sectionId,
+      kind: need.kind,
+      question: need.question,
+      required: need.required,
+      preferredOutput: need.preferredOutput
+    };
+    try {
+      const asset = await executeOfficialDocumentResearch(
+        need,
+        chartCount < MAX_OFFICIAL_DOCUMENT_CHARTS
+      );
+      if (asset.chart) {
+        chartCount += 1;
+      }
+      results.push({
+        ...base,
+        status: asset.summary || asset.table ? "SUCCESS" : "NO_RESULT",
+        summary: asset.summary,
+        table: asset.table,
+        chart: asset.chart,
+        querySource: asset.querySource,
+        citations: asset.citations ?? []
+      });
+      options.onProgress?.({ need, index, total: needs.length, status: "success" });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "资料查询失败";
+      results.push({ ...base, status: "FAILED", summary: "", citations: [] });
+      options.onProgress?.({ need, index, total: needs.length, status: "failed", error: message });
+    }
+  }
+
+  return results;
 }
 
 export async function executeOfficialDocumentDataTable(

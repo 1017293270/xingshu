@@ -49,7 +49,7 @@
 
 对话状态是按草稿隔离的组件本地状态（`useWritingChat`），不进 `useUiStore` —— 那里的 `analysisTurns` 是全局单会话的问数对话。回答生成完成后可以「插入到正文」，按空行拆成正文节点一次性追加，只触发一次自动保存。
 
-`/writing` 的一键成稿复用同一流式接口，使用 `action: "REFERENCE_DRAFT"`。参考草稿只提供模板结构、标题层级与限量文风样本，旧固定字段、表格、图表、绑定和正文事实不会复制。模型以 `[[XS_FIXED:slot-id]]` 与 `[[XS_SECTION:section-id]]` 返回结构化结果；前端校验锚点后先保留临时成稿，通过 `/v1/drafts/:preview` 与 `/v1/drafts/:export` 浏览或下载，不创建草稿记录。只有用户点击“保存到草稿箱”时才复用现有创建草稿与内容保存接口。该模式不自动执行问数、问知或找文档，事实不足时保留明确的待补充标记。
+`/writing` 的一键成稿复用同一流式接口，使用 `action: "REFERENCE_DRAFT"`。参考草稿只提供模板结构、标题层级与限量文风样本，旧固定字段、表格、图表、绑定和正文事实不会复制。模型以 `[[XS_FIXED:slot-id]]` 与 `[[XS_SECTION:section-id]]` 返回结构化结果；前端校验锚点后先保留临时成稿，通过 `/v1/drafts/:preview` 与 `/v1/drafts/:export` 浏览或下载，不创建草稿记录。只有用户点击“保存到草稿箱”时才复用现有创建草稿与内容保存接口。提交前先经写作大纲确认环（`/api/v1/chat/writing-content-analysis` 出章节与研究清单，可修改或跳过）；确认后由前端按清单自动执行问数/问知研究，结果作为 `writingContext.researchResults` 注入生成上下文，模型自身仍不发起检索，研究失败或事实不足处保留明确的待补充标记。
 
 ## QueryAsset 绑定
 
@@ -82,4 +82,4 @@ Syncfusion license、数据库凭据、服务间 HMAC 和 QueryAsset 内网地�
 - ONLYOFFICE 组件与接口代码保留用于回退，但 `/writing` 不加载编辑器、不创建会话。
 - Aspose 适配器代码保留但生产不启用。
 - 智写对话依赖 DataHub 侧提供 `writing` 模式；公文服务自身仍不提供 AI 起草接口。
-- 不支持多人协同、审批、图表写入或复杂 Word 对象编辑。
+- 不支持多人协同、审批或复杂 Word 对象编辑。图表以 PNG 形式写入正文（前端研究环节生成、上限 3 张），不支持可编辑的原生 Office 图表对象。

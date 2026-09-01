@@ -3080,3 +3080,319 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================== 公文写作：大纲确认环 ==================== */
+
+.compose-outline {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.compose-outline__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--xs-text);
+}
+
+.compose-outline__head svg {
+  align-self: center;
+  color: var(--xs-primary-2);
+}
+
+.compose-outline__head small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-outline__sections {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.compose-outline__sections > li {
+  display: grid;
+  gap: 4px;
+}
+
+.compose-outline__section-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.compose-outline__section-row .ant-input {
+  max-width: 420px;
+  font-weight: var(--xs-fw-medium);
+}
+
+.compose-outline__sections p {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+}
+
+.compose-outline__points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.compose-outline__points em {
+  padding: 1px 8px;
+  color: var(--xs-text-2);
+  border: 1px solid var(--xs-border);
+  border-radius: 999px;
+  background: var(--xs-surface);
+  font-size: var(--xs-fs-caption);
+  font-style: normal;
+}
+
+.compose-outline__research {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--xs-border);
+  border-radius: 10px;
+  background: var(--xs-surface-soft);
+}
+
+.compose-outline__research strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+}
+
+.compose-outline__research ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-outline__research li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+}
+
+.compose-outline__research li span {
+  flex: none;
+  padding: 0 8px;
+  color: var(--xs-primary-2);
+  border: 1px solid #d4e5ff;
+  border-radius: 999px;
+  background: #f4f8ff;
+  font-size: var(--xs-fs-caption);
+}
+
+.compose-outline__research li span[data-kind="ASK_KNOWLEDGE"] {
+  color: #6f42c1;
+  border-color: #e6dcf7;
+  background: #f8f4ff;
+}
+
+.compose-outline__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+}
+
+.compose-outline__progress small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--xs-danger-ink, #b42318);
+}
+
+.compose-outline__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ==================== 公文写作：入口 hero 与文稿宫格 ==================== */
+
+.official-document-compose__hero-sub {
+  margin: 6px 0 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+}
+
+.official-document-compose__mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  color: var(--xs-primary-2);
+  cursor: pointer;
+  border: 1px solid #d4e5ff;
+  border-radius: 999px;
+  background: #f4f8ff;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.official-document-compose__mode-chip:hover {
+  border-color: var(--xs-primary-2);
+}
+
+.official-document-compose__picker {
+  display: grid;
+  gap: 8px;
+  width: 320px;
+}
+
+.official-document-compose__picker header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.official-document-compose__picker header small {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.official-document-compose__picker ul {
+  display: grid;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.official-document-compose__picker li button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+}
+
+.official-document-compose__picker li button:hover {
+  background: var(--xs-surface-soft);
+}
+
+.official-document-compose__picker li button span {
+  display: grid;
+  min-width: 0;
+}
+
+.official-document-compose__picker li button strong {
+  overflow: hidden;
+  font-size: var(--xs-fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__picker li button small {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.official-document-compose__drafts {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 760px);
+  margin: 22px auto 0;
+}
+
+.official-document-compose__drafts > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.official-document-compose__drafts h3 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+}
+
+.official-document-compose__drafts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.official-document-compose__drafts-grid article {
+  position: relative;
+  display: grid;
+}
+
+.official-document-compose__draft-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px 34px;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+  background: var(--xs-surface);
+  text-align: left;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.official-document-compose__draft-card:hover {
+  border-color: var(--xs-primary-2);
+}
+
+.official-document-compose__draft-card svg {
+  color: var(--xs-primary-2);
+}
+
+.official-document-compose__draft-card strong {
+  overflow: hidden;
+  font-size: var(--xs-fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__draft-card small {
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__drafts-grid article > .ant-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  color: var(--xs-text-3);
+}
+
+.official-document-compose__drafts-grid article > .ant-btn:hover {
+  color: var(--xs-primary-2);
+}

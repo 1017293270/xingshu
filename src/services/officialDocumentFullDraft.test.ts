@@ -3,6 +3,7 @@ import type { OfficialDocumentDraftContent, OfficialDocumentStructureNode } from
 import {
   buildOfficialDocumentReferenceWritingPlan,
   buildOfficialDocumentPreviewLines,
+  mapResearchResultsToReferenceSections,
   parseOfficialDocumentReferenceGeneration,
   stripOfficialDocumentAnchors
 } from "./officialDocumentFullDraft";
@@ -90,6 +91,81 @@ describe("reference draft generation", () => {
     expect(JSON.stringify(plan.writingContext)).not.toContain("2025年旧标题");
     expect(JSON.stringify(plan.writingContext)).not.toContain("旧数据表");
     expect(plan.writingContext).toMatchObject({ action: "REFERENCE_DRAFT" });
+  });
+
+  it("研究结果注入上下文并放开 allowResearch，图表 base64 不进上下文", () => {
+    const research = [{
+      taskId: "n1",
+      sectionId: "reference-section-1",
+      kind: "ASK_DATA" as const,
+      question: "检查完成数量",
+      required: true,
+      preferredOutput: "TABLE" as const,
+      status: "SUCCESS" as const,
+      summary: "全年完成 120 次",
+      chart: { mimeType: "image/png" as const, base64: "AAAA", widthPx: 10, heightPx: 10, altText: "图" },
+      citations: []
+    }];
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "h1", order: 0, role: "HEADING_1", variantId: "heading-v1", text: "一、旧年度情况" },
+        { id: "b1", order: 1, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知",
+      researchResults: research
+    });
+    const context = plan.writingContext as {
+      researchResults?: Array<{ summary: string; chart?: { base64?: string } }>;
+      outputRules: { allowResearch: boolean };
+    };
+    expect(context.outputRules.allowResearch).toBe(true);
+    expect(context.researchResults?.[0]?.summary).toBe("全年完成 120 次");
+    expect(context.researchResults?.[0]?.chart?.base64).toBeUndefined();
+    // 未注入时保持关闭
+    const bare = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "b1", order: 0, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知"
+    });
+    expect((bare.writingContext as { outputRules: { allowResearch: boolean } }).outputRules.allowResearch).toBe(false);
+  });
+
+  it("mapResearchResultsToReferenceSections 标题优先、序号兜底、无匹配保留原值", () => {
+    const analyzed = [
+      { id: "s1", order: 0, title: "一、检查安排" },
+      { id: "s2", order: 1, title: "二、其他事项" },
+      { id: "s3", order: 9, title: "完全对不上的" }
+    ];
+    const reference = [
+      { id: "reference-section-1", order: 0, title: "1. 检查安排", bodyRequired: true },
+      { id: "reference-section-2", order: 1, title: "工作要求", bodyRequired: true }
+    ];
+    const base = {
+      kind: "ASK_DATA" as const,
+      question: "q",
+      required: false,
+      preferredOutput: "" as const,
+      status: "SUCCESS" as const,
+      summary: "s",
+      citations: []
+    };
+    const mapped = mapResearchResultsToReferenceSections([
+      { ...base, taskId: "a", sectionId: "s1" },
+      { ...base, taskId: "b", sectionId: "s2" },
+      { ...base, taskId: "c", sectionId: "s3" },
+      { ...base, taskId: "d", sectionId: "unknown" }
+    ], analyzed, reference);
+    expect(mapped.map((item) => item.sectionId)).toEqual([
+      "reference-section-1", // 标题归一后相同（检查安排）
+      "reference-section-2", // 标题不同但同序号
+      "s3",                  // 序号也对不上，保留原值
+      "unknown"              // 不在分析章节里，原样保留
+    ]);
   });
 
   it("parses fixed fields and rewritten headings into template variants", () => {
