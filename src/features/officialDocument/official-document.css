@@ -3081,104 +3081,215 @@
   }
 }
 
-/* ==================== 公文写作：大纲确认环 ==================== */
+/* ==================== 公文写作：大纲确认环 ====================
+   读起来要像一份计划，不是一叠表单：层级靠缩进，标题是幽灵输入，
+   删除键只在行上出现。硬性约束——卡片内不允许任何横向溢出，
+   它挂在 .xs-chat 这条共用滚动容器里，一处溢出整条会话流都会横滚。 */
 
 .compose-outline {
+  --compose-outline-inset: 7px;
+
   display: grid;
-  gap: 12px;
-  padding: 14px 16px;
+  width: 100%;
+  /* grid 项默认 min-width:auto，内容 min-content 一大就把卡片顶出父列 */
+  min-width: 0;
+  gap: 10px;
+  padding: 13px 14px;
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
-  background: #fbfdff;
+  border-radius: 10px;
+  background: var(--xs-surface);
 }
 
 .compose-outline__head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--xs-text);
+  display: grid;
+  min-width: 0;
+  gap: 3px;
 }
 
-.compose-outline__head svg {
-  align-self: center;
+/* 第一行只放标题，摘要不许跟它挤在一行 */
+.compose-outline__heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  line-height: 1.5;
+}
+
+.compose-outline__heading svg {
+  flex: none;
   color: var(--xs-primary-2);
 }
 
-.compose-outline__head small {
+.compose-outline__heading strong {
   min-width: 0;
-  overflow: hidden;
+  font-weight: var(--xs-fw-medium);
+}
+
+/* 摘要独占一行、自动换行。这里曾经是 nowrap 的 small：
+   nowrap 让它的 min-content 等于整行文字宽，卡片跟着被顶宽，横向滚动条就是这么来的。 */
+.compose-outline__summary {
+  min-width: 0;
+  margin: 0;
+  padding-left: 23px;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .compose-outline__sections {
   display: grid;
-  gap: 10px;
+  min-width: 0;
+  gap: 2px;
   margin: 0;
-  padding-left: 22px;
+  padding: 0;
+  list-style: none;
 }
 
 .compose-outline__sections > li {
   display: grid;
-  gap: 4px;
+  min-width: 0;
+  gap: 1px;
+  padding: 3px 0;
+}
+
+/* 层级只用缩进表达，别再加边框或序号图形 */
+.compose-outline__sections > li[data-level="2"] {
+  padding-left: 18px;
+}
+
+.compose-outline__sections > li[data-level="3"] {
+  padding-left: 36px;
 }
 
 .compose-outline__section-row {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 2px;
 }
 
-.compose-outline__section-row .ant-input {
-  max-width: 420px;
+/* 幽灵输入：默认就是一行正文，hover / 聚焦才浮出浅边框 */
+.compose-outline__title.ant-input {
+  min-width: 0;
+  /* antd 给 textarea 兜了 44px 的 min-height，那是控件高度，计划清单里要按行高走 */
+  min-height: 0;
+  flex: 1;
+  padding: 2px var(--compose-outline-inset);
+  color: var(--xs-text);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--xs-fs-control);
   font-weight: var(--xs-fw-medium);
+  line-height: 1.55;
+  resize: none;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.compose-outline__sections p {
+.compose-outline__sections > li[data-level="2"] .compose-outline__title.ant-input,
+.compose-outline__sections > li[data-level="3"] .compose-outline__title.ant-input {
+  color: var(--xs-text-2);
+  font-weight: var(--xs-fw-text);
+}
+
+/* 整节都是热区：鼠标落在说明或要点上，也该看出这一节是可改可删的 */
+.compose-outline__sections > li:hover .compose-outline__title.ant-input:not(:disabled) {
+  border-color: var(--xs-border);
+  background: var(--xs-surface-soft);
+}
+
+.compose-outline__title.ant-input:focus,
+.compose-outline__title.ant-input:focus-within {
+  border-color: var(--xs-border-strong);
+  background: var(--xs-surface);
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 10%);
+}
+
+.compose-outline__title.ant-input:disabled {
+  color: var(--xs-text-2);
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
+/* 垃圾桶只在这一行 hover（或键盘走到它）时出现，平时不占视觉 */
+.compose-outline__remove.ant-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  flex: none;
+  padding: 0;
+  color: var(--xs-text-3);
+  opacity: 0;
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.compose-outline__sections > li:hover .compose-outline__remove.ant-btn,
+.compose-outline__remove.ant-btn:focus-visible {
+  opacity: 1;
+}
+
+.compose-outline__remove.ant-btn:hover:not(:disabled) {
+  color: var(--xs-danger-ink);
+}
+
+.compose-outline__purpose,
+.compose-outline__points {
+  min-width: 0;
   margin: 0;
+  /* 幽灵输入有 1px 透明边框，说明行要跟着它的文字左沿对齐 */
+  padding-left: calc(var(--compose-outline-inset) + 1px);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  line-height: 1.5;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
-.compose-outline__points {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* 要点从胶囊降成一行小字，前缀只做一点弱强调 */
+.compose-outline__points > span {
+  margin-right: 5px;
+  color: #8b9bb1;
 }
 
-.compose-outline__points em {
-  padding: 1px 8px;
-  color: var(--xs-text-2);
-  border: 1px solid var(--xs-border);
-  border-radius: 999px;
-  background: var(--xs-surface);
-  font-size: var(--xs-fs-caption);
-  font-style: normal;
+.compose-outline__points > span::after {
+  content: "：";
 }
 
 .compose-outline__research {
   display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px dashed var(--xs-border);
-  border-radius: 10px;
-  background: var(--xs-surface-soft);
+  min-width: 0;
+  gap: 5px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
 }
 
 .compose-outline__research strong {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.compose-outline__research strong svg {
+  flex: none;
+  color: var(--xs-primary-2);
 }
 
 .compose-outline__research ul {
   display: grid;
-  gap: 4px;
+  min-width: 0;
+  gap: 3px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -3186,46 +3297,89 @@
 
 .compose-outline__research li {
   display: flex;
+  min-width: 0;
   align-items: baseline;
-  gap: 8px;
+  gap: 7px;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .compose-outline__research li span {
   flex: none;
-  padding: 0 8px;
+  padding: 0 5px;
   color: var(--xs-primary-2);
-  border: 1px solid #d4e5ff;
-  border-radius: 999px;
-  background: #f4f8ff;
-  font-size: var(--xs-fs-caption);
+  border-radius: 4px;
+  background: #f0f5ff;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .compose-outline__research li span[data-kind="ASK_KNOWLEDGE"] {
   color: #6f42c1;
-  border-color: #e6dcf7;
-  background: #f8f4ff;
+  background: #f6f2fd;
 }
 
 .compose-outline__progress {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .compose-outline__progress small {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 4px;
   color: var(--xs-danger-ink, #b42318);
+  font-size: var(--xs-fs-caption);
 }
 
 .compose-outline__actions {
   display: flex;
+  min-width: 0;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.compose-outline__actions .ant-btn {
+  height: 30px;
+  padding-inline: 11px;
+  border-radius: 8px;
+  font-size: var(--xs-fs-label);
+}
+
+.compose-outline__actions .ant-btn-text {
+  color: var(--xs-text-3);
+}
+
+.compose-outline__actions .ant-btn-text:hover:not(:disabled) {
+  color: var(--xs-text);
+}
+
+/* 触屏没有 hover：删除键常显，否则永远点不到 */
+@media (hover: none) {
+  .compose-outline__remove.ant-btn {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compose-outline__title.ant-input,
+  .compose-outline__remove.ant-btn {
+    transition: none;
+  }
 }
