@@ -84,7 +84,7 @@ describe("dashboard designer motion states", () => {
     expect(screen.getByRole("button", { name: "撤销" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重做" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "应用大屏模板" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "AI 排版" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "一键美化" })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "缩放" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /×/ })).toHaveLength(11);
     expect(screen.queryByRole("navigation", { name: "大屏编辑工具栏" })).not.toBeInTheDocument();
@@ -558,7 +558,7 @@ describe("dashboard designer motion states", () => {
     ]);
     expect(table?.querySelectorAll("tbody tr")).toHaveLength(24);
     expect(host.querySelector(".vue-echart")).not.toBeInTheDocument();
-    expect(screen.getByText("已加入 1 个组件")).toBeInTheDocument();
+    expect(screen.getByText("已加入 1")).toBeInTheDocument();
   });
 
   it("previews and applies a tidy AI layout from the toolbar", async () => {
@@ -619,23 +619,28 @@ describe("dashboard designer motion states", () => {
       exit: vi.fn()
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "AI 排版" }));
+    fireEvent.click(await screen.findByRole("button", { name: "一键美化" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "预览整齐排版" });
-    expect(dialog).toHaveTextContent("AI 语义规划");
+    const dialog = await screen.findByRole("dialog", { name: "选配色，再构图" });
+    // 构图与配色全部走本地引擎，后端 /layout-plan 端点从未存在，一发都不许白打
+    expect(dataActions.planLayout).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent("星数冰蓝");
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(host.querySelectorAll(".layout-preview__block")).toHaveLength(4);
 
-    fireEvent.click(screen.getByRole("button", { name: "应用排版" }));
+    fireEvent.click(screen.getByRole("radio", { name: /深空指挥/ }));
+    fireEvent.click(screen.getByRole("button", { name: "应用美化" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "预览整齐排版" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "选配色，再构图" })).not.toBeInTheDocument());
     const cardA = screen.getByRole("button", { name: "图表甲" });
     const cardB = screen.getByRole("button", { name: "图表乙" });
-    expect(cardA.style.left).toBe("32px");
     expect(cardA.style.top).toBe("32px");
     expect(cardB.style.top).toBe("32px");
-    expect(Number.parseInt(cardB.style.left, 10)).toBeGreaterThan(Number.parseInt(cardA.style.left, 10));
+    expect(Math.min(Number.parseInt(cardA.style.left, 10), Number.parseInt(cardB.style.left, 10))).toBe(32);
     expect(Number.parseInt(cardA.style.left, 10) % 8).toBe(0);
     expect(Number.parseInt(cardB.style.left, 10) % 8).toBe(0);
+    // 主题也一并落到画布上：深空指挥档的底色接管画布
+    expect(host.querySelector<HTMLElement>(".designer-canvas")).toHaveStyle({ backgroundColor: "#050C1C" });
   });
 
   it("switches canvas resolution and clamps out-of-bounds widgets", async () => {

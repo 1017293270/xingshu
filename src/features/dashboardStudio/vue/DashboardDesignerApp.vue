@@ -24,6 +24,7 @@ import {
   PhFloppyDisk,
   PhGridFour,
   PhHand,
+  PhImageSquare,
   PhLock,
   PhLockOpen,
   PhMagnifyingGlass,
@@ -34,6 +35,7 @@ import {
   PhSidebarSimple,
   PhSlidersHorizontal,
   PhSparkle,
+  PhSquaresFour,
   PhStar,
   PhTable,
   PhTextT,
@@ -97,7 +99,18 @@ import {
   removeQueryAssetChart
 } from "@/services/dashboardModuleService";
 import { readDataHubSession } from "@/services/dataHubSession";
-import { createLayoutRequest, solveDashboardLayout, widgetSemanticRole } from "../core/dashboardLayoutSolver";
+import { widgetSemanticRole } from "../core/dashboardLayoutSolver";
+import {
+  composeDashboardLayout,
+  composeDashboardLayoutPlan
+} from "../core/dashboardCompose";
+import {
+  DEFAULT_DASHBOARD_BOARD_THEME_ID,
+  applyDashboardBoardTheme,
+  dashboardBoardThemes,
+  getDashboardBoardTheme,
+  getMatchingDashboardBoardThemeId
+} from "../core/dashboardBoardThemes";
 import {
   compressDashboardBackgroundImage,
   resolveCanvasBackgroundStyle
@@ -301,7 +314,14 @@ const layoutPlan = ref<LayoutPlan | null>(null);
 const layoutPreviewSchema = ref<DashboardSchema | null>(null);
 const showLayoutDialog = ref(false);
 const layoutPlanning = ref(false);
+const beautifyPresetId = ref(DEFAULT_DASHBOARD_BOARD_THEME_ID);
+/**
+ * 用户是否亲手动过整板观感（画布底色/底图、组件配色、图表主题）。
+ * 一旦为 true，空板首添时就不再自动套默认主题——自动美化永远不覆盖手工配置。
+ */
+const boardStyleTouched = ref(false);
 const canvasNotice = ref("");
+let canvasNoticeTimer: number | null = null;
 const canvasBackgroundUploading = ref(false);
 const canvasBackgroundInput = ref<HTMLInputElement | null>(null);
 const relativeTimeOptions: Array<{ value: RelativeTimePreset; label: string }> = [
@@ -316,6 +336,7 @@ const relativeTimeOptions: Array<{ value: RelativeTimePreset; label: string }> =
   { value: "LAST_YEAR", label: "去年" }
 ];
 
+const beautifyPreset = computed(() => getDashboardBoardTheme(beautifyPresetId.value));
 const selectedWidget = computed(() => schema.widgets.find((widget) => widget.id === selectedWidgetId.value));
 const isSelectedWidgetLocked = computed(() => selectedWidget.value?.style.locked === true);
 const isPropertyEditingDisabled = computed(() => lifecycle.value === "saving" || isSelectedWidgetLocked.value);
@@ -594,7 +615,7 @@ function clampWidgetsToCanvas() {
       adjusted += 1;
     }
   }
-  canvasNotice.value = adjusted > 0 ? `已将 ${adjusted} 个越界组件移回画布` : "";
+  showCanvasNotice(adjusted > 0 ? `已将 ${adjusted} 个越界组件移回画布` : "");
 }
 
 function handleResolutionChange(event: Event) {
@@ -685,6 +706,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("pointercancel", finishCanvasPan);
   finishDesignerConfirmation(false);
   clearDesignerConfirmationCloseTimer();
+  if (canvasNoticeTimer !== null) window.clearTimeout(canvasNoticeTimer);
 });
 
 function bindingForWidget(widget: DashboardWidget) {
@@ -693,6 +715,25 @@ function bindingForWidget(widget: DashboardWidget) {
 
 function assetChartCount(assetId: string) {
   return queryAssetCharts.value.filter((entry) => entry.module.source.assetId === assetId).length;
+}
+
+/** 左面板列表的类型图标：一眼分清图表 / 表格 / 指标 / 文本装饰，不用读小字。 */
+function widgetTypeIcon(type: DashboardWidgetType) {
+  if (type === "table") return PhTable;
+  if (type === "text") return PhTextT;
+  if (type === "metric") return PhNumberSquareOne;
+  if (type === "image") return PhImageSquare;
+  if (type === "decoration") return PhSquaresFour;
+  if (type === "bar" || type === "funnel") return PhChartBar;
+  if (type === "pie" || type === "radar") return PhChartPieSlice;
+  return PhChartLine;
+}
+
+function widgetTypeTone(type: DashboardWidgetType) {
+  if (type === "table") return "table";
+  if (type === "metric") return "metric";
+  if (["text", "image", "decoration"].includes(type)) return "text";
+  return "chart";
 }
 
 function selectQueryAssetChart(widgetId: string) {
@@ -717,6 +758,8 @@ async function removeDashboardQueryChart(widgetId: string) {
   if (!confirmed) return;
   await applySchemaChange(removeQueryAssetChart(plainSchema(), widgetId));
   if (selectedWidgetId.value === widgetId) selectedWidgetId.value = "";
+  // 移除后剩下的组件会留一个洞，这里顺手收口，但绝不动配色。
+  await autoComposeAfterChange();
 }
 
 function availablePosition(widgetId: string, desired: DashboardWidgetPosition) {
@@ -1398,11 +1441,14 @@ async function addSelectedAsset() {
     });
     const outputKey = selectedOutputKey.value || defaultQueryOutputKey(preview.outputs);
     if (!outputKey) throw new Error("该查询资产没有可用输出");
+    const wasEmptyBoard = schema.widgets.length === 0;
     const result = appendQueryAssetChart(plainSchema(), asset, clone(toRaw(preview)), outputKey,
       clone(toRaw(selectedAssetParameters)));
     await applySchemaChange(result.schema);
     selectedWidgetId.value = result.widgetId;
     markWidgetSettling(result.widgetId);
+    // 添加即成型：first-fit 堆叠出来的方块阵在这里被构图器收走，空板首添还顺带套一次默认主题。
+    await autoComposeAfterChange({ allowTheme: wasEmptyBoard });
     paletteTab.value = "assets";
     activePropertyTab.value = "data";
     activeDrawer.value = "property";
@@ -1604,46 +1650,78 @@ async function saveModuleSchedule() {
   }
 }
 
-async function previewAiLayout() {
+function showCanvasNotice(message: string) {
+  canvasNotice.value = message;
+  if (canvasNoticeTimer !== null) window.clearTimeout(canvasNoticeTimer);
+  if (!message) {
+    canvasNoticeTimer = null;
+    return;
+  }
+  canvasNoticeTimer = window.setTimeout(() => {
+    canvasNotice.value = "";
+    canvasNoticeTimer = null;
+  }, 4600);
+}
+
+/**
+ * 空板首次落组件时才允许自动套默认主题，且必须同时满足：
+ * 板上还没有可识别的整板主题、没有自定义画布底图、schema.theme 还没被模板/AI 写过、
+ * 本次会话里用户也没手动改过任何配色。任何一条不满足都保持用户既有观感不动。
+ */
+function canAutoApplyBoardTheme(source: DashboardSchema) {
+  if (boardStyleTouched.value) return false;
+  if (source.canvas.backgroundImage) return false;
+  if (source.theme?.name) return false;
+  return getMatchingDashboardBoardThemeId(source) === "";
+}
+
+/**
+ * 添加/移除组件后的自动收口：先按构图规则重排，空板首添时顺带套一次默认主题。
+ * 独立走一次 applySchemaChange，撤销一步即可退回自动排版之前的样子。
+ */
+async function autoComposeAfterChange(options: { allowTheme?: boolean } = {}) {
+  if (schema.widgets.length === 0) return;
+  const source = plainSchema();
+  const themed = options.allowTheme && canAutoApplyBoardTheme(source)
+    ? applyDashboardBoardTheme(source, DEFAULT_DASHBOARD_BOARD_THEME_ID, { includeLocked: false })
+    : source;
+  const composed = composeDashboardLayout(themed);
+  if (historySignature(source) === historySignature(composed)) return;
+  const keepSelection = selectedWidgetId.value;
+  await applySchemaChange(composed);
+  if (keepSelection && schema.widgets.some((widget) => widget.id === keepSelection)) {
+    selectedWidgetId.value = keepSelection;
+    markWidgetSettling(keepSelection);
+  }
+  showCanvasNotice(
+    themed === source
+      ? "已自动收口版式，可撤销"
+      : "已自动排版并套用默认主题，可撤销"
+  );
+}
+
+/** 一键美化：本地构图器直接出方案，不再向后端要 /layout-plan（该端点从未存在）。 */
+function refreshBeautifyPreview() {
+  const source = plainSchema();
+  layoutPlan.value = composeDashboardLayoutPlan(source);
+  // 设计器把 locked 当“全属性冻结”，所以换肤一律跳过锁定组件，只让它们参与避让。
+  layoutPreviewSchema.value = composeDashboardLayout(
+    applyDashboardBoardTheme(source, beautifyPresetId.value, { includeLocked: false })
+  );
+}
+
+function selectBeautifyPreset(presetId: string) {
+  if (beautifyPresetId.value === presetId) return;
+  beautifyPresetId.value = presetId;
+  refreshBeautifyPreview();
+}
+
+function openBeautifyDialog() {
   if (layoutPlanning.value || schema.widgets.length === 0) return;
   layoutPlanning.value = true;
   try {
-    const request = createLayoutRequest(plainSchema());
-    let plan: LayoutPlan;
-    try {
-      plan = await props.dataActions.planLayout(request);
-      if (plan.intents.length !== schema.widgets.length) throw new Error("AI 排版缺少组件");
-    } catch {
-      // 本地兜底构图：KPI 总览带 + 首图 hero（其后最多两个组件作侧轨）+ 明细表通栏。
-      let heroAssigned = false;
-      let railCount = 0;
-      plan = {
-        source: "LOCAL",
-        message: "AI 暂不可用，已使用本地整齐排版",
-        intents: request.widgets.map((widget, rank) => {
-          if (widget.semanticRole === "kpi") {
-            return { widgetId: widget.id, section: "summary", rank, emphasis: "compact" as const };
-          }
-          if (widget.semanticRole === "detail") {
-            return { widgetId: widget.id, section: "detail", rank, emphasis: "wide" as const };
-          }
-          if (widget.semanticRole === "narrative") {
-            return { widgetId: widget.id, section: "main", rank, emphasis: "wide" as const, heightTier: "slim" as const };
-          }
-          if (!heroAssigned) {
-            heroAssigned = true;
-            return { widgetId: widget.id, section: "main", rank, emphasis: "hero" as const };
-          }
-          if (railCount < 2) {
-            railCount += 1;
-            return { widgetId: widget.id, section: "main", rank, emphasis: "compact" as const, placement: "rail" as const };
-          }
-          return { widgetId: widget.id, section: "main", rank, emphasis: "normal" as const };
-        })
-      };
-    }
-    layoutPlan.value = plan;
-    layoutPreviewSchema.value = solveDashboardLayout(plainSchema(), plan.intents);
+    beautifyPresetId.value = getMatchingDashboardBoardThemeId(plainSchema()) || DEFAULT_DASHBOARD_BOARD_THEME_ID;
+    refreshBeautifyPreview();
     showLayoutDialog.value = true;
   } finally {
     layoutPlanning.value = false;
@@ -1680,7 +1758,8 @@ async function handleCanvasBackgroundUpload(event: Event) {
   try {
     const dataUrl = await compressDashboardBackgroundImage(file, schema.canvas.width);
     schema.canvas.backgroundImage = { dataUrl, fit: schema.canvas.backgroundImage?.fit ?? "cover" };
-    canvasNotice.value = "";
+    boardStyleTouched.value = true;
+    showCanvasNotice("");
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "背景图上传失败";
     lifecycle.value = "error";
@@ -1697,13 +1776,23 @@ function updateCanvasBackgroundFit(event: Event) {
 }
 
 function removeCanvasBackground() {
+  boardStyleTouched.value = true;
   delete schema.canvas.backgroundImage;
+}
+
+function updateCanvasBackgroundColor(event: Event) {
+  boardStyleTouched.value = true;
+  schema.canvas.background = (event.target as HTMLInputElement).value;
 }
 
 async function applyLayoutPreview() {
   if (!layoutPreviewSchema.value) return;
+  const presetTitle = beautifyPreset.value.title;
   await applySchemaChange(layoutPreviewSchema.value);
+  // 用户在对话框里亲自挑过主题，之后的自动排版不再替他决定配色。
+  boardStyleTouched.value = true;
   showLayoutDialog.value = false;
+  showCanvasNotice(`已应用「${presetTitle}」并重新构图，可撤销`);
 }
 
 function updateMetricSelection(event: Event) {
@@ -1779,6 +1868,7 @@ function selectChartVariant(variantId: string) {
 
 function applyChartTheme(themeId: string) {
   if (!selectedWidget.value || isPropertyEditingDisabled.value) return;
+  boardStyleTouched.value = true;
   const theme = getDashboardChartTheme(themeId);
   selectedWidget.value.style = {
     ...selectedWidget.value.style,
@@ -1796,6 +1886,7 @@ function updateStyleValue(
   value: string
 ) {
   if (!selectedWidget.value || isPropertyEditingDisabled.value) return;
+  boardStyleTouched.value = true;
   selectedWidget.value.style[key] = value;
 }
 
@@ -2032,11 +2123,11 @@ async function exitDesigner() {
           type="button"
           class="designer-toolbar__button designer-toolbar__layout-button"
           :disabled="layoutPlanning || lifecycle === 'saving' || schema.widgets.length === 0"
-          :title="schema.widgets.length === 0 ? '先向画布添加组件' : '让 AI 将组件重新排列整齐'"
-          @click="previewAiLayout"
+          :title="schema.widgets.length === 0 ? '先向画布添加组件' : '自动配色并重新构图，应用前可预览'"
+          @click="openBeautifyDialog"
         >
           <PhSparkle :size="15" aria-hidden="true" />
-          <span>{{ layoutPlanning ? '排版中…' : 'AI 排版' }}</span>
+          <span>{{ layoutPlanning ? '生成中…' : '一键美化' }}</span>
         </button>
         <a
           class="designer-toolbar__button designer-toolbar__link-button"
@@ -2057,8 +2148,8 @@ async function exitDesigner() {
     <div class="designer-workspace" @keydown="handleCanvasKeydown">
       <aside class="designer-panel designer-palette" :class="{ 'is-drawer-open': activeDrawer === 'palette' }" aria-label="组件库">
         <header class="designer-palette__header">
-          <p>{{ paletteTab === 'assets' ? '查询资产' : '组件' }}</p>
-          <h2>{{ paletteTab === 'assets' ? '收藏问数' : '构建模块' }}</h2>
+          <p>构建</p>
+          <h2>组件库</h2>
         </header>
         <nav class="designer-palette__tabs" aria-label="资源类型">
           <button type="button" :class="{ 'is-active': paletteTab === 'components' }" @click="paletteTab = 'components'">组件</button>
@@ -2084,28 +2175,24 @@ async function exitDesigner() {
         </div>
         <div v-else class="query-asset-panel">
           <div class="query-asset-panel__browser">
-            <div class="query-asset-panel__intro">
-              <span>
-                <strong>添加收藏组件</strong>
-                <small>每次选择一条收藏和一张结果表，只添加一个可编辑组件。</small>
-              </span>
-              <b>{{ queryAssetCharts.length }}</b>
-            </div>
-            <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__current">
-              <header>
-                <strong>当前看板组件</strong>
-                <span>{{ queryAssetCharts.length }} 个</span>
+            <section v-if="queryAssetCharts.length > 0" class="query-asset-panel__section">
+              <header class="query-asset-panel__section-head">
+                <strong>画布上的组件</strong>
+                <span>{{ queryAssetCharts.length }}</span>
               </header>
               <div class="query-asset-panel__module-list">
                 <article v-for="entry in queryAssetCharts" :key="entry.widget.id">
                   <button type="button" class="query-asset-panel__module-main" @click="selectQueryAssetChart(entry.widget.id)">
-                    <strong>{{ entry.widget.title }}</strong>
-                    <small>
-                      {{ getDashboardComponentDefinition(entry.widget.type).title }}
-                      · {{ entry.module.source.outputKey }}
-                      · 固定版本
-                      · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
-                    </small>
+                    <span class="query-asset-panel__module-icon" :data-tone="widgetTypeTone(entry.widget.type)" aria-hidden="true">
+                      <component :is="widgetTypeIcon(entry.widget.type)" :size="14" />
+                    </span>
+                    <span class="query-asset-panel__module-copy">
+                      <strong>{{ entry.widget.title }}</strong>
+                      <small>
+                        {{ getDashboardComponentDefinition(entry.widget.type).title }}
+                        · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
+                      </small>
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -2114,43 +2201,51 @@ async function exitDesigner() {
                     :disabled="lifecycle === 'saving'"
                     @click="removeDashboardQueryChart(entry.widget.id)"
                   >
-                    <PhTrash :size="15" aria-hidden="true" />
+                    <PhTrash :size="14" aria-hidden="true" />
                   </button>
                 </article>
               </div>
             </section>
-            <div class="query-asset-panel__filters">
-              <label class="query-asset-panel__search-field">
-                <PhMagnifyingGlass :size="14" aria-hidden="true" />
-                <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题或名称" @keyup.enter="loadAssets" />
-              </label>
-              <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
-                <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
-              </select>
-              <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
-            </div>
-            <p v-if="assetError" class="query-asset-panel__error" role="alert">{{ assetError }}</p>
-            <div v-if="assetState === 'success' && queryAssets.length === 0" class="query-asset-panel__empty">暂无收藏问数，请先在问数结果中收藏。</div>
-            <div class="query-asset-panel__list">
-              <button
-                v-for="asset in queryAssets"
-                :key="asset.id"
-                type="button"
-                :class="{ 'is-active': selectedAssetId === asset.id }"
-                @click="chooseAsset(asset)"
-              >
-                <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="15" weight="fill" /></span>
-                <span class="query-asset-panel__asset-body">
-                  <strong>{{ asset.name }}</strong>
-                  <span>{{ asset.resolvedQuestion }}</span>
-                  <small>
-                    <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
-                    <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
-                    <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }} 个组件</b>
-                  </small>
-                </span>
-              </button>
-            </div>
+
+            <section class="query-asset-panel__section">
+              <header class="query-asset-panel__section-head">
+                <strong>收藏问数</strong>
+                <span v-if="queryAssets.length > 0">{{ queryAssets.length }}</span>
+              </header>
+              <p class="query-asset-panel__note">选一条收藏和一张结果表，添加一个可编辑组件。</p>
+              <div class="query-asset-panel__filters">
+                <label class="query-asset-panel__search-field">
+                  <PhMagnifyingGlass :size="14" aria-hidden="true" />
+                  <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题" @keyup.enter="loadAssets" />
+                </label>
+                <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
+                  <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
+                </select>
+                <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
+              </div>
+              <p v-if="assetError" class="query-asset-panel__error" role="alert">{{ assetError }}</p>
+              <div v-if="assetState === 'success' && queryAssets.length === 0" class="query-asset-panel__empty">暂无收藏问数，请先在问数结果中收藏。</div>
+              <div class="query-asset-panel__list">
+                <button
+                  v-for="asset in queryAssets"
+                  :key="asset.id"
+                  type="button"
+                  :class="{ 'is-active': selectedAssetId === asset.id }"
+                  @click="chooseAsset(asset)"
+                >
+                  <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="14" weight="fill" /></span>
+                  <span class="query-asset-panel__asset-body">
+                    <strong>{{ asset.name }}</strong>
+                    <span>{{ asset.resolvedQuestion }}</span>
+                    <small>
+                      <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
+                      <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
+                      <b v-if="assetChartCount(asset.id) > 0">已加入 {{ assetChartCount(asset.id) }}</b>
+                    </small>
+                  </span>
+                </button>
+              </div>
+            </section>
           </div>
           <section v-if="selectedAsset" class="query-asset-panel__preview">
             <header><strong>组件配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
@@ -2199,6 +2294,10 @@ async function exitDesigner() {
       </aside>
 
       <section class="designer-canvas-viewport" aria-label="设计画布">
+        <p v-if="canvasNotice" class="designer-canvas-toast" role="status" aria-live="polite">
+          <PhSparkle :size="13" aria-hidden="true" />
+          <span>{{ canvasNotice }}</span>
+        </p>
         <div class="designer-canvas-ruler designer-canvas-ruler--horizontal" aria-hidden="true">
           <span>{{ schema.canvas.width }} × {{ schema.canvas.height }}</span>
           <span>{{ canvasScaleLabel }}</span>
@@ -2385,7 +2484,7 @@ async function exitDesigner() {
             <h3>背景</h3>
             <label class="property-field">
               <span>背景色</span>
-              <input v-model="schema.canvas.background" type="color" :disabled="lifecycle === 'saving'" aria-label="画布背景色" />
+              <input :value="schema.canvas.background" type="color" :disabled="lifecycle === 'saving'" aria-label="画布背景色" @input="updateCanvasBackgroundColor" />
             </label>
             <div class="property-field">
               <span>背景图</span>
@@ -2405,7 +2504,6 @@ async function exitDesigner() {
                 {{ canvasBackgroundUploading ? '压缩上传中…' : (schema.canvas.backgroundImage ? '更换图片' : '上传背景图') }}
               </button>
             </div>
-            <p v-if="canvasNotice" class="property-hint" role="status">{{ canvasNotice }}</p>
           </section>
 
           <div class="designer-properties__empty">
@@ -2463,9 +2561,35 @@ async function exitDesigner() {
 
     <div v-if="showLayoutDialog && layoutPreviewSchema" class="designer-modal-backdrop" role="presentation" @click.self="showLayoutDialog = false">
       <section class="designer-modal designer-modal--layout" role="dialog" aria-modal="true" aria-labelledby="layout-dialog-title">
-        <header><div><p>{{ layoutPlan?.source === 'AI' ? 'AI 语义规划' : '本地规则' }}</p><h2 id="layout-dialog-title">预览整齐排版</h2></div><button type="button" aria-label="关闭" @click="showLayoutDialog = false">×</button></header>
-        <p class="designer-modal__hint">{{ layoutPlan?.message }}。只调整位置、尺寸和阅读顺序；标题、图表类型、字段绑定和锁定组件保持不变。</p>
-        <div class="layout-preview-summary"><strong>{{ layoutPreviewSchema.widgets.length }}</strong><span>个组件参与排版</span><strong>{{ layoutPreviewSchema.widgets.filter(widget => widget.style.locked).length }}</strong><span>个锁定组件原位保留</span></div>
+        <header><div><p>自动美化</p><h2 id="layout-dialog-title">选配色，再构图</h2></div><button type="button" aria-label="关闭" @click="showLayoutDialog = false">×</button></header>
+        <div class="board-theme-picker" role="radiogroup" aria-label="整板主题">
+          <button
+            v-for="preset in dashboardBoardThemes"
+            :key="preset.id"
+            type="button"
+            role="radio"
+            class="board-theme-card"
+            :class="{ 'is-active': beautifyPresetId === preset.id }"
+            :aria-checked="beautifyPresetId === preset.id"
+            :title="preset.description"
+            @click="selectBeautifyPreset(preset.id)"
+          >
+            <span
+              class="board-theme-card__swatch"
+              aria-hidden="true"
+              :style="{ background: preset.canvasBackground, backgroundImage: preset.backdrop ? `url(${preset.backdrop})` : undefined }"
+            >
+              <i :style="{ background: preset.surface.background, borderColor: preset.surface.borderColor }" />
+              <em>
+                <b v-for="color in preset.seriesColors.slice(0, 4)" :key="color" :style="{ background: color }" />
+              </em>
+            </span>
+            <strong>{{ preset.title }}</strong>
+            <small>{{ preset.description }}</small>
+          </button>
+        </div>
+        <p class="designer-modal__hint">{{ layoutPlan?.message }}只重排位置与配色；标题、图表类型、字段绑定不变，锁定组件既不换肤也不挪动，仅作为障碍被避让。</p>
+        <div class="layout-preview-summary"><strong>{{ layoutPreviewSchema.widgets.length }}</strong><span>个组件参与构图</span><strong>{{ layoutPreviewSchema.widgets.filter(widget => widget.style.locked).length }}</strong><span>个锁定组件原样保留</span></div>
         <div class="layout-preview-compare">
           <figure class="layout-preview__pane">
             <figcaption>当前布局</figcaption>
@@ -2481,8 +2605,16 @@ async function exitDesigner() {
             </div>
           </figure>
           <figure class="layout-preview__pane">
-            <figcaption>排版后</figcaption>
-            <div class="layout-preview__canvas" :style="{ aspectRatio: layoutPreviewAspectRatio(layoutPreviewSchema) }">
+            <figcaption>美化后 · {{ beautifyPreset.title }}</figcaption>
+            <div
+              class="layout-preview__canvas"
+              :style="{
+                aspectRatio: layoutPreviewAspectRatio(layoutPreviewSchema),
+                background: beautifyPreset.canvasBackground,
+                backgroundImage: beautifyPreset.backdrop ? `url(${beautifyPreset.backdrop})` : undefined,
+                backgroundSize: 'cover'
+              }"
+            >
               <span
                 v-for="widget in layoutPreviewSchema.widgets"
                 :key="widget.id"
@@ -2494,7 +2626,7 @@ async function exitDesigner() {
             </div>
           </figure>
         </div>
-        <div class="designer-modal__actions"><button type="button" @click="showLayoutDialog = false">取消</button><button type="button" class="designer-modal__primary" @click="applyLayoutPreview">应用排版</button></div>
+        <div class="designer-modal__actions"><button type="button" @click="showLayoutDialog = false">取消</button><button type="button" class="designer-modal__primary" @click="applyLayoutPreview">应用美化</button></div>
       </section>
     </div>
 
@@ -3683,7 +3815,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  margin: 0 12px 10px;
+  margin: 12px 14px 12px;
   padding: 3px;
   border: 1px solid var(--studio-border);
   border-radius: 10px;
@@ -3717,8 +3849,8 @@ textarea:focus-visible {
   display: grid;
   min-height: 0;
   align-content: start;
-  gap: 14px;
-  padding: 2px 10px 12px 14px;
+  gap: 0;
+  padding: 4px 10px 16px 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -3735,125 +3867,140 @@ textarea:focus-visible {
   opacity: .55;
 }
 
-.query-asset-panel__intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--studio-border);
-  border-radius: 12px;
-  background: var(--studio-surface-soft);
-}
-
-.query-asset-panel__intro > span {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.query-asset-panel__intro strong {
-  color: var(--studio-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.query-asset-panel__intro small {
-  color: var(--studio-text-3);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.query-asset-panel__intro > b {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 26px;
-  height: 22px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  color: var(--studio-primary);
-  background: #eaf3ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.query-asset-panel__current {
+/* 左面板分区：每块只有「分区标题 + 内容」两层，块与块之间靠 22px 呼吸带分开 */
+.query-asset-panel__section {
   display: grid;
   gap: 8px;
 }
 
-.query-asset-panel__current > header {
+.query-asset-panel__section + .query-asset-panel__section {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--studio-border);
+}
+
+.query-asset-panel__section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  color: var(--studio-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.query-asset-panel__section-head strong {
   color: var(--studio-text-2);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.query-asset-panel__current > header span {
-  padding: 1px 8px;
+.query-asset-panel__section-head span {
+  display: inline-flex;
+  min-width: 18px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
   border-radius: 999px;
   color: var(--studio-primary);
   background: #eaf3ff;
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* 原来那张“添加收藏组件”提示卡收成一行说明，不再占一整块卡面 */
+.query-asset-panel__note {
+  margin: -2px 0 2px;
+  color: var(--studio-text-3);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .query-asset-panel__module-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .query-asset-panel__module-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 26px;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  background: #fff;
-  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+  gap: 2px;
+  padding: 4px 4px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__module-list article:hover {
-  border-color: var(--studio-border-strong);
+  border-color: var(--studio-border);
+  background: var(--studio-surface-soft);
 }
 
 .query-asset-panel__module-main {
   display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
   min-width: 0;
-  gap: 2px;
-  padding: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
   border: 0;
   color: var(--studio-text-2);
   background: transparent;
   text-align: left;
 }
 
-.query-asset-panel__module-main strong,
-.query-asset-panel__module-main small {
+.query-asset-panel__module-icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--studio-primary);
+  background: #eaf3ff;
+}
+
+.query-asset-panel__module-icon[data-tone="table"] { color: #0f766e; background: #e2f5f1; }
+.query-asset-panel__module-icon[data-tone="metric"] { color: #b45309; background: #fdf3e0; }
+.query-asset-panel__module-icon[data-tone="text"] { color: var(--studio-text-3); background: #eef1f6; }
+
+.query-asset-panel__module-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.query-asset-panel__module-copy strong,
+.query-asset-panel__module-copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.query-asset-panel__module-main strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
-.query-asset-panel__module-main small { color: var(--studio-text-3); font-size: 10px; }
+.query-asset-panel__module-copy strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
+.query-asset-panel__module-copy small { color: var(--studio-text-3); font-size: 10px; }
 
 .query-asset-panel__module-remove {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   place-items: center;
   border: 0;
   border-radius: 8px;
   color: var(--studio-text-3);
   background: transparent;
-  transition: color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
+  opacity: 0;
+  transition: color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out), opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.query-asset-panel__module-list article:hover .query-asset-panel__module-remove,
+.query-asset-panel__module-remove:focus-visible {
+  opacity: 1;
 }
 
 .query-asset-panel__module-remove:hover {
@@ -3861,14 +4008,14 @@ textarea:focus-visible {
   background: #fef2f2;
 }
 
+/* 搜索 + 范围 + 搜索按钮并成一条，不再三行堆叠 */
 .query-asset-panel__filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 76px auto;
   gap: 6px;
 }
 
 .query-asset-panel__search-field {
-  grid-column: 1 / -1;
   position: relative;
   display: flex;
   min-width: 0;
@@ -3888,8 +4035,8 @@ textarea:focus-visible {
 .query-asset-panel__preview select {
   width: 100%;
   min-width: 0;
-  height: 34px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 8px;
   border: 1px solid var(--studio-border);
   border-radius: 10px;
   color: var(--studio-text-2);
@@ -3916,8 +4063,9 @@ textarea:focus-visible {
 }
 
 .query-asset-panel__filters button {
-  height: 34px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 11px;
+  white-space: nowrap;
   border: 1px solid #cfe0fb;
   border-radius: 10px;
   color: var(--studio-primary);
@@ -3934,49 +4082,49 @@ textarea:focus-visible {
 
 .query-asset-panel__list {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
+/* 结果卡降噪：只留一层细描边，名称是唯一的重音，元信息退到裸文字 */
 .query-asset-panel__list > button {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 9px;
   align-items: start;
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--studio-border);
-  border-radius: 12px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--studio-text-2);
-  background: #fff;
+  background: transparent;
   text-align: left;
-  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), background var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .query-asset-panel__list > button:hover {
-  border-color: var(--studio-border-strong);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, .05);
+  border-color: var(--studio-border);
+  background: var(--studio-surface-soft);
 }
 
 .query-asset-panel__list > button.is-active {
-  border-color: var(--studio-primary);
+  border-color: color-mix(in srgb, var(--studio-primary) 42%, var(--studio-border));
   background: #f5f9ff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
 }
 
 .query-asset-panel__asset-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   place-items: center;
-  border-radius: 9px;
-  color: var(--studio-primary);
-  background: #eaf3ff;
+  border-radius: 8px;
+  color: #b8862a;
+  background: #fdf5e3;
 }
 
 .query-asset-panel__asset-body {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
 .query-asset-panel__asset-body strong,
@@ -3992,37 +4140,44 @@ textarea:focus-visible {
 .query-asset-panel__asset-body small {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 2px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 1px;
+  color: var(--studio-text-3);
+  font-size: 10px;
 }
 
 .query-asset-panel__asset-body small i,
 .query-asset-panel__asset-body small b {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
-  border-radius: 999px;
-  color: var(--studio-text-3);
-  background: var(--studio-surface-soft);
+  color: inherit;
   font-size: 10px;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.query-asset-panel__asset-body small i + i::before,
+.query-asset-panel__asset-body small i + b::before {
+  margin-right: 8px;
+  color: var(--studio-border-strong);
+  content: "·";
 }
 
 .query-asset-panel__asset-body small b {
   color: var(--studio-primary);
-  background: #eaf3ff;
+  font-weight: 600;
 }
 
 .query-asset-panel__empty,
 .query-asset-panel__error {
   margin: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px dashed var(--studio-border-strong);
   border-radius: 10px;
   color: var(--studio-text-3);
   background: var(--studio-surface-soft);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.6;
 }
 
@@ -4249,11 +4404,117 @@ textarea:focus-visible {
   border-style: dashed;
   background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .35) 0 4px, transparent 4px 8px);
 }
+/* 一键美化：四档整板主题的色卡缩略图 */
+.board-theme-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.board-theme-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 11px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out), box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+.board-theme-card:hover { border-color: var(--studio-border-strong); }
+.board-theme-card.is-active {
+  border-color: var(--studio-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+.board-theme-card__swatch {
+  position: relative;
+  display: block;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+}
+.board-theme-card__swatch > i {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  height: 20px;
+  border: 1px solid;
+  border-radius: 5px;
+}
+.board-theme-card__swatch > em {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+}
+.board-theme-card__swatch > em > b {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.board-theme-card strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--studio-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-theme-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--studio-text-3);
+  font-size: 10px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 自动排版/自动套主题的低调回执，浮在画布右上角，4.6s 后自动消失 */
+.designer-canvas-toast {
+  position: absolute;
+  top: 46px;
+  right: 16px;
+  z-index: 6;
+  display: inline-flex;
+  max-width: min(420px, calc(100% - 32px));
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  color: var(--studio-text-2);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .1);
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  animation: designer-toast-enter 200ms cubic-bezier(.2, 0, 0, 1);
+}
+.designer-canvas-toast > svg { flex: 0 0 auto; color: var(--studio-primary); }
+@keyframes designer-toast-enter {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 720px) {
   .layout-preview-compare { grid-template-columns: 1fr; }
+  .board-theme-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .designer-canvas-toast {
+    animation: none;
+  }
+
   .designer-toolbar__status[data-state="saving"] > i {
     animation: none;
   }

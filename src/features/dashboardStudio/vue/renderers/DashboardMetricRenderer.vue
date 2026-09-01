@@ -64,7 +64,11 @@ const trend = computed(() => {
 });
 /* 非时序数据不展示趋势：生成器可显式关闭，避免把排名差值误读为趋势 */
 const showTrendChip = computed(() => props.widget.style.showTrend !== false);
-const style = computed(() => resolveDashboardWidgetStyle(props.widget.style));
+/* 同表格卡：指标卡不画 ECharts 面板，摘掉残留的 chartTheme 再解析，避免深色整板主题下被兜底改回白卡 */
+const style = computed(() => {
+  const { chartTheme: _chartTheme, ...rest } = props.widget.style;
+  return resolveDashboardWidgetStyle(rest);
+});
 const light = computed(() => isLightDashboardSurface(style.value.background, style.value.color));
 const cardStyle = computed(() => ({
   backgroundColor: style.value.background ?? "#FFFFFF",

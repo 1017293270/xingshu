@@ -264,7 +264,7 @@
 .designer-palette__header,
 .designer-properties__header {
   min-width: 0;
-  padding: 18px 16px 12px;
+  padding: 15px 16px 11px;
   border-bottom: 1px solid var(--studio-border);
   background: var(--studio-surface);
 }

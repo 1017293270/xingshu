@@ -35,9 +35,23 @@ const panelStyle = computed(() => ({
         <span class="chart-renderer__skeleton" />
         <span class="chart-renderer__skeleton chart-renderer__skeleton--short" />
       </div>
-      <p v-else-if="error" class="chart-renderer__state">图表不可用：{{ error }}</p>
+      <p v-else-if="error" class="chart-renderer__state">
+        <span class="chart-renderer__notice">
+          <span class="chart-renderer__notice-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7.6v5" /><path d="M12 16.1h.01" /></svg>
+          </span>
+          <span class="chart-renderer__notice-text">图表不可用：{{ error }}</span>
+        </span>
+      </p>
       <div v-else-if="option" class="chart-renderer__chart"><VueEChart :option="option" :label="`${widget.title}图表`" /></div>
-      <p v-else class="chart-renderer__state">当前结果缺少可绘制的数值指标，请在右侧重新选择维度或指标。</p>
+      <p v-else class="chart-renderer__state">
+        <span class="chart-renderer__notice">
+          <span class="chart-renderer__notice-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5" /><path d="M4 19.5h15.5" /><path d="M8 15.5l3.4-3.9 2.6 2.3 3.8-4.7" /></svg>
+          </span>
+          <span class="chart-renderer__notice-text">还没选到可绘制的数值指标</span>
+        </span>
+      </p>
     </div>
   </section>
 </template>
@@ -94,4 +108,26 @@ const panelStyle = computed(() => ({
 .chart-renderer__state { display: grid; place-content: center; gap: 10px; width: 100%; height: 100%; margin: 0; color: color-mix(in srgb, currentColor 72%, transparent); font-size: 14px; overflow-wrap: anywhere; }
 .chart-renderer__skeleton { display: block; width: 180px; max-width: 70%; height: 16px; border-radius: 6px; background: color-mix(in srgb, currentColor 14%, transparent); }
 .chart-renderer__skeleton--short { width: 120px; }
+/*
+ * 空态/错误态一律走中性卡：底与描边都从卡面自身的墨色调出来，
+ * 浅色档是淡灰蓝、深色档是半透明冷灰，四档主题下都读得清，也不会再有一块粉红方块跳出来。
+ */
+.chart-renderer__notice {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 10px;
+  /* 卡面墨色已经被外层压到 72%，提示卡里再补回来，深色档下才不会糊成一团 */
+  color: color-mix(in srgb, currentColor 92%, transparent);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+.chart-renderer__notice-icon { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; opacity: .68; }
+.chart-renderer__notice-icon svg { width: 18px; height: 18px; }
+.chart-renderer__notice-text { min-width: 0; }
 </style>
