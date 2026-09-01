@@ -6,7 +6,7 @@ type TablePlaceholderProps = {
 };
 
 const PLACEHOLDER_COLUMNS = 5;
-const PLACEHOLDER_ROWS = 6;
+const PLACEHOLDER_ROWS = 5;
 
 /**
  * 结果表位常驻：无论空态还是加载中，工作台都保持一张"空表"的形状，
@@ -15,19 +15,19 @@ const PLACEHOLDER_ROWS = 6;
 export function TablePlaceholder({ state, title, hint }: TablePlaceholderProps) {
   return (
     // 状态播报由页面底部的 XsStatusBar 统一负责，这里只标记忙碌，避免两个 live region 抢播
-    <div className="table-placeholder" data-state={state} aria-busy={state === "loading"}>
-      <div className="table-placeholder__head">
+    <div className="tgs-placeholder" data-state={state} aria-busy={state === "loading"}>
+      <div className="tgs-placeholder__head">
         <h2>{title}</h2>
         <p>{hint}</p>
       </div>
-      <div className="table-placeholder__grid" aria-hidden="true">
-        <div className="table-placeholder__row table-placeholder__row--head">
+      <div className="tgs-placeholder__grid" aria-hidden="true">
+        <div className="tgs-placeholder__row tgs-placeholder__row--head">
           {Array.from({ length: PLACEHOLDER_COLUMNS }, (_, column) => (
             <span key={column} />
           ))}
         </div>
         {Array.from({ length: PLACEHOLDER_ROWS }, (_, row) => (
-          <div className="table-placeholder__row" key={row} style={{ "--row-index": row } as React.CSSProperties}>
+          <div className="tgs-placeholder__row" key={row}>
             {Array.from({ length: PLACEHOLDER_COLUMNS }, (_, column) => (
               <span key={column} />
             ))}

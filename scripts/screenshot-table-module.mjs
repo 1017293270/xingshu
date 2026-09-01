@@ -99,8 +99,19 @@ const replays = {
       "SELECT order_no, customer_name, region, owner, order_date, category,\n       qty, unit_price, amount, discount_rate, settle_status, credit_days\n  FROM erp_dw.fact_order\n WHERE region = '华东'\n ORDER BY order_date DESC",
       46
     )
+  },
+  // 只有回答没有表的一轮：用来截"结果台没打开"的纯对话态
+  "ask-table-chat": {
+    question: "本月的费用明细能不能按部门汇总一下",
+    datasourceName: "费用主题 fin_dw",
+    table: null,
+    answer: "当前空间里没有可汇总的费用明细表。补充所属账套或时间范围之后我可以再跑一次。",
+    trace: traceFor("费用主题 fin_dw", "SELECT dept, SUM(amount)\n  FROM fin_dw.fact_expense\n GROUP BY dept", 0)
   }
 };
+
+/** 这些会话没有任何历史，用来截空态；接口直接回空数组。 */
+const emptySessions = new Set(["ask-table-empty"]);
 
 const envelope = (data) => ({ code: 200, message: "visual qa fixture", data });
 
@@ -123,6 +134,9 @@ async function newPage(width, height, replayDelayMs = 0) {
   await page.route("**/api/v1/chat/messages/list", async (route) => {
     await holdReplay();
     const sessionId = JSON.parse(route.request().postData() ?? "{}").sessionId ?? "";
+    if (emptySessions.has(sessionId)) {
+      return route.fulfill({ json: envelope([]) });
+    }
     const replay = replayFor(sessionId);
     return route.fulfill({
       json: envelope([
@@ -134,6 +148,9 @@ async function newPage(width, height, replayDelayMs = 0) {
   await page.route("**/api/v1/chat/events/list", async (route) => {
     await holdReplay();
     const sessionId = JSON.parse(route.request().postData() ?? "{}").sessionId ?? "";
+    if (emptySessions.has(sessionId)) {
+      return route.fulfill({ json: envelope([]) });
+    }
     const replay = replayFor(sessionId);
     return route.fulfill({
       json: envelope([
@@ -148,7 +165,9 @@ async function newPage(width, height, replayDelayMs = 0) {
         ...replay.trace.toolResults.map((result, index) => ({
           id: 40 + index, sessionId, chatId: "c1", type: "tool_result", seqNum: 30 + index, data: result
         })),
-        { id: 50, sessionId, chatId: "c1", type: "table", seqNum: 40, data: replay.table },
+        ...(replay.table
+          ? [{ id: 50, sessionId, chatId: "c1", type: "table", seqNum: 40, data: replay.table }]
+          : []),
         { id: 51, sessionId, chatId: "c1", type: "content", seqNum: 41, data: replay.answer },
         { id: 52, sessionId, chatId: "c1", type: "done", seqNum: 42, data: replay.trace.done }
       ])
@@ -178,24 +197,35 @@ async function shot(name, width, height, path, readySelector, replayDelayMs = 0)
 }
 
 const listReady = ".sheet-list .sheet-row";
-const sessionReady = ".datahub-table-scroll";
+// 出表的会话会自动把结果台开到第一张表，所以表体出现即代表分栏工作区已就位
+const dockReady = ".tgs__dock .datahub-table-scroll";
+// 没有结果表的一轮：只有对话列，结果台不开
+const chatReady = ".tgs__turns .tgs-trace";
 
 await shot("table-list-1440", 1440, 1000, "/table", listReady);
 await shot("table-list-1672", 1672, 1000, "/table", listReady);
 await shot("table-list-1920", 1920, 1080, "/table", listReady);
 await shot("table-list-390", 390, 844, "/table", listReady);
-await shot("table-session-1440", 1440, 1480, "/table/ask-table-a1", sessionReady);
-await shot("table-session-1920", 1920, 1320, "/table/ask-table-a1", sessionReady);
-await shot("table-session-390", 390, 844, "/table/ask-table-a1", sessionReady);
-await shot("table-session-wide-1440", 1440, 1600, "/table/ask-table-wide", sessionReady);
+// 结果台打开态：左对话列 40%，右侧结果台通高
+await shot("table-session-1440", 1440, 900, "/table/ask-table-a1", dockReady);
+await shot("table-session-1920", 1920, 1080, "/table/ask-table-a1", dockReady);
+// 1200 是分栏能站住的最窄一档；1024 已经跨过 1100 断点，结果台该变成全宽覆盖抽屉
+await shot("table-session-1200", 1200, 900, "/table/ask-table-a1", dockReady);
+await shot("table-session-1024", 1024, 800, "/table/ask-table-a1", dockReady);
+await shot("table-session-390", 390, 844, "/table/ask-table-a1", dockReady);
+await shot("table-session-wide-1440", 1440, 900, "/table/ask-table-wide", dockReady);
+// 纯对话态：没有结果表时对话列独占整幅宽度
+await shot("table-session-chat-1440", 1440, 900, "/table/ask-table-chat", chatReady);
+await shot("table-session-chat-390", 390, 844, "/table/ask-table-chat", chatReady);
 // 空态与还原加载态：结果表位常驻，加载动画发生在空表框里
-await shot("table-session-idle-1440", 1440, 1000, "/table/ask-table-empty", ".table-placeholder");
+await shot("table-session-idle-1440", 1440, 900, "/table/ask-table-empty", ".tgs-placeholder");
+await shot("table-session-idle-390", 390, 844, "/table/ask-table-empty", ".tgs-placeholder");
 await shot(
   "table-session-loading-1440",
   1440,
-  1000,
+  900,
   "/table/ask-table-a1",
-  '.table-placeholder[data-state="loading"]',
+  '.tgs-placeholder[data-state="loading"]',
   6000
 );
 

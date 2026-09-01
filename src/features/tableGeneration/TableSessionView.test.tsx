@@ -12,7 +12,10 @@ const serviceMocks = vi.hoisted(() => ({
   listRecentTables: vi.fn(),
   streamAgentMessage: vi.fn(),
   respondToAgentInteraction: vi.fn(),
-  loadDataHubHistoryReplay: vi.fn()
+  loadDataHubHistoryReplay: vi.fn(),
+  exportDataHubTablesCsv: vi.fn(),
+  exportDataHubTablesXlsx: vi.fn(),
+  createTableTemplate: vi.fn()
 }));
 
 vi.mock("@/services/tableService", () => ({
@@ -28,6 +31,24 @@ vi.mock("@/services/historyService", () => ({
   loadDataHubHistoryReplay: serviceMocks.loadDataHubHistoryReplay
 }));
 
+vi.mock("@/services/dataHubTableExport", async () => {
+  const actual = await vi.importActual<typeof import("@/services/dataHubTableExport")>(
+    "@/services/dataHubTableExport"
+  );
+  return {
+    ...actual,
+    exportDataHubTablesCsv: serviceMocks.exportDataHubTablesCsv,
+    exportDataHubTablesXlsx: serviceMocks.exportDataHubTablesXlsx
+  };
+});
+
+vi.mock("@/services/tableTemplateService", async () => {
+  const actual = await vi.importActual<typeof import("@/services/tableTemplateService")>(
+    "@/services/tableTemplateService"
+  );
+  return { ...actual, createTableTemplate: serviceMocks.createTableTemplate };
+});
+
 const SESSION_ID = "ask-table-demo";
 
 const rankingTableEvent: DataHubStreamEvent = {
@@ -39,6 +60,20 @@ const rankingTableEvent: DataHubStreamEvent = {
     ],
     rows: [{ region: "华东", sales: 128 }],
     totalRows: 1,
+    source: "cube"
+  }
+};
+
+const cityTableEvent: DataHubStreamEvent = {
+  type: "table",
+  data: {
+    columns: [
+      { name: "city", title: "城市" },
+      { name: "orders", title: "订单数", type: "number" }
+    ],
+    rows: [{ city: "上海", orders: 42 }],
+    totalRows: 1,
+    groupLabel: "城市订单分布",
     source: "cube"
   }
 };
@@ -84,6 +119,30 @@ function replayWithTable(question = "华东区Q1销售排行") {
         chatMode: "ask" as const,
         status: "done" as const,
         events: [rankingTableEvent],
+        error: ""
+      }
+    ]
+  };
+}
+
+/** 一轮出两张表：结果台要靠 tab 条在它们之间切。 */
+function replayWithTables(question = "华东区Q1销售排行与城市订单分布") {
+  const events = [rankingTableEvent, cityTableEvent];
+
+  return {
+    sessionId: SESSION_ID,
+    chatMode: "ask" as const,
+    question,
+    events,
+    turns: [
+      {
+        id: "turn-1",
+        question,
+        sessionId: SESSION_ID,
+        chatId: "chat-1",
+        chatMode: "ask" as const,
+        status: "done" as const,
+        events,
         error: ""
       }
     ]
@@ -143,6 +202,11 @@ describe("TableSessionView", () => {
     serviceMocks.streamAgentMessage.mockReset();
     serviceMocks.respondToAgentInteraction.mockReset();
     serviceMocks.loadDataHubHistoryReplay.mockReset();
+    serviceMocks.exportDataHubTablesCsv.mockReset();
+    serviceMocks.exportDataHubTablesXlsx.mockReset();
+    serviceMocks.exportDataHubTablesXlsx.mockResolvedValue(undefined);
+    serviceMocks.createTableTemplate.mockReset();
+    serviceMocks.createTableTemplate.mockResolvedValue({ id: 1 });
     serviceMocks.listRecentTables.mockResolvedValue([]);
     serviceMocks.loadDataHubHistoryReplay.mockResolvedValue({
       sessionId: SESSION_ID,
@@ -366,5 +430,95 @@ describe("TableSessionView", () => {
 
     await user.click(screen.getByRole("button", { name: "去选择" }));
     expect(await screen.findByRole("button", { name: /签约主体区域/ })).toBeInTheDocument();
+  });
+
+  it("switches between the session's tables from the dock tab bar", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTables());
+
+    renderSession();
+
+    const dock = await screen.findByRole("complementary", { name: "结果表预览" });
+    // 一轮出两张表：tab 条按「第 N 轮 · 表 M」列出，默认停在第一张
+    expect(within(dock).getByRole("tab", { name: "第1轮 · 表1" })).toHaveAttribute("aria-selected", "true");
+    expect(within(dock).getByRole("columnheader", { name: "区域" })).toBeInTheDocument();
+
+    await user.click(within(dock).getByRole("tab", { name: "第1轮 · 表2" }));
+
+    expect(within(dock).getByRole("tab", { name: "第1轮 · 表2" })).toHaveAttribute("aria-selected", "true");
+    expect(await within(dock).findByRole("columnheader", { name: "城市" })).toBeInTheDocument();
+    expect(within(dock).getByRole("heading", { level: 2 })).toHaveTextContent("城市订单分布");
+    // 切表也把对话流里对应的那张工件卡标成正在浏览
+    const cards = screen.getAllByRole("article", { name: "结果表" });
+    expect(cards[1]).toHaveAttribute("data-active", "true");
+    expect(cards[0]).not.toHaveAttribute("data-active");
+  });
+
+  it("exports the open table as csv and as xlsx from the dock", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTable("华东区Q1销售排行"));
+
+    renderSession();
+    const dock = await screen.findByRole("complementary", { name: "结果表预览" });
+
+    await user.click(within(dock).getByRole("button", { name: "下载当前结果表" }));
+    await user.click(await screen.findByRole("menuitem", { name: "导出 CSV" }));
+    expect(serviceMocks.exportDataHubTablesCsv).toHaveBeenCalledWith(
+      [expect.objectContaining({ totalRows: 1 })],
+      "华东区Q1销售排行"
+    );
+
+    await user.click(within(dock).getByRole("button", { name: "下载当前结果表" }));
+    await user.click(await screen.findByRole("menuitem", { name: "导出 XLSX" }));
+    expect(serviceMocks.exportDataHubTablesXlsx).toHaveBeenCalledWith(
+      [expect.objectContaining({ totalRows: 1 })],
+      "华东区Q1销售排行"
+    );
+  });
+
+  it("saves the open table as a template from the dock", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTable("月度费用统计报表"));
+
+    renderSession();
+    const dock = await screen.findByRole("complementary", { name: "结果表预览" });
+
+    await user.click(within(dock).getByRole("button", { name: "把当前结果表存为模板" }));
+
+    const modal = await screen.findByRole("dialog", { name: "存为模板" });
+    expect(within(modal).getByLabelText("模板名称")).toHaveValue("月度费用统计报表");
+    // 结构快照跟着正在看的那张表带进来，不必让用户重敲一遍列名
+    expect(within(modal).getByLabelText("表结构快照")).toHaveTextContent("2 列");
+
+    await user.click(within(modal).getByRole("button", { name: "保存模板" }));
+
+    expect(serviceMocks.createTableTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "月度费用统计报表", prompt: "月度费用统计报表" })
+    );
+    expect(await screen.findByText("已存为模板：月度费用统计报表")).toBeInTheDocument();
+  });
+
+  it("sends a follow-up from the bottom composer", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTable());
+    mockStream(() => undefined);
+
+    renderSession();
+    await screen.findByRole("complementary", { name: "结果表预览" });
+
+    const composer = screen.getByRole("region", { name: "继续制表" });
+    const send = within(composer).getByRole("button", { name: "继续制表" });
+    // 空输入时发送钮是关着的，敲字之后才亮
+    expect(send).toBeDisabled();
+
+    await user.type(within(composer).getByRole("textbox", { name: "继续追问" }), "再按季度拆一下");
+    expect(send).toBeEnabled();
+    await user.click(send);
+
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "再按季度拆一下", chatMode: "ask_table" }),
+      expect.any(Object)
+    );
+    expect(within(composer).getByRole("textbox", { name: "继续追问" })).toHaveValue("");
   });
 });

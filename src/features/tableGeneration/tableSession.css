@@ -1,0 +1,1072 @@
+/* 问表智能体会话页（/table/:sessionId）。
+   基调：克制、中性、密度高。纯白底、1px 描边、8-10px 圆角、至多一层极轻阴影，
+   主色只出现在主按钮、激活态和链接上。这一层只服务这一页，
+   不复用会话外壳（xs-chat / xs-composer / xs-side-panel）的气泡与浮起卡片语言。 */
+
+.tgs {
+  --tgs-line: var(--xs-border);
+  --tgs-line-soft: #EDF1F7;
+  --tgs-ink: var(--xs-text);
+  --tgs-ink-2: #48566E;
+  --tgs-ink-3: #7A8899;
+  --tgs-soft: #F4F6F9;
+  --tgs-soft-2: #FAFBFD;
+  --tgs-column: 840px;
+  --tgs-gutter: 24px;
+
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: stretch;
+  background: var(--xs-surface);
+}
+
+/* 页面外壳自带蓝色渐变底，会话页要的是纯白工作区，所以在这一页把它铺平。
+   左侧仍留出侧边栏折叠钮的槽位，否则那颗钮会被推到视口外。 */
+.xs-shell__main:has(.table-session-page) {
+  padding: 0 0 0 var(--xs-shell-toggle-gutter);
+  background: var(--xs-surface);
+}
+
+.xs-page.table-session-page {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+}
+
+/* ---------- 左列：顶栏 / 对话流 / 输入条 ---------- */
+
+.tgs__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/* 结果台打开：这不是浮层，是分栏工作区——对话列让到 40%，右侧通高 */
+.tgs[data-dock] .tgs__main {
+  flex: 0 0 40%;
+  max-width: 40%;
+}
+
+.tgs__topbar {
+  display: flex;
+  height: 48px;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 0 4px;
+  border-bottom: 1px solid var(--tgs-line);
+}
+
+.tgs-topbar__switch {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(46ch, 52%);
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--xs-radius-small);
+  background: transparent;
+  color: var(--tgs-ink);
+  cursor: pointer;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.3;
+}
+
+.tgs-topbar__switch > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-topbar__switch:hover,
+.tgs-topbar__switch:focus-visible {
+  background: var(--tgs-soft);
+  outline: none;
+}
+
+.tgs-topbar__switch:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--xs-primary);
+}
+
+.tgs-topbar__switch svg {
+  flex: none;
+  color: var(--tgs-ink-3);
+}
+
+.tgs-topbar__count {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--tgs-line);
+  border-radius: 999px;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tgs-topbar__spacer {
+  flex: 1 1 auto;
+}
+
+.tgs-topbar__new {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--tgs-line);
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-interactive-text);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tgs-topbar__new:hover {
+  border-color: var(--xs-primary);
+  background: var(--xs-info-soft);
+}
+
+.tgs-topbar__session {
+  display: flex;
+  min-width: 0;
+  max-width: 280px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tgs-topbar__session > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-topbar__session[data-active] {
+  color: var(--xs-primary-2);
+  font-weight: var(--xs-fw-medium);
+}
+
+/* ---------- 对话流 ---------- */
+
+.tgs__stream {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.tgs__column {
+  width: min(var(--tgs-column), 100%);
+  margin-inline: auto;
+  padding: 20px var(--tgs-gutter) 10px;
+}
+
+/* 每轮之间靠留白分隔，不画线；垂直节奏比通用会话壳收紧一档 */
+.tgs__turns {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.tgs-turn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* 用户消息：右对齐小灰 pill，不是大卡片。序号是信息，留在 pill 外做灰字 */
+.tgs-turn__ask {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tgs-turn__round {
+  flex: none;
+  color: var(--tgs-ink-3);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.tgs-turn__ask p {
+  max-width: min(78%, 60ch);
+  margin: 0;
+  padding: 5px 11px;
+  border-radius: var(--xs-radius-small);
+  background: var(--tgs-soft);
+  color: var(--tgs-ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 助手侧：平铺文档流，没有气泡框，也没有头像槽 */
+.tgs-turn__reply {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tgs-turn__reply > p {
+  margin: 0;
+  color: var(--tgs-ink);
+  font-size: 14px;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+.tgs-turn__reply[data-error] > p:first-of-type {
+  color: var(--xs-danger-ink);
+}
+
+/* 提示语：正文下面一行灰色小字，不做成色块 */
+.tgs-turn__reply small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.tgs-turn__reply small[data-error] {
+  color: var(--xs-danger-ink);
+}
+
+.tgs-turn__reply .xs-safe-markdown {
+  width: 100%;
+  min-width: 0;
+}
+
+.tgs-turn__reply .xs-safe-markdown p,
+.tgs-turn__reply .xs-safe-markdown li {
+  color: var(--tgs-ink);
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+/* 正文段落之间靠 reply 自己的 gap 排版，markdown 默认的上下 margin 会把节奏拉散 */
+.tgs-turn__reply .xs-safe-markdown > :first-child {
+  margin-top: 0;
+}
+
+.tgs-turn__reply .xs-safe-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.tgs-spin {
+  color: var(--xs-primary);
+  animation: tgs-spin 900ms linear infinite;
+}
+
+@keyframes tgs-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- 执行过程：一行低调元信息，默认收起 ---------- */
+
+.tgs-trace {
+  width: 100%;
+  min-width: 0;
+}
+
+.tgs-trace__toggle {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tgs-ink-3);
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+}
+
+.tgs-trace__toggle:hover {
+  background: var(--tgs-soft);
+  color: var(--tgs-ink-2);
+}
+
+.tgs-trace__toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
+  outline-offset: 1px;
+}
+
+.tgs-trace__label {
+  flex: none;
+  color: var(--tgs-ink-2);
+  font-weight: var(--xs-fw-medium);
+}
+
+.tgs-trace__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-trace__caret {
+  flex: none;
+  transition: transform var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-trace__toggle[aria-expanded="true"] .tgs-trace__caret {
+  transform: rotate(90deg);
+}
+
+.tgs-trace[data-streaming="true"] .tgs-trace__label {
+  color: var(--xs-primary-2);
+}
+
+.tgs-trace__panel {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--tgs-line);
+  border-radius: var(--xs-radius-small);
+  background: var(--tgs-soft-2);
+}
+
+.tgs-trace__steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 2px;
+  list-style: none;
+}
+
+.tgs-trace__step {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 3px 0;
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.tgs-trace__index {
+  grid-row: 1;
+  color: var(--tgs-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tgs-trace__step[data-status="running"] .tgs-trace__index {
+  color: var(--xs-primary);
+}
+
+.tgs-trace__step[data-status="error"] .tgs-trace__index,
+.tgs-trace__step[data-status="error"] .tgs-trace__name {
+  color: var(--xs-danger-ink);
+}
+
+.tgs-trace__name {
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tgs-ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-trace__time {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--tgs-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tgs-trace__detail {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  color: var(--tgs-ink-3);
+  overflow-wrap: anywhere;
+}
+
+.tgs-trace__step[data-pending="true"] .tgs-trace__index {
+  animation: tgs-pulse var(--xs-motion-thinking) var(--xs-motion-ease-ambient) infinite;
+}
+
+@keyframes tgs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.tgs-trace__sql {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+
+.tgs-trace__sql > summary {
+  color: var(--xs-interactive-text);
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+}
+
+.tgs-trace__sql > pre {
+  margin: 5px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--tgs-line);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface);
+  color: var(--tgs-ink-2);
+  font-family: var(--xs-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ---------- 工件卡：一行的结果表入口 ---------- */
+
+.tgs-artifact {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--tgs-line);
+  border-radius: 10px;
+  background: var(--xs-surface);
+  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-artifact:hover {
+  border-color: var(--xs-border-strong);
+}
+
+.tgs-artifact[data-active] {
+  border-color: var(--xs-primary);
+  box-shadow: inset 0 0 0 1px var(--xs-primary);
+}
+
+.tgs-artifact__open {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tgs-artifact__open:focus-visible {
+  border-radius: var(--xs-radius-small);
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
+  outline-offset: 2px;
+}
+
+.tgs-artifact__icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--tgs-soft);
+  color: var(--xs-primary-2);
+}
+
+.tgs-artifact__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tgs-ink);
+  font-size: 13px;
+  font-weight: var(--xs-fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-artifact__meta {
+  flex: none;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tgs-artifact__cue {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--xs-interactive-text);
+  font-size: var(--xs-fs-caption);
+  white-space: nowrap;
+}
+
+.tgs-artifact__export.ant-btn {
+  flex: none;
+  height: 26px;
+  padding: 0 9px;
+  color: var(--tgs-ink-2);
+  font-size: var(--xs-fs-caption);
+}
+
+/* ---------- 消息级操作 ---------- */
+
+.tgs-turn__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  opacity: 0.5;
+  transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-turn:hover .tgs-turn__actions,
+.tgs-turn__actions:focus-within {
+  opacity: 1;
+}
+
+.tgs-turn__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tgs-ink-3);
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+}
+
+.tgs-turn__actions button:hover:not(:disabled) {
+  background: var(--tgs-soft);
+  color: var(--tgs-ink-2);
+}
+
+.tgs-turn__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tgs-turn__actions button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .tgs-turn__actions {
+    opacity: 1;
+  }
+}
+
+/* ---------- 空态 / 加载态 ---------- */
+
+.tgs-placeholder {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 0 2px;
+}
+
+.tgs-placeholder__head h2 {
+  margin: 0 0 4px;
+  color: var(--tgs-ink);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.4;
+}
+
+.tgs-placeholder__head p {
+  margin: 0;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-label);
+  line-height: 1.6;
+}
+
+/* 结果表位常驻：空态也保持一张"空表"的形状，加载动画就发生在这张空表里 */
+.tgs-placeholder__grid {
+  display: grid;
+  overflow: hidden;
+  gap: 1px;
+  border: 1px solid var(--tgs-line);
+  border-radius: 10px;
+  background: var(--tgs-line-soft);
+}
+
+.tgs-placeholder__row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--tgs-line-soft);
+}
+
+.tgs-placeholder__row > span {
+  display: block;
+  height: 30px;
+  background: var(--xs-surface);
+}
+
+.tgs-placeholder__row > span::after {
+  content: "";
+  display: block;
+  height: 7px;
+  margin: 11px 14px 0 12px;
+  border-radius: 4px;
+  background: #EEF1F6;
+}
+
+.tgs-placeholder__row--head > span {
+  background: var(--tgs-soft-2);
+}
+
+.tgs-placeholder__row--head > span::after {
+  background: #E2E8F1;
+}
+
+.tgs-placeholder__row > span:nth-child(2)::after { margin-right: 34px; }
+.tgs-placeholder__row > span:nth-child(4)::after { margin-right: 24px; }
+.tgs-placeholder__row > span:nth-child(5)::after { margin-right: 40px; }
+
+.tgs-placeholder[data-state="loading"] .tgs-placeholder__row > span::after {
+  background: linear-gradient(90deg, #EEF1F6 0%, #E1E9F5 45%, #EEF1F6 90%);
+  background-size: 220% 100%;
+  animation: tgs-shimmer var(--xs-motion-skeleton) var(--xs-motion-ease-ambient) infinite;
+}
+
+@keyframes tgs-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -60% 0; }
+}
+
+/* ---------- 底部输入条 ---------- */
+
+.tgs__foot {
+  flex: none;
+  padding: 0 var(--tgs-gutter) 12px;
+}
+
+.tgs__foot-inner {
+  position: relative;
+  width: min(var(--tgs-column), 100%);
+  margin-inline: auto;
+}
+
+.tgs-composer {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--tgs-line);
+  border-radius: 10px;
+  background: var(--xs-surface);
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-composer:focus-within {
+  border-color: var(--xs-primary);
+  box-shadow: 0 0 0 3px rgb(22 119 255 / 10%);
+}
+
+.tgs-composer .ant-input,
+.tgs-composer .ant-input-outlined {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tgs-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  /* 单行起步，最多长到约 6 行，再多就自己滚 */
+  max-height: 140px;
+  padding: 7px 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  color: var(--tgs-ink);
+  font-size: var(--xs-fs-input);
+  line-height: 1.55;
+  resize: none;
+}
+
+.tgs-composer textarea::placeholder {
+  color: var(--tgs-ink-3);
+}
+
+.tgs-composer__tail {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 1px;
+}
+
+.tgs-composer__send.ant-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--xs-radius-small);
+  box-shadow: none;
+}
+
+.tgs-composer__stop.ant-btn {
+  height: 30px;
+  padding: 0 9px;
+  font-size: var(--xs-fs-caption);
+}
+
+.tgs-scroll-bottom.ant-btn {
+  position: absolute;
+  z-index: 4;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--tgs-line);
+  background: var(--xs-surface);
+  box-shadow: 0 4px 12px rgb(15 38 74 / 10%);
+  color: var(--tgs-ink-2);
+  transform: translateX(-50%);
+}
+
+.tgs-scroll-bottom.ant-btn:hover {
+  border-color: var(--xs-primary);
+  color: var(--xs-primary);
+}
+
+/* 状态条降级成输入条下面的一行灰字：会话页的状态是脚注，不是横幅 */
+.tgs__status {
+  width: min(var(--tgs-column), 100%);
+  margin: 5px auto 0;
+}
+
+.tgs__status .xs-status-bar-slot--reserved {
+  min-height: 18px;
+}
+
+.tgs__status .xs-status-bar {
+  min-height: 18px;
+  padding: 0;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+}
+
+.tgs__status .xs-status-bar--error {
+  color: var(--xs-danger-ink);
+}
+
+.tgs__status .xs-status-bar__mark {
+  width: 14px;
+  height: 14px;
+}
+
+/* 受控澄清浮层锚在输入条上沿 */
+.tgs__clarify-anchor {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.tgs .xs-clarify-dock {
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgb(15 38 74 / 12%);
+}
+
+.tgs .xs-clarify {
+  border-radius: 10px;
+}
+
+/* ---------- 结果台 ---------- */
+
+.tgs__dock {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--tgs-line);
+  background: var(--xs-surface);
+}
+
+.tgs-dock__head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px 10px;
+  border-bottom: 1px solid var(--tgs-line);
+}
+
+.tgs-dock__identity {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.tgs-dock__identity h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--tgs-ink);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-dock__desc {
+  margin: 0;
+  overflow: hidden;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-dock__meta {
+  margin: 1px 0 0;
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+/* 多表时的紧凑 tab 条 */
+.tgs-dock__tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--tgs-line);
+  scrollbar-width: none;
+}
+
+.tgs-dock__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tgs-dock__tab {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tgs-ink-3);
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.tgs-dock__tab:hover {
+  background: var(--tgs-soft);
+  color: var(--tgs-ink-2);
+}
+
+.tgs-dock__tab[aria-selected="true"] {
+  border-color: var(--tgs-line);
+  background: var(--tgs-soft);
+  color: var(--tgs-ink);
+  font-weight: var(--xs-fw-medium);
+}
+
+.tgs-dock__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--tgs-line);
+}
+
+.tgs-dock__tools .ant-btn {
+  height: 28px;
+  padding: 0 10px;
+  color: var(--tgs-ink-2);
+  font-size: var(--xs-fs-caption);
+}
+
+.tgs-dock__tools .ant-btn:hover {
+  color: var(--xs-primary-2);
+}
+
+.tgs-dock__tools-spacer {
+  flex: 1 1 auto;
+}
+
+.tgs-dock__close.ant-btn {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.tgs-dock__body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 结果表与问数页共用同一个组件：它自带的表头与行数脚注在这儿是第二层重复，
+   由结果台自己的头部与底栏承担，所以在这一层收掉。 */
+.tgs-dock__body .datahub-result-head,
+.tgs-dock__body .datahub-table-card__note {
+  display: none;
+}
+
+.tgs-dock__body .datahub-table-card {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tgs-dock__body .datahub-table-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+/* 面板里的表可能很长，表头跟着滚就读不出列名了 */
+.tgs-dock__body .datahub-table-scroll .xs-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tgs-dock__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--tgs-line);
+  color: var(--tgs-ink-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+}
+
+.tgs-dock__foot b {
+  color: var(--tgs-ink-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--xs-fw-medium);
+}
+
+/* ---------- 窄屏：结果台退化为全宽覆盖抽屉 ---------- */
+
+@media (max-width: 1099px) {
+  .tgs {
+    position: relative;
+    --tgs-gutter: 16px;
+  }
+
+  .tgs[data-dock] .tgs__main {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .tgs__dock {
+    position: absolute;
+    z-index: 6;
+    inset: 0;
+    border-left: 0;
+    animation: tgs-dock-in var(--xs-motion-state) var(--xs-motion-ease-out) backwards;
+  }
+}
+
+@keyframes tgs-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 900px) {
+  .xs-shell__main:has(.table-session-page) {
+    padding: 0;
+  }
+
+  /* 窄屏外壳是 64px 顶部导航 + 剩余高度的网格，主区高度是 auto，
+     百分比高度撑不起来，只能按顶部导航的高度自己算。 */
+  .xs-page.table-session-page {
+    height: calc(100dvh - 64px);
+  }
+
+  .tgs__topbar {
+    height: 44px;
+    padding: 0 10px;
+  }
+
+  .tgs-topbar__count {
+    display: none;
+  }
+
+  .tgs__column {
+    padding: 14px var(--tgs-gutter) 8px;
+  }
+
+  .tgs-turn__ask p {
+    max-width: 88%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tgs-spin,
+  .tgs-placeholder[data-state="loading"] .tgs-placeholder__row > span::after,
+  .tgs-trace__step[data-pending="true"] .tgs-trace__index {
+    animation: none;
+  }
+
+  .tgs__dock {
+    animation: none;
+  }
+
+  .tgs-artifact,
+  .tgs-composer,
+  .tgs-turn__actions {
+    transition: none;
+  }
+}

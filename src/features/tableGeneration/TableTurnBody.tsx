@@ -1,13 +1,9 @@
-import { ArrowsClockwise, CircleNotch, Copy, DownloadSimple, Table, WarningCircle } from "@phosphor-icons/react";
+import { ArrowsClockwise, CircleNotch, Copy, DownloadSimple } from "@phosphor-icons/react";
 import { Dropdown } from "antd";
-import {
-  XsArtifactCard,
-  XsChatActionButton,
-  XsChatActions,
-  XsClarifyCard
-} from "@/components/xs/conversation";
+import { XsClarifyCard } from "@/components/xs/conversation";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
+import { TableArtifactCard } from "@/features/tableGeneration/TableArtifactCard";
 import { buildTableAgentTrace } from "@/features/tableGeneration/agentTrace";
 import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { formatDataHubTableTitle } from "@/services/dataHubFormat";
@@ -20,11 +16,9 @@ export type TableTurnStatus = {
 
 type TableTurnBodyProps = {
   turn: DataHubAskTurn;
-  /** 流式过程中的当前动作，交给推演轨迹当最后一条占位。 */
+  /** 流式过程中的当前动作，交给执行过程当最后一条占位。 */
   progress: string;
-  /** 最新一轮的轨迹默认展开——过程本身就是 agent 的交付物。 */
-  isLatest: boolean;
-  /** 正在侧栏里浏览的那张表，格式见 tableViewerKey。 */
+  /** 正在结果台里浏览的那张表，格式见 tableViewerKey。 */
   activeTableKey: string;
   busy: boolean;
   status?: TableTurnStatus;
@@ -41,6 +35,7 @@ type TableTurnBodyProps = {
   onCopyAnswer: () => void;
   onRegenerate: () => void;
   onExport: (format: "csv" | "xlsx") => void;
+  onExportTable: (position: number, format: "csv" | "xlsx") => void;
 };
 
 /**
@@ -52,14 +47,13 @@ export function tableViewerKey(turn: DataHubAskTurn, position: number) {
 }
 
 /**
- * 一轮制表在对话流里的助手侧内容：推演轨迹 → 回答正文 → 结果表卡 → 消息级操作。
- * 表本身不铺在这里，只留一张卡；几十行数据摊进 640px 的对话栏，
- * 上一轮就再也翻不回去了——完整的表在右侧栏看。
+ * 一轮制表在对话流里的助手侧内容：执行过程 → 回答正文 → 结果表工件卡 → 消息级操作。
+ * 全部平铺，不套气泡框；表本身不铺在这里，只留一张卡，
+ * 几十行数据摊进对话列，上一轮就再也翻不回去了——完整的表在结果台看。
  */
 export function TableTurnBody({
   turn,
   progress,
-  isLatest,
   activeTableKey,
   busy,
   status,
@@ -71,7 +65,8 @@ export function TableTurnBody({
   onExpandClarify,
   onCopyAnswer,
   onRegenerate,
-  onExport
+  onExport,
+  onExportTable
 }: TableTurnBodyProps) {
   const trace = buildTableAgentTrace(turn);
   const hasTables = turn.tableResults.length > 0;
@@ -86,29 +81,30 @@ export function TableTurnBody({
   const retryLabel = isError ? "重试" : isCancelled ? "继续生成" : "重新生成";
 
   return (
-    <>
-      <TableAgentTrace
-        trace={trace}
-        isStreaming={isStreaming}
-        progress={progress}
-        defaultExpanded={isLatest}
-      />
+    <div className="tgs-turn__reply" data-error={isError || undefined} aria-live="polite">
+      <TableAgentTrace trace={trace} isStreaming={isStreaming} progress={progress} />
 
+      {/* 错误与提示就是一行正文加一行灰色小字，不做红色横幅 */}
       {isError ? (
-        <p>
-          <WarningCircle size={15} weight="bold" aria-hidden="true" />
-          {turn.error?.message || "制表执行失败，请稍后重试"}
-        </p>
+        <>
+          <p>{turn.error?.message || "制表执行失败，请稍后重试"}</p>
+          <small data-error="true">可以调整需求后重新提交，或点下面的重试再跑一次</small>
+        </>
       ) : null}
 
-      {isCancelled && !hasTables ? <p>已停止本次制表生成，可以修改需求后重新提交。</p> : null}
+      {isCancelled && !hasTables ? (
+        <>
+          <p>已停止本次制表生成</p>
+          <small>可以修改需求后重新提交。</small>
+        </>
+      ) : null}
 
-      {/* 实时步骤由上方轨迹播报，这里只补一句"表会长在哪儿"，不重复同一件事 */}
+      {/* 实时步骤由上方执行过程播报，这里只补一句"表会长在哪儿"，不重复同一件事 */}
       {isStreaming && !hasTables ? (
         <>
           <p>正在生成结果表…</p>
           <small>
-            <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
+            <CircleNotch className="tgs-spin" size={14} aria-hidden="true" />
             结果表就绪后会出现在这里
           </small>
         </>
@@ -137,17 +133,13 @@ export function TableTurnBody({
       {turn.tableResults.map((table, position) => {
         const title = formatDataHubTableTitle(table);
         return (
-          <XsArtifactCard
+          <TableArtifactCard
             key={tableViewerKey(turn, position)}
-            label="结果表"
-            icon={<Table size={24} aria-hidden="true" />}
-            eyebrow={trace.datasourceName || "结果表 · 点击浏览"}
             title={title}
-            badge={turn.tableResults.length > 1 ? `表 ${position + 1}` : undefined}
             meta={`字段 ${table.columns.length} · 行 ${table.totalRows}`}
             active={activeTableKey === tableViewerKey(turn, position)}
-            openLabel={`浏览结果表：${title}`}
             onOpen={() => onOpenTable(position)}
+            onExport={(format) => onExportTable(position, format)}
           />
         );
       })}
@@ -157,21 +149,22 @@ export function TableTurnBody({
       ) : null}
 
       {isStreaming ? null : (
-        <XsChatActions>
+        <div className="tgs-turn__actions">
           {answer ? (
-            <XsChatActionButton
-              icon={<Copy size={14} aria-hidden="true" />}
-              label="复制回答"
-              text="复制"
-              onClick={onCopyAnswer}
-            />
+            <button type="button" aria-label="复制回答" onClick={onCopyAnswer}>
+              <Copy size={13} aria-hidden="true" />
+              复制
+            </button>
           ) : null}
-          <XsChatActionButton
-            icon={<ArrowsClockwise size={14} aria-hidden="true" />}
-            label={retryLabel}
+          <button
+            type="button"
+            aria-label={retryLabel}
             disabled={busy || pendingClarification}
             onClick={onRegenerate}
-          />
+          >
+            <ArrowsClockwise size={13} aria-hidden="true" />
+            {retryLabel}
+          </button>
           {canExport ? (
             <Dropdown
               trigger={["click"]}
@@ -183,21 +176,21 @@ export function TableTurnBody({
                 onClick: ({ key }) => onExport(key as "csv" | "xlsx")
               }}
             >
-              {/* Dropdown 需要能挂 ref 的触发器，这里用与 XsChatActionButton 同容器样式的原生按钮 */}
+              {/* Dropdown 需要能挂 ref 的触发器，这里用与其他动作同容器样式的原生按钮 */}
               <button type="button" aria-label="导出结果" aria-haspopup="menu">
-                <DownloadSimple size={14} aria-hidden="true" />
+                <DownloadSimple size={13} aria-hidden="true" />
                 导出结果
               </button>
             </Dropdown>
           ) : null}
-        </XsChatActions>
+        </div>
       )}
 
       {status ? (
-        <small className="xs-chat__status" role="status" data-error={status.tone === "error" || undefined}>
+        <small role="status" data-error={status.tone === "error" || undefined}>
           {status.message}
         </small>
       ) : null}
-    </>
+    </div>
   );
 }

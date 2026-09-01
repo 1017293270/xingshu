@@ -1,22 +1,15 @@
-import { CaretDown, Check, PaperPlaneTilt, Plus, StopCircle, Table } from "@phosphor-icons/react";
-import { Button, Dropdown, Input } from "antd";
+import { Check } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
-import {
-  useClarifyDock,
-  XsChatAssistant,
-  XsChatTurn,
-  XsChatUserBubble,
-  XsClarifyPanel,
-  XsComposerBox,
-  XsSidePanel
-} from "@/components/xs/conversation";
-import { DataHubResultTable } from "@/components/xs/datahub";
+import { useClarifyDock, XsClarifyPanel } from "@/components/xs/conversation";
 import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
+import { TableComposer } from "@/features/tableGeneration/TableComposer";
 import { TablePlaceholder } from "@/features/tableGeneration/TablePlaceholder";
+import { TableResultDock, type TableViewerItem } from "@/features/tableGeneration/TableResultDock";
+import { TableSessionTopBar } from "@/features/tableGeneration/TableSessionTopBar";
 import { TableTurnBody, tableViewerKey, type TableTurnStatus } from "@/features/tableGeneration/TableTurnBody";
 import { groupTableSessions } from "@/features/tableGeneration/sessionGroups";
 import { getTableGenerationProgress } from "@/features/tableGeneration/tableGenerationProgress";
@@ -28,7 +21,11 @@ import {
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
 import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
-import { exportDataHubTablesCsv, exportDataHubTablesXlsx } from "@/services/dataHubTableExport";
+import {
+  buildDataHubTablesCsv,
+  exportDataHubTablesCsv,
+  exportDataHubTablesXlsx
+} from "@/services/dataHubTableExport";
 import { TableTemplateModal } from "@/features/tableGeneration/TableTemplateModal";
 import {
   buildTableStructureJson,
@@ -36,11 +33,12 @@ import {
   type TableTemplateInput
 } from "@/services/tableTemplateService";
 import { listRecentTables } from "@/services/tableService";
-import type { DataHubAskDataStatus, DataHubAskTurn } from "@/types/dataHub";
+import type { DataHubAskDataStatus, DataHubAskTurn, DataHubTableResult } from "@/types/dataHub";
 import { PageFrame } from "@/pages/PageFrame";
 import "@/pages/styles/workflows.css";
+import "@/features/tableGeneration/tableSession.css";
 
-/** 侧栏里的表比对话流里宽得多，预览行数跟着放宽——侧栏存在的意义就是把表看全。 */
+/** 结果台里的表比对话列宽得多，预览行数跟着放宽——结果台存在的意义就是把表看全。 */
 const PANEL_ROW_LIMIT = 100;
 
 const followUpPlaceholder = "继续追问字段、筛选条件或统计口径…";
@@ -79,10 +77,10 @@ export function TableSessionView() {
   const [followUp, setFollowUp] = useState("");
   const [viewerKey, setViewerKey] = useState("");
   const [turnStatus, setTurnStatus] = useState<TableTurnStatus & { turnId: string }>();
-  /* 侧栏「存为模板」的草稿：带上正在看的表结构快照 */
+  /* 结果台「存为模板」的草稿：带上正在看的表结构快照 */
   const [templateDraft, setTemplateDraft] = useState<TableTemplateInput | null>(null);
   const [templateSaving, setTemplateSaving] = useState(false);
-  /* 每一轮只自动弹一次侧栏；用户关掉之后这一轮不再自己蹦出来。 */
+  /* 每一轮只自动开一次结果台；用户关掉之后这一轮不再自己蹦出来。 */
   const autoOpenedRef = useRef(new Set<string>());
   const generation = useTableGeneration({
     sessionId,
@@ -156,7 +154,7 @@ export function TableSessionView() {
     }
   }, [generation.status, queryClient, sessionScope]);
 
-  /* 出表就把侧栏开到这一轮的第一张：制表的交付物是表，不该再多一次点击才看得到。 */
+  /* 出表就把结果台开到这一轮的第一张：制表的交付物是表，不该再多一次点击才看得到。 */
   useEffect(() => {
     for (const item of generation.turns) {
       if (item.status === "streaming" || item.tableResults.length === 0) continue;
@@ -167,15 +165,16 @@ export function TableSessionView() {
     }
   }, [generation.turns]);
 
-  const viewer = useMemo(() => generation.turns
+  const viewerItems = useMemo<TableViewerItem[]>(() => generation.turns
     .flatMap((item, index) => item.tableResults.map((table, position) => ({
       turn: item,
       table,
       round: index + 1,
+      position,
       key: tableViewerKey(item, position)
-    })))
-    .find((candidate) => candidate.key === viewerKey),
-  [generation.turns, viewerKey]);
+    }))),
+  [generation.turns]);
+  const viewer = viewerItems.find((candidate) => candidate.key === viewerKey);
 
   const handleFollowUp = () => {
     if (isBusy) {
@@ -186,14 +185,14 @@ export function TableSessionView() {
     setFollowUp("");
   };
 
-  const handleExport = (turn: DataHubAskTurn, format: "csv" | "xlsx") => {
+  const exportTables = (tables: DataHubTableResult[], turn: DataHubAskTurn, format: "csv" | "xlsx") => {
     const basename = turn.question || "制表结果";
     if (format === "csv") {
-      exportDataHubTablesCsv(turn.tableResults, basename);
+      exportDataHubTablesCsv(tables, basename);
       return;
     }
     // XLSX 走动态 import，首次点击有一次分包加载；失败要让用户知道
-    void exportDataHubTablesXlsx(turn.tableResults, basename).catch(() => {
+    void exportDataHubTablesXlsx(tables, basename).catch(() => {
       setTurnStatus({
         turnId: turnKeyOf(turn),
         tone: "error",
@@ -209,6 +208,15 @@ export function TableSessionView() {
       turnId: turnKeyOf(turn),
       tone: copied ? "success" : "error",
       message: copied ? "已复制回答" : "复制失败，请手动选中正文"
+    });
+  };
+
+  const handleCopyTable = async (item: TableViewerItem) => {
+    const copied = await copyText(buildDataHubTablesCsv([item.table]));
+    setTurnStatus({
+      turnId: turnKeyOf(item.turn),
+      tone: copied ? "success" : "error",
+      message: copied ? `已复制 ${item.table.rows.length} 行表格` : "复制表格失败，请稍后重试"
     });
   };
 
@@ -229,7 +237,7 @@ export function TableSessionView() {
     ];
   }, [activeQuestion, recentTables, sessionId]);
 
-  /* 会话列表从右侧栏收进页头：右边整块留给结果表，是这一页真正的交付物。 */
+  /* 会话列表收在顶栏标题里：右边整块留给结果表，是这一页真正的交付物。 */
   const sessionMenu: MenuProps = {
     items: recentTablesQuery.isError
       ? [{ key: "error", disabled: true, label: "会话列表加载失败" }]
@@ -242,7 +250,7 @@ export function TableSessionView() {
           children: group.items.map((item) => ({
             key: item.id,
             label: (
-              <span className="table-chat__session-item" data-active={item.id === sessionId || undefined}>
+              <span className="tgs-topbar__session" data-active={item.id === sessionId || undefined}>
                 <span title={`${item.title} · ${item.description}`}>{item.title}</span>
                 {item.id === sessionId ? <Check size={14} weight="bold" aria-hidden="true" /> : null}
               </span>
@@ -262,206 +270,139 @@ export function TableSessionView() {
       title="问表智能体"
       hideHeader
     >
-      <div className="table-chat xs-chat-shell" data-panel={viewer ? "" : undefined}>
-        <div className="xs-chat-shell__main">
-          <header className="table-chat__head">
-            <Dropdown trigger={["click"]} menu={sessionMenu} placement="bottomLeft">
-              <button type="button" className="table-chat__session-switch" aria-label="切换制表会话">
-                <span>{activeQuestion || "新制表"}</span>
-                <CaretDown size={14} weight="bold" aria-hidden="true" />
-              </button>
-            </Dropdown>
-            <Link className="table-chat__new" to="/table">
-              <Plus size={15} aria-hidden="true" />
-              新建制表
-            </Link>
-          </header>
+      <div className="tgs" data-dock={viewer ? "" : undefined}>
+        <div className="tgs__main">
+          <TableSessionTopBar
+            title={activeQuestion || "新制表"}
+            sessionMenu={sessionMenu}
+            tableCount={tableCount}
+          />
 
           <section
-            className="xs-chat"
+            className="tgs__stream"
             aria-label="制表对话"
             tabIndex={-1}
             {...conversation.containerProps}
           >
-            {generation.restoreError && generation.turns.length === 0 ? (
-              <p className="table-chat__empty-error">{generation.restoreError}</p>
-            ) : null}
-            {!generation.restoreError && generation.turns.length === 0 ? (
-              <TablePlaceholder
-                state={generation.isRestoring ? "loading" : "idle"}
-                title={generation.isRestoring ? "正在还原当时的结果表" : "还没有结果表"}
-                hint={
-                  generation.isRestoring
-                    ? "正在读取这次会话的执行记录与结果表"
-                    : "用自然语言描述你需要的表，例如「华东区Q1销售排行」"
-                }
-              />
-            ) : null}
-            {generation.turns.map((item, index) => {
-              const key = turnKeyOf(item);
-              const isLatest = index === generation.turns.length - 1;
+            <div className="tgs__column">
+              {generation.restoreError && generation.turns.length === 0 ? (
+                <div className="tgs-turn__reply" data-error="true">
+                  <p>{generation.restoreError}</p>
+                  <small data-error="true">可以刷新重试，或回到最近制表换一个会话</small>
+                </div>
+              ) : null}
+              {!generation.restoreError && generation.turns.length === 0 ? (
+                <TablePlaceholder
+                  state={generation.isRestoring ? "loading" : "idle"}
+                  title={generation.isRestoring ? "正在还原当时的结果表" : "还没有结果表"}
+                  hint={
+                    generation.isRestoring
+                      ? "正在读取这次会话的执行记录与结果表"
+                      : "用自然语言描述你需要的表，例如「华东区Q1销售排行」"
+                  }
+                />
+              ) : null}
+              <div className="tgs__turns">
+                {generation.turns.map((item, index) => {
+                  const key = turnKeyOf(item);
+                  const isLatest = index === generation.turns.length - 1;
 
-              return (
-                <XsChatTurn key={key}>
-                  <XsChatUserBubble meta={`第 ${index + 1} 轮`}>{item.question}</XsChatUserBubble>
-                  <XsChatAssistant error={item.status === "error"}>
-                    <TableTurnBody
-                      turn={item}
-                      progress={isLatest ? progress : getTableGenerationProgress(item)}
-                      isLatest={isLatest}
-                      activeTableKey={viewerKey}
-                      busy={isBusy}
-                      status={turnStatus?.turnId === key ? turnStatus : undefined}
-                      onOpenTable={(position) => setViewerKey(tableViewerKey(item, position))}
-                      turnKey={key}
-                      dockedClarifyKey={dockTarget?.key}
-                      dismissedClarifyKeys={dock.dismissedKeys}
-                      freshClarifyKey={dock.justAnsweredKey}
-                      onExpandClarify={dock.expand}
-                      onCopyAnswer={() => void handleCopyAnswer(item)}
-                      onRegenerate={() => generation.generate(item.question, sessionId)}
-                      onExport={(format) => handleExport(item, format)}
-                    />
-                  </XsChatAssistant>
-                </XsChatTurn>
-              );
-            })}
+                  return (
+                    <article className="tgs-turn" key={key}>
+                      {/* 追问是有序的：第 N 轮的口径继承自第 N-1 轮，序号是信息不是装饰 */}
+                      <div className="tgs-turn__ask">
+                        <span className="tgs-turn__round">{`第 ${index + 1} 轮`}</span>
+                        <p>{item.question}</p>
+                      </div>
+                      <TableTurnBody
+                        turn={item}
+                        progress={isLatest ? progress : getTableGenerationProgress(item)}
+                        activeTableKey={viewerKey}
+                        busy={isBusy}
+                        status={turnStatus?.turnId === key ? turnStatus : undefined}
+                        onOpenTable={(position) => setViewerKey(tableViewerKey(item, position))}
+                        turnKey={key}
+                        dockedClarifyKey={dockTarget?.key}
+                        dismissedClarifyKeys={dock.dismissedKeys}
+                        freshClarifyKey={dock.justAnsweredKey}
+                        onExpandClarify={dock.expand}
+                        onCopyAnswer={() => void handleCopyAnswer(item)}
+                        onRegenerate={() => generation.generate(item.question, sessionId)}
+                        onExport={(format) => exportTables(item.tableResults, item, format)}
+                        onExportTable={(position, format) => {
+                          const table = item.tableResults[position];
+                          if (table) exportTables([table], item, format);
+                        }}
+                      />
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
           </section>
 
-          <div className="xs-clarify-anchor">
-            {dockTarget ? (
-              <XsClarifyPanel
-                clarification={dockTarget.clarification}
-                submittingAnswer={
-                  dock.submittedKey === dockTarget.key ? dock.submittingAnswer : undefined
-                }
-                error={dockTarget.error}
-                onAnswer={(answer) => {
-                  dock.submit(dockTarget.key, answer);
-                  generation.respondToClarification(
-                    dockTarget.chatId,
-                    answer,
-                    dockTarget.clarification.interactionId
-                  );
-                }}
-                onDismiss={() => dock.dismiss(dockTarget.key)}
-              />
-            ) : null}
-            <XsComposerBox
-            className="table-chat__composer"
-            mode="chat"
-            label="继续制表"
-            busy={isBusy}
-            showScrollToBottom={conversation.showScrollToBottom && !dockTarget}
-            onScrollToBottom={conversation.scrollToBottom}
-            toolbarTail={(
-              <>
-                {generation.isStreaming ? (
-                  <Button
-                    danger
-                    type="text"
-                    icon={<StopCircle size={18} weight="fill" aria-hidden="true" />}
-                    onClick={generation.stop}
-                  >停止生成</Button>
-                ) : null}
-                <Button
-                  type="primary"
-                  shape="circle"
-                  aria-label="继续制表"
-                  disabled={isBusy || !followUp.trim()}
-                  icon={<PaperPlaneTilt size={18} weight="fill" aria-hidden="true" />}
-                  onClick={handleFollowUp}
+          <div className="tgs__foot">
+            <div className="tgs__foot-inner tgs__clarify-anchor">
+              {dockTarget ? (
+                <XsClarifyPanel
+                  clarification={dockTarget.clarification}
+                  submittingAnswer={
+                    dock.submittedKey === dockTarget.key ? dock.submittingAnswer : undefined
+                  }
+                  error={dockTarget.error}
+                  onAnswer={(answer) => {
+                    dock.submit(dockTarget.key, answer);
+                    generation.respondToClarification(
+                      dockTarget.chatId,
+                      answer,
+                      dockTarget.clarification.interactionId
+                    );
+                  }}
+                  onDismiss={() => dock.dismiss(dockTarget.key)}
                 />
-              </>
-            )}
-          >
-            <Input.TextArea
-              aria-label="继续追问"
-              variant="borderless"
-              autoSize={{ minRows: 1, maxRows: 6 }}
-              placeholder={awaitingClarification ? clarifyPlaceholder : followUpPlaceholder}
-              value={followUp}
-              disabled={isBusy}
-              onChange={(event) => setFollowUp(event.target.value)}
-              onPressEnter={(event) => {
-                if (event.shiftKey) {
-                  return;
-                }
-                event.preventDefault();
-                handleFollowUp();
-              }}
-            />
-          </XsComposerBox>
-          </div>
+              ) : null}
+              <TableComposer
+                value={followUp}
+                placeholder={awaitingClarification ? clarifyPlaceholder : followUpPlaceholder}
+                busy={isBusy}
+                streaming={generation.isStreaming}
+                onChange={setFollowUp}
+                onSubmit={handleFollowUp}
+                onStop={generation.stop}
+                showScrollToBottom={conversation.showScrollToBottom && !dockTarget}
+                onScrollToBottom={conversation.scrollToBottom}
+              />
+            </div>
 
-          <div className="workflow-status-slot table-page__status-slot">
-            <XsStatusBar
-              tone={statusToneFor(statusMessage, isBusy, generation.status, generation.restoreError)}
-              spinner={false}
-              message={statusMessage}
-              transitionKey={`${generation.status}:${statusMessage}`}
-              reserveSpace
-            />
+            <div className="tgs__status">
+              <XsStatusBar
+                tone={statusToneFor(statusMessage, isBusy, generation.status, generation.restoreError)}
+                spinner={false}
+                message={statusMessage}
+                transitionKey={`${generation.status}:${statusMessage}`}
+                reserveSpace
+              />
+            </div>
           </div>
         </div>
 
         {viewer ? (
-          <XsSidePanel
-            label="结果表预览"
-            icon={<Table size={18} aria-hidden="true" />}
-            title={viewer.turn.question}
-            titleHint={viewer.turn.question}
-            meta={`第 ${viewer.round} 轮${viewer.turn.dataSources.at(-1)?.datasourceName ? ` · ${viewer.turn.dataSources.at(-1)!.datasourceName}` : ""}`}
-            actions={(
-              <>
-                <Button
-                  size="small"
-                  aria-label="把当前结果表存为模板"
-                  onClick={() =>
-                    setTemplateDraft({
-                      name: viewer.turn.question.trim().slice(0, 100) || "制表模板",
-                      prompt: viewer.turn.question.trim() || "按当前表结构生成",
-                      structureJson: buildTableStructureJson(viewer.table.columns)
-                    })
-                  }
-                >
-                  存为模板
-                </Button>
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: [
-                      { key: "csv", label: "导出 CSV" },
-                      { key: "xlsx", label: "导出 XLSX" }
-                    ],
-                    onClick: ({ key }) => {
-                      // 侧栏只导出正在看的这一张表
-                      const single = [viewer.table];
-                      const basename = viewer.turn.question || "制表结果";
-                      if (key === "csv") {
-                        exportDataHubTablesCsv(single, basename);
-                        return;
-                      }
-                      void exportDataHubTablesXlsx(single, basename).catch(() => {
-                        setTurnStatus({
-                          turnId: turnKeyOf(viewer.turn),
-                          tone: "error",
-                          message: "XLSX 导出失败，请重试或改用 CSV"
-                        });
-                      });
-                    }
-                  }}
-                >
-                  <Button size="small" aria-label="下载当前结果表">下载</Button>
-                </Dropdown>
-              </>
-            )}
+          <TableResultDock
+            items={viewerItems}
+            active={viewer}
+            rowLimit={PANEL_ROW_LIMIT}
+            onSelect={setViewerKey}
             onClose={() => setViewerKey("")}
-          >
-            <div className="table-chat__panel-body">
-              <DataHubResultTable table={viewer.table} rowLimit={PANEL_ROW_LIMIT} />
-            </div>
-          </XsSidePanel>
+            onCopy={() => void handleCopyTable(viewer)}
+            onExport={(format) => exportTables([viewer.table], viewer.turn, format)}
+            onSaveTemplate={() =>
+              setTemplateDraft({
+                name: viewer.turn.question.trim().slice(0, 100) || "制表模板",
+                prompt: viewer.turn.question.trim() || "按当前表结构生成",
+                structureJson: buildTableStructureJson(viewer.table.columns)
+              })
+            }
+          />
         ) : null}
       </div>
       <TableTemplateModal
