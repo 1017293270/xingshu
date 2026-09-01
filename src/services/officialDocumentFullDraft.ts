@@ -22,6 +22,8 @@ export type OfficialDocumentWritingAction = "DRAFT_ASSIST" | "FULL_DRAFT" | "REF
 
 type TextBlockRole = "HEADING_1" | "HEADING_2" | "HEADING_3" | "BODY";
 
+type ParsedTextBlock = { role: TextBlockRole; text: string };
+
 export type OfficialDocumentReferenceSection = {
   id: string;
   order: number;
@@ -76,15 +78,22 @@ function unwrapHeadingMarkup(value: string) {
   return bold?.[1].trim() ?? text;
 }
 
-function plainHeadingRole(value: string): TextBlockRole | undefined {
-  const text = unwrapHeadingMarkup(value);
-  if (!text || text.length > 120 || /[；;。！？!?，,：:]$/.test(text)) return undefined;
+/** 公文编号的层级：只看行首编号，不管这一行末尾有没有句读。 */
+function numberedHeadingRole(text: string): TextBlockRole | undefined {
   if (/^(?:[一二三四五六七八九十百零〇两]+[、.]|第[一二三四五六七八九十百零〇两\d]+[章节篇部分])/.test(text)) {
     return "HEADING_1";
   }
   if (/^\d+(?:\.\d+)+\s*/.test(text)) return "HEADING_3";
   if (/^(?:（[一二三四五六七八九十百零〇两\d]+）|\d+[、.]\s*)/.test(text)) return "HEADING_2";
   return undefined;
+}
+
+const TRAILING_PUNCTUATION = /[；;。！？!?，,：:]$/;
+
+function plainHeadingRole(value: string): TextBlockRole | undefined {
+  const text = unwrapHeadingMarkup(value);
+  if (!text || text.length > 120 || TRAILING_PUNCTUATION.test(text)) return undefined;
+  return numberedHeadingRole(text);
 }
 
 export function summarizeOfficialDocumentTemplate(structureNodes: OfficialDocumentStructureNode[]) {
@@ -246,6 +255,9 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         // 把可用锚点逐字列出来才有东西可抄。
         fixedFieldAnchors: fixedFields.map((field) => `[[XS_FIXED:${field.slotId}]]`),
         sectionAnchors: sections.map((section) => `[[XS_SECTION:${section.id}]]`),
+        // 标题和首句写在同一行时整行会被当成正文，只能靠解析阶梯事后补救；
+        // 这条规则和 sectionAnchors 一样随 writingContext 原样注入提示词，加了即刻生效。
+        sectionHeadingFirstLine: "每个 [[XS_SECTION:section-id]] 锚点后的第一行必须是该章节标题，标题文字可以按本次主题改写，但必须独立成行、行尾不带句号冒号等标点，不得与正文写在同一行",
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
@@ -302,7 +314,7 @@ export function officialDocumentVariantId(
 }
 
 export function parseOfficialDocumentAssistantText(text: string, inferPlainHeadings = false) {
-  const blocks: Array<{ role: TextBlockRole; text: string }> = [];
+  const blocks: ParsedTextBlock[] = [];
   let paragraph: string[] = [];
   const flush = () => {
     const value = paragraph.join("\n").trim();
@@ -472,6 +484,117 @@ function resolveFixedAnchorIds(
   });
 }
 
+/** 把一行按「标题」的写法规整：去掉加粗标记和行尾句读，再抹平空白，用来和大纲标题比对。 */
+function headingLineKey(value: string) {
+  return normalizeText(unwrapHeadingMarkup(value).replace(TRAILING_PUNCTUATION, ""));
+}
+
+/** 章节内容还站不站得住：声明了 headingRole 就得有首块标题，bodyRequired 就得留下正文。 */
+function sectionStaysValid(section: OfficialDocumentReferenceSection, parsed: ParsedTextBlock[]) {
+  if (!section.headingRole) return parsed.length > 0;
+  if (!parsed[0]?.role.startsWith("HEADING_")) return false;
+  return !section.bodyRequired || parsed.slice(1).some((block) => block.role === "BODY");
+}
+
+/**
+ * 阶梯 1：模型把标题写在 [[XS_SECTION:…]] 锚点之前，标题落进上一节切片的尾部——
+ * 本节缺标题、上一节多出一个标题。上一节挪走之后仍然完整时才回捞，
+ * 绝不为了救本节把上一节掏空。
+ */
+function reclaimHeadingFromPreviousSection(
+  section: OfficialDocumentReferenceSection,
+  parsed: ParsedTextBlock[],
+  previousSection: OfficialDocumentReferenceSection | undefined,
+  previousParsed: ParsedTextBlock[] | undefined
+) {
+  if (!section.headingRole || !previousSection || !previousParsed?.length) return false;
+  const tail = previousParsed[previousParsed.length - 1];
+  const remainder = previousParsed.slice(0, -1);
+  if (tail.role.startsWith("HEADING_")) {
+    if (!sectionStaysValid(previousSection, remainder)) return false;
+    previousParsed.pop();
+    parsed.unshift(tail);
+    return true;
+  }
+  // 标题被并进上一节最后一段的末行：只有规整后正好等于本节标题才敢挪走，避免切掉真正文。
+  const lines = tail.text.split("\n");
+  const last = lines[lines.length - 1] ?? "";
+  if (headingLineKey(last) !== normalizeText(section.title)) return false;
+  const kept = lines.slice(0, -1).join("\n").trim();
+  const previousAfter = kept ? [...remainder, { ...tail, text: kept }] : remainder;
+  if (!sectionStaysValid(previousSection, previousAfter)) return false;
+  previousParsed.splice(0, previousParsed.length, ...previousAfter);
+  parsed.unshift({
+    role: section.headingRole,
+    text: unwrapHeadingMarkup(last).replace(TRAILING_PUNCTUATION, "")
+  });
+  return true;
+}
+
+/**
+ * 阶梯 2：标题和首句写在同一行（「（一）指导思想。以……」），整行被判成正文。
+ * 首行带公文编号时在第一个句末标点处拆开；整行只以冒号/分号收尾、后面还有正文时按换行拆。
+ * 拆不出正文就不拆——那说明是标题自带句号，交给后面的阶梯处理。
+ */
+function splitGluedHeading(section: OfficialDocumentReferenceSection, parsed: ParsedTextBlock[]) {
+  const first = parsed[0];
+  if (!section.headingRole || first?.role !== "BODY") return false;
+  const [firstLine, ...restLines] = first.text.split("\n");
+  const stop = firstLine.search(/[。！？!?]/);
+  const glued = stop >= 0
+    ? { heading: firstLine.slice(0, stop), body: [firstLine.slice(stop + 1), ...restLines] }
+    : /[：:；;]$/.test(firstLine.trim()) && restLines.length
+      ? { heading: firstLine.trim().replace(/[：:；;]$/, ""), body: restLines }
+      : undefined;
+  if (!glued) return false;
+  const heading = unwrapHeadingMarkup(glued.heading.trim());
+  const role = heading && heading.length <= 120 ? numberedHeadingRole(heading) : undefined;
+  const body = glued.body.map((line) => line.trim()).filter(Boolean).join("\n").trim();
+  if (!role || !body) return false;
+  parsed.splice(0, 1, { role, text: heading }, { role: "BODY", text: body });
+  return true;
+}
+
+/**
+ * 阶梯 3：标题写了却没被判成标题（行尾带句读、或被挪到了中间）。
+ * 已确认大纲的 title 是权威，去掉行尾句读后规整相等就升格为标题，其余块按原序留作正文。
+ */
+function promoteMatchingTitle(section: OfficialDocumentReferenceSection, parsed: ParsedTextBlock[]) {
+  const target = normalizeText(section.title);
+  if (!section.headingRole || !target) return false;
+  const index = parsed.findIndex((block) => headingLineKey(block.text) === target);
+  if (index < 0) return false;
+  const [match] = parsed.splice(index, 1);
+  parsed.unshift({
+    role: match.role.startsWith("HEADING_") ? match.role : section.headingRole,
+    text: unwrapHeadingMarkup(match.text).replace(TRAILING_PUNCTUATION, "")
+  });
+  return true;
+}
+
+/**
+ * 章节身份由锚点决定、标题由已确认大纲决定，模型漏写／改写／粘连标题都不该让整版成稿被拒。
+ * 按保守优先级修，越靠前越贴近模型真的写出来的文字：
+ * 1) 跨切片回捞——标题写在了锚点之前，落进上一节尾部；
+ * 2) 粘连拆分——标题和首句写在同一行；
+ * 3) 标题匹配——正文里存在与大纲标题一致的块；
+ * 4) 兜底合成——直接用已确认大纲的 title 造一个标题，这一步永远成功。
+ * 因此「章节缺少标题」这一类整版拒绝在这里被彻底消化掉，下游不再需要那条校验。
+ */
+function repairSectionHeadings(
+  sections: OfficialDocumentReferenceSection[],
+  parsedBySection: ParsedTextBlock[][]
+) {
+  sections.forEach((section, index) => {
+    const parsed = parsedBySection[index];
+    if (!section.headingRole || parsed[0]?.role.startsWith("HEADING_")) return;
+    if (reclaimHeadingFromPreviousSection(section, parsed, sections[index - 1], parsedBySection[index - 1])) return;
+    if (splitGluedHeading(section, parsed)) return;
+    if (promoteMatchingTitle(section, parsed)) return;
+    parsed.unshift({ role: section.headingRole, text: section.title });
+  });
+}
+
 export function parseOfficialDocumentReferenceGeneration(input: {
   markdown: string;
   referenceDraftTitle: string;
@@ -539,16 +662,22 @@ export function parseOfficialDocumentReferenceGeneration(input: {
 
   const blocks: OfficialDocumentDraftContent["blocks"] = [];
   let order = 0;
-  input.sections.forEach((section) => {
-    const parsed = parseOfficialDocumentAssistantText(sectionValues.get(section.id) ?? "", true);
+  const parsedBySection = input.sections.map((section) => (
+    parseOfficialDocumentAssistantText(sectionValues.get(section.id) ?? "", true)
+  ));
+  repairSectionHeadings(input.sections, parsedBySection);
+  input.sections.forEach((section, index) => {
+    const parsed = parsedBySection[index];
     if (section.headingRole) {
-      const heading = parsed[0];
-      if (!heading?.role.startsWith("HEADING_")) throw new Error(`章节“${section.title}”缺少标题`);
-      if (parsed.slice(1).some((block) => block.role.startsWith("HEADING_"))) {
-        throw new Error(`章节“${section.title}”生成了额外标题`);
+      // 修复阶梯保证首块一定是标题；这里的兜底只是防御，任何情况下都不再整版拒绝。
+      const heading = parsed[0] ?? { role: section.headingRole, text: section.title };
+      const rest = parsed.slice(1);
+      // 标题层级仍按参考草稿声明的 headingRole 落库，模型多写出来的下级标题按各自层级保留：
+      // blocks 是一条扁平有序链，编辑器、导出和预览都不假设一个 sectionId 只有一个标题，
+      // 降级成正文反而会丢掉公文分级。
+      if (section.bodyRequired && !rest.some((block) => block.role === "BODY")) {
+        throw new Error(`章节“${section.title}”没有生成正文`);
       }
-      const body = parsed.slice(1).filter((block) => block.role === "BODY");
-      if (section.bodyRequired && !body.length) throw new Error(`章节“${section.title}”没有生成正文`);
       blocks.push({
         id: crypto.randomUUID(),
         order: order++,
@@ -558,11 +687,11 @@ export function parseOfficialDocumentReferenceGeneration(input: {
         sourceTaskIds: [],
         text: heading.text
       });
-      body.forEach((item) => blocks.push({
+      rest.forEach((item) => blocks.push({
         id: crypto.randomUUID(),
         order: order++,
-        role: "BODY",
-        variantId: officialDocumentVariantId(input.templateNodes, "BODY"),
+        role: item.role,
+        variantId: officialDocumentVariantId(input.templateNodes, item.role, item.text),
         sectionId: section.id,
         sourceTaskIds: [],
         text: item.text

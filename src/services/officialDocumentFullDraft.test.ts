@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { OfficialDocumentDraftContent, OfficialDocumentStructureNode } from "@/types/officialDocument";
-import type { OfficialDocumentReferenceFixedField } from "./officialDocumentFullDraft";
+import type {
+  OfficialDocumentReferenceFixedField,
+  OfficialDocumentReferenceSection
+} from "./officialDocumentFullDraft";
 import {
   buildOfficialDocumentReferenceWritingPlan,
   buildOfficialDocumentPreviewLines,
@@ -364,6 +367,178 @@ describe("reference draft generation", () => {
     });
   });
 
+  describe("章节标题的修复阶梯", () => {
+    const twoSections: OfficialDocumentReferenceSection[] = [
+      { id: "reference-section-1", order: 0, headingRole: "HEADING_1", title: "一、总体要求", bodyRequired: true },
+      { id: "reference-section-2", order: 1, headingRole: "HEADING_2", title: "（二）主要任务", bodyRequired: true }
+    ];
+    const oneSection = (title: string, headingRole: "HEADING_1" | "HEADING_2" = "HEADING_2") => ([{
+      id: "reference-section-1", order: 0, headingRole, title, bodyRequired: true
+    }] satisfies OfficialDocumentReferenceSection[]);
+    const parseSections = (sections: OfficialDocumentReferenceSection[], lines: string[]) =>
+      parseOfficialDocumentReferenceGeneration({
+        markdown: lines.join("\n"),
+        referenceDraftTitle: "参考草稿",
+        sections,
+        fixedFields: [],
+        templateNodes
+      });
+    const shape = (result: { blocks: Array<{ role: string; sectionId?: string; text: string }> }) =>
+      result.blocks.map((block) => [block.role, block.sectionId, block.text]);
+
+    it("阶梯 a：标题写在锚点之前时从上一节尾部回捞，上一节不再多出标题", () => {
+      const result = parseSections(twoSections, [
+        "[[XS_SECTION:reference-section-1]]",
+        "# 一、总体要求",
+        "各部门要压实安全生产责任。",
+        "（二）主要任务",
+        "[[XS_SECTION:reference-section-2]]",
+        "推进重点工程建设。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_1", "reference-section-1", "一、总体要求"],
+        ["BODY", "reference-section-1", "各部门要压实安全生产责任。"],
+        ["HEADING_2", "reference-section-2", "（二）主要任务"],
+        ["BODY", "reference-section-2", "推进重点工程建设。"]
+      ]);
+    });
+
+    it("阶梯 a：标题被并进上一节末段的末行时同样回捞", () => {
+      const result = parseSections(twoSections, [
+        "[[XS_SECTION:reference-section-1]]",
+        "# 一、总体要求",
+        "各部门要压实安全生产责任。",
+        "（二）主要任务：",
+        "[[XS_SECTION:reference-section-2]]",
+        "推进重点工程建设。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_1", "reference-section-1", "一、总体要求"],
+        ["BODY", "reference-section-1", "各部门要压实安全生产责任。"],
+        ["HEADING_2", "reference-section-2", "（二）主要任务"],
+        ["BODY", "reference-section-2", "推进重点工程建设。"]
+      ]);
+    });
+
+    it("阶梯 a：挪走会把上一节掏空时不回捞，转由后面的阶梯兜底", () => {
+      const result = parseSections([
+        { ...twoSections[0], bodyRequired: false },
+        twoSections[1]
+      ], [
+        "[[XS_SECTION:reference-section-1]]",
+        "# 一、总体要求",
+        "[[XS_SECTION:reference-section-2]]",
+        "推进重点工程建设。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_1", "reference-section-1", "一、总体要求"],
+        ["HEADING_2", "reference-section-2", "（二）主要任务"],
+        ["BODY", "reference-section-2", "推进重点工程建设。"]
+      ]);
+    });
+
+    it("阶梯 b：标题和首句写在同一行时按句末标点拆开，标题被改写也照拆", () => {
+      const result = parseSections(oneSection("（一）总体思路"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "（一）指导思想。以习近平新时代中国特色社会主义思想为指导，全面落实安全生产责任。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_2", "reference-section-1", "（一）指导思想"],
+        ["BODY", "reference-section-1", "以习近平新时代中国特色社会主义思想为指导，全面落实安全生产责任。"]
+      ]);
+    });
+
+    it("阶梯 b：整行以冒号收尾、正文另起一行时按换行拆", () => {
+      const result = parseSections(oneSection("（一）指导思想"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "（一）指导思想：",
+        "以习近平新时代中国特色社会主义思想为指导。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_2", "reference-section-1", "（一）指导思想"],
+        ["BODY", "reference-section-1", "以习近平新时代中国特色社会主义思想为指导。"]
+      ]);
+    });
+
+    it("阶梯 b：拆不出正文就不拆，标题自带句号时交给后面的阶梯", () => {
+      const result = parseSections(oneSection("（一）指导思想"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "（一）指导思想。",
+        "",
+        "以习近平新时代中国特色社会主义思想为指导。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_2", "reference-section-1", "（一）指导思想"],
+        ["BODY", "reference-section-1", "以习近平新时代中国特色社会主义思想为指导。"]
+      ]);
+    });
+
+    it("阶梯 c：正文里存在与大纲标题一致的块时升格，其余按原序作正文", () => {
+      const result = parseSections(oneSection("（一）指导思想"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "本节说明如下。",
+        "",
+        "（一）指导思想",
+        "",
+        "坚持稳中求进工作总基调。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_2", "reference-section-1", "（一）指导思想"],
+        ["BODY", "reference-section-1", "本节说明如下。"],
+        ["BODY", "reference-section-1", "坚持稳中求进工作总基调。"]
+      ]);
+    });
+
+    it("阶梯 d：完全没写标题时用已确认大纲的标题合成，正文原样保留", () => {
+      const result = parseSections(oneSection("一、工作要求", "HEADING_1"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "各部门要压实责任，严格落实安全生产制度。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_1", "reference-section-1", "一、工作要求"],
+        ["BODY", "reference-section-1", "各部门要压实责任，严格落实安全生产制度。"]
+      ]);
+      expect(result.blocks[0].variantId).toBe("heading-v1");
+    });
+
+    it("合成标题后 bodyRequired 校验仍然有效，且不再出现「缺少标题」", () => {
+      const call = () => parseSections(twoSections, [
+        "[[XS_SECTION:reference-section-1]]",
+        "# 一、总体要求",
+        "各部门要压实安全生产责任。",
+        "[[XS_SECTION:reference-section-2]]"
+      ]);
+
+      expect(call).toThrow("章节“（二）主要任务”没有生成正文");
+      expect(call).not.toThrow("缺少标题");
+    });
+
+    it("章节内多写的下级标题按真实层级保留，不再整版拒绝", () => {
+      const result = parseSections(oneSection("一、总体要求", "HEADING_1"), [
+        "[[XS_SECTION:reference-section-1]]",
+        "# 一、总体要求",
+        "总体要求如下。",
+        "## （一）指导思想",
+        "坚持稳中求进工作总基调。"
+      ]);
+
+      expect(shape(result)).toEqual([
+        ["HEADING_1", "reference-section-1", "一、总体要求"],
+        ["BODY", "reference-section-1", "总体要求如下。"],
+        ["HEADING_2", "reference-section-1", "（一）指导思想"],
+        ["BODY", "reference-section-1", "坚持稳中求进工作总基调。"]
+      ]);
+    });
+  });
+
   it("outputRules 列出合法锚点全集，旧键原样保留", () => {
     const plan = buildOfficialDocumentReferenceWritingPlan({
       referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
@@ -384,6 +559,8 @@ describe("reference draft generation", () => {
     );
     expect(outputRules.fixedFieldAnchors).toContain("[[XS_FIXED:title-slot]]");
     expect(outputRules.sectionAnchors).toContain("[[XS_SECTION:reference-section-1]]");
+    expect(outputRules.sectionHeadingFirstLine).toContain("锚点后的第一行必须是该章节标题");
+    expect(outputRules.sectionHeadingFirstLine).toContain("必须独立成行、行尾不带句号冒号等标点");
     expect(outputRules).toMatchObject({
       fixedFieldAnchor: "[[XS_FIXED:slot-id]]",
       sectionAnchor: "[[XS_SECTION:section-id]]",
