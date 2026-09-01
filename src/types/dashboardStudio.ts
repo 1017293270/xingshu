@@ -177,6 +177,11 @@ export type DashboardRecord = {
   status: DashboardRecordStatus;
   revision: number;
   visibility?: "PRIVATE" | "SPACE";
+  /**
+   * 看板归属者（后端 analytics_dashboard.owner_user_id，与登录态 user.userId 同源同类型）。
+   * 老后端不返回这个字段，读的地方必须容忍缺席。
+   */
+  ownerUserId?: number;
   schema: DashboardSchema;
   publishedSchema?: DashboardSchema;
   publishedAt?: string;

@@ -45,7 +45,7 @@ export function DashboardPage() {
   const [versionsOpen, setVersionsOpen] = useState(false);
 
   const { dashboardsQuery, records } = library;
-  const current = resolveCurrentDashboard(records, currentId);
+  const current = resolveCurrentDashboard(records, currentId, userId);
   const versions = [...(current?.versions ?? [])].sort((left, right) => right.version - left.version);
   const shareLink = current ? library.shareLinks[current.id] : undefined;
 

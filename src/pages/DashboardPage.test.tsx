@@ -9,6 +9,7 @@ import {
 } from "@/features/dashboard/currentDashboard";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DashboardRecord } from "@/types/dashboardStudio";
 import { DashboardPage } from "./DashboardPage";
 
@@ -52,12 +53,31 @@ function createStoredDashboard(
   return repository.get(schema.id)!;
 }
 
+/**
+ * 本地测试仓储不记归属，这里直接补写进 records JSON，模拟服务端列表把他人
+ * 共享到空间的看板一起返回（后端 SQL：owner_user_id = ? OR visibility = 'SPACE'）。
+ * 两块都写成 SPACE，逼判定只能靠 ownerUserId，从而验证页面确实把 userId 传下去了。
+ */
+function setStoredDashboardOwners(owners: Record<string, number>) {
+  const storageKey = "xingshu.dashboard.records.v1";
+  const records = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as DashboardRecord[];
+  localStorage.setItem(
+    storageKey,
+    JSON.stringify(records.map((record) => ({
+      ...record,
+      ownerUserId: owners[record.id],
+      visibility: "SPACE"
+    })))
+  );
+}
+
 async function openSettings(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "当前看板设置" }));
 }
 
 describe("DashboardPage", () => {
   beforeEach(() => {
+    useDataHubAuthStore.getState().clearAuthState();
     localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -107,6 +127,18 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByRole("region", { name: "当前看板：最近更新的库存看板" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "当前看板：旧的经营驾驶舱" })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the user's own dashboard, not a newer one shared into the space", async () => {
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("我的经营驾驶舱", "mine", { updatedAt: "2026-07-15T08:00:00.000Z" });
+    createStoredDashboard("同事共享的测试", "shared", { updatedAt: "2026-07-20T08:00:00.000Z" });
+    setStoredDashboardOwners({ "dashboard-mine": 7, "dashboard-shared": 42 });
+
+    renderPage();
+
+    expect(await screen.findByRole("region", { name: "当前看板：我的经营驾驶舱" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "当前看板：同事共享的测试" })).not.toBeInTheDocument();
   });
 
   it("resolves the current dashboard from the stored id and falls back by update time", () => {
