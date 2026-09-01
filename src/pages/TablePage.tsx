@@ -85,6 +85,12 @@ function formatRecentTime(table: TableTemplate) {
 
 type TableHomeTab = "recent" | "mine" | "templates";
 
+/** 选项卡自己就是标题，所以面板不再重复一遍 h2，只把口径说明挂在选项卡右侧。 */
+const tabHint: Record<Exclude<TableHomeTab, "recent">, string> = {
+  mine: "由制表会话生成的结果表 · 点击直接打开",
+  templates: "保存常用的制表提示词与表结构，一键复用"
+};
+
 export function TablePage() {
   const navigate = useNavigate();
   const sessionScope = useSessionQueryScope();
@@ -268,6 +274,8 @@ export function TablePage() {
           reserveSpace
         />
       </div>
+      {/* 选项卡这一行同时是面板抬头：左边切换，右边是当前面板的口径与动作，
+          下面的面板从这条线一直站到视口底部，长列表在面板里滚。 */}
       <div className="table-home-tabs xs-page-enter" style={xsEnterStep(2)}>
         <Segmented
           aria-label="制表内容切换"
@@ -281,13 +289,26 @@ export function TablePage() {
             { label: "表格模板", value: "templates", title: "" }
           ]}
         />
+        <div className="table-home-tabs__tail">
+          <span className="section-title-meta">
+            {activeTab === "recent"
+              ? `${recentTables.length} 条记录 · 点击打开当时的结果表`
+              : tabHint[activeTab]}
+          </span>
+          {activeTab === "templates" ? (
+            <Button
+              type="primary"
+              size="small"
+              icon={<Plus size={14} aria-hidden="true" />}
+              onClick={() => setTemplateModal({ mode: "create" })}
+            >
+              新建模板
+            </Button>
+          ) : null}
+        </div>
       </div>
       {activeTab === "recent" ? (
       <section className="table-recent" aria-label="最近制表记录">
-        <div className="section-title-row section-title-row--compact xs-page-enter" style={xsEnterStep(2)}>
-          <h2 className="subsection-title">最近制表</h2>
-          <span className="section-title-meta">{recentTables.length} 条记录 · 点击打开当时的结果表</span>
-        </div>
         <XsAsyncPanel
           status={recentTablesStatus}
           empty={recentTables.length === 0}
@@ -357,10 +378,6 @@ export function TablePage() {
       ) : null}
       {activeTab === "mine" ? (
         <section className="table-recent" aria-label="我的表格">
-          <div className="section-title-row section-title-row--compact">
-            <h2 className="subsection-title">我的表格</h2>
-            <span className="section-title-meta">由制表会话生成的结果表 · 点击直接打开</span>
-          </div>
           <XsAsyncPanel
             status={recentTablesStatus}
             empty={recentTables.length === 0}
@@ -403,18 +420,6 @@ export function TablePage() {
       ) : null}
       {activeTab === "templates" ? (
         <section className="table-recent" aria-label="表格模板">
-          <div className="section-title-row section-title-row--compact">
-            <h2 className="subsection-title">表格模板</h2>
-            <span className="section-title-meta">保存常用的制表提示词与表结构，一键复用</span>
-            <Button
-              type="primary"
-              size="small"
-              icon={<Plus size={14} aria-hidden="true" />}
-              onClick={() => setTemplateModal({ mode: "create" })}
-            >
-              新建模板
-            </Button>
-          </div>
           <XsAsyncPanel
             status={templatesStatus}
             empty={templates.length === 0}
@@ -447,7 +452,7 @@ export function TablePage() {
                           {columns.length > 0 ? (
                             <>
                               <em aria-hidden="true">·</em>
-                              <span>{columns.length} 列结构</span>
+                              <span className="sheet-row__cols">{columns.length} 列结构</span>
                             </>
                           ) : null}
                         </span>

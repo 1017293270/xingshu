@@ -70,17 +70,7 @@
   margin-bottom: var(--xs-module-gap);
 }
 
-/* 区块标题行：标题 + 计数元信息 */
-.section-title-row--compact {
-  align-items: baseline;
-  margin: 0 0 10px;
-}
-
-.section-title-row--compact h2.subsection-title {
-  font-size: var(--xs-fs-control-lg);
-  font-weight: var(--xs-fw-medium);
-}
-
+/* 面板口径说明：跟在选项卡右侧，一句话交代这一屏在看什么 */
 .section-title-meta {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
@@ -91,21 +81,36 @@
 /* 入口页只留一条中轴：列表与上面的输入盒同宽同心，读作输入盒的续篇而不是另起一张全宽数据表。
    行内也不再排四列——表名是主角，类型与时间退到副行，动作等指针进来再现身。 */
 
-/* 选项卡是这条中轴的抬头，必须和下面的标题行、列表卡同宽同心：
-   页面外框走的是更宽的 data 轨道，不限宽就会甩到内容列左外侧。 */
+/* 选项卡是这条中轴的抬头，必须和下面的列表卡同宽同心：
+   页面外框走的是更宽的 data 轨道，不限宽就会甩到内容列左外侧。
+   右半边挂当前面板的口径与动作——面板里不再重复一遍同名 h2。 */
 .table-home-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
   width: min(760px, 100%);
-  margin: 4px auto 14px;
+  margin: 4px auto 12px;
+}
+
+.table-home-tabs__tail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.table-home-tabs__tail .section-title-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-recent {
   width: min(760px, 100%);
   margin: 0 auto;
-}
-
-.table-recent .section-title-row--compact {
-  margin: 0 0 12px;
-  padding-inline: 2px;
 }
 
 .sheet-list {
@@ -295,6 +300,92 @@ button.sheet-row__main {
     min-width: 40px;
     height: 40px;
     opacity: 1;
+  }
+}
+
+/* ---------- 一排两条：760 轨道装得下两张 366px 的记录卡 ---------- */
+/* 一列时每条记录靠一条横线断句就够了；两列以后横线会在中缝两侧各断一次，
+   读起来像一张没有表头的网格，所以这一档改成「每条记录自己成卡」：
+   1px 描边定边界，hover 才上底色。760px 以下（窄桌面与移动端）退回单列横线版。 */
+
+@media (min-width: 761px) {
+  .sheet-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .sheet-row {
+    padding: 0 6px 0 10px;
+    border: 1px solid var(--xs-border);
+    border-radius: 12px;
+    background: var(--xs-surface);
+    transition:
+      border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+      background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+  }
+
+  /* 卡片自带边界，横线退场 */
+  .sheet-row + .sheet-row::before {
+    content: none;
+  }
+
+  .sheet-row:hover,
+  .sheet-row:focus-within {
+    border-color: var(--xs-border-strong);
+    background: var(--xs-surface-soft);
+  }
+
+  .sheet-row__main {
+    min-height: 58px;
+    padding: 8px 0;
+  }
+
+  /* 卡宽只有整行的一半，副行必须能截：类型先截，时间是定位锚点，整着留 */
+  .sheet-row__meta {
+    flex-wrap: nowrap;
+  }
+
+  .sheet-row__type {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 时间、列数、分隔点是定长锚点，压不得；被挤没的应该是上面那段长提示词 */
+  .sheet-row__time,
+  .sheet-row__cols,
+  .sheet-row__meta > em {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* 模板卡的编辑/删除收到和复制钮同一档：44px 的页面主动作放进半幅卡，
+     会把表名挤成两个字。 */
+  .sheet-list .sheet-row__actions .ant-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    color: var(--xs-text-3);
+    border-radius: 9px;
+  }
+
+  .sheet-list .sheet-row__actions .ant-btn:not(:disabled):hover,
+  .sheet-list .sheet-row__actions .ant-btn:not(:disabled):focus-visible {
+    color: var(--xs-primary-2);
+    background: var(--xs-info-soft);
+  }
+}
+
+/* 触屏上这两颗钮仍要够大按 */
+@media (min-width: 761px) and (pointer: coarse) {
+  .sheet-list .sheet-row__actions .ant-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
   }
 }
 
@@ -716,6 +807,152 @@ button.sheet-row__main {
 .table-page .table-page__status-slot {
   width: min(760px, 100%);
   margin: 12px auto var(--xs-module-gap);
+}
+
+/* ---------- 智能制表：入口页一屏布局 ---------- */
+/* 一句话：页面壳一屏收下，长内容在面板里滚。
+   hero + 状态槽 + 选项卡是固定上段，垂直节奏跟首页闲置态用同一套 vh 负截距刻度，
+   视口越矮压得越紧；下面的面板区吃掉剩余全部高度，列表装不下就在卡里滚、
+   下沿正好贴住视口底，页面本身永远不滚。
+   路由级高度锁沿用 .xs-shell__main:has(.table-session-page) 那一手，
+   选择器只咬 /table 首页的 .table-page，不影响别的路由。
+   两条退路：窄屏（<768px）与矮视口（<680px）都不进这套锁，回退成整页滚动。 */
+
+@media (min-width: 768px) and (min-height: 680px) {
+  /* 不用 100dvh 减常数：外壳在 900px 断点上换过一次高度模型（定高 ↔ 网格行），
+     让主区自己变成 flex 列、页面吃掉剩余高度，两种模型下都对得上。 */
+  .xs-shell__main:has(.table-page) {
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+    /* 与首页同值：见下方 .table-page 上的刻度说明 */
+    padding-top: clamp(12px, 1.6vh, 16px);
+    padding-bottom: clamp(14px, 2.2vh, 26px);
+  }
+
+  /* 折叠钮槽位是 0 高的 sticky 层，别让它参与分高；
+     路由容器夹在主区和页面之间，高度必须过一手，否则页面拿不到剩余高度。 */
+  .xs-shell__main:has(.table-page) > .xs-shell__sidebar-toggle-slot {
+    flex: none;
+  }
+
+  .xs-shell__main:has(.table-page) > .xs-route-view {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  .xs-page.table-page {
+    /* 纵向刻度抄自首页闲置态（src/features/home/home.css 桌面档的
+       --home-hero-top / --home-hero-gap，以及外壳的 padding-top）。
+       故意按同值重新声明而不是跨文件引用变量：两页的节奏是一份约定，不是一份依赖。
+       改首页刻度时这里要一起改，否则 / 与 /table 之间切换输入盒会跳位。
+
+       --table-hero-head: 首页 hero 区块（问候语 h1 + 副标题 p）的实测高度 69.6px。
+       制表页抬头只有一行标题，撑到同一高度，输入盒顶边才落在同一条线上。 */
+    --table-hero-top: clamp(40px, calc(40vh - 244px), 124px);
+    --table-hero-gap: clamp(22px, calc(6vh - 20px), 46px);
+    --table-hero-head: 69.6px;
+
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* hero 原来顶部留 7vh 的死白，现在整段交给上面那条负截距斜率；
+     字号与图标改跟视口高度走，矮屏自动收一档，但始终落在 69.6px 的抬头框里。 */
+  .table-page .table-hero {
+    flex: 0 0 auto;
+    gap: var(--table-hero-gap);
+    padding: var(--table-hero-top) 0 14px;
+  }
+
+  .table-page .table-hero__head {
+    min-height: var(--table-hero-head);
+  }
+
+  .table-page .table-hero .table-hero__head svg {
+    width: clamp(26px, 3.6vh, 40px);
+    height: clamp(26px, 3.6vh, 40px);
+  }
+
+  .table-page .table-hero .table-hero__head h1 {
+    font-size: clamp(24px, 3.6vh, 40px);
+  }
+
+  /* 状态条只是偶尔出现的一行反馈，槽位按它的实际高度（34px）预留，不再占 44px */
+  .table-page .table-page__status-slot {
+    flex: 0 0 auto;
+    min-height: 36px;
+    margin: clamp(6px, 1vh, 12px) auto clamp(6px, 1vh, 12px);
+  }
+
+  .table-page .table-home-tabs {
+    flex: 0 0 auto;
+    margin-bottom: clamp(8px, 1.2vh, 14px);
+  }
+
+  /* 面板链路：section → 异步壳 → content 三层都传高度，最后落到列表卡上 */
+  .table-page .table-recent,
+  .table-page .table-recent > .xs-async-panel,
+  .table-page .table-recent .xs-async-panel__content {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  .table-page .table-recent .xs-async-panel__refresh {
+    flex: none;
+  }
+
+  /* 列表卡按内容取高，上限是面板剩余高度（flex: 0 1 auto + min-height: 0）：
+     装不下就在卡里滚、下沿正好贴住视口；装得下就到此为止。
+     不写 flex: 1 是因为「最近制表 / 我的表格」被服务端固定截到 8 条，
+     强行拉通高只会在大屏上留出半张空白卡——那不是留白，是没做完。 */
+  .table-page .sheet-list {
+    min-height: 0;
+    flex: 0 1 auto;
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(83, 105, 133, 0.26) transparent;
+  }
+
+  /* 滚动条克制：静止时只是一道浅痕，指针进面板才加深 */
+  .table-page .sheet-list::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .table-page .sheet-list::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: rgba(83, 105, 133, 0.2);
+    background-clip: padding-box;
+  }
+
+  .table-page .sheet-list:hover::-webkit-scrollbar-thumb {
+    background: rgba(83, 105, 133, 0.38);
+    background-clip: padding-box;
+  }
+
+  /* 空态和列表的职责不同，所以填充方式也不同：
+     列表只管把行摆出来，空态得把这块区域占住并解释清楚——
+     一张小虚线卡孤零零吊在通高区域的顶端比撑满更难看，所以空态撑满、图文居中。 */
+  .table-page .table-recent .xs-empty-state {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  /* 骨架跟着列表走：按内容取高，免得加载完成时从通高塌回一张短卡 */
+  .table-page .table-recent .xs-async-panel__skeleton {
+    min-height: 0;
+    flex: 0 1 auto;
+    align-content: start;
+  }
 }
 
 /* ---------- 智能制表：会话页样式已迁到 features/tableGeneration/tableSession.css ---------- */
