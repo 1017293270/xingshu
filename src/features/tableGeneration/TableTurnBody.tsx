@@ -1,9 +1,8 @@
-import { ArrowsClockwise, CircleNotch, Copy, DownloadSimple } from "@phosphor-icons/react";
-import { Dropdown } from "antd";
+import { ArrowsClockwise, CircleNotch, Copy } from "@phosphor-icons/react";
 import { XsClarifyCard } from "@/components/xs/conversation";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
-import { TableArtifactCard } from "@/features/tableGeneration/TableArtifactCard";
+import { TableArtifactGroup } from "@/features/tableGeneration/TableArtifactGroup";
 import { buildTableAgentTrace } from "@/features/tableGeneration/agentTrace";
 import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { formatDataHubTableTitle } from "@/services/dataHubFormat";
@@ -130,19 +129,20 @@ export function TableTurnBody({
         );
       })}
 
-      {turn.tableResults.map((table, position) => {
-        const title = formatDataHubTableTitle(table);
-        return (
-          <TableArtifactCard
-            key={tableViewerKey(turn, position)}
-            title={title}
-            meta={`字段 ${table.columns.length} · 行 ${table.totalRows}`}
-            active={activeTableKey === tableViewerKey(turn, position)}
-            onOpen={() => onOpenTable(position)}
-            onExport={(format) => onExportTable(position, format)}
-          />
-        );
-      })}
+      {hasTables ? (
+        <TableArtifactGroup
+          rows={turn.tableResults.map((table, position) => ({
+            key: tableViewerKey(turn, position),
+            title: formatDataHubTableTitle(table),
+            meta: `字段 ${table.columns.length} · 行 ${table.totalRows}`
+          }))}
+          activeKey={activeTableKey}
+          canExport={canExport}
+          onOpen={onOpenTable}
+          onExport={onExport}
+          onExportTable={onExportTable}
+        />
+      ) : null}
 
       {isDone && !hasTables && !pendingClarification ? (
         <p>未生成结果表，请补充字段、时间或统计口径</p>
@@ -165,24 +165,7 @@ export function TableTurnBody({
             <ArrowsClockwise size={13} aria-hidden="true" />
             {retryLabel}
           </button>
-          {canExport ? (
-            <Dropdown
-              trigger={["click"]}
-              menu={{
-                items: [
-                  { key: "csv", label: "导出 CSV" },
-                  { key: "xlsx", label: "导出 XLSX" }
-                ],
-                onClick: ({ key }) => onExport(key as "csv" | "xlsx")
-              }}
-            >
-              {/* Dropdown 需要能挂 ref 的触发器，这里用与其他动作同容器样式的原生按钮 */}
-              <button type="button" aria-label="导出结果" aria-haspopup="menu">
-                <DownloadSimple size={13} aria-hidden="true" />
-                导出结果
-              </button>
-            </Dropdown>
-          ) : null}
+          {/* 整轮导出已经挪进工件组头部，跟"这轮出了几张表"待在一起更合读法 */}
         </div>
       )}
 

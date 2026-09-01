@@ -223,10 +223,15 @@ describe("TableSessionView", () => {
 
     renderSession();
 
-    // 对话流里只留一张卡，表本身在侧栏
-    const card = await screen.findByRole("article", { name: "结果表" });
-    expect(within(card).getByText("字段 2 · 行 1")).toBeInTheDocument();
-    expect(card).toHaveAttribute("data-active", "true");
+    // 对话流里只留一组工件行，表本身在侧栏；单表轮也走同一个组容器
+    const group = await screen.findByRole("region", { name: "结果表" });
+    expect(within(group).getByText(/·\s*1\s*张/)).toBeInTheDocument();
+    const rows = within(group).getAllByRole("listitem");
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText("字段 2 · 行 1")).toBeInTheDocument();
+    expect(rows[0]).toHaveAttribute("data-active", "true");
+    // 整轮导出挪进组头，消息级动作行里不再重复一颗
+    expect(within(group).getByRole("button", { name: "导出结果" })).toBeInTheDocument();
 
     const panel = await screen.findByRole("complementary", { name: "结果表预览" });
     expect(within(panel).getByRole("columnheader", { name: "区域" })).toBeInTheDocument();
@@ -245,7 +250,8 @@ describe("TableSessionView", () => {
     await waitFor(() => {
       expect(screen.queryByRole("complementary", { name: "结果表预览" })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole("article", { name: "结果表" })).not.toHaveAttribute("data-active");
+    const group = screen.getByRole("region", { name: "结果表" });
+    expect(within(group).getAllByRole("listitem")[0]).not.toHaveAttribute("data-active");
 
     await user.click(screen.getByRole("button", { name: /浏览结果表/ }));
     expect(await screen.findByRole("complementary", { name: "结果表预览" })).toBeInTheDocument();
@@ -449,10 +455,59 @@ describe("TableSessionView", () => {
     expect(within(dock).getByRole("tab", { name: "第1轮 · 表2" })).toHaveAttribute("aria-selected", "true");
     expect(await within(dock).findByRole("columnheader", { name: "城市" })).toBeInTheDocument();
     expect(within(dock).getByRole("heading", { level: 2 })).toHaveTextContent("城市订单分布");
-    // 切表也把对话流里对应的那张工件卡标成正在浏览
-    const cards = screen.getAllByRole("article", { name: "结果表" });
-    expect(cards[1]).toHaveAttribute("data-active", "true");
-    expect(cards[0]).not.toHaveAttribute("data-active");
+    // 切表也把对话流工件组里对应的那一行标成正在浏览
+    const group = screen.getByRole("region", { name: "结果表" });
+    const rows = within(group).getAllByRole("listitem");
+    expect(rows[1]).toHaveAttribute("data-active", "true");
+    expect(rows[0]).not.toHaveAttribute("data-active");
+  });
+
+  it("groups one turn's tables into a single artifact card", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTables());
+
+    renderSession();
+
+    // 两张表收进同一个组：一个组容器、两行，而不是两张独立卡
+    const group = await screen.findByRole("region", { name: "结果表" });
+    expect(screen.getAllByRole("region", { name: "结果表" })).toHaveLength(1);
+    expect(within(group).getByText(/·\s*2\s*张/)).toBeInTheDocument();
+
+    const rows = within(group).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText("表 1")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("表 2")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("字段 2 · 行 1")).toBeInTheDocument();
+
+    // 组头只有整轮导出一颗；每行自己的导出是行内动作
+    expect(within(group).getAllByRole("button", { name: "导出结果" })).toHaveLength(1);
+    await user.click(within(rows[1]).getByRole("button", { name: /^导出结果表：.*城市订单分布$/ }));
+    await user.click(await screen.findByRole("menuitem", { name: "导出 CSV" }));
+    expect(serviceMocks.exportDataHubTablesCsv).toHaveBeenCalledWith(
+      [expect.objectContaining({ groupLabel: "城市订单分布" })],
+      "华东区Q1销售排行与城市订单分布"
+    );
+
+    // 点行就是打开结果台，激活态跟着换行
+    await user.click(within(rows[1]).getByRole("button", { name: /浏览结果表/ }));
+    expect(within(group).getAllByRole("listitem")[1]).toHaveAttribute("data-active", "true");
+  });
+
+  it("exports the whole turn from the group header", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTables());
+
+    renderSession();
+    const group = await screen.findByRole("region", { name: "结果表" });
+
+    await user.click(within(group).getByRole("button", { name: "导出结果" }));
+    await user.click(await screen.findByRole("menuitem", { name: "导出 XLSX" }));
+
+    // 整轮导出带上这轮的两张表，不是只带正在看的那一张
+    expect(serviceMocks.exportDataHubTablesXlsx).toHaveBeenCalledWith(
+      [expect.objectContaining({ totalRows: 1 }), expect.objectContaining({ groupLabel: "城市订单分布" })],
+      "华东区Q1销售排行与城市订单分布"
+    );
   });
 
   it("exports the open table as csv and as xlsx from the dock", async () => {

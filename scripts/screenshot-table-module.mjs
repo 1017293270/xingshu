@@ -100,6 +100,37 @@ const replays = {
       46
     )
   },
+  // 一轮出两张表：用来截对话流里的结果表工件组（组头 + 两行）
+  "ask-table-multi": {
+    question: "华东区Q1销售排行，另外再给我一份城市订单分布",
+    datasourceName: "销售数仓 sales_dw",
+    tables: [
+      narrowTable,
+      {
+        columns: [
+          { key: "city", title: "城市" },
+          { key: "orders", title: "订单数" },
+          { key: "avgAmount", title: "客单价(元)" },
+          { key: "refund", title: "退单率" }
+        ],
+        rows: [
+          { city: "上海", orders: 1284, avgAmount: "3752.40", refund: "1.8%" },
+          { city: "杭州", orders: 963, avgAmount: "3286.10", refund: "2.4%" },
+          { city: "南京", orders: 741, avgAmount: "3491.55", refund: "3.1%" },
+          { city: "苏州", orders: 688, avgAmount: "3208.90", refund: "2.0%" }
+        ],
+        totalRows: 4,
+        groupLabel: "城市订单分布",
+        source: "sales_dw.fact_order"
+      }
+    ],
+    answer: "已生成两张表：华东区 Q1 销售排行，以及同口径下的城市订单分布。",
+    trace: traceFor(
+      "销售数仓 sales_dw",
+      "SELECT city, COUNT(*) AS orders, AVG(amount) AS avg_amount\n  FROM sales_dw.fact_order\n WHERE region = '华东' AND quarter = '2026Q1'\n GROUP BY city",
+      10
+    )
+  },
   // 只有回答没有表的一轮：用来截"结果台没打开"的纯对话态
   "ask-table-chat": {
     question: "本月的费用明细能不能按部门汇总一下",
@@ -165,11 +196,13 @@ async function newPage(width, height, replayDelayMs = 0) {
         ...replay.trace.toolResults.map((result, index) => ({
           id: 40 + index, sessionId, chatId: "c1", type: "tool_result", seqNum: 30 + index, data: result
         })),
-        ...(replay.table
-          ? [{ id: 50, sessionId, chatId: "c1", type: "table", seqNum: 40, data: replay.table }]
-          : []),
-        { id: 51, sessionId, chatId: "c1", type: "content", seqNum: 41, data: replay.answer },
-        { id: 52, sessionId, chatId: "c1", type: "done", seqNum: 42, data: replay.trace.done }
+        // 一轮可以出多张表：table 是单张的简写，tables 是完整写法
+        ...(replay.tables ?? (replay.table ? [replay.table] : [])).map((table, index) => ({
+          id: 50 + index, sessionId, chatId: "c1", type: "table", seqNum: 40 + index, data: table
+        })),
+        // 留出多张表占掉的 id / seqNum，别跟正文和 done 撞上
+        { id: 70, sessionId, chatId: "c1", type: "content", seqNum: 60, data: replay.answer },
+        { id: 71, sessionId, chatId: "c1", type: "done", seqNum: 61, data: replay.trace.done }
       ])
     });
   });
@@ -214,6 +247,9 @@ await shot("table-session-1200", 1200, 900, "/table/ask-table-a1", dockReady);
 await shot("table-session-1024", 1024, 800, "/table/ask-table-a1", dockReady);
 await shot("table-session-390", 390, 844, "/table/ask-table-a1", dockReady);
 await shot("table-session-wide-1440", 1440, 900, "/table/ask-table-wide", dockReady);
+// 一轮两张表：验对话流里的工件组（组头「结果表 · 2 张」+ 两行 + 激活行高亮）
+await shot("table-session-group-1440", 1440, 900, "/table/ask-table-multi", dockReady);
+await shot("table-session-group-1200", 1200, 900, "/table/ask-table-multi", dockReady);
 // 纯对话态：没有结果表时对话列独占整幅宽度
 await shot("table-session-chat-1440", 1440, 900, "/table/ask-table-chat", chatReady);
 await shot("table-session-chat-390", 390, 844, "/table/ask-table-chat", chatReady);

@@ -435,93 +435,226 @@
   line-height: 1.6;
 }
 
-/* ---------- 工件卡：一行的结果表入口 ---------- */
+/* ---------- 工件组：一轮的结果表收在一张卡里 ---------- */
 
-.tgs-artifact {
-  display: flex;
+/* 一轮出两张表时，两张独立卡竖着堆读起来是"一堆"而不是"一组"。
+   收进带头部的容器：头部交代这轮出了几张 + 整轮导出，底下每张表占一行。 */
+.tgs-group {
   width: 100%;
   min-width: 0;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px 6px 10px;
+  /* 行的 hover 底色与激活条要被外框的圆角裁住 */
+  overflow: hidden;
   border: 1px solid var(--tgs-line);
   border-radius: 10px;
   background: var(--xs-surface);
-  transition: border-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-.tgs-artifact:hover {
-  border-color: var(--xs-border-strong);
+.tgs-group__head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 9px;
+  border-bottom: 1px solid var(--tgs-line-soft);
+  background: var(--tgs-soft-2);
 }
 
-.tgs-artifact[data-active] {
+.tgs-group__icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--tgs-soft);
+  color: var(--xs-primary-2);
+}
+
+.tgs-group__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--tgs-ink);
+  font-size: 13px;
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-group__count {
+  color: var(--tgs-ink-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--xs-fw-regular);
+}
+
+/* 两颗导出都是原生按钮：页面层的 .xs-page .ant-btn 最小高度会把 antd Button
+   顶到 32/44px，这一行的密度就没了。触屏的点按尺寸在末尾单独补。 */
+.tgs-group__export,
+.tgs-group__row-export {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--xs-fs-caption);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.tgs-group__export {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--tgs-line);
+  background: var(--xs-surface);
+  color: var(--tgs-ink-2);
+  font-weight: var(--xs-fw-medium);
+}
+
+.tgs-group__export:hover,
+.tgs-group__export[aria-expanded="true"] {
   border-color: var(--xs-primary);
-  box-shadow: inset 0 0 0 1px var(--xs-primary);
+  background: var(--xs-info-soft);
+  color: var(--xs-primary-2);
 }
 
-.tgs-artifact__open {
+.tgs-group__export:focus-visible,
+.tgs-group__row-export:focus-visible,
+.tgs-group__open:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
+  outline-offset: -2px;
+}
+
+.tgs-group__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tgs-group__row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 9px;
+  transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+/* 行之间只用发丝线，不再是卡与卡之间的整段留白 */
+.tgs-group__row + .tgs-group__row {
+  border-top: 1px solid var(--tgs-line-soft);
+}
+
+.tgs-group__row:hover {
+  background: var(--tgs-soft-2);
+}
+
+/* 正在结果台里看的那一行：左侧一道主色条 + 极浅底，比整行描边克制 */
+.tgs-group__row[data-active] {
+  background: var(--xs-info-soft);
+  box-shadow: inset 2px 0 0 var(--xs-primary);
+}
+
+.tgs-group__open {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  align-items: center;
-  gap: 9px;
-  padding: 2px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 2px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   cursor: pointer;
   text-align: left;
 }
 
-.tgs-artifact__open:focus-visible {
-  border-radius: var(--xs-radius-small);
-  outline: 2px solid color-mix(in srgb, var(--xs-primary) 45%, white);
-  outline-offset: 2px;
+.tgs-group__index {
+  flex: none;
+  color: var(--tgs-ink-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
 }
 
-.tgs-artifact__icon {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  place-items: center;
-  border-radius: 7px;
-  background: var(--tgs-soft);
+.tgs-group__row[data-active] .tgs-group__index {
   color: var(--xs-primary-2);
 }
 
-.tgs-artifact__name {
+.tgs-group__name {
   min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   color: var(--tgs-ink);
   font-size: 13px;
-  font-weight: var(--xs-fw-medium);
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tgs-artifact__meta {
+.tgs-group__row[data-active] .tgs-group__name {
+  font-weight: var(--xs-fw-medium);
+}
+
+.tgs-group__meta {
   flex: none;
+  margin-left: auto;
+  padding-left: 10px;
   color: var(--tgs-ink-3);
   font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
+  line-height: 1.6;
   white-space: nowrap;
 }
 
-.tgs-artifact__cue {
-  margin-left: auto;
-  padding-left: 8px;
-  color: var(--xs-interactive-text);
-  font-size: var(--xs-fs-caption);
-  white-space: nowrap;
+/* 每行常驻两颗按钮太吵：单表导出跟着 hover / 键盘焦点出现 */
+.tgs-group__row-export {
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  background: transparent;
+  color: var(--tgs-ink-3);
+  opacity: 0;
 }
 
-.tgs-artifact__export.ant-btn {
-  flex: none;
-  height: 26px;
-  padding: 0 9px;
+.tgs-group__row:hover .tgs-group__row-export,
+.tgs-group__row:focus-within .tgs-group__row-export,
+.tgs-group__row-export[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.tgs-group__row-export:hover,
+.tgs-group__row-export[aria-expanded="true"] {
+  background: var(--tgs-soft);
   color: var(--tgs-ink-2);
-  font-size: var(--xs-fs-caption);
+}
+
+/* 没有 hover 的设备上藏起来就等于没有，触屏一并放大点按区 */
+@media (hover: none) {
+  .tgs-group__row-export {
+    height: 32px;
+    padding: 0 10px;
+    opacity: 1;
+  }
+
+  .tgs-group__export {
+    height: 32px;
+  }
+}
+
+@media (pointer: coarse) {
+  .tgs-group__export,
+  .tgs-group__row-export {
+    min-height: 32px;
+  }
 }
 
 /* ---------- 消息级操作 ---------- */
@@ -1161,9 +1294,11 @@
     display: none;
   }
 
-  .tgs-artifact,
   .tgs-composer,
   .tgs-dock__collapse,
+  .tgs-group__row,
+  .tgs-group__export,
+  .tgs-group__row-export,
   .tgs-turn__actions {
     transition: none;
   }
