@@ -383,8 +383,11 @@
   text-align: center;
 }
 
+/* 与制表入口同一手：星标 1:1 跟着标题字号，TSX 里写死的 size={40} 由这条覆盖 */
 .official-document-compose__content > header svg {
   flex: none;
+  width: var(--xs-fs-hero);
+  height: var(--xs-fs-hero);
   color: var(--xs-primary);
 }
 
@@ -397,14 +400,15 @@
   gap: 16px;
   padding: 28px 0 16px;
 }
+/* 与首页问候语、制表入口同一套排版（基准见 src/features/home/home.css 的 .home-page__hero h1）：
+   同字族、同字号、同字重、同字距、同行高、同墨色。三个入口 hero 必须是同一件东西。 */
 .official-document-compose__content h2 {
   margin: 0;
-  color: #111;
-  font-family: "Songti SC", STSong, "Noto Serif CJK SC", serif;
-  font-size: clamp(34px, 3.2vw, 44px);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-hero);
+  font-weight: var(--xs-fw-medium);
+  letter-spacing: 0;
+  line-height: 1.3;
 }
 
 .official-document-compose__content[data-conversation] .official-document-compose__reference {
@@ -918,17 +922,10 @@
     padding: 42px 0 80px;
   }
 
-  .official-document-compose__content h2 {
-    font-size: 26px;
-  }
-
+  /* 窄屏不再单独降字号：--xs-fs-hero 是全站唯一的 hero 档，首页在窄屏也不缩，
+     公文跟着不缩，两页切换标题才不会跳。图标同理跟着字号走，不再写死 34px。 */
   .official-document-compose__content > header {
     gap: 8px;
-  }
-
-  .official-document-compose__content > header svg {
-    width: 34px;
-    height: 34px;
   }
 
   .official-document-compose__box {

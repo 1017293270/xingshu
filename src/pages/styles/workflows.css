@@ -771,19 +771,25 @@ button.sheet-row__main {
   text-align: center;
 }
 
+/* 星标与标题同尺寸（28px = --xs-fs-hero）：CJK 字面接近满 em，1:1 的图标读起来像一枚行内字符，
+   而不是压在标题旁边的徽标。TSX 里写死的 size={40} 由这条覆盖，不改组件。 */
 .table-hero__head svg {
   flex: none;
+  width: var(--xs-fs-hero);
+  height: var(--xs-fs-hero);
   color: var(--xs-primary);
 }
 
+/* 与首页问候语同一套排版（见 src/features/home/home.css 的 .home-page__hero h1）：
+   同字族（继承 --xs-font-family）、同字号、同字重、同字距、同行高、同墨色。
+   三个入口 hero 是一份约定，不是三处各自的品味。 */
 .table-hero .table-hero__head h1 {
   margin: 0;
-  color: #111;
-  font-family: "Songti SC", STSong, "Noto Serif CJK SC", serif;
-  font-size: clamp(30px, 2.8vw, 40px);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-hero);
+  font-weight: var(--xs-fw-medium);
+  letter-spacing: 0;
+  line-height: 1.3;
 }
 
 /* footnote 是绝对定位的，压在盒子下方；这里留出它的高度，别让它贴到快捷示例上 */
@@ -861,8 +867,11 @@ button.sheet-row__main {
     flex-direction: column;
   }
 
-  /* hero 原来顶部留 7vh 的死白，现在整段交给上面那条负截距斜率；
-     字号与图标改跟视口高度走，矮屏自动收一档，但始终落在 69.6px 的抬头框里。 */
+  /* hero 原来顶部留 7vh 的死白，现在整段交给上面那条负截距斜率。
+     字号不再跟视口高度走：标题定在 --xs-fs-hero（28px），与首页问候语同值。
+     抬头本来就靠 69.6px 的 min-height 定高（28×1.3 = 36.4px 远够不着它），
+     所以字号常量化不动输入盒的顶边——vh 缩放只是当年为了塞进矮屏的补丁，
+     现在字更小，补丁没有存在的理由了。 */
   .table-page .table-hero {
     flex: 0 0 auto;
     gap: var(--table-hero-gap);
@@ -871,15 +880,6 @@ button.sheet-row__main {
 
   .table-page .table-hero__head {
     min-height: var(--table-hero-head);
-  }
-
-  .table-page .table-hero .table-hero__head svg {
-    width: clamp(26px, 3.6vh, 40px);
-    height: clamp(26px, 3.6vh, 40px);
-  }
-
-  .table-page .table-hero .table-hero__head h1 {
-    font-size: clamp(24px, 3.6vh, 40px);
   }
 
   /* 状态条只是偶尔出现的一行反馈，槽位按它的实际高度（34px）预留，不再占 44px */

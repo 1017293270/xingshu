@@ -2801,7 +2801,7 @@
 
 .content-profile-generation-progress li strong {
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-semibold);
+  font-weight: var(--xs-fw-medium);
 }
 
 .content-profile-generation-progress li small {
