@@ -84,7 +84,10 @@ const chat = vi.hoisted(() => {
   };
 });
 
-const send = vi.fn((message: string, options?: { displayQuestion?: string }) => {
+const send = vi.fn((
+  message: string,
+  options?: { displayQuestion?: string; writingContext?: Record<string, unknown>; purpose?: string }
+) => {
   const id = `turn-${chat.state.turns.length + 1}`;
   chat.state.turns = [...chat.state.turns, {
     id,
