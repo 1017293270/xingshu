@@ -215,6 +215,33 @@ describe("HomePage", () => {
     );
   });
 
+  /* 闲置态"一屏放下"是验收线：jsdom 量不了布局，这里锁住撑起这条线的几个机制。
+     720 高的笔记本上，缺任何一项最后一行卡片都会掉到折叠线以下。 */
+  it("keeps the idle home page inside one screen on short laptops", () => {
+    const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
+
+    /* 外壳的 16/56 上下留白按路由换成随视口收敛的刻度，且只命中首页 */
+    expect(homeCss).toMatch(
+      /\.xs-shell__main:has\(\.home-page\) \{\n\s+padding-top: clamp\([^)]*\);\n\s+padding-bottom: clamp\([^;]*vh[^;]*;/
+    );
+    /* 留白与卡片走同一套带负截距的斜率，纯 vh 在矮屏上压不动 */
+    expect(homeCss).toMatch(/--home-hero-top: clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\);/);
+    expect(homeCss).toMatch(/--home-card-height: clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\);/);
+    expect(homeCss).toMatch(/\.home-page__hero \{\n\s+margin: var\(--home-hero-top\) auto var\(--home-hero-gap\);/);
+    expect(homeCss).toContain("min-height: var(--home-card-height);");
+    /* 卡片自然高度由内边距 + 图标 + 描述位撑起，只调 min-height 压不到 150px 档 */
+    expect(homeCss).toContain("--xs-icon-tile-size: var(--home-card-tile);");
+    expect(homeCss).toContain("min-height: var(--home-card-desc);");
+    /* 输入框是一级焦点，任何视口都不参与压缩 */
+    expect(homeCss).toMatch(
+      /@media \(min-width: 901px\)[\s\S]*?\.home-page \.xs-command-box__input \{\n\s+height: 72px;/
+    );
+    /* 一屏锁只加在桌面档，移动端仍是可滚动的长页 */
+    expect(homeCss).not.toMatch(
+      /@media \(max-width: 900px\)[\s\S]*?\.xs-shell__main:has\(\.home-page\)/
+    );
+  });
+
   it("opens the ask workspace from the full card and selects its model", async () => {
     const user = userEvent.setup();
     renderHomePage();

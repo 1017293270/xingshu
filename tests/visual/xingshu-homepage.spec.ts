@@ -1247,8 +1247,8 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.appsTop).toBeLessThanOrEqual(560);
   expect(metrics!.cardHeight).toBeGreaterThanOrEqual(196);
   expect(metrics!.cardHeight).toBeLessThanOrEqual(240);
-  expect(metrics!.cardWidth).toBeGreaterThanOrEqual(130);
-  expect(metrics!.cardWidth).toBeLessThanOrEqual(180);
+  expect(metrics!.cardWidth).toBeGreaterThanOrEqual(220);
+  expect(metrics!.cardWidth).toBeLessThanOrEqual(250);
   expect(["-webkit-box", "flow-root"]).toContain(metrics!.descriptionDisplay);
   expect(metrics!.inputFocusShadow).toBe("none");
   expect(metrics!.toolbarBorderTopWidth).toBe(0);

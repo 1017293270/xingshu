@@ -253,6 +253,8 @@
 
 /* 760px 轨道下 7 列会把卡片挤成 86px，改成 3 列（约 240px/张）；
    6 张推荐应用正好排满两行，不留孤行。 */
+/* gap 是唯一一个不跟着视口高度收缩的间距：它同时三等分 760px 轨道决定卡片宽度，
+   动它就会把纵向节奏的改动漏到横向去。矮屏要省的高度全从卡片自己的壳子里出。 */
 .home-page__app-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -370,11 +372,38 @@
   outline: none;
 }
 
-/* ---------- 桌面分段响应式：垂直节奏随视口高度舒展 ---------- */
+/* ---------- 桌面分段响应式：闲置态锁一屏，垂直节奏随视口高度收敛 ---------- */
 
+/* 首页闲置态要在 720 高的笔记本上一屏放下问候语 + 输入框 + 6 张卡，
+   所以整页只留一套刻度：留白、卡片、卡内图标全部从下面这几个变量派生，
+   调一档就整体等比缩放，不会出现"改了间距忘了卡片"的错位。
+
+   斜率写成 clamp(min, calc(N vh - M px), max) 而不是纯 vh：纯 vh 在矮屏上压不动
+   （旧的 12vh 到 720 高还剩 86px 的顶部留白），在 1440 高的外接屏又会散架成一版空白。
+   带负截距的斜率能在 720~1080 之间画出一条真正收敛的线，两端再由 min/max 兜住。 */
 @media (min-width: 901px) {
   .home-page {
+    --home-hero-top: clamp(40px, calc(40vh - 244px), 124px);
+    --home-hero-gap: clamp(22px, calc(6vh - 20px), 46px);
+    --home-apps-gap: clamp(20px, calc(6vh - 22px), 44px);
+    --home-apps-title-gap: clamp(10px, 1.6vh, 18px);
+    --home-card-height: clamp(144px, calc(27.8vh - 50px), 236px);
+    --home-card-pad-top: clamp(14px, 2.2vh, 20px);
+    --home-card-pad-bottom: clamp(12px, 2vh, 18px);
+    --home-card-stack-gap: clamp(8px, 1.4vh, 14px);
+    --home-card-tile: clamp(44px, 6vh, 52px);
+    --home-card-glyph: clamp(34px, 4.9vh, 42px);
+    --home-card-desc: clamp(36px, 5vh, 40px);
+
     min-height: 0;
+  }
+
+  /* 外壳主区自带 16px / 56px 的上下留白，短屏上这 72px 差不多正好是"最后一行卡片
+     露不出来"的那 72px。这里按路由把它换成同一套刻度，选择器只命中首页，
+     其他页面的外壳节奏不动（与 .xs-shell__main:has(.table-session-page) 同一手法）。 */
+  .xs-shell__main:has(.home-page) {
+    padding-top: clamp(12px, 1.6vh, 16px);
+    padding-bottom: clamp(20px, 3vh, 44px);
   }
 
   .home-page__bg {
@@ -383,9 +412,11 @@
   }
 
   .home-page__hero {
-    margin: clamp(72px, 12vh, 124px) auto clamp(30px, 4.2vh, 46px);
+    margin: var(--home-hero-top) auto var(--home-hero-gap);
   }
 
+  /* 输入框是全页唯一一级焦点，任何视口都不参与压缩：矮屏省下来的高度
+     全部从留白和卡片壳子里出，主控件保持 72px + 52px 的原尺寸。 */
   .home-page .xs-command-box__input {
     height: 72px;
   }
@@ -394,16 +425,42 @@
     min-height: 52px;
   }
 
-  .home-page__apps {
-    margin-top: clamp(28px, 4.2vh, 44px);
+  .home-page__apps,
+  .home-page__questions {
+    margin-top: var(--home-apps-gap);
   }
 
-  .home-page__apps h2 {
-    margin-bottom: clamp(14px, 1.8vh, 18px);
+  .home-page__apps h2,
+  .home-page__questions h2 {
+    margin-bottom: var(--home-apps-title-gap);
   }
 
+  /* 卡片自然高度（图标 + 标题 + 两行描述 + 内边距）在原尺寸下就有 168px，
+     只调 min-height 压不到 150px 档，所以壳子里的内边距、图标、行距一起跟着刻度走。 */
   .home-page .xs-app-card {
-    min-height: clamp(196px, 24vh, 236px);
+    min-height: var(--home-card-height);
+    padding: var(--home-card-pad-top) 16px var(--home-card-pad-bottom);
+  }
+
+  /* 卡片高度现在跟着视口伸缩，内容再顶格排就会在高屏上留出一块死白；
+     居中后多出来的高度上下对半分，六张卡的图标依然在同一条基线上
+     （描述区有固定的两行位，行数差不会把图标推歪）。 */
+  .home-page .xs-app-card__main {
+    gap: var(--home-card-stack-gap);
+    justify-content: center;
+  }
+
+  .home-page .xs-app-card .xs-icon-tile {
+    --xs-icon-tile-size: var(--home-card-tile);
+  }
+
+  .home-page .xs-app-card .xs-icon-tile__image {
+    --xs-icon-glyph-size: var(--home-card-glyph);
+  }
+
+  /* 描述给两行留位，矮屏收到 36px（12px × 1.5 × 2 行）仍是整两行，不截字。 */
+  .home-page .xs-app-card__desc {
+    min-height: var(--home-card-desc);
   }
 }
 
