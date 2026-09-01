@@ -14,7 +14,7 @@ import {
   WarningCircle,
   X
 } from "@phosphor-icons/react";
-import { Button, Dropdown, Mentions, Popover } from "antd";
+import { Button, Dropdown, Mentions } from "antd";
 import type { MentionsOptionProps } from "antd/es/mentions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -887,10 +887,7 @@ export function OfficialDocumentComposeView() {
           {!conversationVisible ? (
             <header>
               <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
-              <h2>公文模板化复刻</h2>
-              <p className="official-document-compose__hero-sub">
-                选一篇参考草稿，按它的结构与文风生成新公文；生成前先确认大纲、自动补齐数据资料。
-              </p>
+              <h2>公文写作</h2>
             </header>
           ) : null}
 
@@ -1024,44 +1021,7 @@ export function OfficialDocumentComposeView() {
                     }}
                   ><X size={14} aria-hidden="true" /></button>
                 </div>
-              ) : (
-                <Popover
-                  trigger="click"
-                  placement="topLeft"
-                  overlayClassName="official-document-compose-picker"
-                  content={(
-                    <div className="official-document-compose__picker" aria-label="选择参考草稿">
-                      <header><strong>选择参考草稿</strong><small>按更新时间排序</small></header>
-                      <ul>
-                        {drafts.slice(0, 8).map((draft) => (
-                          <li key={draft.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedDraftId(draft.id);
-                                setComposerError("");
-                              }}
-                            >
-                              <FileText size={16} aria-hidden="true" />
-                              <span><strong>{draft.title}</strong><small>{draft.templateName} · {formatDate(draft.updatedAt)}</small></span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="official-document-compose__mode-chip"
-                    aria-label="公文写作：选择参考草稿"
-                    disabled={composerBusy}
-                  >
-                    <FileText size={15} aria-hidden="true" />
-                    公文写作 · 选参考草稿
-                  </button>
-                </Popover>
-              )}
+              ) : null}
               toolbarLead={<><b>@</b> {conversationVisible ? "更换参考草稿" : "选择参考草稿"}</>}
               toolbarTail={writingBusy ? (
                 <Button
@@ -1122,44 +1082,6 @@ export function OfficialDocumentComposeView() {
           )}
 
           {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
-
-          {!conversationVisible && drafts.length ? (
-            <section className="official-document-compose__drafts" aria-label="我的文稿">
-              <header>
-                <h3>我的文稿</h3>
-                <Button type="link" size="small" onClick={() => navigate("/writing/drafts")}>
-                  查看全部
-                </Button>
-              </header>
-              <div className="official-document-compose__drafts-grid">
-                {drafts.slice(0, 8).map((draft) => (
-                  <article key={draft.id}>
-                    <button
-                      type="button"
-                      className="official-document-compose__draft-card"
-                      aria-label={`打开文稿：${draft.title}`}
-                      onClick={() => navigate(`/writing/drafts/${draft.id}`)}
-                    >
-                      <FileText size={18} aria-hidden="true" />
-                      <strong>{draft.title}</strong>
-                      <small>{draft.templateName} · {formatDate(draft.updatedAt)}</small>
-                    </button>
-                    <Button
-                      size="small"
-                      type="text"
-                      aria-label={`以「${draft.title}」为参考写新公文`}
-                      onClick={() => {
-                        setSelectedDraftId(draft.id);
-                        setComposerError("");
-                      }}
-                    >
-                      设为参考
-                    </Button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </div>
       </XsAsyncPanel>
 

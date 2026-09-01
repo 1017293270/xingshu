@@ -274,7 +274,7 @@ async function submitRequirement(user: ReturnType<typeof userEvent.setup>, requi
 async function pickReference(user: ReturnType<typeof userEvent.setup>) {
   const input = await screen.findByRole("textbox", { name: "公文写作要求" });
   await user.type(input, "@");
-  // 首页文稿宫格里也有同名草稿卡，必须在 Mentions 浮层容器内点选
+  // 选参考草稿只剩 Mentions 一条路径，必须在它自己的浮层容器内点选
   const dropdown = await waitFor(() => {
     const element = document.querySelector(".official-document-compose-mentions");
     if (!element) throw new Error("mentions dropdown not open");
@@ -335,6 +335,18 @@ describe("OfficialDocumentComposeView", () => {
       value: vi.fn(() => "blob:official-document")
     });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  });
+
+  it("keeps the entry page down to a centered title and the composer", async () => {
+    renderView();
+
+    expect(await screen.findByRole("heading", { name: "公文写作" })).toBeInTheDocument();
+    // 模式 chip、模板浮层入口与文稿宫格都已下线，选参考草稿只走 @ Mentions
+    expect(screen.queryByRole("button", { name: "公文写作：选择参考草稿" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("我的文稿")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /设为参考/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "公文写作要求" })).toBeInTheDocument();
+    expect(screen.getByText("生成结果先保留在当前会话，确认后再保存到草稿箱。")).toBeInTheDocument();
   });
 
   it("keeps the generated document temporary until the user saves it to the draft box", async () => {
@@ -446,7 +458,7 @@ describe("OfficialDocumentComposeView", () => {
     const conversation = await screen.findByRole("region", { name: "公文生成对话" });
     expect(conversation).toHaveTextContent("撰写2026年安全检查通知");
     expect(conversation).toHaveTextContent("正在读取“季度通知草稿”的结构与文风");
-    expect(screen.queryByRole("heading", { name: "公文模板化复刻" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "公文写作" })).not.toBeInTheDocument();
   });
 
   it("keeps earlier turns when the user follows up, and versions the new draft", async () => {
