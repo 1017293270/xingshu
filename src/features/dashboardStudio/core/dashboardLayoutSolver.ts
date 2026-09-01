@@ -15,7 +15,7 @@ type LayoutSpacing = {
 };
 
 /** 间距随画布宽度缩放：宽屏需要更大的呼吸感，所有取值保持 8px 网格对齐。 */
-function canvasSpacing(width: number): LayoutSpacing {
+export function dashboardLayoutSpacing(width: number): LayoutSpacing {
   return width >= 1680
     ? { padding: 32, gap: 24, sectionGap: 40 }
     : { padding: 24, gap: 16, sectionGap: 32 };
@@ -69,8 +69,11 @@ function emphasisColumns(emphasis: LayoutIntent["emphasis"]) {
   return GRID_COLUMNS;
 }
 
-/** 语义分区的纵向顺序：总览在上、明细在下，未识别的分区按主体处理。 */
-const SECTION_ORDER: Record<string, number> = { summary: 0, main: 1, detail: 2 };
+/**
+ * 语义分区的纵向顺序：标题条最上、总览次之、明细在下、脚注收尾，未识别的分区按主体处理。
+ * banner / footnote 让整行文本条独占一个横向带，不会被后面的图表挤到同一行。
+ */
+const SECTION_ORDER: Record<string, number> = { banner: -1, summary: 0, main: 1, detail: 2, footnote: 3 };
 
 function sectionOrder(section: string | undefined) {
   return SECTION_ORDER[section ?? "main"] ?? SECTION_ORDER.main;
@@ -81,6 +84,16 @@ function maxColumns(widget: DashboardWidget) {
   return widget.type === "metric" ? METRIC_MAX_COLUMNS : GRID_COLUMNS;
 }
 
+/**
+ * 最窄跨度：图表/表格窄于 1/3 行宽就读不清，因此 compact 对它们等于 4 列（一行最多三张）；
+ * KPI、文本、图片、装饰仍可收到 3 列，保证 KPI 一行能站四张。
+ */
+const NARROW_ALLOWED_TYPES = new Set<DashboardWidget["type"]>(["metric", "text", "image", "decoration"]);
+
+function minColumns(widget: DashboardWidget) {
+  return NARROW_ALLOWED_TYPES.has(widget.type) ? 3 : 4;
+}
+
 function snapToGrid(value: number) {
   return Math.round(value / SNAP) * SNAP;
 }
@@ -88,9 +101,17 @@ function snapToGrid(value: number) {
 /** 非 KPI 组件的高度意图档位（px），让 AI 可以表达“细条 / 标准 / 加高”。 */
 const HEIGHT_TIERS = { slim: 216, short: 280, tall: 416 } as const;
 
+/** 文本条按自身高度收敛：标题/说明套用图表档位会被撑成 216px 的空白块。 */
+function textHeight(widget: DashboardWidget) {
+  return snapToGrid(Math.max(88, Math.min(240, widget.position.h)));
+}
+
 function desiredHeight(widget: DashboardWidget, intent: LayoutIntent) {
   if (widget.type === "metric") {
     return snapToGrid(Math.max(132, Math.min(220, widget.position.h)));
+  }
+  if (widget.type === "text") {
+    return textHeight(widget);
   }
   if (intent.emphasis === "hero") {
     return snapToGrid(Math.max(intent.heightTier === "tall" ? 440 : 360, widget.position.h));
@@ -103,6 +124,7 @@ function desiredHeight(widget: DashboardWidget, intent: LayoutIntent) {
 function maxUnifiedHeight(widget: DashboardWidget, intent: LayoutIntent) {
   if (intent.emphasis === "hero") return Number.POSITIVE_INFINITY;
   if (widget.type === "metric") return 220;
+  if (widget.type === "text") return textHeight(widget);
   if (intent.heightTier) return HEIGHT_TIERS[intent.heightTier];
   return 420;
 }
@@ -118,10 +140,10 @@ type LayoutGrid = {
 function createLayoutGrid(contentWidth: number, spacing: LayoutSpacing): LayoutGrid {
   const base = Math.max(SNAP, Math.floor((contentWidth - spacing.gap * (GRID_COLUMNS - 1)) / GRID_COLUMNS / SNAP) * SNAP);
   const columnWidths = Array.from({ length: GRID_COLUMNS }, () => base);
-  let remainder = contentWidth - spacing.gap * (GRID_COLUMNS - 1) - base * GRID_COLUMNS;
-  for (let column = 0; remainder >= SNAP; column = (column + 1) % GRID_COLUMNS) {
-    columnWidths[column]! += SNAP;
-    remainder -= SNAP;
+  // 余量沿整行均匀撒开（而不是全堆在最左几列），同一行的卡片宽度差最多一个 8px 格。
+  const extraUnits = Math.max(0, Math.floor((contentWidth - spacing.gap * (GRID_COLUMNS - 1) - base * GRID_COLUMNS) / SNAP));
+  for (let unit = 0; unit < extraUnits; unit += 1) {
+    columnWidths[Math.floor((unit * GRID_COLUMNS) / extraUnits)]! += SNAP;
   }
   const offsets: number[] = [];
   columnWidths.reduce((offset, width, column) => {
@@ -142,13 +164,13 @@ function createLayoutGrid(contentWidth: number, spacing: LayoutSpacing): LayoutG
 /**
  * AI 只决定顺序、分区、强调级别和高度意图；该求解器才决定像素位置，并强制锁定、边界和无重叠。
  * 组件按 12 列网格落位：同列左对齐、坐标 8px 对齐；语义分区纵向成带、带间留白大于行距；
- * 同一行内的组件高度统一、底缘对齐，不足一行的窄卡优先拉伸，KPI 卡最多占 1/3 行宽；
+ * 同一行内的组件高度统一、底缘对齐，不足一行的窄卡优先拉伸，KPI 卡最多占 1/3 行宽、图表最窄 1/3 行宽；
  * 同 moduleId 的组件聚类相邻；hero 独占一个横向带，可携带最多两个侧轨组件垂直堆叠、底缘对齐。
  */
 export function solveDashboardLayout(schema: DashboardSchema, intents: LayoutIntent[]): DashboardSchema {
   const next = structuredClone(schema);
   const intentById = new Map(intents.map((intent) => [intent.widgetId, intent]));
-  const spacing = canvasSpacing(next.canvas.width);
+  const spacing = dashboardLayoutSpacing(next.canvas.width);
   const locked = next.widgets.filter((widget) => widget.style.locked).map((widget) => widget.position);
   const movable = next.widgets.filter((widget) => !widget.style.locked);
   const rankOf = (widget: DashboardWidget) => intentById.get(widget.id)?.rank ?? 9999;
@@ -282,7 +304,10 @@ export function solveDashboardLayout(schema: DashboardSchema, intents: LayoutInt
       continue;
     }
 
-    const span = Math.min(emphasisColumns(intent.emphasis), maxColumns(widget));
+    const span = Math.max(
+      Math.min(minColumns(widget), maxColumns(widget)),
+      Math.min(emphasisColumns(intent.emphasis), maxColumns(widget))
+    );
     const height = desiredHeight(widget, intent);
     if (cursorColumn + span > GRID_COLUMNS) {
       advanceRow(spacing.gap);
