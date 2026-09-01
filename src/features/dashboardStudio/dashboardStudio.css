@@ -221,9 +221,16 @@
   min-width: 0;
 }
 
+/* 内联态高度完全由画布比例决定（见 DashboardRuntimeApp 的 aspect-ratio）。
+   680px 的老下限会在画布下面留一截死白，所以占位高度只给骨架和报错两态。 */
 .dashboard-runtime-island {
   position: relative;
-  min-height: 680px;
+  min-height: 0;
+}
+
+.dashboard-runtime-island:not(.is-fullscreen)[data-state="loading"],
+.dashboard-runtime-island:not(.is-fullscreen)[data-state="error"] {
+  min-height: 280px;
 }
 
 .dashboard-runtime-island.is-fullscreen {
@@ -296,36 +303,46 @@
   justify-items: center;
   gap: 14px;
   padding: 24px;
-  background: #07111f;
   color: var(--xs-text-2);
-  background: rgba(242, 247, 253, .96);
+  background: var(--xs-surface);
   text-align: center;
 }
 
 .dashboard-runtime-island__state strong,
 .dashboard-runtime-island__state p { margin: 0; }
 
-.dashboard-runtime-island__state strong { color: var(--xs-text); font-size: var(--xs-fs-title); }
-.dashboard-runtime-island__state p { max-width: 520px; color: var(--xs-text-3); font-size: var(--xs-fs-control); }
+.dashboard-runtime-island__state strong { color: var(--xs-text); font-size: var(--xs-fs-card); font-weight: var(--xs-fw-medium); }
+.dashboard-runtime-island__state p { max-width: 520px; color: var(--xs-text-3); font-size: var(--xs-fs-label); }
 
+.dashboard-runtime-island__state--error { color: var(--xs-danger-ink); }
+
+/* 浅底上的重试按钮：原来是给深色底写的浅蓝字，落到浅底上几乎看不见 */
 .dashboard-runtime-island__state button {
   min-height: 38px;
   padding: 0 16px;
-  border: 1px solid rgba(56, 189, 248, .48);
-  border-radius: 6px;
-  background: rgba(14, 165, 233, .16);
-  color: #e0f2fe;
+  border: 1px solid var(--xs-border-strong);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface);
+  color: var(--xs-interactive-text);
   cursor: pointer;
   font: inherit;
-  font-weight: var(--xs-fw-display);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.dashboard-runtime-island__state button:hover {
+  border-color: var(--xs-primary);
+  background: var(--xs-info-soft);
 }
 
 .dashboard-runtime-island__skeleton {
   width: 320px;
   max-width: calc(100vw - 48px);
-  height: 16px;
-  border-radius: 6px;
-  background: rgba(148, 163, 184, .22);
+  height: 14px;
+  border-radius: var(--xs-radius-small);
+  background: linear-gradient(90deg, var(--xs-bg-2), var(--xs-surface-soft), var(--xs-bg-2));
+  background-size: 220% 100%;
+  animation: dashboard-workspace-shimmer var(--xs-motion-skeleton) linear infinite;
 }
 
 .dashboard-runtime-island__skeleton--wide { width: 460px; }
@@ -445,7 +462,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-editor-layout-skeleton > i,
-  .dashboard-runtime-layout-skeleton > i {
+  .dashboard-runtime-layout-skeleton > i,
+  .dashboard-runtime-island__skeleton {
     animation: none;
   }
 }

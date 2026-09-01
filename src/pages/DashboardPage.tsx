@@ -101,12 +101,13 @@ export function DashboardPage() {
   }
 
   const hasWorkbench = records.length > 0 && !dashboardsQuery.isLoading && !dashboardsQuery.isError;
+  /* 已发布的看板展示的是 publishedSchema，来源要跟着运行态那份读，别拿草稿的 */
+  const runtimeSource = (current?.publishedSchema ?? current?.schema)?.source;
 
   return (
     <PageFrame
       className="dashboard-list dashboard-current"
       title="我的看板"
-      subtitle="当前看板直接在这里内联展示，切换、编辑与归档都收在这条工具条上。"
       actions={(
         <div className="dashboard-current__toolbar">
           {hasWorkbench && current ? (
@@ -180,11 +181,15 @@ export function DashboardPage() {
         />
       ) : (
         <>
+          {/* 页面唯一一条 meta：状态、来源、更新时间、分享链都收在这里，运行态内部不再重复 */}
           <p className="dashboard-current__meta xs-page-enter" style={xsEnterStep(1)}>
             <span className={`dashboard-current__status is-${current.status}`}>
               {current.status === "published" ? "已发布" : "草稿"}
             </span>
-            更新于 {formatDateTime(current.updatedAt)}
+            <span className="dashboard-current__fact">
+              {runtimeSource?.kind === "ask-data" ? "智能问数" : "手动配置"}
+            </span>
+            <span className="dashboard-current__fact">更新于 {formatDateTime(current.updatedAt)}</span>
             {shareLink ? (
               <a className="dashboard-current__share" href={shareLink} title={shareLink}>{shareLink}</a>
             ) : null}

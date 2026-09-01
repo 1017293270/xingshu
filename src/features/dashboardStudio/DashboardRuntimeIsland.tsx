@@ -60,6 +60,8 @@ export function DashboardRuntimeIsland({
   return (
     <div
       className={`dashboard-runtime-island${fullscreen ? " is-fullscreen" : ""}`}
+      /* ready 之后高度完全交给画布比例，占位下限只在骨架/报错这两态生效 */
+      data-state={error ? "error" : loading ? "loading" : "ready"}
       aria-label="问数生成大屏"
     >
       <div ref={mountRef} className="dashboard-runtime-island__mount" />

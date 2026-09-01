@@ -617,33 +617,58 @@
   border-radius: var(--xs-radius-control);
 }
 
+/* ---------- 当前看板：一条 meta 行 + 一块舞台 ----------
+   页面只有三层：页头（标题 + 工具条）、meta 行（状态 / 来源 / 更新时间 / 分享链）、
+   舞台（画布本体）。看板名只出现在工具条的切换器里，运行态内部不再重复画一遍 header。 */
+
+.dashboard-current {
+  gap: 14px;
+}
+
 .dashboard-current__meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  margin: 0 0 14px;
+  gap: 4px 10px;
+  margin: 0;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-regular);
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-current__status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--xs-text-3) 12%, #ffffff);
-  color: var(--xs-text-3);
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface);
+  color: var(--xs-text-2);
   font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-medium);
 }
 
-.dashboard-current__status.is-published {
-  background: var(--xs-primary);
-  color: var(--xs-surface);
+/* 状态只靠一颗点区分，不再整块刷成品牌蓝——一行 meta 里不该有第二个视觉重心 */
+.dashboard-current__status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--xs-text-3);
+  content: "";
+}
+
+.dashboard-current__status.is-published::before {
+  background: var(--xs-success);
+}
+
+.dashboard-current__fact + .dashboard-current__fact::before,
+.dashboard-current__fact + .dashboard-current__share::before {
+  margin-right: 10px;
+  color: var(--xs-border-strong);
+  content: "·";
 }
 
 .dashboard-current__share {
@@ -655,26 +680,21 @@
   white-space: nowrap;
 }
 
+/* 舞台是页面里唯一一层容器：1px 描边 + 圆角裁切，画布贴着描边吃满宽度 */
 .dashboard-current__stage {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
   background: var(--xs-surface);
-  box-shadow: var(--xs-shadow-soft);
-}
-
-/* 内联模式不占满视口：全屏挂载的 680px 下限在页面内会把页脚顶出去 */
-.dashboard-current__stage .dashboard-runtime-island {
-  min-height: clamp(380px, 62vh, 680px);
 }
 
 .dashboard-current__stage--loading {
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 14px;
-  min-height: clamp(380px, 62vh, 680px);
+  gap: 12px;
+  min-height: clamp(320px, 46vh, 560px);
   padding: 24px;
 }
 

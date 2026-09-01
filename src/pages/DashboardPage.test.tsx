@@ -118,6 +118,20 @@ describe("DashboardPage", () => {
     expect(screen.getByText("已发布")).toBeInTheDocument();
   });
 
+  /* 页面只留一条 meta 行：状态 / 来源 / 更新时间都在这里，运行态里不再有第二份 */
+  it("collapses status, source and update time into a single meta row", async () => {
+    createStoredDashboard("经营驾驶舱", "cockpit", { published: true, updatedAt: "2026-07-15T08:00:00.000Z" });
+    localStorage.setItem(CURRENT_DASHBOARD_STORAGE_KEY, "dashboard-cockpit");
+
+    renderPage();
+    await screen.findByRole("region", { name: "当前看板：经营驾驶舱" });
+
+    // 空白看板走的是手动配置分支，问数生成的才是"智能问数"
+    expect(screen.getAllByText("已发布")).toHaveLength(1);
+    expect(screen.getByText("手动配置")).toBeInTheDocument();
+    expect(screen.getAllByText(/^更新于 /)).toHaveLength(1);
+  });
+
   it("falls back to the most recently updated dashboard when the stored id is stale", async () => {
     createStoredDashboard("旧的经营驾驶舱", "cockpit", { updatedAt: "2026-07-15T08:00:00.000Z" });
     createStoredDashboard("最近更新的库存看板", "stock", { updatedAt: "2026-07-18T08:00:00.000Z" });

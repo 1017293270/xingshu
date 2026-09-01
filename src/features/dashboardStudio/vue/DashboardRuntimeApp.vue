@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { PhCheckCircle, PhClock, PhDatabase, PhSparkle } from "@phosphor-icons/vue";
 import type { DashboardRecord, DashboardWidget } from "@/types/dashboardStudio";
 import { calculateDashboardRuntimeScale } from "../core/dashboardRuntimeScale";
 import { resolveCanvasBackgroundStyle } from "../core/dashboardCanvasBackground";
@@ -16,7 +15,6 @@ const runtimeSchema = computed(() =>
     ? props.record.publishedSchema
     : null
 );
-const isPublished = computed(() => props.record.status === "published" && Boolean(props.record.publishedSchema));
 const visibleWidgets = computed(() => runtimeSchema.value
   ? [...runtimeSchema.value.widgets]
       .filter((item) => item.style.visible !== false)
@@ -35,7 +33,12 @@ const useFullscreenDefaultBackground = computed(() =>
   Boolean(props.fullscreen && runtimeSchema.value && !runtimeSchema.value.canvas.backgroundImage)
 );
 const canvasViewportStyle = computed(() => {
-  if (!props.fullscreen || !runtimeSchema.value) return {};
+  if (!runtimeSchema.value) return {};
+  // 内联舞台按画布比例撑高：fit-screen 的宽高两条约束同时命中，画布正好贴满，
+  // 不再需要一个比画布大的固定高度盒子去居中——那正是旧版黑色 letterbox 的来源。
+  if (!props.fullscreen) {
+    return { aspectRatio: `${runtimeSchema.value.canvas.width} / ${runtimeSchema.value.canvas.height}` };
+  }
   return useFullscreenDefaultBackground.value
     ? canvasBackgroundStyle.value
     : { backgroundColor: runtimeSchema.value.canvas.background };
@@ -58,7 +61,8 @@ function updateCanvasScale() {
   const activeSchema = runtimeSchema.value;
   if (!viewport || !activeSchema) return;
 
-  const inset = props.fullscreen ? 0 : 28;
+  // 内联态也不再留 inset：留白由外层舞台负责，画布自己吃满视口
+  const inset = 0;
   canvasScale.value = calculateDashboardRuntimeScale(
     activeSchema.canvas.scaleMode ?? "fit-screen",
     activeSchema.canvas.width,
@@ -87,35 +91,14 @@ function bindingForWidget(widget: DashboardWidget) {
 
 <template>
   <main class="xs-dashboard-runtime" :class="{ 'is-fullscreen': fullscreen }" aria-label="大屏运行态">
+    <!-- 没有运行态有两种原因：草稿还没发布过（最常见，内联页天天遇到），或者真的取不到 -->
     <section v-if="!runtimeSchema" class="runtime-unavailable" role="alert">
-      <h1>运行态暂不可用</h1>
-      <p>未找到运行态大屏</p>
+      <h1>{{ record.status === 'published' ? '运行态暂不可用' : '这块看板还没有发布' }}</h1>
+      <p>{{ record.status === 'published' ? '未找到运行态大屏' : '发布后即可在这里看到运行态画布。' }}</p>
     </section>
-    <template v-else>
-    <header v-if="!fullscreen" class="runtime-header">
-      <div class="runtime-header__title">
-        <span class="runtime-header__mark" aria-hidden="true"><PhSparkle :size="20" weight="duotone" /></span>
-        <div>
-          <span class="runtime-header__eyebrow">星数 · 可信数据智能</span>
-          <h2>{{ runtimeSchema.title }}</h2>
-          <p>{{ runtimeSchema.description }}</p>
-        </div>
-      </div>
-      <div class="runtime-header__meta">
-        <span :class="{ 'is-draft': !isPublished }">
-          <PhCheckCircle v-if="isPublished" :size="16" aria-hidden="true" />
-          <PhClock v-else :size="16" aria-hidden="true" />
-          {{ isPublished ? '已发布' : '草稿预览' }}
-        </span>
-        <span>
-          <PhDatabase :size="16" aria-hidden="true" />
-          {{ runtimeSchema.source.kind === 'ask-data' ? '智能问数' : '手动配置' }}
-        </span>
-        <time :datetime="record.updatedAt">更新于 {{ new Date(record.updatedAt).toLocaleString('zh-CN', { hour12: false }) }}</time>
-      </div>
-    </header>
-
-    <div ref="canvasViewport" class="runtime-canvas-viewport" :style="canvasViewportStyle">
+    <!-- 内联态没有自己的 header：状态 / 来源 / 更新时间由宿主页面的一条 meta 行统一承担，
+         这里再画一遍就是同一份信息出现两次。全屏态本来也不渲染 header。 -->
+    <div v-else ref="canvasViewport" class="runtime-canvas-viewport" :style="canvasViewportStyle">
       <div class="runtime-canvas-stage" :style="canvasStageStyle">
         <div class="runtime-canvas" :style="canvasStyle">
           <DashboardWidgetCard
@@ -134,7 +117,6 @@ function bindingForWidget(widget: DashboardWidget) {
         </div>
       </div>
     </div>
-    </template>
   </main>
 </template>
 
@@ -145,13 +127,15 @@ function bindingForWidget(widget: DashboardWidget) {
   --runtime-text-2: var(--xs-text-2, #294469);
   --runtime-text-3: var(--xs-text-3, #5f7391);
   display: grid;
-  gap: 14px;
+  gap: 0;
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--runtime-border);
-  border-radius: 14px;
-  background: #edf5ff;
-  box-shadow: 0 14px 36px rgba(22, 119, 255, .08);
+  /* 内联态是"裸"渲染器：边框、圆角、留白全部交给宿主页面的舞台，
+     这里再包一层卡片就会和舞台叠成双层描边。 */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   container-type: inline-size;
   font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
@@ -160,130 +144,24 @@ function bindingForWidget(widget: DashboardWidget) {
   width: 100vw;
   height: 100dvh;
   min-height: 100dvh;
-  gap: 0;
-  padding: 0;
   overflow: hidden;
-  border: 0;
-  border-radius: 0;
   background: linear-gradient(180deg, #07111f 0%, #030712 100%);
-  box-shadow: none;
-}
-
-.runtime-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 13px 16px;
-  border: 1px solid var(--runtime-border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .94);
-}
-
-.runtime-header__title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
-
-.runtime-header__mark {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid #d9e8ff;
-  border-radius: 14px;
-  color: #1677ff;
-  background: #edf5ff;
-}
-
-.runtime-header__title div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.runtime-header__eyebrow {
-  color: #2563eb;
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: .08em;
-}
-
-.runtime-header h2,
-.runtime-header p {
-  margin: 0;
-}
-
-.runtime-header h2 {
-  overflow: hidden;
-  color: var(--runtime-text);
-  font-size: 17px;
-  font-weight: 790;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-header p {
-  overflow: hidden;
-  max-width: 680px;
-  color: var(--runtime-text-3);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-header__meta {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 7px;
-}
-
-.runtime-header__meta span,
-.runtime-header__meta time {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 5px;
-  padding: 0 9px;
-  border: 1px solid #dce8fb;
-  border-radius: 999px;
-  color: #294469;
-  background: #f8fbff;
-  font-size: 10px;
-  font-weight: 680;
-}
-
-.runtime-header__meta span:first-child {
-  border-color: rgba(22, 163, 122, .2);
-  color: #087b5a;
-  background: #f1fbf7;
-}
-
-.runtime-header__meta span:first-child.is-draft {
-  border-color: rgba(255, 176, 32, .24);
-  color: #9f6400;
-  background: #fffaf0;
 }
 
 .runtime-canvas-viewport {
   display: flex;
   width: 100%;
-  height: min(76vh, 900px);
-  min-height: 560px;
+  /* 高度由内联样式里的 aspect-ratio 决定；这里只兜住极端比例的画布 */
+  max-height: min(78vh, 920px);
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(180deg, #07111f 0%, #030712 100%);
+  background: var(--xs-surface, #ffffff);
 }
 
 .is-fullscreen .runtime-canvas-viewport {
   height: 100dvh;
+  max-height: none;
   min-height: 100dvh;
 }
 
@@ -298,9 +176,10 @@ function bindingForWidget(widget: DashboardWidget) {
   box-sizing: border-box;
   min-width: 0;
   padding: 0;
-  border: 1px solid #d8e6f9;
-  border-radius: 14px;
-  box-shadow: 0 16px 32px rgba(24, 77, 145, .08);
+  /* 画布贴满舞台，描边与圆角由舞台负责裁切，内层不再自带一圈边 */
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   transform-origin: top left;
   animation: runtime-canvas-enter 180ms cubic-bezier(.2, 0, 0, 1) backwards;
 }
@@ -310,51 +189,65 @@ function bindingForWidget(widget: DashboardWidget) {
   to { opacity: 1; }
 }
 
-.is-fullscreen .runtime-canvas {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
+/* 画布底色是用户数据，深浅都可能：空态做成一张浅色卡片，两种底上都读得出来。
+   注意它长在 scale() 过的画布里，字号要按缩放前的尺度写。 */
 .runtime-empty {
   position: absolute;
-  inset: 0;
   z-index: 1;
+  top: 50%;
+  left: 50%;
   display: grid;
-  place-content: center;
-  gap: 6px;
-  color: rgba(226, 232, 240, .72);
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 44px;
+  border: 2px solid var(--runtime-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .94);
+  transform: translate(-50%, -50%);
   pointer-events: none;
   text-align: center;
 }
 
 .runtime-empty strong {
-  color: #f8fafc;
-  font-size: 28px;
+  color: var(--runtime-text);
+  font-size: 26px;
+  font-weight: 600;
 }
 
 .runtime-empty span {
+  color: var(--runtime-text-3);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .runtime-unavailable {
   display: grid;
   width: 100%;
   height: 100%;
+  min-height: 260px;
   place-content: center;
-  gap: 14px;
-  padding: 24px;
-  background: #07111f;
-  color: #dbeafe;
+  gap: 8px;
+  padding: 32px;
+  background: var(--xs-surface, #ffffff);
+  color: var(--runtime-text-2);
   text-align: center;
 }
 
 .runtime-unavailable h1,
 .runtime-unavailable p { margin: 0; }
 
-.runtime-unavailable h1 { color: #f8fafc; font-size: 24px; }
-.runtime-unavailable p { color: rgba(219, 234, 254, .74); font-size: 14px; }
+.runtime-unavailable h1 { color: var(--runtime-text); font-size: 20px; font-weight: 600; }
+.runtime-unavailable p { color: var(--runtime-text-3); font-size: 13px; }
+
+/* 全屏态背后是深色渐变，缺运行态时保持原来的深色版式 */
+.is-fullscreen .runtime-unavailable {
+  min-height: 0;
+  background: #07111f;
+  color: #dbeafe;
+}
+
+.is-fullscreen .runtime-unavailable h1 { color: #f8fafc; font-size: 24px; }
+.is-fullscreen .runtime-unavailable p { color: rgba(219, 234, 254, .74); font-size: 14px; }
 
 @media (prefers-reduced-motion: reduce) {
   .runtime-canvas { animation: none; }
