@@ -90,6 +90,17 @@
   min-height: 42px;
 }
 
+/* 页级统计期控件：与页头其余动作同排同高，不再借用图表卡的头部排版。 */
+.data-dashboard-range.ant-segmented {
+  padding: 3px;
+  border: 1px solid var(--xs-border);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.data-dashboard-range .ant-segmented-item {
+  min-height: 32px;
+}
+
 .data-dashboard-page time {
   transition:
     color var(--xs-motion-state) var(--xs-motion-ease-out),
@@ -129,7 +140,8 @@
 }
 
 @media (pointer: coarse) {
-  .asset-tabs .ant-segmented-item {
+  .asset-tabs .ant-segmented-item,
+  .data-dashboard-range .ant-segmented-item {
     min-height: 44px;
   }
 }

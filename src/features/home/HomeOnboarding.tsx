@@ -82,7 +82,7 @@ function BoardVisual() {
       <div className="home-onboarding__kpi">
         <span>数据资产总量</span>
         <strong>{kpiValue}</strong>
-        <small>较昨日 ↑ 5.2%</small>
+        <small>较统计期起点 ↑ 5.2%</small>
       </div>
       <div className="home-onboarding__mini-chart">
         <XsEChart option={miniChartOption} label="季度经营得分示例图" />

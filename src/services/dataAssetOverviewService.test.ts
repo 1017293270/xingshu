@@ -25,6 +25,15 @@ describe("dataAssetService overview", () => {
         dataSourceCount: 1,
         serviceCallCount: 3
       },
+      comparisonBaselineKpis: {
+        assetCount: 4,
+        dataVolumeBytes: 768,
+        unstructuredCount: 1,
+        tableCount: 3,
+        dataSourceCount: 1,
+        serviceCallCount: 1
+      },
+      comparisonBaselineDate: "2026-07-12",
       typeDistribution: [{ type: "STRUCTURED", count: 4 }],
       growth: [{ date: "2026-08-11", assetCount: 6, dataVolumeBytes: 1024 }],
       sourceDistribution: [{ type: "DATABASE", count: 1 }],

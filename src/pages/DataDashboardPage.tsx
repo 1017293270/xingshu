@@ -57,6 +57,19 @@ export function DataDashboardPage() {
       subtitle="统计当前空间内的全部数据资产"
       actions={
         <>
+          {/* range 是页级统计期：KPI 调用量、应用场景、热门资产都跟着它变，
+              所以控件放页头而不是增长趋势卡内，避免被读成只管那一张图。 */}
+          <Segmented
+            aria-label="统计期"
+            className="data-dashboard-range"
+            options={[
+              { label: "近7天", value: "7D" },
+              { label: "近30天", value: "30D" },
+              { label: "近6个月", value: "6M" }
+            ]}
+            value={range}
+            onChange={(value) => setRange(value as DataAssetOverviewRange)}
+          />
           <time dateTime={overview?.updatedAt}>数据更新于 {formatUpdatedAt(overview?.updatedAt)}</time>
           <Link className="xs-action-link xs-action-link--primary" to="/data-management">管理数据资产</Link>
         </>
@@ -96,18 +109,6 @@ export function DataDashboardPage() {
               <XsChartCard
                 title="数据资产增长趋势"
                 {...dashboardView.charts.growth}
-                action={(
-                  <Segmented
-                    aria-label="增长趋势统计范围"
-                    options={[
-                      { label: "近7天", value: "7D" },
-                      { label: "近30天", value: "30D" },
-                      { label: "近6个月", value: "6M" }
-                    ]}
-                    value={range}
-                    onChange={(value) => setRange(value as DataAssetOverviewRange)}
-                  />
-                )}
                 headingLevel={2}
                 className="data-card"
                 chartClassName="chart-large"

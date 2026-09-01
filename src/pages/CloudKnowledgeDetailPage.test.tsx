@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import {
-  listDataHubKnowledgeBases,
+  listPersonalKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource
@@ -17,14 +17,14 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/dataHubKnowledgeService")>();
   return {
     ...actual,
-    listDataHubKnowledgeBases: vi.fn(),
+    listPersonalKnowledgeBases: vi.fn(),
     listDataHubKnowledgeDocuments: vi.fn(),
     loadDataHubKnowledgeMarkdown: vi.fn(),
     loadDataHubKnowledgeSource: vi.fn()
   };
 });
 
-const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
+const listKnowledgeBases = vi.mocked(listPersonalKnowledgeBases);
 const listDocuments = vi.mocked(listDataHubKnowledgeDocuments);
 const loadMarkdown = vi.mocked(loadDataHubKnowledgeMarkdown);
 const loadSource = vi.mocked(loadDataHubKnowledgeSource);

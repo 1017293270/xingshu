@@ -58,13 +58,48 @@ export function formatBytes(value: number) {
   return `${scaled >= 100 || index === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[index]}`;
 }
 
-function formatYesterday(current: number, previous?: number | null, formatValue = formatCount) {
-  if (previous === undefined || previous === null) return "较昨日 暂无快照";
-  if (current === previous) return "较昨日 持平";
-  if (previous === 0) return `较昨日 ↑ 新增 ${formatValue(current)}`;
+/**
+ * 只认 ISO 日期前缀（YYYY-MM-DD），并用 UTC 回环校验真实存在，
+ * 因此 "2026-02-31"、"" 与任意非日期串都会被判为无效；
+ * 全程不走本地时区取值，避免 UTC 午夜在东八区以西被读成前一天。
+ */
+function parseIsoDateParts(value?: string | null) {
+  if (!value) return null;
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (!matched) return null;
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  const day = Number(matched[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const valid = date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+  return valid ? { year, month, day } : null;
+}
+
+/**
+ * KPI 对比前缀。基线日期可用时展示「较 M月D日」，
+ * 跨年（近6个月常见）补上年份避免读成今年的同月同日；
+ * 基线日期缺失或不可解析时退回统计期起点的说法。
+ * @param baselineDate 对比基线快照日期，来自 `comparisonBaselineDate`
+ * @param referenceDate 判断是否跨年的参照日期，一般传 `overview.updatedAt`
+ */
+export function formatComparisonBaselineLabel(baselineDate?: string | null, referenceDate?: string | null) {
+  const baseline = parseIsoDateParts(baselineDate);
+  if (!baseline) return "较统计期起点";
+  const referenceYear = parseIsoDateParts(referenceDate)?.year;
+  return referenceYear !== undefined && referenceYear !== baseline.year
+    ? `较 ${baseline.year}年${baseline.month}月${baseline.day}日`
+    : `较 ${baseline.month}月${baseline.day}日`;
+}
+
+function formatComparison(label: string, current: number, previous?: number | null, formatValue = formatCount) {
+  if (previous === undefined || previous === null) return `${label} 暂无快照`;
+  if (current === previous) return `${label} 持平`;
+  if (previous === 0) return `${label} ↑ 新增 ${formatValue(current)}`;
   const direction = current > previous ? "↑" : "↓";
   const percentage = Math.abs((current - previous) / previous * 100);
-  return `较昨日 ${direction} ${percentage.toFixed(1)}%`;
+  return `${label} ${direction} ${percentage.toFixed(1)}%`;
 }
 
 function chartTable(
@@ -76,14 +111,15 @@ function chartTable(
 }
 
 export function buildKpis(overview: DataAssetOverview): DashboardKpi[] {
-  const previous = overview.previousDayKpis;
+  const baseline = overview.comparisonBaselineKpis;
+  const label = formatComparisonBaselineLabel(overview.comparisonBaselineDate, overview.updatedAt);
   return [
-    { id: "data-assets", label: "数据资产总量", value: formatCount(overview.kpis.assetCount), note: formatYesterday(overview.kpis.assetCount, previous?.assetCount), tone: "blue" },
-    { id: "data-volume", label: "数据总量", value: formatBytes(overview.kpis.dataVolumeBytes), note: formatYesterday(overview.kpis.dataVolumeBytes, previous?.dataVolumeBytes, formatBytes), tone: "green" },
-    { id: "media-documents", label: "非结构化数据资产数量", value: formatCount(overview.kpis.unstructuredCount), note: formatYesterday(overview.kpis.unstructuredCount, previous?.unstructuredCount), tone: "purple" },
-    { id: "data-tables", label: "数据表数量", value: formatCount(overview.kpis.tableCount), note: formatYesterday(overview.kpis.tableCount, previous?.tableCount), tone: "cyan" },
-    { id: "data-apis", label: "数据源数量", value: formatCount(overview.kpis.dataSourceCount), note: formatYesterday(overview.kpis.dataSourceCount, previous?.dataSourceCount), tone: "orange" },
-    { id: "service-calls", label: "数据服务调用量", value: formatCount(overview.kpis.serviceCallCount), note: formatYesterday(overview.kpis.serviceCallCount, previous?.serviceCallCount), tone: "blue" }
+    { id: "data-assets", label: "数据资产总量", value: formatCount(overview.kpis.assetCount), note: formatComparison(label, overview.kpis.assetCount, baseline?.assetCount), tone: "blue" },
+    { id: "data-volume", label: "数据总量", value: formatBytes(overview.kpis.dataVolumeBytes), note: formatComparison(label, overview.kpis.dataVolumeBytes, baseline?.dataVolumeBytes, formatBytes), tone: "green" },
+    { id: "media-documents", label: "非结构化数据资产数量", value: formatCount(overview.kpis.unstructuredCount), note: formatComparison(label, overview.kpis.unstructuredCount, baseline?.unstructuredCount), tone: "purple" },
+    { id: "data-tables", label: "数据表数量", value: formatCount(overview.kpis.tableCount), note: formatComparison(label, overview.kpis.tableCount, baseline?.tableCount), tone: "cyan" },
+    { id: "data-apis", label: "数据源数量", value: formatCount(overview.kpis.dataSourceCount), note: formatComparison(label, overview.kpis.dataSourceCount, baseline?.dataSourceCount), tone: "orange" },
+    { id: "service-calls", label: "数据服务调用量", value: formatCount(overview.kpis.serviceCallCount), note: formatComparison(label, overview.kpis.serviceCallCount, baseline?.serviceCallCount), tone: "blue" }
   ];
 }
 
@@ -213,7 +249,8 @@ export function buildChartViews(overview: DataAssetOverview) {
   };
 
   const usage: ChartView = {
-    summary: `当前空间累计记录 ${formatCount(overview.kpis.serviceCallCount)} 次成功数据调用。`,
+    // serviceCallCount 已按统计期过滤，不再是空间累计值
+    summary: `当前统计期内记录 ${formatCount(overview.kpis.serviceCallCount)} 次成功数据调用。`,
     option: {
       grid: { left: 42, right: 42, top: 20, bottom: 34 },
       xAxis: {

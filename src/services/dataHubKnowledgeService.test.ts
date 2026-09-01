@@ -3,6 +3,7 @@ import { DataHubServiceError } from "./dataHubClient";
 import {
   DATA_HUB_KNOWLEDGE_BASE_LIST_PATH,
   listDataHubKnowledgeBases,
+  listPersonalKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubCitationDocument,
   loadDataHubKnowledgeMarkdown,
@@ -315,7 +316,7 @@ describe("dataHubKnowledgeService", () => {
     ]);
   });
 
-  it("reads the current space knowledge bases from the pinned list endpoint", async () => {
+  it("reads the personal knowledge bases from the pinned list endpoint", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("Authorization")).toBe("Bearer token-123");
@@ -326,7 +327,7 @@ describe("dataHubKnowledgeService", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(listDataHubKnowledgeBases()).resolves.toEqual([
+    await expect(listPersonalKnowledgeBases()).resolves.toEqual([
       {
         id: "kb-policy",
         title: "企业制度知识库",
@@ -335,9 +336,14 @@ describe("dataHubKnowledgeService", () => {
         updatedAt: undefined
       }
     ]);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(DATA_HUB_KNOWLEDGE_BASE_LIST_PATH);
+    // 云盘系归属走 scope_type=PERSONAL，空间仍只由 X-Space-Id 头传递
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${DATA_HUB_KNOWLEDGE_BASE_LIST_PATH}?scope_type=PERSONAL`);
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("space_id");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
+
+    // 不传 scope 的共享入口（数据资产管理页）保持后端默认可见范围，不带 scope_type
+    await listDataHubKnowledgeBases();
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(DATA_HUB_KNOWLEDGE_BASE_LIST_PATH);
   });
 
   it("does not call DataHub when the current space is missing", async () => {

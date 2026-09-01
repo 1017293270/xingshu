@@ -19,7 +19,7 @@ import {
   XsGlyphRecentUpdate
 } from "@/components/xs/XsMetricGlyphs";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
-import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
+import { listPersonalKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { PageFrame } from "./PageFrame";
@@ -108,7 +108,7 @@ function documentShare(knowledgeBase: DataHubKnowledgeBase, documentTotal?: numb
 }
 
 function knowledgeBaseDescription(knowledgeBase: DataHubKnowledgeBase) {
-  return knowledgeBase.description?.trim() || "来自当前空间的 DataHub 知识库";
+  return knowledgeBase.description?.trim() || "来自个人的 DataHub 知识库";
 }
 
 function ShareBar({ share, layout = "stacked" }: { share: number; layout?: "stacked" | "inline" }) {
@@ -117,7 +117,7 @@ function ShareBar({ share, layout = "stacked" }: { share: number; layout?: "stac
       <span className="cloud-share__track" aria-hidden="true">
         <i style={{ width: `${Math.max(share, 2)}%` }} />
       </span>
-      <small>{layout === "inline" ? `${share}%` : `占空间文档 ${share}%`}</small>
+      <small>{layout === "inline" ? `${share}%` : `占个人文档 ${share}%`}</small>
     </span>
   );
 }
@@ -173,7 +173,7 @@ export function CloudPage() {
   const deferredQuery = useDeferredValue(query);
   const knowledgeBasesQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "knowledge-bases"),
-    queryFn: listDataHubKnowledgeBases,
+    queryFn: listPersonalKnowledgeBases,
     retry: false
   });
   const knowledgeBases = knowledgeBasesQuery.data ?? [];
@@ -229,7 +229,7 @@ export function CloudPage() {
   return (
     <PageFrame
       title="我的云盘"
-      subtitle="集中查看当前空间已入库的知识库与文档规模"
+      subtitle="集中查看个人已入库的知识库与文档规模"
       className="cloud-page"
       track="data"
       actions={(
@@ -271,7 +271,7 @@ export function CloudPage() {
                   }
                 />
               )}
-              caption="当前空间已入库"
+              caption="个人已入库"
               glyph={XsGlyphCloudDrive}
               tone="blue"
               step={1}
@@ -375,7 +375,7 @@ export function CloudPage() {
               ? "换个关键词，或清空搜索查看全部知识库。"
               : appLinks.canAdd
                 ? "到 DataHub 添加知识库后，返回此页即可看到。"
-                : "当前空间还没有知识库。"
+                : "当前还没有个人知识库。"
           }
           emptyActionLabel={!normalizedQuery && appLinks.canAdd ? "去 DataHub 添加" : undefined}
           onEmptyAction={!normalizedQuery && appLinks.canAdd ? handleAddKnowledgeBase : undefined}

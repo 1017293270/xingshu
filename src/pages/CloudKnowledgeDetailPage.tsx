@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import {
-  listDataHubKnowledgeBases,
+  listPersonalKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource
@@ -56,7 +56,7 @@ export function CloudKnowledgeDetailPage() {
   const [previewError, setPreviewError] = useState("");
   const knowledgeBasesQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "knowledge-bases"),
-    queryFn: listDataHubKnowledgeBases,
+    queryFn: listPersonalKnowledgeBases,
     retry: false
   });
   const documentsQuery = useQuery({

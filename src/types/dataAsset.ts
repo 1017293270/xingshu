@@ -23,7 +23,10 @@ export type DataAssetOverview = {
   updatedAt: string;
   range: DataAssetOverviewRange;
   kpis: DataAssetKpis;
-  previousDayKpis?: DataAssetKpis | null;
+  /** 对比基线：统计期起点当天或之前最近一张空间快照，没有则回退期内最早一张，再没有为 null。 */
+  comparisonBaselineKpis?: DataAssetKpis | null;
+  /** 对比基线快照日期，ISO 日期串（如 "2026-08-02"）；没有基线时为 null。 */
+  comparisonBaselineDate?: string | null;
   typeDistribution: Array<{ type: string; count: number }>;
   growth: Array<{ date: string; assetCount: number; dataVolumeBytes: number }>;
   sourceDistribution: Array<{ type: string; count: number }>;

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { getDataHubKnowledgeAppLinks } from "@/services/dataHubKnowledgeApp";
-import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
+import { listPersonalKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { CloudPage } from "./CloudPage";
@@ -21,11 +21,11 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/dataHubKnowledgeService")>();
   return {
     ...actual,
-    listDataHubKnowledgeBases: vi.fn()
+    listPersonalKnowledgeBases: vi.fn()
   };
 });
 
-const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
+const listKnowledgeBases = vi.mocked(listPersonalKnowledgeBases);
 const knowledgeAppLinks = vi.mocked(getDataHubKnowledgeAppLinks);
 
 const sampleKnowledgeBases: DataHubKnowledgeBase[] = [
@@ -118,6 +118,10 @@ describe("CloudPage", () => {
     expect(within(screen.getByLabelText("云盘概览指标")).getByText("89", { selector: ".sr-only" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("云盘概览指标")).getByText("2026-08-13 10:00")).toBeInTheDocument();
     expect(screen.queryByText(/模拟上传|模拟同步|预览企业资料/)).not.toBeInTheDocument();
+    // 云盘归属是个人知识库，页面不再用「空间」措辞
+    expect(screen.getByText("集中查看个人已入库的知识库与文档规模")).toBeInTheDocument();
+    expect(screen.getByText("个人已入库")).toBeInTheDocument();
+    expect(screen.queryByText(/当前空间/)).not.toBeInTheDocument();
   });
 
   it("shows knowledge-base timestamps without the ISO T separator", async () => {
@@ -143,12 +147,12 @@ describe("CloudPage", () => {
     expect(screen.queryByText("2026-07-17T11:02:15")).not.toBeInTheDocument();
   });
 
-  it("shows an empty state when the space has no knowledge bases", async () => {
+  it("shows an empty state when there is no personal knowledge base", async () => {
     listKnowledgeBases.mockResolvedValue([]);
     renderCloudPage();
 
     expect(await screen.findByText("暂无知识库")).toBeInTheDocument();
-    expect(screen.getByText("当前空间还没有知识库。")).toBeInTheDocument();
+    expect(screen.getByText("当前还没有个人知识库。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "去 DataHub 添加" })).not.toBeInTheDocument();
   });
 

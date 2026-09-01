@@ -84,7 +84,7 @@ export function DataManagementPage() {
   const deferredQuery = useDeferredValue(query);
   const knowledgeBasesQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "knowledge-bases"),
-    queryFn: listDataHubKnowledgeBases,
+    queryFn: () => listDataHubKnowledgeBases(),
     retry: false
   });
   const knowledgeBases = knowledgeBasesQuery.data ?? [];

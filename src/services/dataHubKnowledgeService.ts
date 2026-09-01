@@ -371,13 +371,29 @@ function requireSpaceId() {
   return session.spaceId;
 }
 
-export async function listDataHubKnowledgeBases(): Promise<DataHubKnowledgeBase[]> {
+export type DataHubKnowledgeBaseScope = "SPACE" | "DEPARTMENT" | "PERSONAL";
+
+/**
+ * 知识库列表。scope 缺省时不传 scope_type，保持后端默认可见范围
+ * （数据资产管理页等空间口径页面用）；云盘系页面显式传 PERSONAL。
+ */
+export async function listDataHubKnowledgeBases(
+  scope?: DataHubKnowledgeBaseScope
+): Promise<DataHubKnowledgeBase[]> {
   const spaceId = requireSpaceId();
-  const payload = await requestDataHub<unknown>(DATA_HUB_KNOWLEDGE_BASE_LIST_PATH, {
+  const path = scope
+    ? `${DATA_HUB_KNOWLEDGE_BASE_LIST_PATH}?scope_type=${scope}`
+    : DATA_HUB_KNOWLEDGE_BASE_LIST_PATH;
+  const payload = await requestDataHub<unknown>(path, {
     method: "GET",
     spaceId
   });
   return normalizeDataHubKnowledgeBases(payload);
+}
+
+/** 云盘定位是「个人知识库」（RagController 的 scope_type=PERSONAL）。 */
+export function listPersonalKnowledgeBases() {
+  return listDataHubKnowledgeBases("PERSONAL");
 }
 
 const knownDocumentStatuses = new Set<DataHubKnowledgeDocumentStatus>([
