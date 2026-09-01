@@ -16,21 +16,22 @@ function renderPage(page: React.ReactElement) {
 describe("dashboard page actions", () => {
   beforeEach(() => localStorage.clear());
 
-  it("renders the dashboard library with real creation paths instead of the fixed demo", () => {
+  it("renders the current-dashboard workbench with real creation paths instead of the fixed demo", () => {
     renderPage(<DashboardPage />);
 
-    expect(screen.getByRole("heading", { name: "看板广场" })).toBeInTheDocument();
-    expect(screen.getByLabelText("看板广场空状态")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的看板" })).toBeInTheDocument();
+    expect(screen.getByLabelText("我的看板空状态")).toBeInTheDocument();
     expect(screen.getByText("暂无看板")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "创建第一个看板" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建看板" })).toHaveLength(2);
     screen.getAllByRole("button", { name: "新建看板" }).forEach((button) => expect(button).toBeEnabled());
+    expect(screen.getAllByRole("button", { name: "看板广场" })).toHaveLength(2);
     expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
     expect(screen.queryByText("经营分析全景看板")).not.toBeInTheDocument();
     expect(screen.queryByRole("article", { name: /看板组件：/ })).not.toBeInTheDocument();
   });
 
-  it("creates a full-hd blank draft from the dashboard library", async () => {
+  it("creates a full-hd blank draft from the current-dashboard workbench", async () => {
     const user = userEvent.setup();
     renderPage(<DashboardPage />);
 

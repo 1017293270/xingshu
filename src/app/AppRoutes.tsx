@@ -32,6 +32,9 @@ const WritingDraftDetailPage = lazy(() =>
   import("@/pages/WritingDraftDetailPage").then((module) => ({ default: module.WritingDraftDetailPage }))
 );
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const DashboardSquarePage = lazy(() =>
+  import("@/pages/DashboardSquarePage").then((module) => ({ default: module.DashboardSquarePage }))
+);
 const DashboardEditorPage = lazy(() =>
   import("@/pages/DashboardEditorPage").then((module) => ({ default: module.DashboardEditorPage }))
 );
@@ -110,6 +113,7 @@ export function AppRoutes() {
             <Route path="/table" element={<TablePage />} />
             <Route path="/table/:sessionId" element={<TableSessionPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/dashboard/square" element={<DashboardSquarePage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />

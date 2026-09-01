@@ -23,6 +23,8 @@ type DashboardCardProps = {
   archiving: boolean;
   rollingBack: boolean;
   onToggleVersions: () => void;
+  /** 传入后菜单里出现「设为当前」：把这块看板写成「我的看板」的当前看板。 */
+  onSetCurrent?: () => void;
   onCopy: () => void;
   onShare: () => void;
   onArchive: () => void;
@@ -39,6 +41,7 @@ export function DashboardCard({
   archiving,
   rollingBack,
   onToggleVersions,
+  onSetCurrent,
   onCopy,
   onShare,
   onArchive,
@@ -120,6 +123,9 @@ export function DashboardCard({
             </button>
             {menuOpen || menuMounted ? (
               <ul className="dashboard-card__menu" role="menu" data-closing={!menuOpen || undefined}>
+                {onSetCurrent ? (
+                  <li role="none"><button type="button" role="menuitem" onClick={runMenuAction(onSetCurrent)}>设为当前</button></li>
+                ) : null}
                 <li role="none"><Link role="menuitem" to={editorPath} onClick={() => setMenuOpen(false)}>编辑</Link></li>
                 <li role="none"><button type="button" role="menuitem" disabled={copying} onClick={runMenuAction(onCopy)}>复制</button></li>
                 <li role="none"><button type="button" role="menuitem" onClick={runMenuAction(onToggleVersions)}>版本</button></li>
@@ -132,7 +138,7 @@ export function DashboardCard({
                     className="dashboard-card__menu-danger"
                     disabled={archiving}
                     onClick={runMenuAction(onArchive)}
-                  >删除</button>
+                  >归档</button>
                 </li>
               </ul>
             ) : null}

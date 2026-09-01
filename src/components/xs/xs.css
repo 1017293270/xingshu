@@ -314,6 +314,12 @@
   justify-content: flex-start;
   height: 40px;
   margin: 0 6px 14px;
+  border-radius: 8px;
+}
+
+.xs-sidebar__brand:focus-visible {
+  outline: 2px solid var(--xs-primary);
+  outline-offset: 2px;
 }
 
 .xs-sidebar__brand img {
@@ -421,6 +427,8 @@
 .xs-sidebar__menu.ant-menu-inline .ant-menu-submenu-title {
   display: flex;
   align-items: center;
+  /* 图标与文字的间距在这里显式给出，不再吃 antd 的继承 margin（见下方归零规则） */
+  gap: 12px;
   width: 100%;
   height: 36px !important;
   line-height: 36px !important;
@@ -479,8 +487,15 @@
   align-items: center;
   justify-content: center;
   min-width: 18px;
+  margin-inline-end: 0;
   /* 图标字形尺寸，不是排版字号，不要接 --xs-fs-* */
   font-size: 18px;
+}
+
+/* antd 默认在图标后面的文字上加 margin，与上面的 gap 会叠加成双份间距 */
+.xs-sidebar__menu .ant-menu-item .ant-menu-item-icon + span,
+.xs-sidebar__menu .ant-menu-submenu-title .ant-menu-item-icon + span {
+  margin-inline-start: 0;
 }
 
 .xs-sidebar__user {

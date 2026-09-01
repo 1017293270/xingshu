@@ -1,4 +1,5 @@
-/* 大屏库列表页：卡片网格布局，全部消费全局 --xs-* token */
+/* 看板两页共用：「我的看板」当前看板内联工作台 + 「看板广场」卡片网格。
+   全部消费全局 --xs-* token */
 
 .dashboard-list {
   display: grid;
@@ -594,6 +595,106 @@
   font-weight: var(--xs-fw-medium);
 }
 
+/* ---------- 我的看板：页头工具条 + 当前看板内联舞台 ----------
+   工具条排版跟随 data-assets 页头 Segmented 的既有约定：
+   一行右对齐、控件之间 10px、窄屏整体落到标题下方左对齐（见 page-shell.css）。 */
+
+.dashboard-current__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dashboard-current__switch.ant-select {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.dashboard-current__switch .ant-select-selector {
+  min-height: 44px;
+  border-radius: var(--xs-radius-control);
+}
+
+.dashboard-current__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0 0 14px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+}
+
+.dashboard-current__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xs-text-3) 12%, #ffffff);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.dashboard-current__status.is-published {
+  background: var(--xs-primary);
+  color: var(--xs-surface);
+}
+
+.dashboard-current__share {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--xs-interactive-text);
+  font-size: var(--xs-fs-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-current__stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+  box-shadow: var(--xs-shadow-soft);
+}
+
+/* 内联模式不占满视口：全屏挂载的 680px 下限在页面内会把页脚顶出去 */
+.dashboard-current__stage .dashboard-runtime-island {
+  min-height: clamp(380px, 62vh, 680px);
+}
+
+.dashboard-current__stage--loading {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  min-height: clamp(380px, 62vh, 680px);
+  padding: 24px;
+}
+
+.dashboard-current__stage--loading > .dashboard-list__skeleton {
+  width: min(320px, 100%);
+  height: 14px;
+}
+
+.dashboard-current__versions-state {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+}
+
+/* ---------- 看板广场：返回「我的看板」 ---------- */
+
+.dashboard-square__back {
+  gap: 8px;
+}
+
 @media (max-width: 820px) {
   .dashboard-list__toolbar {
     grid-template-columns: minmax(0, 1fr);
@@ -601,5 +702,14 @@
 
   .dashboard-list__toolbar > span {
     justify-self: start;
+  }
+
+  .dashboard-current__toolbar {
+    justify-content: flex-start;
+  }
+
+  .dashboard-current__switch.ant-select {
+    flex: 1 1 100%;
+    max-width: none;
   }
 }

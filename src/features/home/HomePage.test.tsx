@@ -144,6 +144,8 @@ describe("HomePage", () => {
 
     const navigation = screen.getByRole("navigation", { name: "星数主导航" });
     expect(navigation).toBeInTheDocument();
+    /* 桌面品牌区是可 Tab 到的回首页链接，不再是死 div */
+    expect(screen.getByRole("link", { name: "回到首页" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "新建对话" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建对话" })).toHaveClass("xs-sidebar__new-chat--current");
     expect(screen.getByRole("main").contains(screen.getByRole("button", { name: "收起侧边栏" }))).toBe(true);
@@ -165,7 +167,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     const { container } = renderHomePage();
 
-    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "报告智写", "会议纪要", "更多应用"];
+    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "报告智写", "会议纪要"];
 
     for (const appName of expectedApps) {
       expect(screen.getByRole("button", { name: new RegExp(`打开 ${appName}`) })).toHaveAttribute(
@@ -175,7 +177,8 @@ describe("HomePage", () => {
     }
 
     expect(screen.queryByText("👋")).not.toBeInTheDocument();
-    expect(container.querySelectorAll('[data-icon-source="xingshu-home-apps-image2-v1"]')).toHaveLength(7);
+    expect(container.querySelectorAll('[data-icon-source="xingshu-home-apps-image2-v1"]')).toHaveLength(6);
+    expect(screen.queryByRole("button", { name: /打开 更多应用/ })).not.toBeInTheDocument();
     expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(0);
 
     const dataChatButton = screen.getByRole("button", { name: /打开 智能问数/ });
@@ -242,7 +245,7 @@ describe("HomePage", () => {
     expect(screen.getByLabelText("当前应用路径")).toHaveTextContent(expectedPath);
   });
 
-  it.each(["会议纪要", "更多应用"])("shows a coming-soon status for %s", async (appName) => {
+  it.each(["会议纪要"])("shows a coming-soon status for %s", async (appName) => {
     const user = userEvent.setup();
     renderHomePage();
 

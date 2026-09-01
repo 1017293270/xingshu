@@ -5,7 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { Button, Dropdown, Layout, Menu, type MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { isNavigationItemActive, primaryNavigation, secondaryNavigation } from "./navigation";
 import { useXsAccountMenu } from "./useXsAccountMenu";
 import logoSource from "@/assets/brand/xingshu-logo-2x.png";
@@ -95,9 +95,9 @@ export function XsSidebar({ collapsed, onNewChat }: XsSidebarProps) {
       trigger={null}
       aria-label="星数侧边栏"
     >
-      <div className="xs-sidebar__brand">
+      <NavLink className="xs-sidebar__brand" to="/" aria-label="回到首页">
         <img src={logoSource} alt="星数" width={400} height={183} />
-      </div>
+      </NavLink>
 
       <Button
         type="default"

@@ -233,10 +233,12 @@
   text-align: center;
 }
 
-/* ---------- 推荐应用：统一网格的左对齐竖卡 ---------- */
+/* ---------- 推荐应用：与命令框同宽的 3×2 网格 ---------- */
 
+/* 命令框是首屏唯一一级焦点，推荐应用跟它同宽（760px）才有同一条左右轴；
+   之前的 --xs-page-track（1170px 起）会让这一区比输入框宽出一大截。 */
 .home-page__apps {
-  width: min(100%, var(--xs-page-track));
+  width: min(100%, 760px);
   margin: 40px auto 0;
 }
 
@@ -249,9 +251,11 @@
   letter-spacing: 0;
 }
 
+/* 760px 轨道下 7 列会把卡片挤成 86px，改成 3 列（约 240px/张）；
+   6 张推荐应用正好排满两行，不留孤行。 */
 .home-page__app-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
 
@@ -403,18 +407,6 @@
   }
 }
 
-@media (max-width: 1500px) {
-  .home-page__app-grid {
-    gap: 16px;
-  }
-}
-
-@media (max-width: 1180px) {
-  .home-page__app-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 /* ---------- 移动端：横排卡片、紧凑工具栏 ---------- */
 
 @media (max-width: 900px) {
@@ -549,10 +541,6 @@
 
 .home-page__app-grid > .xs-app-card:nth-child(6) {
   animation-delay: calc(var(--xs-motion-stagger) * 6);
-}
-
-.home-page__app-grid > .xs-app-card:nth-child(7) {
-  animation-delay: calc(var(--xs-motion-stagger) * 7);
 }
 
 @media (prefers-reduced-motion: reduce) {

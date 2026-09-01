@@ -1,11 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
+import {
+  CURRENT_DASHBOARD_STORAGE_KEY,
+  resolveCurrentDashboard
+} from "@/features/dashboard/currentDashboard";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
+import type { DashboardRecord } from "@/types/dashboardStudio";
 import { DashboardPage } from "./DashboardPage";
+
+/* 页面测试只验证"内联挂载了哪块看板"，Vue 运行时本身在 DashboardRuntimeIsland.test.tsx 里覆盖 */
+vi.mock("@/features/dashboardStudio/DashboardRuntimeIsland", () => ({
+  DashboardRuntimeIsland: ({ record, fullscreen }: { record: DashboardRecord; fullscreen?: boolean }) => (
+    <div data-testid="dashboard-runtime" data-fullscreen={String(Boolean(fullscreen))}>
+      {record.schema.title} 运行态
+    </div>
+  )
+}));
 
 function renderPage() {
   return render(
@@ -13,39 +27,33 @@ function renderPage() {
       <MemoryRouter initialEntries={["/dashboard"]}>
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard/square" element={<div>看板广场目标页</div>} />
           <Route path="/dashboard-editor" element={<div>编辑器目标页</div>} />
-          <Route path="/dashboard-view" element={<div>运行态目标页</div>} />
         </Routes>
       </MemoryRouter>
     </AppProviders>
   );
 }
 
-function createStoredDashboard(title: string, id: string, published = false, description = "") {
-  const repository = createDashboardRepository(localStorage, {
-    now: () => new Date("2026-07-15T08:00:00.000Z")
+function createStoredDashboard(
+  title: string,
+  id: string,
+  options: { published?: boolean; updatedAt?: string } = {}
+) {
+  const { published = false, updatedAt = "2026-07-15T08:00:00.000Z" } = options;
+  const repository = createDashboardRepository(localStorage, { now: () => new Date(updatedAt) });
+  const schema = createBlankDashboard({
+    title,
+    idFactory: (prefix) => `${prefix}-${id}`,
+    now: new Date("2026-07-15T07:00:00.000Z")
   });
-  const schema = {
-    ...createBlankDashboard({
-      title,
-      idFactory: (prefix) => `${prefix}-${id}`,
-      now: new Date("2026-07-15T07:00:00.000Z")
-    }),
-    description
-  };
   repository.saveDraft(schema);
   if (published) repository.publish(schema.id);
-  return { record: repository.get(schema.id)!, repository };
+  return repository.get(schema.id)!;
 }
 
-function cardOf(title: string) {
-  const card = screen.getByRole("link", { name: title }).closest("article");
-  expect(card).not.toBeNull();
-  return card as HTMLElement;
-}
-
-async function openCardMenu(user: ReturnType<typeof userEvent.setup>, title: string) {
-  await user.click(screen.getByRole("button", { name: `${title} 设置` }));
+async function openSettings(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "当前看板设置" }));
 }
 
 describe("DashboardPage", () => {
@@ -54,47 +62,139 @@ describe("DashboardPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows favorite-question entry points in the dashboard-library empty state", () => {
+  it("guides to creation and the dashboard square when nothing is saved yet", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "看板广场" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的看板" })).toBeInTheDocument();
+    expect(screen.getByLabelText("我的看板空状态")).toBeInTheDocument();
     expect(screen.getByText("暂无看板")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "创建第一个看板" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建看板" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "从收藏问数创建" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "选择收藏问数" })).toBeInTheDocument();
-    expect(screen.queryByText("去问数生成")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "导入为静态看板" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/旧本地看板/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "看板广场" })).toHaveLength(2);
+    expect(screen.queryByTestId("dashboard-runtime")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "当前看板设置" })).not.toBeInTheDocument();
   });
 
-  it("renders saved dashboards as management cards", async () => {
+  it("opens the dashboard square from the header toolbar", async () => {
     const user = userEvent.setup();
-    createStoredDashboard("运营草稿", "draft", false, "不应在大屏库中展示的问数摘要");
-    createStoredDashboard("善治测试", "published", true);
+    renderPage();
+
+    await user.click(screen.getAllByRole("button", { name: "看板广场" })[0]);
+
+    expect(await screen.findByText("看板广场目标页")).toBeInTheDocument();
+  });
+
+  it("mounts the stored current dashboard inline instead of full screen", async () => {
+    createStoredDashboard("经营驾驶舱", "cockpit", { published: true, updatedAt: "2026-07-15T08:00:00.000Z" });
+    createStoredDashboard("库存周转", "stock", { updatedAt: "2026-07-16T08:00:00.000Z" });
+    localStorage.setItem(CURRENT_DASHBOARD_STORAGE_KEY, "dashboard-cockpit");
 
     renderPage();
 
-    const draftCard = cardOf("运营草稿");
-    expect(within(draftCard).getByText("草稿")).toBeInTheDocument();
-    expect(within(draftCard).getByRole("link", { name: "浏览大屏" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.queryByText("不应在大屏库中展示的问数摘要")).not.toBeInTheDocument();
-
-    const publishedCard = cardOf("善治测试");
-    expect(within(publishedCard).getByText("已发布")).toBeInTheDocument();
-    expect(within(publishedCard).getByRole("link", { name: "浏览大屏" })).toHaveAttribute(
-      "href",
-      "/dashboard-view?dashboard=dashboard-published"
-    );
-
-    await openCardMenu(user, "善治测试");
-    ["编辑", "复制", "版本", "分享", "删除"].forEach((action) => {
-      expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
-    });
-    expect(screen.queryByRole("menuitem", { name: "归档" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "当前看板：经营驾驶舱" })).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-runtime")).toHaveAttribute("data-fullscreen", "false");
+    expect(screen.getByTestId("dashboard-runtime")).toHaveTextContent("经营驾驶舱 运行态");
+    expect(screen.getByRole("combobox", { name: "切换当前看板" })).toBeInTheDocument();
+    expect(screen.getByText("已发布")).toBeInTheDocument();
   });
 
-  it("requires a dashboard name before entering the editor", async () => {
+  it("falls back to the most recently updated dashboard when the stored id is stale", async () => {
+    createStoredDashboard("旧的经营驾驶舱", "cockpit", { updatedAt: "2026-07-15T08:00:00.000Z" });
+    createStoredDashboard("最近更新的库存看板", "stock", { updatedAt: "2026-07-18T08:00:00.000Z" });
+    localStorage.setItem(CURRENT_DASHBOARD_STORAGE_KEY, "dashboard-已被归档");
+
+    renderPage();
+
+    expect(await screen.findByRole("region", { name: "当前看板：最近更新的库存看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "当前看板：旧的经营驾驶舱" })).not.toBeInTheDocument();
+  });
+
+  it("resolves the current dashboard from the stored id and falls back by update time", () => {
+    const older = { id: "a", updatedAt: "2026-07-15T08:00:00.000Z" } as DashboardRecord;
+    const newer = { id: "b", updatedAt: "2026-07-18T08:00:00.000Z" } as DashboardRecord;
+
+    expect(resolveCurrentDashboard([older, newer], "a")).toBe(older);
+    expect(resolveCurrentDashboard([older, newer], "missing")).toBe(newer);
+    expect(resolveCurrentDashboard([older, newer], null)).toBe(newer);
+    expect(resolveCurrentDashboard([], "a")).toBeNull();
+  });
+
+  it("persists the switched dashboard as the new current one", async () => {
+    const user = userEvent.setup();
+    createStoredDashboard("经营驾驶舱", "cockpit", { updatedAt: "2026-07-18T08:00:00.000Z" });
+    createStoredDashboard("库存周转", "stock", { updatedAt: "2026-07-15T08:00:00.000Z" });
+
+    renderPage();
+
+    expect(await screen.findByRole("region", { name: "当前看板：经营驾驶舱" })).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "切换当前看板" }));
+    await user.click(await screen.findByTitle("库存周转"));
+
+    expect(await screen.findByRole("region", { name: "当前看板：库存周转" })).toBeInTheDocument();
+    expect(localStorage.getItem(CURRENT_DASHBOARD_STORAGE_KEY)).toBe("dashboard-stock");
+  });
+
+  it("keeps archive and delete apart in the settings menu", async () => {
+    const user = userEvent.setup();
+    createStoredDashboard("经营驾驶舱", "cockpit", { published: true });
+
+    renderPage();
+    await openSettings(user);
+
+    ["编辑", "复制", "版本回滚", "分享", "归档"].forEach((action) => {
+      expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
+    });
+    // 服务层只有 archiveDashboard，没有真删除接口，菜单里就不该出现"删除"
+    expect(screen.queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
+  });
+
+  it("archives the current dashboard after an archive-worded confirmation", async () => {
+    const user = userEvent.setup();
+    createStoredDashboard("待归档看板", "archive");
+
+    renderPage();
+    await openSettings(user);
+    await user.click(screen.getByRole("menuitem", { name: "归档" }));
+
+    expect(await screen.findByRole("dialog", { name: "归档看板" })).toHaveTextContent(
+      "归档“待归档看板”？归档后它会从看板广场移除，当前版本没有自助恢复入口。"
+    );
+    await user.click(screen.getByRole("button", { name: "确认归档" }));
+
+    expect(await screen.findByLabelText("我的看板空状态")).toBeInTheDocument();
+    expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
+  });
+
+  it("edits the current dashboard from the settings menu", async () => {
+    const user = userEvent.setup();
+    createStoredDashboard("经营驾驶舱", "cockpit");
+
+    renderPage();
+    await openSettings(user);
+    await user.click(screen.getByRole("menuitem", { name: "编辑" }));
+
+    expect(await screen.findByText("编辑器目标页")).toBeInTheDocument();
+  });
+
+  it("rolls back to a published version from the settings menu", async () => {
+    const user = userEvent.setup();
+    const record = createStoredDashboard("版本看板", "version", { published: true });
+
+    renderPage();
+    await openSettings(user);
+    await user.click(screen.getByRole("menuitem", { name: "版本回滚" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "版本回滚" });
+    expect(dialog).toHaveTextContent("v1");
+
+    await user.click(screen.getByRole("button", { name: "回滚" }));
+
+    await waitFor(() => {
+      expect(createDashboardRepository(localStorage).get(record.id)?.revision).toBe(record.revision + 1);
+    });
+  });
+
+  it("creates a dashboard from the header toolbar", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -106,47 +206,5 @@ describe("DashboardPage", () => {
     const records = createDashboardRepository(localStorage).list();
     expect(records).toHaveLength(1);
     expect(records[0]?.schema.title).toBe("华东区经营驾驶舱");
-  });
-
-  it("copies a dashboard into a new editable draft", async () => {
-    const user = userEvent.setup();
-    createStoredDashboard("销售大屏", "sales", true);
-    renderPage();
-
-    await openCardMenu(user, "销售大屏");
-    await user.click(screen.getByRole("menuitem", { name: "复制" }));
-
-    expect(await screen.findByText("编辑器目标页")).toBeInTheDocument();
-    const records = createDashboardRepository(localStorage).list();
-    expect(records).toHaveLength(2);
-    expect(records.some((record) => record.schema.title === "销售大屏 副本" && record.status === "draft")).toBe(true);
-  });
-
-  it("deletes a dashboard after confirmation", async () => {
-    const user = userEvent.setup();
-    createStoredDashboard("待删除大屏", "archive");
-    renderPage();
-
-    await openCardMenu(user, "待删除大屏");
-    await user.click(screen.getByRole("menuitem", { name: "删除" }));
-
-    expect(await screen.findByRole("dialog", { name: "删除看板" })).toHaveTextContent(
-      "删除“待删除大屏”？它会从看板广场中移除。"
-    );
-    await user.click(screen.getByRole("button", { name: "确认删除" }));
-    expect(screen.queryByText("待删除大屏")).not.toBeInTheDocument();
-    expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
-  });
-
-  it("expands the persisted published version history", async () => {
-    const user = userEvent.setup();
-    createStoredDashboard("版本大屏", "version", true);
-    renderPage();
-
-    await openCardMenu(user, "版本大屏");
-    await user.click(screen.getByRole("menuitem", { name: "版本" }));
-
-    expect(screen.getByText("v1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "回滚" })).toBeInTheDocument();
   });
 });

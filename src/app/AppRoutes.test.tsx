@@ -98,7 +98,8 @@ describe("AppRoutes", () => {
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "想做一张什么表？", "最近制表记录"],
     ["/writing", "报告智写", "报告智写工作台"],
-    ["/dashboard", "看板广场", "看板广场空状态"],
+    ["/dashboard", "我的看板", "我的看板空状态"],
+    ["/dashboard/square", "看板广场", "看板广场空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
     ["/login", /让每一次问数.*都有据可依/, "星数登录页"],
@@ -268,7 +269,7 @@ describe("AppRoutes", () => {
 
     await user.click(screen.getByRole("link", { name: "我的看板" }));
 
-    const heading = await screen.findByRole("heading", { name: "看板广场", level: 1 });
+    const heading = await screen.findByRole("heading", { name: "我的看板", level: 1 });
     expect(heading).toHaveFocus();
     expect(container.querySelector(".xs-route-view")).not.toBe(initialRouteView);
     expect(document.title).toBe("我的看板 · 星数");

@@ -9,7 +9,6 @@ import appDataChatIcon from "@/assets/generated-icons/app-data-chat.png";
 import appDocumentAssistantIcon from "@/assets/generated-icons/app-document-assistant.png";
 import appKnowledgeQaIcon from "@/assets/generated-icons/app-knowledge-qa.png";
 import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.png";
-import appMoreAppsIcon from "@/assets/generated-icons/app-more-apps.png";
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.webp";
@@ -88,16 +87,6 @@ const recommendedApps: RecommendedApp[] = [
     description: "提炼议题、结论和待办事项",
     prompt: "帮我整理今天会议的纪要和行动项",
     imageSrc: appMeetingMinutesIcon,
-    imageSource: "xingshu-home-apps-image2-v1",
-    tone: "blue",
-    comingSoon: true
-  },
-  {
-    id: "more-apps",
-    title: "更多应用",
-    description: "打开更多企业智能能力",
-    prompt: "帮我打开更多企业智能应用",
-    imageSrc: appMoreAppsIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "blue",
     comingSoon: true

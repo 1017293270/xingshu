@@ -194,7 +194,7 @@ describe("data asset actions", () => {
   it("exposes the real dashboard creation workflow instead of unavailable placeholders", async () => {
     renderRoute("/dashboard");
 
-    await screen.findByRole("heading", { name: "看板广场" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
+    await screen.findByRole("heading", { name: "我的看板" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
     expect(await screen.findByRole("heading", { name: "创建第一个看板" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建看板" })).toHaveLength(2);
     screen.getAllByRole("button", { name: "新建看板" }).forEach((button) => expect(button).toBeEnabled());

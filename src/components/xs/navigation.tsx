@@ -47,6 +47,7 @@ export const routeTitles: Record<string, string> = {
   "/writing/templates": "结构模板",
   "/writing/drafts": "报告草稿",
   "/dashboard": "我的看板",
+  "/dashboard/square": "看板广场",
   "/dashboard-editor": "看板编辑器",
   "/dashboard-view": "大屏浏览",
   "/cloud": "我的云盘",
