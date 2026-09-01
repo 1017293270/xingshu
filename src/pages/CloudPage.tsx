@@ -19,7 +19,7 @@ import {
   XsGlyphRecentUpdate
 } from "@/components/xs/XsMetricGlyphs";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
-import { listPersonalKnowledgeBases } from "@/services/dataHubKnowledgeService";
+import { cloudKnowledgeScopeFor, listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { PageFrame } from "./PageFrame";
@@ -107,27 +107,67 @@ function documentShare(knowledgeBase: DataHubKnowledgeBase, documentTotal?: numb
   return Math.round((knowledgeBase.documentCount / documentTotal) * 100);
 }
 
-function knowledgeBaseDescription(knowledgeBase: DataHubKnowledgeBase) {
-  return knowledgeBase.description?.trim() || "来自个人的 DataHub 知识库";
+type CloudScopeCopy = {
+  subtitle: string;
+  metricCaption: string;
+  fallbackDescription: string;
+  /** 占比条口径措辞，卡片与列表行共用一处，见 XsKnowledgeCard 的 scopeLabel。 */
+  scopeLabel: string;
+  emptyDescription: string;
+};
+
+/** 云盘归属措辞跟着登录角色走：空间管理员是空间口径，普通用户是个人口径。 */
+function cloudScopeCopy(isAdmin: boolean): CloudScopeCopy {
+  if (isAdmin) {
+    return {
+      subtitle: "集中查看当前空间已入库的知识库与文档规模",
+      metricCaption: "当前空间已入库",
+      fallbackDescription: "来自当前空间的 DataHub 知识库",
+      scopeLabel: "空间",
+      emptyDescription: "当前空间还没有知识库。"
+    };
+  }
+
+  return {
+    subtitle: "集中查看个人已入库的知识库与文档规模",
+    metricCaption: "个人已入库",
+    fallbackDescription: "来自个人的 DataHub 知识库",
+    scopeLabel: "个人",
+    emptyDescription: "当前还没有个人知识库。"
+  };
 }
 
-function ShareBar({ share, layout = "stacked" }: { share: number; layout?: "stacked" | "inline" }) {
+function knowledgeBaseDescription(knowledgeBase: DataHubKnowledgeBase, copy: CloudScopeCopy) {
+  return knowledgeBase.description?.trim() || copy.fallbackDescription;
+}
+
+function ShareBar({
+  share,
+  copy,
+  layout = "stacked"
+}: {
+  share: number;
+  copy: CloudScopeCopy;
+  layout?: "stacked" | "inline";
+}) {
   return (
     <span className={`cloud-share cloud-share--${layout}`}>
       <span className="cloud-share__track" aria-hidden="true">
         <i style={{ width: `${Math.max(share, 2)}%` }} />
       </span>
-      <small>{layout === "inline" ? `${share}%` : `占个人文档 ${share}%`}</small>
+      <small>{layout === "inline" ? `${share}%` : `占${copy.scopeLabel}文档 ${share}%`}</small>
     </span>
   );
 }
 
 function KnowledgeBaseRow({
   knowledgeBase,
-  documentTotal
+  documentTotal,
+  copy
 }: {
   knowledgeBase: DataHubKnowledgeBase;
   documentTotal?: number;
+  copy: CloudScopeCopy;
 }) {
   const tone = xsKnowledgeToneFor(knowledgeBase.id);
   const share = documentShare(knowledgeBase, documentTotal);
@@ -142,7 +182,7 @@ function KnowledgeBaseRow({
         <XsIconTile glyph={XsGlyphKnowledgeTotal} label={knowledgeBase.title} tone={tone} />
         <span className="cloud-kb-row__text">
           <strong>{knowledgeBase.title}</strong>
-          <small>{knowledgeBaseDescription(knowledgeBase)}</small>
+          <small>{knowledgeBaseDescription(knowledgeBase, copy)}</small>
         </span>
       </span>
       <span className="cloud-kb-row__count">
@@ -151,7 +191,7 @@ function KnowledgeBaseRow({
           : "待同步"}
       </span>
       <span className="cloud-kb-row__share">
-        {share != null ? <ShareBar share={share} layout="inline" /> : null}
+        {share != null ? <ShareBar share={share} copy={copy} layout="inline" /> : null}
       </span>
       <span className="cloud-kb-row__time">
         {updatedAt ? <time dateTime={knowledgeBase.updatedAt}>{updatedAt}</time> : "待同步"}
@@ -166,14 +206,18 @@ function KnowledgeBaseRow({
 export function CloudPage() {
   const sessionScope = useSessionQueryScope();
   const spaceId = useDataHubAuthStore((state) => state.currentSpaceId);
+  const isAdmin = useDataHubAuthStore((state) => state.user?.isAdmin === true);
+  const knowledgeScope = cloudKnowledgeScopeFor(isAdmin);
+  const copy = cloudScopeCopy(isAdmin);
   const appLinks = getDataHubKnowledgeAppLinks(spaceId);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<CloudSortKey>("updated");
   const [viewMode, setViewMode] = useState<CloudViewMode>("grid");
   const deferredQuery = useDeferredValue(query);
   const knowledgeBasesQuery = useQuery({
-    queryKey: sessionQueryKey(sessionScope, "knowledge-bases"),
-    queryFn: listPersonalKnowledgeBases,
+    // 口径进缓存键：管理员的空间口径与普通用户的个人口径不能互相复用
+    queryKey: sessionQueryKey(sessionScope, "knowledge-bases", knowledgeScope ?? "SPACE"),
+    queryFn: () => listDataHubKnowledgeBases(knowledgeScope),
     retry: false
   });
   const knowledgeBases = knowledgeBasesQuery.data ?? [];
@@ -229,7 +273,7 @@ export function CloudPage() {
   return (
     <PageFrame
       title="我的云盘"
-      subtitle="集中查看个人已入库的知识库与文档规模"
+      subtitle={copy.subtitle}
       className="cloud-page"
       track="data"
       actions={(
@@ -271,7 +315,7 @@ export function CloudPage() {
                   }
                 />
               )}
-              caption="个人已入库"
+              caption={copy.metricCaption}
               glyph={XsGlyphCloudDrive}
               tone="blue"
               step={1}
@@ -375,7 +419,7 @@ export function CloudPage() {
               ? "换个关键词，或清空搜索查看全部知识库。"
               : appLinks.canAdd
                 ? "到 DataHub 添加知识库后，返回此页即可看到。"
-                : "当前还没有个人知识库。"
+                : copy.emptyDescription
           }
           emptyActionLabel={!normalizedQuery && appLinks.canAdd ? "去 DataHub 添加" : undefined}
           onEmptyAction={!normalizedQuery && appLinks.canAdd ? handleAddKnowledgeBase : undefined}
@@ -402,6 +446,7 @@ export function CloudPage() {
                   key={knowledgeBase.id}
                   knowledgeBase={knowledgeBase}
                   documentTotal={overview.documentTotal}
+                  copy={copy}
                 />
               ))}
             </section>
@@ -412,11 +457,12 @@ export function CloudPage() {
                   key={knowledgeBase.id}
                   id={knowledgeBase.id}
                   title={knowledgeBase.title}
-                  description={knowledgeBaseDescription(knowledgeBase)}
+                  description={knowledgeBaseDescription(knowledgeBase, copy)}
                   documentCount={knowledgeBase.documentCount}
                   updatedAt={formatKnowledgeUpdatedAt(knowledgeBase.updatedAt)}
                   updatedAtValue={knowledgeBase.updatedAt}
                   share={documentShare(knowledgeBase, overview.documentTotal)}
+                  scopeLabel={copy.scopeLabel}
                   tone={xsKnowledgeToneFor(knowledgeBase.id)}
                 />
               ))}

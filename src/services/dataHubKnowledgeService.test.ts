@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DataHubServiceError } from "./dataHubClient";
 import {
+  cloudKnowledgeScopeFor,
   DATA_HUB_KNOWLEDGE_BASE_LIST_PATH,
   listDataHubKnowledgeBases,
-  listPersonalKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubCitationDocument,
   loadDataHubKnowledgeMarkdown,
@@ -316,6 +316,12 @@ describe("dataHubKnowledgeService", () => {
     ]);
   });
 
+  it("maps the cloud knowledge scope from the logged-in role", () => {
+    // 空间管理员看空间口径（不传 scope_type），普通用户只看个人
+    expect(cloudKnowledgeScopeFor(true)).toBeUndefined();
+    expect(cloudKnowledgeScopeFor(false)).toBe("PERSONAL");
+  });
+
   it("reads the personal knowledge bases from the pinned list endpoint", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
@@ -327,7 +333,7 @@ describe("dataHubKnowledgeService", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(listPersonalKnowledgeBases()).resolves.toEqual([
+    await expect(listDataHubKnowledgeBases(cloudKnowledgeScopeFor(false))).resolves.toEqual([
       {
         id: "kb-policy",
         title: "企业制度知识库",
@@ -336,14 +342,18 @@ describe("dataHubKnowledgeService", () => {
         updatedAt: undefined
       }
     ]);
-    // 云盘系归属走 scope_type=PERSONAL，空间仍只由 X-Space-Id 头传递
+    // 普通用户的云盘归属走 scope_type=PERSONAL，空间仍只由 X-Space-Id 头传递
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${DATA_HUB_KNOWLEDGE_BASE_LIST_PATH}?scope_type=PERSONAL`);
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("space_id");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
 
-    // 不传 scope 的共享入口（数据资产管理页）保持后端默认可见范围，不带 scope_type
-    await listDataHubKnowledgeBases();
+    // 空间管理员的云盘口径与数据资产管理页一致：保持后端默认可见范围，不带 scope_type
+    await listDataHubKnowledgeBases(cloudKnowledgeScopeFor(true));
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(DATA_HUB_KNOWLEDGE_BASE_LIST_PATH);
+
+    // 不传 scope 的共享入口（数据资产管理页）同样不带 scope_type
+    await listDataHubKnowledgeBases();
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe(DATA_HUB_KNOWLEDGE_BASE_LIST_PATH);
   });
 
   it("does not call DataHub when the current space is missing", async () => {

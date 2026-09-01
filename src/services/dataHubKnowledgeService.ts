@@ -391,9 +391,14 @@ export async function listDataHubKnowledgeBases(
   return normalizeDataHubKnowledgeBases(payload);
 }
 
-/** 云盘定位是「个人知识库」（RagController 的 scope_type=PERSONAL）。 */
-export function listPersonalKnowledgeBases() {
-  return listDataHubKnowledgeBases("PERSONAL");
+/**
+ * 云盘（我的云盘 / 知识库详情）按登录角色分流口径：
+ * 空间管理员不传 scope_type，看后端默认可见范围（与数据资产管理页同口径）；
+ * 普通用户只看 scope_type=PERSONAL 的个人知识库。
+ * RagController 的 scope_type 只是展示过滤器，不会放大已授权范围。
+ */
+export function cloudKnowledgeScopeFor(isAdmin: boolean): DataHubKnowledgeBaseScope | undefined {
+  return isAdmin ? undefined : "PERSONAL";
 }
 
 const knownDocumentStatuses = new Set<DataHubKnowledgeDocumentStatus>([

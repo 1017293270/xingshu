@@ -6,11 +6,13 @@ import { Link, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import {
-  listPersonalKnowledgeBases,
+  cloudKnowledgeScopeFor,
+  listDataHubKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource
 } from "@/services/dataHubKnowledgeService";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeDocument, DataHubKnowledgeDocumentStatus } from "@/types/dataHub";
 import { canBrowseKnowledgeDocument, CloudDocumentPreview } from "./CloudDocumentPreview";
 import { PageFrame } from "./PageFrame";
@@ -48,6 +50,8 @@ export function CloudKnowledgeDetailPage() {
   const { kbId: rawKbId = "" } = useParams();
   const kbId = decodeURIComponent(rawKbId).trim();
   const sessionScope = useSessionQueryScope();
+  const isAdmin = useDataHubAuthStore((state) => state.user?.isAdmin === true);
+  const knowledgeScope = cloudKnowledgeScopeFor(isAdmin);
   const [previewDocument, setPreviewDocument] = useState<DataHubKnowledgeDocument | null>(null);
   const [previewMarkdown, setPreviewMarkdown] = useState("");
   const [previewSourceUrl, setPreviewSourceUrl] = useState("");
@@ -55,8 +59,9 @@ export function CloudKnowledgeDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const knowledgeBasesQuery = useQuery({
-    queryKey: sessionQueryKey(sessionScope, "knowledge-bases"),
-    queryFn: listPersonalKnowledgeBases,
+    // 与「我的云盘」共用同一份缓存：口径同样跟着登录角色走
+    queryKey: sessionQueryKey(sessionScope, "knowledge-bases", knowledgeScope ?? "SPACE"),
+    queryFn: () => listDataHubKnowledgeBases(knowledgeScope),
     retry: false
   });
   const documentsQuery = useQuery({

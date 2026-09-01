@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import {
-  listPersonalKnowledgeBases,
+  listDataHubKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource
@@ -17,14 +17,14 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/dataHubKnowledgeService")>();
   return {
     ...actual,
-    listPersonalKnowledgeBases: vi.fn(),
+    listDataHubKnowledgeBases: vi.fn(),
     listDataHubKnowledgeDocuments: vi.fn(),
     loadDataHubKnowledgeMarkdown: vi.fn(),
     loadDataHubKnowledgeSource: vi.fn()
   };
 });
 
-const listKnowledgeBases = vi.mocked(listPersonalKnowledgeBases);
+const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
 const listDocuments = vi.mocked(listDataHubKnowledgeDocuments);
 const loadMarkdown = vi.mocked(loadDataHubKnowledgeMarkdown);
 const loadSource = vi.mocked(loadDataHubKnowledgeSource);
@@ -58,14 +58,14 @@ const sampleDocuments: DataHubKnowledgeDocument[] = [
   }
 ];
 
-function renderDetailPage() {
+function renderDetailPage({ isAdmin = false }: { isAdmin?: boolean } = {}) {
   localStorage.clear();
   useDataHubAuthStore.getState().clearAuthState();
   useDataHubAuthStore.getState().setAuth({
     token: "test-token",
     userId: 1,
     username: "zhangsan",
-    isAdmin: false
+    isAdmin
   });
   useDataHubAuthStore.getState().setCurrentSpaceId(7);
 
@@ -121,6 +121,16 @@ describe("CloudKnowledgeDetailPage", () => {
     expect(screen.getByText("解析中")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开 草稿.docx 原文" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "打开 采购合同.pdf 原文" })).toBeEnabled();
+    // 普通用户只看个人知识库
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual(["PERSONAL"]);
+  });
+
+  it("resolves the knowledge base from the space scope for a space admin", async () => {
+    renderDetailPage({ isAdmin: true });
+
+    expect(await screen.findByRole("heading", { name: "企业制度知识库", level: 1 })).toBeInTheDocument();
+    // 空间管理员走空间口径：知识库列表不带 scope_type
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual([undefined]);
   });
 
   it("opens a contract PDF inside the Xingshu preview and never jumps outside", async () => {

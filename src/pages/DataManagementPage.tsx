@@ -237,6 +237,7 @@ export function DataManagementPage() {
               documentCount={knowledgeBase.documentCount}
               updatedAt={formatKnowledgeUpdatedAt(knowledgeBase.updatedAt)}
               updatedAtValue={knowledgeBase.updatedAt}
+              scopeLabel="空间"
               tone={xsKnowledgeToneFor(knowledgeBase.id)}
             />
           ))}

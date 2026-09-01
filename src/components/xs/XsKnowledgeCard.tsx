@@ -13,8 +13,13 @@ type XsKnowledgeCardProps = {
   /** 已格式化的更新时间文本，未同步时留空。 */
   updatedAt?: string;
   updatedAtValue?: string;
-  /** 占空间文档百分比，未知时不显示占比条。 */
+  /** 占当前口径文档总数的百分比，未知时不显示占比条。 */
   share?: number;
+  /**
+   * 占比条的归属口径措辞（「占{scopeLabel}文档 N%」）。
+   * 云盘按登录角色传「空间」/「个人」；缺省保持历史的「空间」。
+   */
+  scopeLabel?: string;
   tone?: XsKnowledgeTone;
   step?: number;
 };
@@ -31,6 +36,7 @@ export function XsKnowledgeCard({
   updatedAt,
   updatedAtValue,
   share,
+  scopeLabel = "空间",
   tone = "blue",
   step = 5
 }: XsKnowledgeCardProps) {
@@ -64,7 +70,7 @@ export function XsKnowledgeCard({
             <span className="xs-kb-card__share-track" aria-hidden="true">
               <i style={{ width: `${Math.max(share, 2)}%` }} />
             </span>
-            <small>占空间文档 {share}%</small>
+            <small>{`占${scopeLabel}文档 ${share}%`}</small>
           </span>
         ) : null}
       </div>
