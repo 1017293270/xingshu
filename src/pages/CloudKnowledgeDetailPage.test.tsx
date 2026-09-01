@@ -9,8 +9,9 @@ import {
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource
 } from "@/services/dataHubKnowledgeService";
+import { listDataHubSpaces } from "@/services/dataHubSpaceService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
-import type { DataHubKnowledgeDocument } from "@/types/dataHub";
+import type { DataHubKnowledgeDocument, DataHubSpace } from "@/types/dataHub";
 import { CloudKnowledgeDetailPage } from "./CloudKnowledgeDetailPage";
 
 vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
@@ -24,10 +25,33 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   };
 });
 
+vi.mock("@/services/dataHubSpaceService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/dataHubSpaceService")>();
+  return {
+    ...actual,
+    listDataHubSpaces: vi.fn()
+  };
+});
+
 const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
+const listSpaces = vi.mocked(listDataHubSpaces);
 const listDocuments = vi.mocked(listDataHubKnowledgeDocuments);
 const loadMarkdown = vi.mocked(loadDataHubKnowledgeMarkdown);
 const loadSource = vi.mocked(loadDataHubKnowledgeSource);
+
+/** 当前空间（id=7）里当前用户的角色列表，判定只认「超级管理员」这一条 */
+function spacesWithRoles(myRoles: string[]): DataHubSpace[] {
+  return [
+    {
+      id: 7,
+      spaceName: "示例空间",
+      ownerId: 1,
+      myRoles,
+      memberCount: 4,
+      createdAt: "2026-08-01 09:00:00"
+    }
+  ];
+}
 
 const sampleDocuments: DataHubKnowledgeDocument[] = [
   {
@@ -58,7 +82,16 @@ const sampleDocuments: DataHubKnowledgeDocument[] = [
   }
 ];
 
-function renderDetailPage({ isAdmin = false }: { isAdmin?: boolean } = {}) {
+/**
+ * isAdmin 是 JWT 里的**系统管理员**；空间管理员看 myRoles 是否含「超级管理员」。
+ */
+function renderDetailPage({
+  isAdmin = false,
+  myRoles
+}: { isAdmin?: boolean; myRoles?: string[] } = {}) {
+  if (myRoles) {
+    listSpaces.mockResolvedValue(spacesWithRoles(myRoles));
+  }
   localStorage.clear();
   useDataHubAuthStore.getState().clearAuthState();
   useDataHubAuthStore.getState().setAuth({
@@ -84,9 +117,12 @@ function renderDetailPage({ isAdmin = false }: { isAdmin?: boolean } = {}) {
 describe("CloudKnowledgeDetailPage", () => {
   beforeEach(() => {
     listKnowledgeBases.mockReset();
+    listSpaces.mockReset();
     listDocuments.mockReset();
     loadMarkdown.mockReset();
     loadSource.mockReset();
+    // 默认：当前空间的普通成员
+    listSpaces.mockResolvedValue(spacesWithRoles(["空间游客"]));
     listKnowledgeBases.mockResolvedValue([
       {
         id: "kb-policy",
@@ -126,11 +162,45 @@ describe("CloudKnowledgeDetailPage", () => {
   });
 
   it("resolves the knowledge base from the space scope for a space admin", async () => {
-    renderDetailPage({ isAdmin: true });
+    renderDetailPage({ myRoles: ["超级管理员"] });
 
     expect(await screen.findByRole("heading", { name: "企业制度知识库", level: 1 })).toBeInTheDocument();
     // 空间管理员走空间口径：知识库列表不带 scope_type
     expect(listKnowledgeBases.mock.calls.at(-1)).toEqual([undefined]);
+  });
+
+  it("keeps the space scope for a system admin whose space roles are empty", async () => {
+    renderDetailPage({ isAdmin: true, myRoles: [] });
+
+    expect(await screen.findByRole("heading", { name: "企业制度知识库", level: 1 })).toBeInTheDocument();
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual([undefined]);
+    expect(listSpaces).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the personal scope when the space list fails", async () => {
+    listSpaces.mockRejectedValue(new Error("空间列表加载失败"));
+    renderDetailPage();
+
+    expect(await screen.findByRole("heading", { name: "企业制度知识库", level: 1 })).toBeInTheDocument();
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual(["PERSONAL"]);
+  });
+
+  it("holds the knowledge-base query until the space role resolves", async () => {
+    let resolveSpaces: (spaces: DataHubSpace[]) => void = () => {};
+    listSpaces.mockReturnValue(new Promise<DataHubSpace[]>((resolve) => {
+      resolveSpaces = resolve;
+    }));
+    renderDetailPage();
+
+    // 角色未落定：知识库列表一次都没请求（文档列表不吃口径，照常发）
+    expect(listKnowledgeBases).not.toHaveBeenCalled();
+    expect(await screen.findByRole("article", { name: "文档：合同管理办法.pdf" })).toBeInTheDocument();
+    expect(listKnowledgeBases).not.toHaveBeenCalled();
+
+    resolveSpaces(spacesWithRoles(["超级管理员"]));
+
+    expect(await screen.findByRole("heading", { name: "企业制度知识库", level: 1 })).toBeInTheDocument();
+    expect(listKnowledgeBases.mock.calls).toEqual([[undefined]]);
   });
 
   it("opens a contract PDF inside the Xingshu preview and never jumps outside", async () => {

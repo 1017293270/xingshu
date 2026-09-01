@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { getDataHubKnowledgeAppLinks } from "@/services/dataHubKnowledgeApp";
 import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
+import { listDataHubSpaces } from "@/services/dataHubSpaceService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
-import type { DataHubKnowledgeBase } from "@/types/dataHub";
+import type { DataHubKnowledgeBase, DataHubSpace } from "@/types/dataHub";
 import { CloudPage } from "./CloudPage";
 
 vi.mock("@/services/dataHubKnowledgeApp", async (importOriginal) => {
@@ -25,8 +26,31 @@ vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   };
 });
 
+vi.mock("@/services/dataHubSpaceService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/dataHubSpaceService")>();
+  return {
+    ...actual,
+    listDataHubSpaces: vi.fn()
+  };
+});
+
 const listKnowledgeBases = vi.mocked(listDataHubKnowledgeBases);
+const listSpaces = vi.mocked(listDataHubSpaces);
 const knowledgeAppLinks = vi.mocked(getDataHubKnowledgeAppLinks);
+
+/** 当前空间（id=7）里当前用户的角色列表，判定只认「超级管理员」这一条 */
+function spacesWithRoles(myRoles: string[]): DataHubSpace[] {
+  return [
+    {
+      id: 7,
+      spaceName: "示例空间",
+      ownerId: 1,
+      myRoles,
+      memberCount: 4,
+      createdAt: "2026-08-01 09:00:00"
+    }
+  ];
+}
 
 const sampleKnowledgeBases: DataHubKnowledgeBase[] = [
   {
@@ -72,7 +96,16 @@ function enabledAppLinks() {
   };
 }
 
-function renderCloudPage({ isAdmin = false }: { isAdmin?: boolean } = {}) {
+/**
+ * isAdmin 是 JWT 里的**系统管理员**；空间管理员看 myRoles 是否含「超级管理员」。
+ */
+function renderCloudPage({
+  isAdmin = false,
+  myRoles
+}: { isAdmin?: boolean; myRoles?: string[] } = {}) {
+  if (myRoles) {
+    listSpaces.mockResolvedValue(spacesWithRoles(myRoles));
+  }
   localStorage.clear();
   useDataHubAuthStore.getState().clearAuthState();
   useDataHubAuthStore.getState().setAuth({
@@ -95,9 +128,12 @@ function renderCloudPage({ isAdmin = false }: { isAdmin?: boolean } = {}) {
 describe("CloudPage", () => {
   beforeEach(() => {
     listKnowledgeBases.mockReset();
+    listSpaces.mockReset();
     knowledgeAppLinks.mockReset();
     knowledgeAppLinks.mockReturnValue(disabledAppLinks());
     listKnowledgeBases.mockResolvedValue(sampleKnowledgeBases);
+    // 默认：当前空间的普通成员
+    listSpaces.mockResolvedValue(spacesWithRoles(["空间游客"]));
   });
 
   afterEach(() => {
@@ -137,7 +173,8 @@ describe("CloudPage", () => {
         updatedAt: "2026-08-13 10:00"
       }
     ]);
-    renderCloudPage({ isAdmin: true });
+    // 空间管理员：JWT 的 isAdmin 是 false，判定只来自空间角色列表
+    renderCloudPage({ myRoles: ["超级管理员"] });
 
     expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
     // 空间管理员走空间口径：列表不带 scope_type，与数据资产管理页一致
@@ -153,11 +190,51 @@ describe("CloudPage", () => {
 
   it("shows the space empty state for a space admin", async () => {
     listKnowledgeBases.mockResolvedValue([]);
-    renderCloudPage({ isAdmin: true });
+    renderCloudPage({ myRoles: ["超级管理员"] });
 
     expect(await screen.findByText("暂无知识库")).toBeInTheDocument();
     expect(screen.getByText("当前空间还没有知识库。")).toBeInTheDocument();
     expect(screen.queryByText("当前还没有个人知识库。")).not.toBeInTheDocument();
+  });
+
+  it("keeps the space scope for a system admin whose space roles are empty", async () => {
+    renderCloudPage({ isAdmin: true, myRoles: [] });
+
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
+    // 系统管理员（JWT isAdmin）与空间角色是 OR 关系，不必等空间列表
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual([undefined]);
+    expect(screen.getByText("当前空间已入库")).toBeInTheDocument();
+    expect(listSpaces).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the personal scope when the space list fails", async () => {
+    listSpaces.mockRejectedValue(new Error("空间列表加载失败"));
+    renderCloudPage();
+
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
+    // 角色拿不到就保守显示个人口径，而不是把页面卡死或报错
+    expect(listKnowledgeBases.mock.calls.at(-1)).toEqual(["PERSONAL"]);
+    expect(screen.getByText("个人已入库")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("holds the knowledge-base query until the space role resolves", async () => {
+    let resolveSpaces: (spaces: DataHubSpace[]) => void = () => {};
+    listSpaces.mockReturnValue(new Promise<DataHubSpace[]>((resolve) => {
+      resolveSpaces = resolve;
+    }));
+    renderCloudPage();
+
+    // 角色未落定：知识库一次都没请求，页面停在 loading，不会先闪个人口径
+    expect(listKnowledgeBases).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("focus"));
+    expect(listKnowledgeBases).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("云盘概览指标")).not.toBeInTheDocument();
+
+    resolveSpaces(spacesWithRoles(["超级管理员"]));
+
+    expect(await screen.findByRole("link", { name: "知识库：企业制度知识库" })).toBeInTheDocument();
+    expect(listKnowledgeBases.mock.calls).toEqual([[undefined]]);
   });
 
   it("shows knowledge-base timestamps without the ISO T separator", async () => {

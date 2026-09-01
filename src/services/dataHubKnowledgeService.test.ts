@@ -316,8 +316,9 @@ describe("dataHubKnowledgeService", () => {
     ]);
   });
 
-  it("maps the cloud knowledge scope from the logged-in role", () => {
-    // 空间管理员看空间口径（不传 scope_type），普通用户只看个人
+  it("maps the cloud knowledge scope from the space role", () => {
+    // 入参是空间管理员（useSpaceAdmin 的判定），不是 JWT 里的系统管理员
+    // 空间管理员看空间口径（不传 scope_type），普通成员只看个人
     expect(cloudKnowledgeScopeFor(true)).toBeUndefined();
     expect(cloudKnowledgeScopeFor(false)).toBe("PERSONAL");
   });

@@ -392,13 +392,15 @@ export async function listDataHubKnowledgeBases(
 }
 
 /**
- * 云盘（我的云盘 / 知识库详情）按登录角色分流口径：
+ * 云盘（我的云盘 / 知识库详情）按空间角色分流口径：
  * 空间管理员不传 scope_type，看后端默认可见范围（与数据资产管理页同口径）；
- * 普通用户只看 scope_type=PERSONAL 的个人知识库。
+ * 普通成员只看 scope_type=PERSONAL 的个人知识库。
  * RagController 的 scope_type 只是展示过滤器，不会放大已授权范围。
+ *
+ * 入参是**空间管理员**（见 useSpaceAdmin），不是 JWT 里的系统管理员 isAdmin。
  */
-export function cloudKnowledgeScopeFor(isAdmin: boolean): DataHubKnowledgeBaseScope | undefined {
-  return isAdmin ? undefined : "PERSONAL";
+export function cloudKnowledgeScopeFor(isSpaceAdmin: boolean): DataHubKnowledgeBaseScope | undefined {
+  return isSpaceAdmin ? undefined : "PERSONAL";
 }
 
 const knownDocumentStatuses = new Set<DataHubKnowledgeDocumentStatus>([

@@ -20,6 +20,7 @@ import {
 } from "@/components/xs/XsMetricGlyphs";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
 import { cloudKnowledgeScopeFor, listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
+import { useSpaceAdmin } from "@/services/useSpaceAdmin";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DataHubKnowledgeBase } from "@/types/dataHub";
 import { PageFrame } from "./PageFrame";
@@ -116,9 +117,9 @@ type CloudScopeCopy = {
   emptyDescription: string;
 };
 
-/** 云盘归属措辞跟着登录角色走：空间管理员是空间口径，普通用户是个人口径。 */
-function cloudScopeCopy(isAdmin: boolean): CloudScopeCopy {
-  if (isAdmin) {
+/** 云盘归属措辞跟着空间角色走：空间管理员是空间口径，普通成员是个人口径。 */
+function cloudScopeCopy(isSpaceAdmin: boolean): CloudScopeCopy {
+  if (isSpaceAdmin) {
     return {
       subtitle: "集中查看当前空间已入库的知识库与文档规模",
       metricCaption: "当前空间已入库",
@@ -206,18 +207,20 @@ function KnowledgeBaseRow({
 export function CloudPage() {
   const sessionScope = useSessionQueryScope();
   const spaceId = useDataHubAuthStore((state) => state.currentSpaceId);
-  const isAdmin = useDataHubAuthStore((state) => state.user?.isAdmin === true);
-  const knowledgeScope = cloudKnowledgeScopeFor(isAdmin);
-  const copy = cloudScopeCopy(isAdmin);
+  const { isSpaceAdmin, resolved: roleResolved } = useSpaceAdmin();
+  const knowledgeScope = cloudKnowledgeScopeFor(isSpaceAdmin);
+  const copy = cloudScopeCopy(isSpaceAdmin);
   const appLinks = getDataHubKnowledgeAppLinks(spaceId);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<CloudSortKey>("updated");
   const [viewMode, setViewMode] = useState<CloudViewMode>("grid");
   const deferredQuery = useDeferredValue(query);
   const knowledgeBasesQuery = useQuery({
-    // 口径进缓存键：管理员的空间口径与普通用户的个人口径不能互相复用
+    // 口径进缓存键：管理员的空间口径与普通成员的个人口径不能互相复用
     queryKey: sessionQueryKey(sessionScope, "knowledge-bases", knowledgeScope ?? "SPACE"),
     queryFn: () => listDataHubKnowledgeBases(knowledgeScope),
+    // 角色未落定前不发请求：否则会先按个人口径拉一遍再闪切到空间口径
+    enabled: roleResolved,
     retry: false
   });
   const knowledgeBases = knowledgeBasesQuery.data ?? [];
@@ -251,7 +254,8 @@ export function CloudPage() {
 
   useEffect(() => {
     const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") {
+      // refetch 会绕过 enabled，这里再挡一次角色未落定的情况
+      if (roleResolved && document.visibilityState === "visible") {
         void refetch();
       }
     };
@@ -262,7 +266,7 @@ export function CloudPage() {
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [refetch]);
+  }, [refetch, roleResolved]);
 
   const handleAddKnowledgeBase = () => {
     if (appLinks.manageUrl) {

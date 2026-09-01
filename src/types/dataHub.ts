@@ -21,8 +21,15 @@ export type DataHubSpace = {
   spaceName: string;
   avatar?: string;
   description?: string;
+  /** 空间创建者用户 ID（SpaceVO.ownerId） */
   ownerId: number;
-  myRole: string;
+  /**
+   * 当前用户在该空间的角色名列表（SpaceVO.myRoles，由 SpaceMembershipService.getMemberRoleNames 填充）。
+   * 含「超级管理员」即空间管理员，与 hasSuperAdminRole 的判定同源。
+   */
+  myRoles?: string[];
+  /** @deprecated 后端 SpaceVO 没有这个字段，只剩历史测试夹具在用 */
+  myRole?: string;
   memberCount: number;
   createdAt: string;
 };
