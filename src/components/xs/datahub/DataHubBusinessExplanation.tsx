@@ -1,17 +1,13 @@
 import {
-  ArrowsLeftRight,
   Brain,
   CaretDown,
   CaretRight,
   CheckCircle,
-  Clock,
   Database,
   FileText,
-  FunnelSimple,
   ListChecks,
   Quotes
 } from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
 import { Modal } from "antd";
 import { useEffect, useId, useRef, useState } from "react";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
@@ -113,48 +109,91 @@ function groupedFactValues(values: string[]) {
   };
 }
 
-function Fact({
-  icon: Icon,
-  label,
-  values,
-  wide = false
-}: {
-  icon: Icon;
+type ScopeRow = {
   label: string;
-  values: string[];
-  wide?: boolean;
-}) {
-  const { context, items } = groupedFactValues(values);
-  if (!items.length) return null;
-  const visibleItems = items.slice(0, 8);
+  /** 直接展示的前几项，已按分隔符连排。 */
+  text: string;
+  /** 该行去重后的总项数，用于「等 N 项」。 */
+  total: number;
+  /** 折叠区里的其余项，空串表示无需折叠。 */
+  rest: string;
+};
+
+/** 口径行统一收敛成「标签 : 连排内容（+ 等 N 项折叠）」，超出上限的部分不丢、只收起。 */
+function scopeRow(
+  label: string,
+  values: string[],
+  { limit = 6, separator = "、" }: { limit?: number; separator?: string } = {}
+): ScopeRow | undefined {
+  const items = unique(values);
+  if (!items.length) return undefined;
+  return {
+    label,
+    text: items.slice(0, limit).join(separator),
+    total: items.length,
+    rest: items.slice(limit).join(separator)
+  };
+}
+
+function ScopeRowList({ rows }: { rows: ScopeRow[] }) {
   return (
-    <section
-      className={`datahub-business-explanation__fact${wide ? " datahub-business-explanation__fact--wide" : ""}`}
-      aria-label={label}
-    >
-      <header>
-        <span aria-hidden="true"><Icon size={15} weight="duotone" /></span>
-        <strong>{label}</strong>
-        {items.length > 1 ? <small>{items.length} 项</small> : null}
-      </header>
-      {context ? (
-        <p className="datahub-business-explanation__fact-context">
-          <span>共同范围</span>{context}
-        </p>
-      ) : null}
-      <ul className="datahub-business-explanation__fact-values">
-        {visibleItems.map((value) => <li key={value}>{value}</li>)}
-      </ul>
-      {items.length > visibleItems.length ? (
-        <details>
-          <summary>查看其余 {items.length - visibleItems.length} 项</summary>
-          <ul className="datahub-business-explanation__fact-values">
-            {items.slice(visibleItems.length).map((value) => <li key={value}>{value}</li>)}
-          </ul>
-        </details>
-      ) : null}
-    </section>
+    <dl className="datahub-business-explanation__scope-rows">
+      {rows.map((row) => (
+        <div className="datahub-business-explanation__scope-row" key={row.label}>
+          <dt>{row.label}</dt>
+          <dd>
+            {row.text}
+            {row.rest ? (
+              <details className="datahub-business-explanation__scope-more">
+                <summary>等 {row.total} 项</summary>
+                <p>{row.rest}</p>
+              </details>
+            ) : null}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
+}
+
+/**
+ * 把 trace 里的结构化口径整理成业务口径区块：
+ * 常读的数据/字段/筛选/时间/计算与检索范围直接成行，
+ * 偏长且少读的指标定义、同义词映射、关联关系收进「口径细则」。
+ */
+function businessScope(content: DataHubBusinessTrace) {
+  const contexts: string[] = [];
+  const stripContext = (values: string[]) => {
+    const { context, items } = groupedFactValues(values);
+    if (context) contexts.push(context);
+    return items;
+  };
+  const fields = stripContext(content.fields);
+  const filters = stripContext(content.filters);
+  const calculations = stripContext(content.calculations);
+  const metricDefinitions = stripContext(content.metricDefinitions);
+  const synonymMappings = stripContext(content.synonymMappings);
+  const knowledgeBases = unique(content.documents.map((document) => document.kbName));
+  const rows = [
+    scopeRow("数据口径", [...content.dataSources, ...content.dataTables, ...contexts], {
+      separator: " · ",
+      limit: 4
+    }),
+    scopeRow("业务字段", fields),
+    scopeRow("筛选条件", filters, { limit: 8 }),
+    scopeRow("时间范围", content.time, { limit: 4 }),
+    scopeRow("计算逻辑", calculations),
+    scopeRow("知识库范围", knowledgeBases, { separator: " · ", limit: 4 }),
+    content.documents.length
+      ? { label: "文档命中", text: `${content.documents.length} 份文档`, total: 1, rest: "" }
+      : undefined
+  ].filter((row): row is ScopeRow => Boolean(row));
+  const detailRows = [
+    scopeRow("指标定义", metricDefinitions),
+    scopeRow("同义词映射", synonymMappings),
+    scopeRow("关联关系", content.relationships, { limit: 4 })
+  ].filter((row): row is ScopeRow => Boolean(row));
+  return { rows, detailRows };
 }
 
 function executionStepDetail(content: DataHubBusinessTrace, step: string) {
@@ -265,17 +304,7 @@ export function DataHubBusinessExplanation({
       : status === "cancelled"
         ? "已停止"
         : "失败";
-  const hasBusinessFacts = [
-    content.dataSources,
-    content.dataTables,
-    content.fields,
-    content.filters,
-    content.calculations,
-    content.relationships,
-    content.metricDefinitions,
-    content.synonymMappings,
-    content.time
-  ].some((values) => values.length > 0);
+  const scope = businessScope(content);
 
   return (
     <section className="datahub-business-explanation" aria-label="查询过程" data-status={status}>
@@ -333,20 +362,19 @@ export function DataHubBusinessExplanation({
           </ol>
         </section>
 
-        {hasBusinessFacts ? (
-          <section className="datahub-business-explanation__section datahub-business-explanation__query-rules">
-            <h3><Database size={16} weight="duotone" aria-hidden="true" />查询口径</h3>
-            <div className="datahub-business-explanation__facts">
-              <Fact icon={Database} label="数据源" values={content.dataSources} />
-              <Fact icon={Database} label="业务数据表" values={content.dataTables} />
-              <Fact icon={ListChecks} label="业务字段" values={content.fields} wide />
-              <Fact icon={FunnelSimple} label="筛选条件" values={content.filters} wide />
-              <Fact icon={ListChecks} label="计算逻辑" values={content.calculations} />
-              <Fact icon={ArrowsLeftRight} label="关联关系" values={content.relationships} />
-              <Fact icon={ListChecks} label="指标口径" values={content.metricDefinitions} />
-              <Fact icon={Quotes} label="业务词映射" values={content.synonymMappings} />
-              <Fact icon={Clock} label="时间范围" values={content.time} />
-            </div>
+        {scope.rows.length || scope.detailRows.length ? (
+          <section
+            className="datahub-business-explanation__section datahub-business-explanation__query-rules"
+            aria-label="业务口径"
+          >
+            <h3><Database size={16} weight="duotone" aria-hidden="true" />业务口径</h3>
+            {scope.rows.length ? <ScopeRowList rows={scope.rows} /> : null}
+            {scope.detailRows.length ? (
+              <details className="datahub-business-explanation__scope-detail">
+                <summary>口径细则</summary>
+                <ScopeRowList rows={scope.detailRows} />
+              </details>
+            ) : null}
           </section>
         ) : null}
 

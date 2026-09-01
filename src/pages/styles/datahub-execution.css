@@ -248,129 +248,74 @@
   margin-top: 2px;
 }
 
-.datahub-business-explanation__facts {
+/* 业务口径：定义表式的 label:value 行组，只用 1px 浅分隔，不用胶囊和图标。 */
+.datahub-business-explanation__scope-rows {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.datahub-business-explanation__fact {
-  min-width: 0;
-  padding: 11px;
-  border: 1px solid #dce8f6;
-  border-radius: 10px;
-  background: #fff;
-}
-
-.datahub-business-explanation__fact--wide {
-  grid-column: 1 / -1;
-}
-
-.datahub-business-explanation__fact > header {
-  display: grid;
-  grid-template-columns: 27px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-}
-
-.datahub-business-explanation__fact > header > span {
-  display: inline-grid;
-  width: 27px;
-  height: 27px;
-  place-items: center;
-  border: 1px solid #d0e2f7;
-  border-radius: 8px;
-  color: #3474b9;
-  background: #f0f7ff;
-}
-
-.datahub-business-explanation__fact > header strong {
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-}
-
-.datahub-business-explanation__fact > header small {
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: #5e7898;
-  background: #f1f6fc;
-  font-size: var(--xs-fs-caption);
-}
-
-.datahub-business-explanation__body .datahub-business-explanation__fact-context {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin: 9px 0 0;
-  padding: 7px 9px;
-  border-radius: 8px;
-  color: #607a99;
-  background: #f6f9fd;
-  line-height: 1.55;
-}
-
-.datahub-business-explanation__fact-context > span {
-  flex: 0 0 auto;
-  padding: 1px 5px;
-  border-radius: 5px;
-  color: #356ca7;
-  background: #e8f2ff;
-  font-size: 10px;
-  font-weight: var(--xs-fw-bold);
-}
-
-.datahub-business-explanation__body .datahub-business-explanation__fact-values {
-  display: grid;
-  gap: 6px;
-  margin: 9px 0 0;
+  margin: 8px 0 0;
   padding: 0;
-  list-style: none;
 }
 
-.datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values li:only-child {
-  grid-column: 1 / -1;
-}
-
-.datahub-business-explanation__fact-values li {
-  position: relative;
+.datahub-business-explanation__scope-row {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  align-items: baseline;
   min-width: 0;
-  padding: 7px 9px 7px 21px;
-  border: 1px solid #e4edf7;
-  border-radius: 8px;
-  color: #4f6c8e;
-  background: #fbfdff;
-  line-height: 1.55;
+  padding: 7px 0;
+}
+
+.datahub-business-explanation__scope-row
+  + .datahub-business-explanation__scope-row {
+  border-top: 1px solid #edf3fa;
+}
+
+.datahub-business-explanation__scope-row dt {
+  min-width: 0;
+  padding-right: 12px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }
 
-.datahub-business-explanation__fact-values li::before {
-  position: absolute;
-  top: 13px;
-  left: 10px;
-  width: 4px;
-  height: 4px;
-  content: "";
-  border-radius: 50%;
-  background: #76a9df;
+.datahub-business-explanation__body .datahub-business-explanation__scope-row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
-.datahub-business-explanation__fact details {
-  margin-top: 8px;
+.datahub-business-explanation__body
+  .datahub-business-explanation__scope-more p {
+  margin-top: 3px;
+  color: var(--xs-text-2);
+  overflow-wrap: anywhere;
 }
 
-.datahub-business-explanation__fact summary {
+.datahub-business-explanation__scope-more {
+  margin-top: 3px;
+}
+
+.datahub-business-explanation__scope-detail {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #edf3fa;
+}
+
+.datahub-business-explanation__scope-more > summary,
+.datahub-business-explanation__scope-detail > summary {
   width: max-content;
   max-width: 100%;
   color: #356fae;
   font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-bold);
   cursor: pointer;
+}
+
+.datahub-business-explanation__scope-detail
+  .datahub-business-explanation__scope-rows {
+  margin-top: 2px;
 }
 
 .datahub-business-explanation__documents li {
@@ -617,16 +562,14 @@
 }
 
 @media (max-width: 620px) {
-  .datahub-business-explanation__facts {
-    grid-template-columns: 1fr;
+  /* 窄屏把标签叠到内容上方，避免定值标签列挤压业务口径正文。 */
+  .datahub-business-explanation__scope-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
   }
 
-  .datahub-business-explanation__fact--wide {
-    grid-column: auto;
-  }
-
-  .datahub-business-explanation__fact--wide .datahub-business-explanation__fact-values {
-    grid-template-columns: 1fr;
+  .datahub-business-explanation__scope-row dt {
+    padding-right: 0;
   }
 
   .datahub-business-explanation__document-action {
