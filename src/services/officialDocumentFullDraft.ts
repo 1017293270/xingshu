@@ -242,6 +242,10 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
       outputRules: {
         fixedFieldAnchor: "[[XS_FIXED:slot-id]]",
         sectionAnchor: "[[XS_SECTION:section-id]]",
+        // 合法锚点的显式全集：提示词只给格式，模型会照抄占位符或自创 id，
+        // 把可用锚点逐字列出来才有东西可抄。
+        fixedFieldAnchors: fixedFields.map((field) => `[[XS_FIXED:${field.slotId}]]`),
+        sectionAnchors: sections.map((section) => `[[XS_SECTION:${section.id}]]`),
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
@@ -424,6 +428,50 @@ function splitAnchoredSections(markdown: string, sections: Array<{ id: string; t
   });
 }
 
+/** 提示词里描述锚点格式用的占位符，模型逐字照抄时命中这里而不是当成真 slotId。 */
+const PLACEHOLDER_FIXED_ANCHOR_IDS = new Set(["slot-id", "slotid", "<slot-id>", "<slotid>"]);
+
+/**
+ * 把 FIXED 锚点上的 id 尽量修回声明过的 slotId。模型常见的两种跑偏——
+ * 逐字抄提示词里的占位符、给红头里没声明成 slot 的字段（如签发人）自创 id——
+ * 过去都会让整版成稿被拒，用户只能展开原文重出一遍。按保守优先级修：
+ * 1) 归一化（去空白、小写）后等于某个声明 slotId；
+ * 2) 归一化后等于某个声明字段的显示名 roleLabel（同名字段多于一个时视为对不上，不猜）；
+ * 3) 字面就是占位符时，按文档顺序补到「没被任何合法锚点认领」的声明字段上。
+ * 都对不上就原样返回，由调用方抛出带 id 的错误——宁可拒绝，也不把值写进错字段。
+ */
+function resolveFixedAnchorIds(
+  markers: Array<{ kind: "FIXED" | "SECTION"; id: string }>,
+  fixedFields: OfficialDocumentReferenceFixedField[]
+) {
+  const bySlotId = new Map(fixedFields.map((field) => [normalizeText(field.slotId), field.slotId]));
+  const byRoleLabel = new Map<string, string | undefined>();
+  fixedFields.forEach((field) => {
+    const label = normalizeText(field.roleLabel);
+    // 同一个显示名对应多个字段时存 undefined：宁可不修，也不赌是哪一个。
+    if (label) byRoleLabel.set(label, byRoleLabel.has(label) ? undefined : field.slotId);
+  });
+  const matched = markers.map((marker) => {
+    if (marker.kind !== "FIXED") return undefined;
+    const normalized = normalizeText(marker.id);
+    return bySlotId.get(normalized) ?? byRoleLabel.get(normalized);
+  });
+  // 先把所有能直接认出来的字段登记掉，占位符才不会抢走模型写对的那个字段。
+  const claimed = new Set(matched.filter((slotId): slotId is string => Boolean(slotId)));
+  let cursor = 0;
+  return markers.map((marker, index) => {
+    const direct = matched[index];
+    if (direct) return direct;
+    if (marker.kind !== "FIXED" || !PLACEHOLDER_FIXED_ANCHOR_IDS.has(normalizeText(marker.id))) return marker.id;
+    while (cursor < fixedFields.length && claimed.has(fixedFields[cursor].slotId)) cursor += 1;
+    const slotId = fixedFields[cursor]?.slotId;
+    if (!slotId) return marker.id;
+    claimed.add(slotId);
+    cursor += 1;
+    return slotId;
+  });
+}
+
 export function parseOfficialDocumentReferenceGeneration(input: {
   markdown: string;
   referenceDraftTitle: string;
@@ -437,11 +485,19 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean) ?? "";
-  const markers = [...input.markdown.matchAll(markerPattern)].map((match) => ({
+  const rawMarkers = [...input.markdown.matchAll(markerPattern)].map((match) => ({
     kind: match[1] as "FIXED" | "SECTION",
     id: match[2].trim(),
     index: match.index ?? 0,
     end: (match.index ?? 0) + match[0].length
+  }));
+  // 改写必须发生在下面的重复/未知判定之前：照抄的占位符会重复出现，
+  // 先补位成不同字段，才不会被当成「重复固定字段的值不一致」拒掉。
+  const resolvedIds = resolveFixedAnchorIds(rawMarkers, input.fixedFields);
+  const markers = rawMarkers.map((marker, index) => ({
+    ...marker,
+    id: resolvedIds[index],
+    rawId: marker.id
   }));
   const firstSectionIndex = markers.findIndex((marker) => marker.kind === "SECTION");
   if (firstSectionIndex < 0) throw new Error("生成结果缺少章节锚点");
@@ -462,7 +518,9 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     const value = input.markdown.slice(marker.end, markers[index + 1]?.index ?? input.markdown.length).trim();
     const target = marker.kind === "FIXED" ? fixedValues : sectionValues;
     const allowed = marker.kind === "FIXED" ? fixedIds.has(marker.id) : sectionIds.includes(marker.id);
-    if (!allowed) throw new Error(`生成结果包含未知的${marker.kind === "FIXED" ? "固定字段" : "章节"}锚点`);
+    if (!allowed) {
+      throw new Error(`生成结果包含未知的${marker.kind === "FIXED" ? "固定字段" : "章节"}锚点：${marker.rawId}`);
+    }
     if (target.has(marker.id)) {
       if (marker.kind === "FIXED"
         && fixedFieldValue(target.get(marker.id)) === fixedFieldValue(value)) return;

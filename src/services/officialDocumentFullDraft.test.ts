@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OfficialDocumentDraftContent, OfficialDocumentStructureNode } from "@/types/officialDocument";
+import type { OfficialDocumentReferenceFixedField } from "./officialDocumentFullDraft";
 import {
   buildOfficialDocumentReferenceWritingPlan,
   buildOfficialDocumentPreviewLines,
@@ -264,6 +265,133 @@ describe("reference draft generation", () => {
         "各部门要压实责任。"
       ].join("\n")
     })).toThrow("重复固定字段的值不一致");
+  });
+
+  describe("固定字段锚点的保守修复", () => {
+    const headFields: OfficialDocumentReferenceFixedField[] = [
+      { slotId: "issuer-slot", role: "ISSUING_AUTHORITY", roleLabel: "发文机关", required: true, preview: "" },
+      { slotId: "title-slot", role: "TITLE", roleLabel: "标题", required: true, preview: "" },
+      { slotId: "date-slot", role: "DATE", roleLabel: "成文日期", required: false, preview: "" }
+    ];
+    const parseHead = (head: string[], fixedFields: OfficialDocumentReferenceFixedField[] = headFields) => parseOfficialDocumentReferenceGeneration({
+      markdown: [...head, "[[XS_SECTION:reference-body-1]]", "通知正文。"].join("\n"),
+      referenceDraftTitle: "参考草稿",
+      sections: [{ id: "reference-body-1", order: 0, title: "正文", bodyRequired: true }],
+      fixedFields,
+      templateNodes
+    });
+    const valueOf = (result: { fixedValues: Array<{ slotId: string; value: string }> }, slotId: string) =>
+      result.fixedValues.find((value) => value.slotId === slotId)?.value;
+
+    it("单个字面 slot-id 补到第一个未被认领的声明字段", () => {
+      const result = parseHead(["[[XS_FIXED:slot-id]]", "测试公司"]);
+      expect(valueOf(result, "issuer-slot")).toBe("测试公司");
+      expect(valueOf(result, "title-slot")).toBe("[待补充：标题]");
+      expect(valueOf(result, "date-slot")).toBe("");
+    });
+
+    it("全部字面 slot-id 按声明顺序逐个补位，且不被重复锚点判定拦下", () => {
+      const result = parseHead([
+        "[[XS_FIXED:slot-id]]", "测试公司",
+        "[[XS_FIXED:slot-id]]", "关于开展安全检查的通知",
+        "[[XS_FIXED:slot-id]]", "2026年8月29日"
+      ]);
+      expect(result.fixedValues).toEqual([
+        { slotId: "issuer-slot", value: "测试公司" },
+        { slotId: "title-slot", value: "关于开展安全检查的通知" },
+        { slotId: "date-slot", value: "2026年8月29日" }
+      ]);
+      expect(result.title).toBe("关于开展安全检查的通知");
+    });
+
+    it("与合法锚点混排时跳过已被认领的字段", () => {
+      const result = parseHead([
+        "[[XS_FIXED:slot-id]]", "测试公司",
+        "[[XS_FIXED:title-slot]]", "关于开展安全检查的通知",
+        "[[XS_FIXED:slot-id]]", "2026年8月29日"
+      ]);
+      expect(result.fixedValues).toEqual([
+        { slotId: "issuer-slot", value: "测试公司" },
+        { slotId: "title-slot", value: "关于开展安全检查的通知" },
+        { slotId: "date-slot", value: "2026年8月29日" }
+      ]);
+    });
+
+    it("大小写与空白变体归一后命中声明 slotId", () => {
+      const result = parseHead([
+        "[[XS_FIXED: Title-Slot ]]", "关于开展安全检查的通知",
+        "[[XS_FIXED:DATE-SLOT]]", "2026年8月29日"
+      ]);
+      expect(valueOf(result, "title-slot")).toBe("关于开展安全检查的通知");
+      expect(valueOf(result, "date-slot")).toBe("2026年8月29日");
+    });
+
+    it("字段显示名命中对应 slotId", () => {
+      const result = parseHead([
+        "[[XS_FIXED:标题]]", "关于开展安全检查的通知",
+        "[[XS_FIXED:成文日期]]", "2026年8月29日"
+      ]);
+      expect(valueOf(result, "title-slot")).toBe("关于开展安全检查的通知");
+      expect(valueOf(result, "date-slot")).toBe("2026年8月29日");
+    });
+
+    it("同名显示名有多个字段时不猜，仍按未知锚点抛错", () => {
+      expect(() => parseHead(["[[XS_FIXED:固定字段]]", "测试公司"], [
+        { slotId: "a-slot", role: "UNKNOWN", roleLabel: "固定字段", required: false, preview: "" },
+        { slotId: "b-slot", role: "UNKNOWN", roleLabel: "固定字段", required: false, preview: "" }
+      ])).toThrow("生成结果包含未知的固定字段锚点：固定字段");
+    });
+
+    it("自创 id 仍然抛错，且错误信息带上具体 id", () => {
+      expect(() => parseHead(["[[XS_FIXED:signer-slot]]", "张三"]))
+        .toThrow("生成结果包含未知的固定字段锚点：signer-slot");
+    });
+
+    it("占位符数量超过声明字段时拒绝修复", () => {
+      expect(() => parseHead(["[[XS_FIXED:slot-id]]", "测试公司", "[[XS_FIXED:slot-id]]", "关于开展安全检查的通知"], [
+        { slotId: "issuer-slot", role: "ISSUING_AUTHORITY", roleLabel: "发文机关", required: true, preview: "" }
+      ])).toThrow("生成结果包含未知的固定字段锚点：slot-id");
+    });
+
+    it("未知章节锚点的错误信息同样带 id", () => {
+      expect(() => parseOfficialDocumentReferenceGeneration({
+        markdown: ["[[XS_SECTION:section-id]]", "通知正文。"].join("\n"),
+        referenceDraftTitle: "参考草稿",
+        sections: [{ id: "reference-body-1", order: 0, title: "正文", bodyRequired: true }],
+        fixedFields: [],
+        templateNodes
+      })).toThrow("生成结果包含未知的章节锚点：section-id");
+    });
+  });
+
+  it("outputRules 列出合法锚点全集，旧键原样保留", () => {
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "h1", order: 0, role: "HEADING_1", variantId: "heading-v1", text: "一、旧年度情况" },
+        { id: "b1", order: 1, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知"
+    });
+    const { outputRules } = plan.writingContext as { outputRules: Record<string, unknown> };
+
+    expect(outputRules.fixedFieldAnchors).toEqual(
+      plan.fixedFields.map((field) => `[[XS_FIXED:${field.slotId}]]`)
+    );
+    expect(outputRules.sectionAnchors).toEqual(
+      plan.sections.map((section) => `[[XS_SECTION:${section.id}]]`)
+    );
+    expect(outputRules.fixedFieldAnchors).toContain("[[XS_FIXED:title-slot]]");
+    expect(outputRules.sectionAnchors).toContain("[[XS_SECTION:reference-section-1]]");
+    expect(outputRules).toMatchObject({
+      fixedFieldAnchor: "[[XS_FIXED:slot-id]]",
+      sectionAnchor: "[[XS_SECTION:section-id]]",
+      keepSectionOrder: true,
+      allowHeadingRewrite: true,
+      copyReferenceFacts: false,
+      allowResearch: false
+    });
   });
 
   it("keeps a body-only reference body-only even when the model emits markdown headings", () => {
