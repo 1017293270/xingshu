@@ -356,6 +356,13 @@
 /* 入口页只留一条中轴：列表与上面的输入盒同宽同心，读作输入盒的续篇而不是另起一张全宽数据表。
    行内也不再排四列——表名是主角，类型与时间退到副行，动作等指针进来再现身。 */
 
+/* 选项卡是这条中轴的抬头，必须和下面的标题行、列表卡同宽同心：
+   页面外框走的是更宽的 data 轨道，不限宽就会甩到内容列左外侧。 */
+.table-home-tabs {
+  width: min(760px, 100%);
+  margin: 4px auto 14px;
+}
+
 .table-recent {
   width: min(760px, 100%);
   margin: 0 auto;
@@ -436,11 +443,6 @@ button.sheet-row__main {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-}
-
-/* 选项卡与上方状态条、下方列表之间都留一口气 */
-.table-home-tabs {
-  margin: 4px 0 14px;
 }
 
 .sheet-row__main:focus-visible {

@@ -273,10 +273,12 @@ export function TablePage() {
           aria-label="制表内容切换"
           value={activeTab}
           onChange={(value) => setActiveTab(value as TableHomeTab)}
+          /* title 置空：rc-segmented 默认把 label 复制成 title，鼠标扫过就会飘一条原生提示，
+             而这三个词本身已自说明，不需要重复一遍。 */
           options={[
-            { label: "最近制表", value: "recent" },
-            { label: "我的表格", value: "mine" },
-            { label: "表格模板", value: "templates" }
+            { label: "最近制表", value: "recent", title: "" },
+            { label: "我的表格", value: "mine", title: "" },
+            { label: "表格模板", value: "templates", title: "" }
           ]}
         />
       </div>

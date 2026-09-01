@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,6 +57,15 @@ describe("TablePage 表格模板选项卡", () => {
     expect(await screen.findByText("季度合同台账")).toBeInTheDocument();
     expect(screen.getByText("2 列结构")).toBeInTheDocument();
     expect(screen.queryByLabelText("最近制表记录")).not.toBeInTheDocument();
+  });
+
+  it("选项卡不挂原生 title，鼠标扫过不会飘出重复的提示条", async () => {
+    renderTablePage();
+
+    const tabs = screen.getByLabelText("制表内容切换");
+    for (const text of ["最近制表", "我的表格", "表格模板"]) {
+      expect(within(tabs).getByText(text)).toHaveAttribute("title", "");
+    }
   });
 
   it("新建模板经弹窗保存并刷新列表", async () => {
