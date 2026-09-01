@@ -32,6 +32,14 @@ describe("dataHubFormat", () => {
     expect(formatDataHubColumnTitle("CustomCube.unmappedField")).toBe("CustomCube.unmappedField");
   });
 
+  it("历史轮次「英文（中文）」双语表头只留中文业务名", () => {
+    expect(formatDataHubColumnTitle("contractNo（合同编号）")).toBe("合同编号");
+    expect(formatDataHubColumnTitle("ContractList.contractAmount(合同金额)")).toBe("合同金额");
+    // 中文在前的括号是单位注记，不能被剥
+    expect(formatDataHubColumnTitle("合同金额（元）")).toBe("合同金额（元）");
+    expect(formatDataHubColumnTitle("占比（%）")).toBe("占比（%）");
+  });
+
   it("appends a concrete table name after the numbered result-table title", () => {
     expect(
       formatDataHubTableTitle({

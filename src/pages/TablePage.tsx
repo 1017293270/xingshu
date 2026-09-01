@@ -1,5 +1,5 @@
-import { Button, Input, Tooltip } from "antd";
-import { AsteriskSimple, Check, CopySimple, PaperPlaneTilt } from "@phosphor-icons/react";
+import { Button, Input, Popconfirm, Segmented, Tooltip } from "antd";
+import { AsteriskSimple, Check, CopySimple, PaperPlaneTilt, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -16,8 +16,19 @@ import {
   XsGlyphTableStatistics
 } from "@/components/xs/XsMetricGlyphs";
 import { tableSessionPath, queueTableSessionLaunch } from "@/features/tableGeneration/useTableGeneration";
+import { TableTemplateModal } from "@/features/tableGeneration/TableTemplateModal";
 import { createAskTableSessionId } from "@/services/dataHubAskTable";
 import { listRecentTables } from "@/services/tableService";
+import {
+  buildTemplateLaunchPrompt,
+  createTableTemplate,
+  deleteTableTemplate,
+  listTableTemplates,
+  parseTableStructureColumns,
+  updateTableTemplate,
+  type DataHubTableTemplate,
+  type TableTemplateInput
+} from "@/services/tableTemplateService";
 import type { TableTemplate, TableTemplateIconId } from "@/types/table";
 import { PageFrame } from "./PageFrame";
 import "./styles/workflows.css";
@@ -72,6 +83,8 @@ function formatRecentTime(table: TableTemplate) {
   return `${updated.getFullYear()}-${padTwo(updated.getMonth() + 1)}-${padTwo(updated.getDate())}`;
 }
 
+type TableHomeTab = "recent" | "mine" | "templates";
+
 export function TablePage() {
   const navigate = useNavigate();
   const sessionScope = useSessionQueryScope();
@@ -80,6 +93,11 @@ export function TablePage() {
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
   const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
   const [promptPulse, setPromptPulse] = useState<"idle" | "filled">("idle");
+  const [activeTab, setActiveTab] = useState<TableHomeTab>("recent");
+  const [templateModal, setTemplateModal] = useState<
+    { mode: "create" } | { mode: "edit"; template: DataHubTableTemplate } | null
+  >(null);
+  const [templateSaving, setTemplateSaving] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
   const filledTimerRef = useRef<number | null>(null);
   const recentTablesQuery = useQuery({
@@ -92,6 +110,18 @@ export function TablePage() {
     isFetching: recentTablesQuery.isFetching,
     isError: recentTablesQuery.isError,
     hasData: recentTablesQuery.data !== undefined
+  });
+  const templatesQuery = useQuery({
+    queryKey: sessionQueryKey(sessionScope, "tableTemplates"),
+    queryFn: listTableTemplates,
+    enabled: activeTab === "templates"
+  });
+  const templates = templatesQuery.data ?? [];
+  const templatesStatus = resolveXsAsyncStatus({
+    isPending: templatesQuery.isPending,
+    isFetching: templatesQuery.isFetching,
+    isError: templatesQuery.isError,
+    hasData: templatesQuery.data !== undefined
   });
 
   useEffect(() => () => {
@@ -135,6 +165,53 @@ export function TablePage() {
       window.clearTimeout(copiedTimerRef.current);
     }
     copiedTimerRef.current = window.setTimeout(() => setCopiedTemplateId(null), 1200);
+  };
+
+  /** 从模板发起制表：提示词 + 结构参考注入首轮，走同一条问表链路。 */
+  const handleLaunchTemplate = (template: DataHubTableTemplate) => {
+    const sessionId = createAskTableSessionId();
+    const launchPrompt = buildTemplateLaunchPrompt(template);
+    queueTableSessionLaunch(sessionId, launchPrompt);
+    navigate(tableSessionPath(sessionId), { state: { prompt: launchPrompt } });
+  };
+
+  const handleSaveTemplate = async (input: TableTemplateInput) => {
+    if (!templateModal) {
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      if (templateModal.mode === "edit") {
+        await updateTableTemplate(templateModal.template.id, input);
+      } else {
+        await createTableTemplate(input);
+      }
+      setTemplateModal(null);
+      setSubmissionTone("success");
+      setSubmissionStatus(templateModal.mode === "edit" ? "模板已更新" : "模板已保存");
+      void templatesQuery.refetch();
+    } catch (error) {
+      setSubmissionTone("error");
+      setSubmissionStatus(
+        error instanceof Error ? `模板保存失败：${error.message}` : "模板保存失败，请稍后重试"
+      );
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (template: DataHubTableTemplate) => {
+    try {
+      await deleteTableTemplate(template.id);
+      setSubmissionTone("success");
+      setSubmissionStatus(`已删除模板：${template.name}`);
+      void templatesQuery.refetch();
+    } catch (error) {
+      setSubmissionTone("error");
+      setSubmissionStatus(
+        error instanceof Error ? `模板删除失败：${error.message}` : "模板删除失败，请稍后重试"
+      );
+    }
   };
 
   return (
@@ -191,7 +268,20 @@ export function TablePage() {
           reserveSpace
         />
       </div>
-      <section className="table-recent" aria-label="最近制表">
+      <div className="table-home-tabs xs-page-enter" style={xsEnterStep(2)}>
+        <Segmented
+          aria-label="制表内容切换"
+          value={activeTab}
+          onChange={(value) => setActiveTab(value as TableHomeTab)}
+          options={[
+            { label: "最近制表", value: "recent" },
+            { label: "我的表格", value: "mine" },
+            { label: "表格模板", value: "templates" }
+          ]}
+        />
+      </div>
+      {activeTab === "recent" ? (
+      <section className="table-recent" aria-label="最近制表记录">
         <div className="section-title-row section-title-row--compact xs-page-enter" style={xsEnterStep(2)}>
           <h2 className="subsection-title">最近制表</h2>
           <span className="section-title-meta">{recentTables.length} 条记录 · 点击打开当时的结果表</span>
@@ -262,6 +352,143 @@ export function TablePage() {
           </div>
         </XsAsyncPanel>
       </section>
+      ) : null}
+      {activeTab === "mine" ? (
+        <section className="table-recent" aria-label="我的表格">
+          <div className="section-title-row section-title-row--compact">
+            <h2 className="subsection-title">我的表格</h2>
+            <span className="section-title-meta">由制表会话生成的结果表 · 点击直接打开</span>
+          </div>
+          <XsAsyncPanel
+            status={recentTablesStatus}
+            empty={recentTables.length === 0}
+            emptyDescription="还没有生成过结果表，先在上面描述一张表试试。"
+            error="表格列表加载失败，请稍后重试。"
+            onRetry={() => void recentTablesQuery.refetch()}
+            loadingVariant="rows"
+            contentKey={recentTablesQuery.dataUpdatedAt}
+          >
+            <div className="sheet-list">
+              {recentTables.map((table) => {
+                const SheetGlyph = sheetGlyphById[table.iconId];
+                return (
+                  <article className="sheet-row" key={table.id} aria-label={table.title}>
+                    <Link
+                      className="sheet-row__main"
+                      to={tableSessionPath(table.id)}
+                      aria-label={`打开结果表：${table.title}`}
+                    >
+                      <span className="sheet-icon" aria-hidden="true">
+                        <SheetGlyph size={SHEET_GLYPH_SIZE} />
+                      </span>
+                      <span className="sheet-row__text">
+                        <h3 className="sheet-row__title" title={table.title}>{table.title}</h3>
+                        <span className="sheet-row__meta">
+                          <span className="sheet-row__type">{table.tag}</span>
+                          <em aria-hidden="true">·</em>
+                          <time className="sheet-row__time" dateTime={table.updatedAt} title={table.description}>
+                            {formatRecentTime(table)}
+                          </time>
+                        </span>
+                      </span>
+                    </Link>
+                  </article>
+                );
+              })}
+            </div>
+          </XsAsyncPanel>
+        </section>
+      ) : null}
+      {activeTab === "templates" ? (
+        <section className="table-recent" aria-label="表格模板">
+          <div className="section-title-row section-title-row--compact">
+            <h2 className="subsection-title">表格模板</h2>
+            <span className="section-title-meta">保存常用的制表提示词与表结构，一键复用</span>
+            <Button
+              type="primary"
+              size="small"
+              icon={<Plus size={14} aria-hidden="true" />}
+              onClick={() => setTemplateModal({ mode: "create" })}
+            >
+              新建模板
+            </Button>
+          </div>
+          <XsAsyncPanel
+            status={templatesStatus}
+            empty={templates.length === 0}
+            emptyDescription="还没有表格模板。可以点「新建模板」，或在制表会话的结果表侧栏里「存为模板」。"
+            error="模板列表加载失败，请稍后重试。"
+            onRetry={() => void templatesQuery.refetch()}
+            loadingVariant="rows"
+            contentKey={templatesQuery.dataUpdatedAt}
+          >
+            <div className="sheet-list">
+              {templates.map((template) => {
+                const columns = parseTableStructureColumns(template.structureJson);
+                return (
+                  <article className="sheet-row" key={template.id} aria-label={`模板：${template.name}`}>
+                    <button
+                      type="button"
+                      className="sheet-row__main"
+                      aria-label={`用模板制表：${template.name}`}
+                      onClick={() => handleLaunchTemplate(template)}
+                    >
+                      <span className="sheet-icon" aria-hidden="true">
+                        <XsGlyphTableChecklist size={SHEET_GLYPH_SIZE} />
+                      </span>
+                      <span className="sheet-row__text">
+                        <h3 className="sheet-row__title" title={template.name}>{template.name}</h3>
+                        <span className="sheet-row__meta">
+                          <span className="sheet-row__type" title={template.prompt}>
+                            {template.prompt.length > 42 ? `${template.prompt.slice(0, 42)}…` : template.prompt}
+                          </span>
+                          {columns.length > 0 ? (
+                            <>
+                              <em aria-hidden="true">·</em>
+                              <span>{columns.length} 列结构</span>
+                            </>
+                          ) : null}
+                        </span>
+                      </span>
+                    </button>
+                    <span className="sheet-row__actions">
+                      <Tooltip title="编辑模板" placement="top">
+                        <Button
+                          type="text"
+                          aria-label={`编辑模板：${template.name}`}
+                          icon={<PencilSimple size={15} aria-hidden="true" />}
+                          onClick={() => setTemplateModal({ mode: "edit", template })}
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                        title="删除这个模板？"
+                        description="删除后不可恢复，不影响已生成的结果表。"
+                        okText="删除"
+                        cancelText="取消"
+                        onConfirm={() => void handleDeleteTemplate(template)}
+                      >
+                        <Button
+                          type="text"
+                          aria-label={`删除模板：${template.name}`}
+                          icon={<Trash size={15} aria-hidden="true" />}
+                        />
+                      </Popconfirm>
+                    </span>
+                  </article>
+                );
+              })}
+            </div>
+          </XsAsyncPanel>
+        </section>
+      ) : null}
+      <TableTemplateModal
+        open={templateModal !== null}
+        title={templateModal?.mode === "edit" ? "编辑模板" : "新建模板"}
+        initial={templateModal?.mode === "edit" ? templateModal.template : undefined}
+        saving={templateSaving}
+        onSave={(input) => void handleSaveTemplate(input)}
+        onClose={() => setTemplateModal(null)}
+      />
     </PageFrame>
   );
 }

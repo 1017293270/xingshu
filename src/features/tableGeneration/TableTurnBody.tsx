@@ -1,4 +1,5 @@
 import { ArrowsClockwise, CircleNotch, Copy, DownloadSimple, Table, WarningCircle } from "@phosphor-icons/react";
+import { Dropdown } from "antd";
 import {
   XsArtifactCard,
   XsChatActionButton,
@@ -39,7 +40,7 @@ type TableTurnBodyProps = {
   onExpandClarify: (key: string) => void;
   onCopyAnswer: () => void;
   onRegenerate: () => void;
-  onExport: () => void;
+  onExport: (format: "csv" | "xlsx") => void;
 };
 
 /**
@@ -172,11 +173,22 @@ export function TableTurnBody({
             onClick={onRegenerate}
           />
           {canExport ? (
-            <XsChatActionButton
-              icon={<DownloadSimple size={14} aria-hidden="true" />}
-              label="导出结果"
-              onClick={onExport}
-            />
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: [
+                  { key: "csv", label: "导出 CSV" },
+                  { key: "xlsx", label: "导出 XLSX" }
+                ],
+                onClick: ({ key }) => onExport(key as "csv" | "xlsx")
+              }}
+            >
+              {/* Dropdown 需要能挂 ref 的触发器，这里用与 XsChatActionButton 同容器样式的原生按钮 */}
+              <button type="button" aria-label="导出结果" aria-haspopup="menu">
+                <DownloadSimple size={14} aria-hidden="true" />
+                导出结果
+              </button>
+            </Dropdown>
           ) : null}
         </XsChatActions>
       )}

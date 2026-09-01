@@ -28,7 +28,13 @@ import {
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
 import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
-import { exportDataHubTablesCsv } from "@/services/dataHubTableExport";
+import { exportDataHubTablesCsv, exportDataHubTablesXlsx } from "@/services/dataHubTableExport";
+import { TableTemplateModal } from "@/features/tableGeneration/TableTemplateModal";
+import {
+  buildTableStructureJson,
+  createTableTemplate,
+  type TableTemplateInput
+} from "@/services/tableTemplateService";
 import { listRecentTables } from "@/services/tableService";
 import type { DataHubAskDataStatus, DataHubAskTurn } from "@/types/dataHub";
 import { PageFrame } from "@/pages/PageFrame";
@@ -73,6 +79,9 @@ export function TableSessionView() {
   const [followUp, setFollowUp] = useState("");
   const [viewerKey, setViewerKey] = useState("");
   const [turnStatus, setTurnStatus] = useState<TableTurnStatus & { turnId: string }>();
+  /* 侧栏「存为模板」的草稿：带上正在看的表结构快照 */
+  const [templateDraft, setTemplateDraft] = useState<TableTemplateInput | null>(null);
+  const [templateSaving, setTemplateSaving] = useState(false);
   /* 每一轮只自动弹一次侧栏；用户关掉之后这一轮不再自己蹦出来。 */
   const autoOpenedRef = useRef(new Set<string>());
   const generation = useTableGeneration({
@@ -177,8 +186,20 @@ export function TableSessionView() {
     setFollowUp("");
   };
 
-  const handleExport = (turn: DataHubAskTurn) => {
-    exportDataHubTablesCsv(turn.tableResults, turn.question || "制表结果");
+  const handleExport = (turn: DataHubAskTurn, format: "csv" | "xlsx") => {
+    const basename = turn.question || "制表结果";
+    if (format === "csv") {
+      exportDataHubTablesCsv(turn.tableResults, basename);
+      return;
+    }
+    // XLSX 走动态 import，首次点击有一次分包加载；失败要让用户知道
+    void exportDataHubTablesXlsx(turn.tableResults, basename).catch(() => {
+      setTurnStatus({
+        turnId: turnKeyOf(turn),
+        tone: "error",
+        message: "XLSX 导出失败，请重试或改用 CSV"
+      });
+    });
   };
 
   const handleCopyAnswer = async (turn: DataHubAskTurn) => {
@@ -299,7 +320,7 @@ export function TableSessionView() {
                       onExpandClarify={dock.expand}
                       onCopyAnswer={() => void handleCopyAnswer(item)}
                       onRegenerate={() => generation.generate(item.question, sessionId)}
-                      onExport={() => handleExport(item)}
+                      onExport={(format) => handleExport(item, format)}
                     />
                   </XsChatAssistant>
                 </XsChatTurn>
@@ -391,6 +412,50 @@ export function TableSessionView() {
             title={viewer.turn.question}
             titleHint={viewer.turn.question}
             meta={`第 ${viewer.round} 轮${viewer.turn.dataSources.at(-1)?.datasourceName ? ` · ${viewer.turn.dataSources.at(-1)!.datasourceName}` : ""}`}
+            actions={(
+              <>
+                <Button
+                  size="small"
+                  aria-label="把当前结果表存为模板"
+                  onClick={() =>
+                    setTemplateDraft({
+                      name: viewer.turn.question.trim().slice(0, 100) || "制表模板",
+                      prompt: viewer.turn.question.trim() || "按当前表结构生成",
+                      structureJson: buildTableStructureJson(viewer.table.columns)
+                    })
+                  }
+                >
+                  存为模板
+                </Button>
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    items: [
+                      { key: "csv", label: "导出 CSV" },
+                      { key: "xlsx", label: "导出 XLSX" }
+                    ],
+                    onClick: ({ key }) => {
+                      // 侧栏只导出正在看的这一张表
+                      const single = [viewer.table];
+                      const basename = viewer.turn.question || "制表结果";
+                      if (key === "csv") {
+                        exportDataHubTablesCsv(single, basename);
+                        return;
+                      }
+                      void exportDataHubTablesXlsx(single, basename).catch(() => {
+                        setTurnStatus({
+                          turnId: turnKeyOf(viewer.turn),
+                          tone: "error",
+                          message: "XLSX 导出失败，请重试或改用 CSV"
+                        });
+                      });
+                    }
+                  }}
+                >
+                  <Button size="small" aria-label="下载当前结果表">下载</Button>
+                </Dropdown>
+              </>
+            )}
             onClose={() => setViewerKey("")}
           >
             <div className="table-chat__panel-body">
@@ -399,6 +464,37 @@ export function TableSessionView() {
           </XsSidePanel>
         ) : null}
       </div>
+      <TableTemplateModal
+        open={templateDraft !== null}
+        title="存为模板"
+        initial={templateDraft ?? undefined}
+        saving={templateSaving}
+        onSave={(input) => {
+          setTemplateSaving(true);
+          createTableTemplate(input)
+            .then(() => {
+              setTemplateDraft(null);
+              if (viewer) {
+                setTurnStatus({
+                  turnId: turnKeyOf(viewer.turn),
+                  tone: "success",
+                  message: `已存为模板：${input.name}`
+                });
+              }
+            })
+            .catch((error: unknown) => {
+              if (viewer) {
+                setTurnStatus({
+                  turnId: turnKeyOf(viewer.turn),
+                  tone: "error",
+                  message: error instanceof Error ? `模板保存失败：${error.message}` : "模板保存失败，请稍后重试"
+                });
+              }
+            })
+            .finally(() => setTemplateSaving(false));
+        }}
+        onClose={() => setTemplateDraft(null)}
+      />
     </PageFrame>
   );
 }

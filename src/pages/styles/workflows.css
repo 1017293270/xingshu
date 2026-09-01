@@ -422,6 +422,27 @@
   text-decoration: none;
 }
 
+/* 模板行的主区是按钮不是链接：抹平原生按钮外观，交互样式与链接版一致 */
+button.sheet-row__main {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 选项卡与上方状态条、下方列表之间都留一口气 */
+.table-home-tabs {
+  margin: 4px 0 14px;
+}
+
 .sheet-row__main:focus-visible {
   outline: 2px solid var(--xs-primary-2);
   outline-offset: 1px;
@@ -1129,4 +1150,54 @@
   .table-chat__panel-body .datahub-table-card {
     animation: none;
   }
+}
+
+/* ==================== 表格模板弹窗 ==================== */
+
+.table-template-modal {
+  display: grid;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.table-template-modal__field {
+  display: grid;
+  gap: 6px;
+}
+
+.table-template-modal__field > span {
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.table-template-modal__structure {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--xs-border);
+  border-radius: 10px;
+  background: var(--xs-surface-soft);
+}
+
+.table-template-modal__structure > span {
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.table-template-modal__structure > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.table-template-modal__structure em {
+  padding: 2px 10px;
+  color: var(--xs-text-2);
+  border: 1px solid var(--xs-border);
+  border-radius: 999px;
+  background: var(--xs-surface);
+  font-size: var(--xs-fs-caption);
+  font-style: normal;
 }

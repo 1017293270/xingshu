@@ -151,8 +151,20 @@ function resolveDataHubFieldTitle(value: string) {
   return dataHubFieldTitles[fieldName.toLowerCase()];
 }
 
+/**
+ * 历史轮次的表头可能是后端旧格式「contractNo（合同编号）」（英文字段在前、
+ * 中文业务名在括号里）；只保留中文业务名。中文在前的「金额（元）」「占比（%）」
+ * 属于单位注记，不在此剥离范围。与后端 BusinessColumnLabels 只出中文互为双向防御。
+ */
+function stripBilingualColumnTitle(title: string) {
+  const englishFirst = title.match(
+    /^[\w.$\s-]*[A-Za-z][\w.$\s-]*[（(]\s*([^（）()]*\p{Script=Han}[^（）()]*)\s*[)）]$/u
+  );
+  return englishFirst ? englishFirst[1].trim() : title;
+}
+
 export function formatDataHubColumnTitle(title: string, key = title) {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = stripBilingualColumnTitle(title.trim().replace(/\s+/g, " "));
   const compactTitle = dataHubColumnTitlePrefixes.reduce(
     (result, pattern) => result.replace(pattern, ""),
     normalizedTitle
