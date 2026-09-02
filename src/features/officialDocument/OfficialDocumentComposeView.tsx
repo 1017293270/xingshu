@@ -153,6 +153,14 @@ function usableResearchResults(results: OfficialDocumentResearchResult[]) {
   ));
 }
 
+/** 能进成稿的研究结果：成功且有料的落表格与图表，跳过的落「【待补充】」正文块。 */
+function embeddableResearchResults(results: OfficialDocumentResearchResult[]) {
+  return results.filter((result) => (
+    result.status === "SKIPPED"
+    || (result.status === "SUCCESS" && Boolean(result.summary.trim() || result.table || result.chart))
+  ));
+}
+
 type DraftMentionOption = MentionsOptionProps & {
   key: string;
   searchText: string;
@@ -336,12 +344,21 @@ export function OfficialDocumentComposeView() {
         { keepRicherStreamedAnswer: true }
       );
       try {
+        /* 研究拿到的表格与图表跟着正文一起进这一轮成稿；章节锚点与大纲 id 已恒等，映射只是防御。 */
+        const research = state.research;
         const generated = parseOfficialDocumentReferenceGeneration({
           markdown: answer,
           referenceDraftTitle: state.referenceDraft.title,
           sections: state.plan.sections,
           fixedFields: state.plan.fixedFields,
-          templateNodes: state.templateNodes
+          templateNodes: state.templateNodes,
+          researchResults: research
+            ? mapResearchResultsToReferenceSections(
+                embeddableResearchResults(research.results),
+                research.plan.sections,
+                state.plan.sections
+              )
+            : undefined
         });
         setTurnStates((current) => {
           const existing = current[message.id];
@@ -648,13 +665,17 @@ export function OfficialDocumentComposeView() {
       }));
       const initial = await getOfficialDocumentDraftContent(created.id);
       const generatedFixedValues = new Map(state.artifact.fixedValues.map((item) => [item.slotId, item.value]));
+      /* 这一轮的问数/问知原样跟着落库：草稿里再走 FULL_DRAFT 才有出处和材料可用，
+         口径与草稿编辑器一致——失败项也留着，资料面板要按状态列全量任务。 */
+      const roundResearch = state.research?.results ?? [];
       await updateOfficialDocumentDraftContent(created.id, {
         expectedRevision: initial.revision,
         fixedValues: initial.fixedValues.map((item) => ({
           ...item,
           value: generatedFixedValues.get(item.slotId) ?? ""
         })),
-        blocks: state.artifact.blocks
+        blocks: state.artifact.blocks,
+        ...(roundResearch.length ? { researchResults: roundResearch } : {})
       });
       patchTurn(turnId, {
         savedDraft: created,
@@ -739,6 +760,12 @@ export function OfficialDocumentComposeView() {
     const previewing = Boolean(state.previewLoading);
     const saving = busyAction?.turnId === turnId && busyAction.kind === "saving";
     const exporting = busyAction?.turnId === turnId && busyAction.kind === "exporting";
+    const tableCount = state.artifact.blocks.filter((block) => block.role === "TABLE").length;
+    const chartCount = state.artifact.blocks.filter((block) => block.role === "CHART_IMAGE").length;
+    const mixedMeta = [
+      tableCount ? `${tableCount} 表` : "",
+      chartCount ? `${chartCount} 图` : ""
+    ].filter(Boolean).join(" ");
 
     return (
       <XsArtifactCard
@@ -747,7 +774,11 @@ export function OfficialDocumentComposeView() {
         eyebrow={previewing ? "正在渲染…" : state.savedDraft ? "已保存 · 点击浏览" : "临时成稿 · 点击浏览"}
         title={state.artifact.title}
         badge={state.version > 1 ? `v${state.version}` : undefined}
-        meta={`${state.artifact.templateName} · ${state.savedDraft ? "已进入草稿箱" : "未保存"}`}
+        meta={[
+          state.artifact.templateName,
+          state.savedDraft ? "已进入草稿箱" : "未保存",
+          mixedMeta
+        ].filter(Boolean).join(" · ")}
         active={viewerTurnId === turnId}
         openLabel={`浏览 ${state.artifact.title}`}
         onOpen={() => openViewer(turnId)}

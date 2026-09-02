@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { OfficialDocumentDraftContent, OfficialDocumentStructureNode } from "@/types/officialDocument";
+import { MAX_OFFICIAL_DOCUMENT_CHARTS } from "@/services/officialDocumentResearchService";
+import type {
+  OfficialDocumentDraftContent,
+  OfficialDocumentResearchResult,
+  OfficialDocumentStructureNode
+} from "@/types/officialDocument";
 import type {
   OfficialDocumentReferenceFixedField,
   OfficialDocumentReferenceSection
@@ -780,6 +785,151 @@ describe("reference draft generation", () => {
     expect(result.fixedValues.find((value) => value.slotId === "title-slot")?.value)
       .toBe("关于开展安全检查的通知");
     expect(result.blocks.map((block) => block.text)).toEqual(["通知正文。"]);
+  });
+
+  describe("研究结果混排", () => {
+    const researchSections: OfficialDocumentReferenceSection[] = [
+      { id: "sec-1", order: 0, headingRole: "HEADING_1", title: "一、总体要求", bodyRequired: true },
+      { id: "sec-2", order: 1, headingRole: "HEADING_1", title: "二、重点任务", bodyRequired: true }
+    ];
+    const researchMarkdown = [
+      "[[XS_SECTION:sec-1]]",
+      "一、总体要求",
+      "全面落实安全生产责任制。",
+      "[[XS_SECTION:sec-2]]",
+      "二、重点任务",
+      "聚焦重点行业开展排查。"
+    ].join("\n");
+    const sampleTable = { columns: ["年份", "起数"], rows: [["2024", "12"]], totalRows: 1 };
+    const sampleChart = {
+      mimeType: "image/png" as const,
+      base64: "iVBORw0KGgo=",
+      widthPx: 640,
+      heightPx: 360,
+      altText: "近三年事故起数柱状图"
+    };
+    const sampleSource = {
+      kind: "QUERY_ASSET" as const,
+      queryAssetId: "qa-1",
+      queryVersionId: "qv-1",
+      outputKey: "out-1"
+    };
+
+    function researchResult(
+      overrides: Partial<OfficialDocumentResearchResult> & { taskId: string; sectionId: string }
+    ): OfficialDocumentResearchResult {
+      return {
+        kind: "ASK_DATA",
+        question: "近三年事故起数",
+        required: true,
+        preferredOutput: "TABLE",
+        status: "SUCCESS",
+        summary: "事故起数逐年下降。",
+        citations: [],
+        ...overrides
+      };
+    }
+
+    const parseWithResearch = (researchResults?: OfficialDocumentResearchResult[]) => (
+      parseOfficialDocumentReferenceGeneration({
+        markdown: researchMarkdown,
+        referenceDraftTitle: "参考草稿",
+        sections: researchSections,
+        fixedFields: [],
+        templateNodes,
+        researchResults
+      })
+    );
+
+    it("表格与图表接在本节文字之后，跳过项落待补充块，失败与缺来源不插块", () => {
+      const generated = parseWithResearch([
+        researchResult({
+          taskId: "t1",
+          sectionId: "sec-1",
+          table: sampleTable,
+          chart: sampleChart,
+          querySource: sampleSource
+        }),
+        researchResult({ taskId: "t2", sectionId: "sec-1", status: "FAILED", question: "失败问题", summary: "" }),
+        researchResult({ taskId: "t3", sectionId: "sec-1", status: "NO_RESULT", question: "查无此数", summary: "" }),
+        /* 有表却没有 querySource：来源标不出来就不落块，交给正文写「[待补充：…]」。 */
+        researchResult({ taskId: "t4", sectionId: "sec-1", question: "无来源表", table: sampleTable }),
+        researchResult({ taskId: "t5", sectionId: "sec-2", status: "SKIPPED", question: "全省投入资金", summary: "" })
+      ]);
+
+      expect(generated.blocks.map((block) => [block.role, block.sectionId, block.text])).toEqual([
+        ["HEADING_1", "sec-1", "一、总体要求"],
+        ["BODY", "sec-1", "全面落实安全生产责任制。"],
+        ["TABLE", "sec-1", "近三年事故起数"],
+        ["CHART_IMAGE", "sec-1", "近三年事故起数柱状图"],
+        ["HEADING_1", "sec-2", "二、重点任务"],
+        ["BODY", "sec-2", "聚焦重点行业开展排查。"],
+        ["BODY", "sec-2", "【待补充】全省投入资金"]
+      ]);
+      expect(generated.blocks.map((block) => block.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+      expect(generated.blocks[2].table).toEqual(sampleTable);
+      expect(generated.blocks[2].source).toEqual(sampleSource);
+      expect(generated.blocks[2].sourceTaskIds).toEqual(["t1"]);
+      expect(generated.blocks[3].chart).toEqual(sampleChart);
+      expect(generated.blocks[3].source).toEqual(sampleSource);
+      expect(generated.blocks[3].sourceTaskIds).toEqual(["t1"]);
+      expect(generated.blocks[6].sourceTaskIds).toEqual(["t5"]);
+      expect(generated.blocks[6].variantId).toBe("body-v1");
+    });
+
+    it("图表按全篇上限发放，超额的结果只落表格", () => {
+      const generated = parseWithResearch(
+        Array.from({ length: MAX_OFFICIAL_DOCUMENT_CHARTS + 1 }, (_, index) => researchResult({
+          taskId: `chart-${index}`,
+          sectionId: index === 0 ? "sec-1" : "sec-2",
+          question: `问题${index}`,
+          table: sampleTable,
+          chart: { ...sampleChart, altText: `图${index}` },
+          querySource: sampleSource
+        }))
+      );
+
+      expect(generated.blocks.filter((block) => block.role === "TABLE").map((block) => block.text))
+        .toEqual(["问题0", "问题1", "问题2", "问题3"]);
+      expect(generated.blocks.filter((block) => block.role === "CHART_IMAGE").map((block) => block.text))
+        .toEqual(["图0", "图1", "图2"]);
+    });
+
+    it("认不出章节的研究结果追加到全文末尾", () => {
+      const generated = parseWithResearch([
+        researchResult({
+          taskId: "t9",
+          sectionId: "sec-unknown",
+          question: "省外对比",
+          table: sampleTable,
+          querySource: sampleSource
+        })
+      ]);
+
+      expect(generated.blocks.map((block) => [block.role, block.sectionId, block.text])).toEqual([
+        ["HEADING_1", "sec-1", "一、总体要求"],
+        ["BODY", "sec-1", "全面落实安全生产责任制。"],
+        ["HEADING_1", "sec-2", "二、重点任务"],
+        ["BODY", "sec-2", "聚焦重点行业开展排查。"],
+        ["TABLE", "sec-2", "省外对比"]
+      ]);
+    });
+
+    it("不带研究结果时成稿与从前一字不差", () => {
+      expect(parseWithResearch().blocks.map((block) => [
+        block.role,
+        block.sectionId,
+        block.variantId,
+        block.text
+      ])).toEqual([
+        ["HEADING_1", "sec-1", "heading-v1", "一、总体要求"],
+        ["BODY", "sec-1", "body-v1", "全面落实安全生产责任制。"],
+        ["HEADING_1", "sec-2", "heading-v1", "二、重点任务"],
+        ["BODY", "sec-2", "body-v1", "聚焦重点行业开展排查。"]
+      ]);
+      expect(parseWithResearch().blocks.some((block) => block.table || block.chart || block.source)).toBe(false);
+      expect(parseWithResearch([]).blocks).toHaveLength(4);
+    });
   });
 });
 

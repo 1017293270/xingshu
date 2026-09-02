@@ -1,3 +1,4 @@
+import { MAX_OFFICIAL_DOCUMENT_CHARTS } from "@/services/officialDocumentResearchService";
 import type {
   OfficialDocumentContentProfile,
   OfficialDocumentDraftContent,
@@ -656,6 +657,8 @@ export function parseOfficialDocumentReferenceGeneration(input: {
   sections: OfficialDocumentReferenceSection[];
   fixedFields: OfficialDocumentReferenceFixedField[];
   templateNodes: OfficialDocumentStructureNode[];
+  /** 这一轮问数/问知的产物；传进来才会把表格与图表混排进成稿。 */
+  researchResults?: OfficialDocumentResearchResult[];
 }): OfficialDocumentReferenceGeneration {
   const markerPattern = /\[\[XS_(FIXED|SECTION):([^\]\r\n]+)\]\]/g;
   const fixedFieldValue = (value: string | undefined) => value
@@ -721,6 +724,50 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     parseOfficialDocumentAssistantText(sectionValues.get(section.id) ?? "", true)
   ));
   repairSectionHeadings(input.sections, parsedBySection);
+
+  /* 研究结果按章节归位；认不出章节的不丢，最后统一落到全文末尾。 */
+  const researchBySection = new Map<string, OfficialDocumentResearchResult[]>();
+  const orphanResearch: OfficialDocumentResearchResult[] = [];
+  (input.researchResults ?? []).forEach((result) => {
+    if (!sectionIds.includes(result.sectionId)) {
+      orphanResearch.push(result);
+      return;
+    }
+    const bucket = researchBySection.get(result.sectionId) ?? [];
+    bucket.push(result);
+    researchBySection.set(result.sectionId, bucket);
+  });
+  /* 图表按全篇预算发放：超额的结果只落表格，不再插图。 */
+  let chartBudget = MAX_OFFICIAL_DOCUMENT_CHARTS;
+  const appendResearchBlocks = (sectionId: string, results: OfficialDocumentResearchResult[]) => {
+    results.forEach((result) => {
+      if (result.status === "SKIPPED") {
+        blocks.push({
+          id: crypto.randomUUID(), order: order++, role: "BODY",
+          variantId: officialDocumentVariantId(input.templateNodes, "BODY"), sectionId,
+          sourceTaskIds: [result.taskId], text: `【待补充】${result.question}`
+        });
+        return;
+      }
+      if (result.status !== "SUCCESS" || !result.querySource) return;
+      if (result.table) {
+        blocks.push({
+          id: crypto.randomUUID(), order: order++, role: "TABLE", variantId: "",
+          sectionId, sourceTaskIds: [result.taskId], text: result.question,
+          table: result.table, source: result.querySource
+        });
+      }
+      if (result.chart && chartBudget > 0) {
+        chartBudget -= 1;
+        blocks.push({
+          id: crypto.randomUUID(), order: order++, role: "CHART_IMAGE", variantId: "",
+          sectionId, sourceTaskIds: [result.taskId], text: result.chart.altText,
+          chart: result.chart, source: result.querySource
+        });
+      }
+    });
+  };
+
   input.sections.forEach((section, index) => {
     const parsed = parsedBySection[index];
     if (section.headingRole) {
@@ -751,20 +798,21 @@ export function parseOfficialDocumentReferenceGeneration(input: {
         sourceTaskIds: [],
         text: item.text
       }));
-      return;
+    } else {
+      if (!parsed.length) throw new Error("生成结果没有正文");
+      parsed.forEach((item) => blocks.push({
+        id: crypto.randomUUID(),
+        order: order++,
+        role: "BODY",
+        variantId: officialDocumentVariantId(input.templateNodes, "BODY"),
+        sectionId: section.id,
+        sourceTaskIds: [],
+        text: item.text
+      }));
     }
-
-    if (!parsed.length) throw new Error("生成结果没有正文");
-    parsed.forEach((item) => blocks.push({
-      id: crypto.randomUUID(),
-      order: order++,
-      role: "BODY",
-      variantId: officialDocumentVariantId(input.templateNodes, "BODY"),
-      sectionId: section.id,
-      sourceTaskIds: [],
-      text: item.text
-    }));
+    appendResearchBlocks(section.id, researchBySection.get(section.id) ?? []);
   });
+  appendResearchBlocks(sectionIds[sectionIds.length - 1], orphanResearch);
 
   let normalizedFixedValues = input.fixedFields.map((field) => ({
     slotId: field.slotId,

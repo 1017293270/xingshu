@@ -874,4 +874,185 @@ describe("OfficialDocumentComposeView", () => {
     expect(JSON.stringify(context)).not.toContain("二、工作要求");
     expect(JSON.stringify(context.referenceSections)).not.toContain("一、原章节");
   });
+
+  it("大纲确认环：研究拿到的表格与图表随正文进这一轮临时成稿", async () => {
+    const user = userEvent.setup();
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    chat.state.autoSettleContent = [
+      "[[XS_FIXED:title-slot]]",
+      "关于开展2026年安全检查的通知",
+      "[[XS_SECTION:s1]]",
+      "# 一、检查安排",
+      "各部门应按要求完成安全检查。"
+    ].join("\n");
+    mocks.analyzeContent.mockReset().mockResolvedValue({
+      summary: "",
+      sections: [{
+        id: "s1", order: 0, headingRole: "HEADING_1", title: "一、检查安排",
+        purpose: "交代检查安排", keyPoints: [], sourceBlockIds: []
+      }],
+      researchNeeds: [{
+        id: "n1", sectionId: "s1", kind: "ASK_DATA",
+        question: "2026年检查完成数量", reason: "正文需要数量",
+        required: true, preferredOutput: "TABLE"
+      }],
+      unassignedSourceBlockIds: [],
+      warnings: []
+    });
+    const researchTable = { columns: ["季度", "次数"], rows: [["Q1", "30"]], totalRows: 1 };
+    const researchChart = {
+      mimeType: "image/png",
+      base64: "iVBORw0KGgo=",
+      widthPx: 640,
+      heightPx: 360,
+      altText: "各季度检查次数柱状图"
+    };
+    const researchSource = { kind: "QUERY_ASSET", queryAssetId: "qa-1", outputKey: "out-1" };
+    mocks.executeResearchPlan.mockReset().mockResolvedValue([{
+      taskId: "n1",
+      sectionId: "s1",
+      kind: "ASK_DATA",
+      question: "2026年检查完成数量",
+      required: true,
+      preferredOutput: "TABLE",
+      status: "SUCCESS",
+      summary: "全年共完成检查 120 次",
+      table: researchTable,
+      chart: researchChart,
+      querySource: researchSource,
+      citations: []
+    }]);
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const outline = await screen.findByRole("region", { name: "写作大纲确认" });
+    await user.click(within(outline).getByRole("button", { name: "确认大纲，补资料并生成" }));
+
+    const artifact = await screen.findByRole("article", { name: "生成的公文文件" });
+    // 产物卡直接报数，用户不用打开预览就知道图表混排进去了
+    await waitFor(() => expect(artifact).toHaveTextContent("1 表 1 图"));
+
+    await user.click(within(artifact).getByRole("button", { name: "下载" }));
+    await user.click(await screen.findByText("下载 Word"));
+    await waitFor(() => expect(mocks.exportTransient).toHaveBeenCalledTimes(1));
+    const exported = mocks.exportTransient.mock.calls[0][0] as {
+      blocks: Array<{
+        role: string;
+        text: string;
+        sourceTaskIds?: string[];
+        table?: unknown;
+        chart?: unknown;
+        source?: unknown;
+      }>;
+    };
+    expect(exported.blocks.map((block) => [block.role, block.text])).toEqual([
+      ["HEADING_1", "一、检查安排"],
+      ["BODY", "各部门应按要求完成安全检查。"],
+      ["TABLE", "2026年检查完成数量"],
+      ["CHART_IMAGE", "各季度检查次数柱状图"]
+    ]);
+    expect(exported.blocks[2].table).toEqual(researchTable);
+    expect(exported.blocks[2].source).toEqual(researchSource);
+    expect(exported.blocks[2].sourceTaskIds).toEqual(["n1"]);
+    // 图表 base64 只在写作上下文里被剥掉，进成稿的必须是完整图
+    expect(exported.blocks[3].chart).toEqual(researchChart);
+    expect(exported.blocks[3].source).toEqual(researchSource);
+    anchorClick.mockRestore();
+  });
+
+  it("保存到草稿箱时把这一轮研究材料一并落库", async () => {
+    const user = userEvent.setup();
+    chat.state.autoSettleContent = [
+      "[[XS_FIXED:title-slot]]",
+      "关于开展2026年安全检查的通知",
+      "[[XS_SECTION:s1]]",
+      "# 一、检查安排",
+      "各部门应按要求完成安全检查。"
+    ].join("\n");
+    mocks.analyzeContent.mockReset().mockResolvedValue({
+      summary: "",
+      sections: [{
+        id: "s1", order: 0, headingRole: "HEADING_1", title: "一、检查安排",
+        purpose: "交代检查安排", keyPoints: [], sourceBlockIds: []
+      }],
+      researchNeeds: [
+        {
+          id: "n1", sectionId: "s1", kind: "ASK_DATA",
+          question: "2026年检查完成数量", reason: "正文需要数量",
+          required: true, preferredOutput: "TABLE"
+        },
+        {
+          id: "n2", sectionId: "s1", kind: "ASK_KNOWLEDGE",
+          question: "上级最新检查口径", reason: "正文需要依据",
+          required: false, preferredOutput: "FACT"
+        }
+      ],
+      unassignedSourceBlockIds: [],
+      warnings: []
+    });
+    const roundResults = [
+      {
+        taskId: "n1",
+        sectionId: "s1",
+        kind: "ASK_DATA",
+        question: "2026年检查完成数量",
+        required: true,
+        preferredOutput: "TABLE",
+        status: "SUCCESS",
+        summary: "全年共完成检查 120 次",
+        table: { columns: ["季度", "次数"], rows: [["Q1", "30"]], totalRows: 1 },
+        chart: {
+          mimeType: "image/png",
+          base64: "iVBORw0KGgo=",
+          widthPx: 640,
+          heightPx: 360,
+          altText: "各季度检查次数柱状图"
+        },
+        querySource: { kind: "QUERY_ASSET", queryAssetId: "qa-1", outputKey: "out-1" },
+        citations: []
+      },
+      {
+        taskId: "n2",
+        sectionId: "s1",
+        kind: "ASK_KNOWLEDGE",
+        question: "上级最新检查口径",
+        required: false,
+        preferredOutput: "FACT",
+        status: "FAILED",
+        summary: "",
+        citations: []
+      }
+    ];
+    mocks.executeResearchPlan.mockReset().mockResolvedValue(roundResults);
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const outline = await screen.findByRole("region", { name: "写作大纲确认" });
+    await user.click(within(outline).getByRole("button", { name: "确认大纲，补资料并生成" }));
+
+    await screen.findByRole("article", { name: "生成的公文文件" });
+    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+
+    await waitFor(() => expect(mocks.updateDraftContent).toHaveBeenCalledTimes(1));
+    // 图表 base64 与失败项都原样留在草稿里：资料面板要列全量任务，再生成要拿得到出处
+    expect(mocks.updateDraftContent.mock.calls[0][1].researchResults).toEqual(roundResults);
+  });
+
+  it("跳过大纲的轮次保存时不带 researchResults", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    await screen.findByRole("article", { name: "生成的公文文件" });
+    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+
+    await waitFor(() => expect(mocks.updateDraftContent).toHaveBeenCalledTimes(1));
+    expect(mocks.updateDraftContent.mock.calls[0][1]).not.toHaveProperty("researchResults");
+  });
 });
