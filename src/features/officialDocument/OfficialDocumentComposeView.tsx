@@ -65,6 +65,7 @@ import type {
   OfficialDocumentTemplate,
   OfficialDocumentWritingLogicPlan
 } from "@/types/officialDocument";
+import { ComposeAnalyzingCard, ComposeElapsed } from "./ComposeAnalyzingCard";
 import { ComposeOutlineCard } from "./ComposeOutlineCard";
 import { formatDate, operationErrorMessage, useUpdateOfficialDocumentWorkspaceCache } from "./officialDocumentMeta";
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
@@ -99,6 +100,8 @@ type ComposeTurnState = {
   referenceDraft: OfficialDocumentDraft;
   template: OfficialDocumentTemplate;
   templateNodes: OfficialDocumentStructureNode[];
+  /** 这一轮发起的时刻，流式还没吐首字时用来给出真实耗时。 */
+  startedAt: number;
   /** 这一轮带的研究材料；重新生成时原样复用，不再重跑问数/问知。 */
   research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
   artifact?: GeneratedArtifact;
@@ -124,6 +127,12 @@ type PendingSubmission = {
   requirement: string;
   draftTitle: string;
   templateName: string;
+  startedAt: number;
+};
+
+/** 分析等待态：卡片要按真实耗时推进阶段，也要把参考结构的章节骨架亮出来。 */
+type AnalyzingSubmission = PendingSubmission & {
+  templateNodes: OfficialDocumentStructureNode[];
 };
 
 /** 大纲确认环：分析完成后停在 confirm 等用户拍板，确认后进入 researching 逐条补资料。 */
@@ -223,7 +232,7 @@ export function OfficialDocumentComposeView() {
   const [selectedDraftId, setSelectedDraftId] = useState("");
   const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>({});
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission>();
-  const [analyzingSubmission, setAnalyzingSubmission] = useState<PendingSubmission>();
+  const [analyzingSubmission, setAnalyzingSubmission] = useState<AnalyzingSubmission>();
   const [planning, setPlanning] = useState<ComposePlanning | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [composerError, setComposerError] = useState("");
@@ -370,10 +379,12 @@ export function OfficialDocumentComposeView() {
     extraInstruction = "",
     research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] }
   ) => {
+    const startedAt = Date.now();
     setPendingSubmission({
       requirement,
       draftTitle: referenceDraft.title,
-      templateName: referenceDraft.templateName
+      templateName: referenceDraft.templateName,
+      startedAt
     });
     try {
       const content = await getOfficialDocumentDraftContent(referenceDraft.id);
@@ -416,6 +427,7 @@ export function OfficialDocumentComposeView() {
           referenceDraft,
           template,
           templateNodes,
+          startedAt,
           research
         }
       }));
@@ -455,15 +467,18 @@ export function OfficialDocumentComposeView() {
     setComposerError("");
     setValue("");
     const referenceDraft = selectedDraft;
+    const structureNodes = template.currentVersion.analysis.structureNodes;
     const token = ++analyzeTokenRef.current;
     setAnalyzingSubmission({
       requirement,
       draftTitle: referenceDraft.title,
-      templateName: referenceDraft.templateName
+      templateName: referenceDraft.templateName,
+      startedAt: Date.now(),
+      templateNodes: structureNodes
     });
     try {
       const logicPlan = await analyzeOfficialDocumentContent({
-        structureNodes: template.currentVersion.analysis.structureNodes,
+        structureNodes,
         sourceBlocks: [{
           id: "user-requirement",
           order: 0,
@@ -503,6 +518,15 @@ export function OfficialDocumentComposeView() {
     analyzeTokenRef.current += 1;
     setAnalyzingSubmission(undefined);
     await runGeneration(current.requirement, selectedDraft, template);
+  };
+
+  /** 取消等待：作废在途分析，要求回到输入框，用户可以改完再来一次。 */
+  const cancelAnalyzing = () => {
+    const current = analyzingSubmission;
+    if (!current) return;
+    analyzeTokenRef.current += 1;
+    setAnalyzingSubmission(undefined);
+    setValue((existing) => existing || current.requirement);
   };
 
   const updatePlanningSectionTitle = (sectionId: string, title: string) => {
@@ -808,7 +832,11 @@ export function OfficialDocumentComposeView() {
         {streaming && !answer ? (
           <>
             <p>正在按参考草稿生成完整公文…</p>
-            <small><CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />正在处理</small>
+            <small>
+              <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
+              正在处理
+              {state ? <ComposeElapsed startedAt={state.startedAt} /> : null}
+            </small>
           </>
         ) : null}
 
@@ -932,18 +960,13 @@ export function OfficialDocumentComposeView() {
                     {analyzingSubmission.requirement}
                   </XsChatUserBubble>
                   <XsChatAssistant>
-                    <p>正在梳理写作大纲与资料需求…</p>
-                    <small>
-                      <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
-                      正在分析
-                    </small>
-                    <XsChatActions>
-                      <XsChatActionButton
-                        icon={<PaperPlaneTilt size={14} aria-hidden="true" />}
-                        label="跳过大纲直接生成"
-                        onClick={() => void skipAnalyzing()}
-                      />
-                    </XsChatActions>
+                    <ComposeAnalyzingCard
+                      startedAt={analyzingSubmission.startedAt}
+                      templateName={analyzingSubmission.templateName}
+                      templateNodes={analyzingSubmission.templateNodes}
+                      onSkip={() => void skipAnalyzing()}
+                      onCancel={cancelAnalyzing}
+                    />
                   </XsChatAssistant>
                 </XsChatTurn>
               ) : null}
@@ -993,6 +1016,7 @@ export function OfficialDocumentComposeView() {
                     <small>
                       <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
                       正在处理
+                      <ComposeElapsed startedAt={pendingSubmission.startedAt} />
                     </small>
                   </XsChatAssistant>
                 </XsChatTurn>

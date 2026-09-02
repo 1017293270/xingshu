@@ -3383,3 +3383,223 @@
     transition: none;
   }
 }
+
+/* ==================== 公文写作：大纲分析等待态 ====================
+   一次同步调用要等几十秒，这块负责把"干等"换成"看得见的事实"：
+   真实耗时、模型此刻在做的那一段、以及即将沿用的章节骨架。
+   与 .compose-outline 同一套卡片语言（同边框、同圆角、同字号阶梯），
+   横向溢出约束同样适用——它挂在 .xs-chat 这条共用滚动容器里。 */
+
+.compose-analyzing {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--xs-border);
+  border-radius: 10px;
+  background: var(--xs-surface);
+}
+
+.compose-analyzing__head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.compose-analyzing__heading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  line-height: 1.5;
+}
+
+.compose-analyzing__heading svg {
+  flex: none;
+  color: var(--xs-primary-2);
+}
+
+.compose-analyzing__heading strong {
+  min-width: 0;
+  font-weight: var(--xs-fw-medium);
+}
+
+/* 秒数每秒都在变，等宽数字才不会让整行左右抖 */
+.compose-analyzing__elapsed {
+  flex: none;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.compose-analyzing__steps {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-analyzing__steps > li {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* 图标槽宽度固定，三行文字左沿才对得齐 */
+.compose-analyzing__step-icon {
+  display: flex;
+  width: 15px;
+  height: 21px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.compose-analyzing__step-icon i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--xs-border-strong);
+}
+
+.compose-analyzing__steps > li[data-state="done"] .compose-analyzing__step-icon {
+  color: var(--xs-success);
+}
+
+.compose-analyzing__step-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-control);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.compose-analyzing__steps > li[data-state="active"] .compose-analyzing__step-text {
+  color: var(--xs-text);
+  font-weight: var(--xs-fw-medium);
+}
+
+.compose-analyzing__steps > li[data-state="done"] .compose-analyzing__step-text {
+  color: var(--xs-text-2);
+}
+
+.compose-analyzing__step-text small {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-text);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.compose-analyzing__skeleton {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.compose-analyzing__skeleton strong {
+  min-width: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.compose-analyzing__skeleton ul {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-analyzing__skeleton li {
+  min-width: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* 层级只用缩进表达，和大纲确认卡保持同一套节奏 */
+.compose-analyzing__skeleton li[data-depth="1"] {
+  padding-left: 16px;
+}
+
+.compose-analyzing__skeleton li[data-depth="2"] {
+  padding-left: 32px;
+}
+
+.compose-analyzing__skeleton li[data-more] {
+  color: #8b9bb1;
+}
+
+.compose-analyzing__slow {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--xs-surface-soft);
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.compose-analyzing__slow svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--xs-primary-2);
+}
+
+.compose-analyzing__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.compose-analyzing__actions .ant-btn {
+  height: 30px;
+  padding-inline: 11px;
+  border-radius: 8px;
+  font-size: var(--xs-fs-label);
+}
+
+.compose-analyzing__actions .ant-btn-text {
+  color: var(--xs-text-3);
+}
+
+.compose-analyzing__actions .ant-btn-text:hover:not(:disabled) {
+  color: var(--xs-text);
+}
+
+/* 运行中轮次的耗时读数，跟在「正在处理」后面 */
+.compose-elapsed {
+  color: var(--xs-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.compose-elapsed::before {
+  content: "·";
+  margin-right: 5px;
+}

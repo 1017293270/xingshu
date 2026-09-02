@@ -753,4 +753,70 @@ describe("OfficialDocumentComposeView", () => {
     expect(screen.queryByRole("region", { name: "写作大纲确认" })).not.toBeInTheDocument();
     expect(input).toHaveValue("撰写2026年安全检查通知");
   });
+
+  it("分析等待态给出耗时、参考骨架和两个出口", async () => {
+    const user = userEvent.setup();
+    // 分析挂着不返回：等待态是这个用例唯一要看的东西
+    mocks.analyzeContent.mockReset().mockReturnValue(new Promise(() => undefined));
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const card = await screen.findByRole("region", { name: "写作大纲分析中" });
+    expect(within(card).getByText("正在梳理写作大纲")).toBeInTheDocument();
+    expect(within(card).getByText(/\d+ 秒/)).toBeInTheDocument();
+    // 骨架来自参考模板真实的标题节点
+    expect(within(card).getByText("《通知模板》· 1 个章节")).toBeInTheDocument();
+    expect(within(card).getByText("一、原章节")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "跳过大纲直接生成" })).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("分析等待态：取消作废在途分析并把要求放回输入框", async () => {
+    const user = userEvent.setup();
+    let resolveAnalysis: ((plan: unknown) => void) | undefined;
+    mocks.analyzeContent.mockReset().mockReturnValue(new Promise((resolve) => {
+      resolveAnalysis = resolve;
+    }));
+    renderView();
+
+    await pickReference(user);
+    const input = await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const card = await screen.findByRole("region", { name: "写作大纲分析中" });
+    await user.click(within(card).getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("region", { name: "写作大纲分析中" })).not.toBeInTheDocument();
+    expect(input).toHaveValue("撰写2026年安全检查通知");
+
+    // 取消后迟到的分析结果必须被丢掉，不能反手弹出大纲卡
+    resolveAnalysis?.({
+      summary: "",
+      sections: [{
+        id: "s1", order: 0, headingRole: "HEADING_1", title: "一、原章节",
+        purpose: "", keyPoints: [], sourceBlockIds: []
+      }],
+      researchNeeds: [],
+      unassignedSourceBlockIds: [],
+      warnings: []
+    });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "写作大纲确认" })).not.toBeInTheDocument());
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("分析等待态：跳过大纲直接生成走一步到位的老路径", async () => {
+    const user = userEvent.setup();
+    mocks.analyzeContent.mockReset().mockReturnValue(new Promise(() => undefined));
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const card = await screen.findByRole("region", { name: "写作大纲分析中" });
+    await user.click(within(card).getByRole("button", { name: "跳过大纲直接生成" }));
+
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(mocks.executeResearchPlan).not.toHaveBeenCalled();
+  });
 });
