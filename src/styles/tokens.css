@@ -33,13 +33,19 @@
   --xs-text-2: #294469;
   --xs-text-3: #536987;
   --xs-interactive-text: #1D4ED8;
-  --xs-radius-control: 12px;
-  --xs-radius-card: 14px;
-  --xs-radius-small: 8px;
-  --xs-radius-large: 18px;
+  /* 圆角四档：small 用于标签与分段项，control 用于按钮/输入/分段外框，
+     card 用于内容卡与浮层，large 只留给 hero 级输入盒。
+     数值刻意压低——曲率越大越像消费级应用，企业界面靠直角和描边表达密度。 */
+  --xs-radius-control: 8px;
+  --xs-radius-card: 12px;
+  --xs-radius-small: 6px;
+  --xs-radius-large: 16px;
   --xs-module-gap: 16px;
-  --xs-control-height: 44px;
-  --xs-control-height-lg: 52px;
+  /* 控件高度三档：默认 36 是工具条与页头动作的密度基准，
+     lg 44 只给首页命令框/登录表单/对话输入这类主输入，sm 28 给行内次级动作。 */
+  --xs-control-height: 36px;
+  --xs-control-height-lg: 44px;
+  --xs-control-height-sm: 28px;
   --xs-sidebar-expanded-width: 200px;
   --xs-sidebar-collapsed-width: 80px;
   --xs-sidebar-width: var(--xs-sidebar-expanded-width);
@@ -47,7 +53,8 @@
   --xs-data-track: clamp(1220px, calc((100vw - var(--xs-sidebar-width)) * 0.84), 1480px);
   --xs-dashboard-track: clamp(1080px, calc((100vw - var(--xs-sidebar-width)) * 0.87), 1960px);
   --xs-shadow-soft: 0 10px 28px rgba(22, 119, 255, 0.08);
-  --xs-shadow-button: 0 12px 22px rgba(22, 119, 255, 0.2);
+  /* 按钮不参与海拔分级：实心按钮靠颜色本身站出来，只留一道 1px 的贴地投影定形 */
+  --xs-shadow-button: 0 1px 2px rgba(8, 26, 58, 0.06);
   /* 阴影海拔分级：lift=悬浮控件/hover，overlay=菜单/下拉/弹层面板，modal=模态对话框/全屏层 */
   --xs-shadow-lift: 0 14px 32px rgba(22, 119, 255, 0.12);
   --xs-shadow-overlay: 0 18px 44px rgba(8, 26, 58, 0.14);
@@ -241,7 +248,7 @@ textarea {
   }
 }
 
-/* 触屏设备：全局触控目标兜底（antd 控件 44px 天然满足，此处保底 40px） */
+/* 触屏设备：全局触控目标兜底。桌面控件基准是 36px，触屏下统一抬到 40px 热区 */
 @media (pointer: coarse) {
   :where(button, a, [role="button"], summary, input, select) {
     min-height: 40px;

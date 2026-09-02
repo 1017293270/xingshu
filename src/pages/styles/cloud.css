@@ -11,7 +11,7 @@
 }
 
 .cloud-toolbar .ant-input-affix-wrapper {
-  min-height: 42px;
+  min-height: var(--xs-control-height);
   background: var(--xs-surface);
 }
 
@@ -28,16 +28,7 @@
   gap: 10px;
 }
 
-.cloud-toolbar .ant-segmented {
-  padding: 3px;
-  border: 1px solid var(--xs-border);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.cloud-toolbar .ant-segmented-item {
-  min-height: 32px;
-}
-
+/* 分段器外观由全站规则（xs.css）统一给，这里只补图标与文字的行内排列 */
 .cloud-toolbar__view .ant-segmented-item-label {
   display: inline-flex;
   align-items: center;
@@ -344,11 +335,11 @@
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--xs-radius-small);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-text);
   white-space: nowrap;
 }
 
@@ -623,13 +614,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: var(--xs-control-height);
   padding: 0 14px;
   color: var(--xs-interactive-text);
   cursor: pointer;
   font-family: inherit;
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   background: var(--xs-surface);

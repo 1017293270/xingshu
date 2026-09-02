@@ -1,7 +1,7 @@
 /* 智能制表 + 智能写作：企业级工作流页面样式 */
 
 .workflow-status-slot {
-  min-height: 44px;
+  min-height: 32px;
 }
 
 .writing-mode-switch {
@@ -12,7 +12,7 @@
   padding: 4px;
   margin: 0 0 16px;
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
+  border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 6px 18px rgba(25, 83, 166, 0.04);
 }
@@ -26,7 +26,7 @@
   color: var(--xs-text-3);
   text-align: left;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--xs-radius-control);
   background: transparent;
   cursor: pointer;
   transition:
@@ -130,7 +130,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
@@ -246,7 +246,7 @@ button.sheet-row__main {
   width: 34px;
   height: 34px;
   color: var(--xs-primary-2);
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   background: var(--xs-info-soft);
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -266,7 +266,7 @@ button.sheet-row__main {
   min-width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: 9px;
+  border-radius: var(--xs-radius-control);
   color: var(--xs-text-3);
   opacity: 0;
   transition:
@@ -318,7 +318,7 @@ button.sheet-row__main {
   .sheet-row {
     padding: 0 6px 0 10px;
     border: 1px solid var(--xs-border);
-    border-radius: 12px;
+    border-radius: var(--xs-radius-card);
     background: var(--xs-surface);
     transition:
       border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -369,7 +369,7 @@ button.sheet-row__main {
     min-height: 32px;
     padding: 0;
     color: var(--xs-text-3);
-    border-radius: 9px;
+    border-radius: var(--xs-radius-control);
   }
 
   .sheet-list .sheet-row__actions .ant-btn:not(:disabled):hover,
@@ -525,7 +525,7 @@ button.sheet-row__main {
   max-width: min(100%, 280px);
   padding: 6px 10px;
   border: 1px solid #d6e8ff;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   color: var(--xs-text-2);
   background: var(--xs-surface-soft);
   font-size: var(--xs-fs-label);
@@ -638,7 +638,7 @@ button.sheet-row__main {
   width: 46px;
   height: 46px;
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
+  border-radius: var(--xs-radius-card);
   background: linear-gradient(180deg, #ffffff, #f1f7ff);
 }
 
@@ -739,15 +739,16 @@ button.sheet-row__main {
   }
 }
 
+/* 触屏热区兜底，和全站的 40px 保持同一个数 */
 @media (pointer: coarse) {
   .writing-panel__controls .ant-btn,
   .writing-panel__actions-bar .ant-btn,
   .doc-table .ant-btn-text {
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .doc-table .ant-btn-text {
-    min-width: 44px;
+    min-width: 40px;
   }
 }
 
@@ -882,10 +883,10 @@ button.sheet-row__main {
     min-height: var(--table-hero-head);
   }
 
-  /* 状态条只是偶尔出现的一行反馈，槽位按它的实际高度（34px）预留，不再占 44px */
+  /* 状态条只是偶尔出现的一行反馈，槽位按它的实际高度（32px）预留 */
   .table-page .table-page__status-slot {
     flex: 0 0 auto;
-    min-height: 36px;
+    min-height: 32px;
     margin: clamp(6px, 1vh, 12px) auto clamp(6px, 1vh, 12px);
   }
 
@@ -987,7 +988,7 @@ button.sheet-row__main {
   gap: 8px;
   padding: 10px 12px;
   border: 1px dashed var(--xs-border);
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   background: var(--xs-surface-soft);
 }
 
@@ -1004,10 +1005,10 @@ button.sheet-row__main {
 }
 
 .table-template-modal__structure em {
-  padding: 2px 10px;
+  padding: 1px 8px;
   color: var(--xs-text-2);
   border: 1px solid var(--xs-border);
-  border-radius: 999px;
+  border-radius: var(--xs-radius-small);
   background: var(--xs-surface);
   font-size: var(--xs-fs-caption);
   font-style: normal;

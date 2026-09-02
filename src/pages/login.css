@@ -263,9 +263,9 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 13px;
+  padding: 5px 10px;
   border: 1px solid #e0ebfb;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-control);
   color: var(--xs-text-2);
   background: rgba(255, 255, 255, 0.82);
   font-size: var(--xs-fs-caption);
@@ -402,6 +402,7 @@
 }
 
 .login-panel__form .ant-input-affix-wrapper {
+  /* 登录表单是这一屏唯一的输入，字段高度自定，不跟随工具条控件的 36px 基准 */
   min-height: 50px;
   padding: 0 14px;
   border-color: var(--xs-border-strong);
@@ -457,23 +458,19 @@
   border-radius: var(--xs-radius-control);
   background: var(--xs-primary-2);
   box-shadow: var(--xs-shadow-button);
-  font-size: var(--xs-fs-control-lg);
-  font-weight: var(--xs-fw-bold);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-text);
   transition:
     transform var(--xs-motion-fast) var(--xs-motion-ease-out),
     box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out),
     background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
+/* hover 只加深一档底色：按钮不参与海拔分级，浮起来会和上方输入框争层次 */
 .login-panel__submit:hover,
 .login-panel__submit:focus-visible {
-  background: var(--xs-primary-2);
-  box-shadow: var(--xs-shadow-lift);
-  transform: translateY(-1px);
-}
-
-.login-panel__submit:active {
-  transform: translateY(0);
+  background: #1d4ed8;
+  box-shadow: var(--xs-shadow-button);
 }
 
 .login-panel__link {

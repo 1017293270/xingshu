@@ -109,7 +109,7 @@
 .home-page .xs-command-box {
   width: min(100%, 760px);
   border-color: #d5e4f6;
-  border-radius: 18px;
+  border-radius: var(--xs-radius-large);
   background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 12px 32px rgba(35, 104, 210, 0.08);
 }
@@ -159,17 +159,18 @@
   flex: none;
   box-sizing: border-box;
   aspect-ratio: 1 / 1;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
+  /* hero 里的工具/发送钮跟主输入走 lg 档，比工具条控件大一号 */
+  width: var(--xs-control-height-lg);
+  min-width: var(--xs-control-height-lg);
+  max-width: var(--xs-control-height-lg);
+  height: var(--xs-control-height-lg);
+  min-height: var(--xs-control-height-lg);
+  max-height: var(--xs-control-height-lg);
   padding: 0;
   line-height: 1;
   color: #54729c;
   border-color: transparent;
-  border-radius: 12px;
+  border-radius: var(--xs-radius-card);
   background: transparent;
   box-shadow: none;
 }
@@ -191,18 +192,18 @@
 
 .home-page .xs-command-box__send.ant-btn,
 .home-page .xs-command-box__stop.ant-btn {
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
+  width: var(--xs-control-height-lg);
+  min-width: var(--xs-control-height-lg);
+  max-width: var(--xs-control-height-lg);
+  height: var(--xs-control-height-lg);
+  min-height: var(--xs-control-height-lg);
+  max-height: var(--xs-control-height-lg);
 }
 
 .home-page .xs-command-box__send.ant-btn {
   color: var(--xs-surface);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--xs-radius-card);
   background: #176ff2;
   box-shadow: none;
 }
@@ -271,7 +272,7 @@
   padding: 20px 16px 18px;
   text-align: center;
   border-color: #d9e6f8;
-  border-radius: 14px;
+  border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 8px 22px rgba(26, 83, 164, 0.06);
 }
@@ -358,7 +359,7 @@
   text-align: left;
   cursor: pointer;
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
+  border-radius: var(--xs-radius-card);
   background: rgba(255, 255, 255, 0.92);
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-text);

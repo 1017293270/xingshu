@@ -42,14 +42,12 @@
   margin-bottom: 24px;
 }
 
+/* 资产标签页会横向溢出，这里只加"能滑"的部分；外观走 xs.css 的全站分段器规则 */
 .asset-tabs .ant-segmented {
   display: block;
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
-  padding: 4px;
-  border: 1px solid var(--xs-border);
-  background: rgba(255, 255, 255, 0.92);
   scrollbar-width: none;
   overscroll-behavior-inline: contain;
   scroll-snap-type: inline proximity;
@@ -65,7 +63,6 @@
 }
 
 .asset-tabs .ant-segmented-item {
-  min-height: 32px;
   flex: 0 0 auto;
   scroll-snap-align: start;
 }
@@ -87,18 +84,7 @@
 
 .asset-filter .ant-input-affix-wrapper,
 .asset-filter .ant-input {
-  min-height: 42px;
-}
-
-/* 页级统计期控件：与页头其余动作同排同高，不再借用图表卡的头部排版。 */
-.data-dashboard-range.ant-segmented {
-  padding: 3px;
-  border: 1px solid var(--xs-border);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.data-dashboard-range .ant-segmented-item {
-  min-height: 32px;
+  min-height: var(--xs-control-height);
 }
 
 .data-dashboard-page time {
@@ -139,9 +125,10 @@
   }
 }
 
+/* 触屏把分段项抬到 40px 热区，和全站兜底同一个数 */
 @media (pointer: coarse) {
   .asset-tabs .ant-segmented-item,
   .data-dashboard-range .ant-segmented-item {
-    min-height: 44px;
+    min-height: 40px;
   }
 }

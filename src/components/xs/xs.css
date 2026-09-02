@@ -333,12 +333,12 @@
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  height: 36px;
-  min-height: 36px;
+  height: var(--xs-control-height);
+  min-height: var(--xs-control-height);
   margin-bottom: 10px;
   padding: 0 12px;
   border: 1px solid var(--xs-border);
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-text);
@@ -436,7 +436,7 @@
   margin-inline: 0;
   padding-inline: 12px !important;
   border-left: 3px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   color: var(--xs-text-2);
   font-weight: var(--xs-fw-text);
   letter-spacing: 0.01em;
@@ -913,12 +913,13 @@
   box-shadow: none;
 }
 
+/* 主输入盒是每屏唯一的一级焦点，圆角走 large 档，不跟随工具条控件的 8px */
 .xs-command-box {
   width: min(100%, var(--xs-page-track));
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--xs-border-strong);
-  border-radius: var(--xs-radius-control);
+  border-radius: var(--xs-radius-large);
   background: var(--xs-surface);
   box-shadow: var(--xs-shadow-soft);
   transition:
@@ -1091,12 +1092,12 @@
   inset: 10px 12px auto auto;
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 14px;
+  min-height: 28px;
+  padding: 0 10px;
   overflow: visible;
   color: #8a4b08;
   border: 1px solid #f5d49a;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-control);
   background: #fffaf0;
   font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-medium);
@@ -1212,14 +1213,14 @@
   display: none;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: var(--xs-control-height);
   padding: 0;
   color: var(--xs-interactive-text);
   cursor: pointer;
   border: 0;
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
 }
 
 .xs-chart-card__fullscreen {
@@ -1342,7 +1343,7 @@
   overflow: hidden;
   color: var(--xs-text);
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1350,7 +1351,7 @@
 .xs-command-box__attachment small {
   color: currentColor;
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-regular);
   white-space: nowrap;
 }
 
@@ -1410,7 +1411,7 @@
   flex: 0 0 auto;
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-command-box__suggestions button {
@@ -1463,7 +1464,7 @@
   color: var(--xs-text-3);
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-control);
   background: transparent;
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-text);
@@ -1507,7 +1508,7 @@
   max-height: 36px;
   padding: 0;
   line-height: 1;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   box-shadow: none;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -1516,7 +1517,7 @@
     transform var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
-/* 压过 `.xs-page .ant-btn { min-height: 44px }`，避免发送/停止被拉成竖条。 */
+/* 压过页面层的按钮尺寸规则，让发送/停止保持正方形而不是被拉伸。 */
 .xs-page .xs-command-box__actions .ant-btn {
   width: 36px;
   min-width: 36px;
@@ -1583,7 +1584,7 @@
 .xs-command-box__send.ant-btn {
   color: var(--xs-surface);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   background: #176ff2;
   box-shadow: none;
 }
@@ -1612,7 +1613,7 @@
 .xs-command-box__stop.ant-btn {
   color: #cf1322;
   border-color: #ffccc7;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   background: #fff2f0;
 }
 
@@ -1796,7 +1797,7 @@
   color: var(--xs-primary-2);
   cursor: pointer;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--xs-radius-control);
   background: transparent;
   opacity: 0.72;
   transition:
@@ -1889,24 +1890,22 @@
   line-height: 1.55;
 }
 
+/* 一行反馈：矩形小圆角、白底、1px 语气描边，和同屏的输入框/按钮共用一套形状语言 */
 .xs-status-bar {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   max-width: 100%;
-  min-height: 34px;
-  padding: 6px 15px 6px 12px;
+  min-height: 32px;
+  padding: 5px 12px;
   border: 1px solid var(--xs-info-line);
-  border-radius: 999px;
+  border-radius: var(--xs-radius-control);
   background: var(--xs-surface);
-  box-shadow: 0 1px 2px rgb(8 26 58 / 4%);
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-regular);
   line-height: 1.45;
 }
-
-/* 全圆角是"这条会消失"的形状，区别于内容卡的 12/14px 直角圆角 */
 
 /* 白底＋细描边是常态语气；只有需要你动手的警告与失败才铺底色 */
 .xs-status-bar--success {
@@ -1949,11 +1948,11 @@
   min-width: 0;
 }
 
-/* 类别前缀靠同色重字与消息分层，不再做成色块药丸 */
+/* 类别前缀靠同色重字与消息分层，本身不是徽章 */
 .xs-status-bar__label {
-  margin-right: 7px;
+  margin-right: 6px;
   color: var(--xs-info-ink);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-medium);
 }
 
 .xs-status-bar__detail {
@@ -1963,10 +1962,10 @@
   line-height: 1.5;
 }
 
-/* 两行形态回到卡片圆角：全圆角只在单行时成立 */
+/* 两行形态升到卡片圆角：盒子高了，8px 会显得边角太紧 */
 .xs-status-bar--stacked {
   align-items: flex-start;
-  padding: 10px 16px 11px 13px;
+  padding: 9px 14px 10px 12px;
   border-radius: var(--xs-radius-card);
 }
 
@@ -2041,7 +2040,7 @@
   color: var(--xs-info-ink);
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
   cursor: pointer;
 }
 
@@ -2067,8 +2066,9 @@
   min-width: 0;
 }
 
+/* 预留槽位按状态条的实际高度（32px）算，多留的空档会在条不出现时塌成一道空行 */
 .xs-status-bar-slot--reserved {
-  min-height: 36px;
+  min-height: 32px;
 }
 
 .xs-status-bar-slot__content {
@@ -2503,18 +2503,21 @@
 
 /* ---------- 分段控件：排序、类型、时间范围共用一种外观 ---------- */
 
+/* 外框 2px 内衬 + 30px 项 = 36px 总高，和按钮、输入框在工具条里齐平。
+   全站只有这一处定义分段器外观，页面不再各自覆盖。 */
 .ant-segmented {
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
-  background: var(--xs-surface-overlay);
+  background: var(--xs-surface-soft);
 }
 
 .ant-segmented .ant-segmented-item {
-  min-height: 34px;
+  min-height: 30px;
   border-radius: var(--xs-radius-small);
+  color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-text);
 }
 
 .ant-segmented .ant-segmented-item-label {
@@ -2522,12 +2525,22 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
+  min-height: 30px;
+  padding: 0 14px;
   line-height: 1;
 }
 
+/* 选中态靠白底浮起，文字只加重一档留在墨色——品牌蓝在这里会和主按钮抢层级 */
+.ant-segmented .ant-segmented-item-selected,
+.ant-segmented .ant-segmented-thumb {
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface);
+  box-shadow: 0 1px 2px rgb(8 26 58 / 8%);
+}
+
 .ant-segmented .ant-segmented-item-selected {
-  font-weight: var(--xs-fw-bold);
+  color: var(--xs-text);
+  font-weight: var(--xs-fw-medium);
 }
 
 @media (max-width: 900px) {
@@ -2771,9 +2784,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border: 1px solid #dceafd;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-small);
   color: var(--xs-primary-2);
   background: #eff6ff;
   font-size: var(--xs-fs-caption);

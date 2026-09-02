@@ -67,7 +67,7 @@ export function XsStatusBar({
       role={announce ? (tone === "error" || tone === "warning" ? "alert" : "status") : undefined}
     >
       {ToneIcon ? (
-        <ToneIcon className="xs-status-bar__mark" size={17} aria-hidden="true" />
+        <ToneIcon className="xs-status-bar__mark" size={15} aria-hidden="true" />
       ) : (
         <span className="xs-status-bar__pulse" aria-hidden="true" data-static={spinner ? undefined : "true"}>
           <i />

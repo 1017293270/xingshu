@@ -8,8 +8,10 @@ describe("xingshu theme tokens", () => {
     expect(xingshuTokens.colorSurface).toBe("#FFFFFF");
     expect(xingshuTokens.colorPrimary).toBe("#1677FF");
     expect(xingshuTokens.colorText).toBe("#081A3A");
-    expect(xingshuTokens.radiusControl).toBe(12);
-    expect(xingshuTokens.radiusCard).toBe(14);
+    expect(xingshuTokens.radiusControl).toBe(8);
+    expect(xingshuTokens.radiusCard).toBe(12);
+    expect(xingshuTokens.controlHeight).toBe(36);
+    expect(xingshuTokens.controlHeightLarge).toBe(44);
   });
 
   it("maps star math tokens into Ant Design theme config", () => {

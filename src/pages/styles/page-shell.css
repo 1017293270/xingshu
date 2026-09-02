@@ -49,53 +49,77 @@
   gap: 10px;
 }
 
-/* 按钮三档：页面主动作 44、页内次级 36、行内文字动作 32。
-   高度和圆角只在这里定义，页面不再自设按钮尺寸。 */
+/* 按钮两档：页面动作走控件基准 36，行内次级动作 28。
+   高度、圆角和字重只在这里定义，页面不再自设按钮尺寸。 */
 .xs-page .ant-btn,
 .xs-action-link {
-  min-height: 44px;
+  min-height: var(--xs-control-height);
   border-radius: var(--xs-radius-control);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
 }
 
 .xs-page .ant-btn-sm,
 .xs-page summary,
 .xs-mini-link {
-  min-height: 32px;
+  min-height: var(--xs-control-height-sm);
 }
 
+/* 默认按钮：白底＋1px 描边，靠轮廓而不是底色和实心按钮拉开层级 */
+.xs-page .ant-btn-default {
+  border-color: var(--xs-border-strong);
+  color: var(--xs-text);
+}
+
+.xs-page .ant-btn-default:not(:disabled):hover {
+  border-color: var(--xs-primary);
+  color: var(--xs-primary-2);
+  background: var(--xs-surface-soft);
+}
+
+/* 纯图标按钮压成正方，避免和带文字的按钮在一行里宽窄不一 */
+.xs-page .ant-btn.ant-btn-icon-only {
+  width: var(--xs-control-height);
+  min-width: var(--xs-control-height);
+  padding: 0;
+}
+
+/* 导航型动作（返回、跳转）是文字链接，不该长成第三个按钮 */
 .xs-action-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
-  border: 1px solid var(--xs-border);
-  background: var(--xs-surface);
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--xs-radius-control);
+  background: transparent;
   color: var(--xs-interactive-text);
   text-decoration: none;
   font-size: var(--xs-fs-control);
   transition:
     border-color var(--xs-motion-state) var(--xs-motion-ease-out),
     background-color var(--xs-motion-state) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
+    color var(--xs-motion-state) var(--xs-motion-ease-out);
 }
 
 .xs-action-link:hover {
-  border-color: var(--xs-border-strong);
-  background: var(--xs-surface-soft);
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
 }
 
+/* --primary 是链接形态的主动作（跳转到新建页），实心但不浮起 */
 .xs-action-link--primary {
-  border-color: var(--xs-primary);
+  padding: 0 16px;
+  border-color: var(--xs-primary-2);
   color: var(--xs-surface);
-  background: var(--xs-primary);
+  background: var(--xs-primary-2);
   box-shadow: var(--xs-shadow-button);
 }
 
 .xs-action-link--primary:hover {
-  border-color: var(--xs-primary-2);
-  background: var(--xs-primary-2);
+  border-color: #1d4ed8;
+  color: var(--xs-surface);
+  background: #1d4ed8;
 }
 
 .xs-card {
@@ -129,7 +153,7 @@
   margin: 8px 0 2px;
   color: var(--xs-interactive-text);
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
   text-decoration: none;
 }
 
@@ -312,16 +336,17 @@
   font-weight: var(--xs-fw-bold);
 }
 
+/* 标签是一块着色的文字，不是控件：矩形小圆角、无描边、22px 高，和 antd Tag 同一档 */
 .xs-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--xs-radius-small);
   color: var(--xs-primary-2);
   background: var(--xs-info-soft);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
+  font-weight: var(--xs-fw-text);
 }
 
 .xs-echart {
@@ -419,11 +444,12 @@
   }
 }
 
+/* 触屏把所有动作抬到 40px 热区，和 tokens.css 的全局兜底同一个数 */
 @media (pointer: coarse) {
   .xs-page .ant-btn,
   .xs-action-link,
   .xs-mini-link,
   .xs-page summary {
-    min-height: 44px;
+    min-height: 40px;
   }
 }

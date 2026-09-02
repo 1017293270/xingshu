@@ -17,12 +17,16 @@ export const xingshuTokens = {
   colorTextSecondary: "#294469",
   colorTextTertiary: "#536987",
   colorInteractiveText: "#1D4ED8",
-  radiusControl: 12,
-  radiusCard: 14,
+  // 与 src/styles/tokens.css 的 --xs-radius-* 逐项对齐，两边必须同时改
+  radiusControl: 8,
+  radiusCard: 12,
+  radiusSmall: 6,
+  radiusLarge: 16,
   sidebarWidth: 200,
   sidebarCollapsedWidth: 80,
   shadowSoft: "0 10px 28px rgba(22, 119, 255, 0.08)",
-  shadowButton: "0 12px 22px rgba(22, 119, 255, 0.2)",
+  // 按钮只保留贴地定形投影，海拔留给浮层与模态
+  shadowButton: "0 1px 2px rgba(8, 26, 58, 0.06)",
   shadowLift: "0 14px 32px rgba(22, 119, 255, 0.12)",
   shadowOverlay: "0 18px 44px rgba(8, 26, 58, 0.14)",
   shadowModal: "0 28px 72px rgba(8, 26, 58, 0.22)",
@@ -35,7 +39,9 @@ export const xingshuTokens = {
   motionHero: 560,
   motionEaseOut: "cubic-bezier(.2, 0, 0, 1)",
   motionEaseSpring: "cubic-bezier(0.18, 0.89, 0.32, 1.08)",
-  controlHeight: 44,
-  controlHeightLarge: 52,
+  // 与 --xs-control-height* 对齐：36 是全站控件基准，44 只给主输入，28 给行内次级动作
+  controlHeight: 36,
+  controlHeightLarge: 44,
+  controlHeightSmall: 28,
   fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif'
 } as const;
