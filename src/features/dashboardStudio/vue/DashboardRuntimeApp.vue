@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { DashboardRecord, DashboardWidget } from "@/types/dashboardStudio";
-import { calculateDashboardRuntimeScale } from "../core/dashboardRuntimeScale";
+import { calculateDashboardRuntimeScale, resolveDashboardRuntimeScaleMode } from "../core/dashboardRuntimeScale";
 import { resolveCanvasBackgroundStyle } from "../core/dashboardCanvasBackground";
 import DashboardWidgetCard from "./DashboardWidgetCard.vue";
 
@@ -34,8 +34,8 @@ const useFullscreenDefaultBackground = computed(() =>
 );
 const canvasViewportStyle = computed(() => {
   if (!runtimeSchema.value) return {};
-  // 内联舞台按画布比例撑高：fit-screen 的宽高两条约束同时命中，画布正好贴满，
-  // 不再需要一个比画布大的固定高度盒子去居中——那正是旧版黑色 letterbox 的来源。
+  // 内联舞台吃满宽度、按画布比例撑高：首帧 JS 还没量出 scale 时高度就已经是对的，画布不会闪。
+  // 高度不设上限——画布比一屏高就让页面往下滚，不为了塞进一屏把画布缩窄成两侧白柱。
   if (!props.fullscreen) {
     return { aspectRatio: `${runtimeSchema.value.canvas.width} / ${runtimeSchema.value.canvas.height}` };
   }
@@ -61,14 +61,13 @@ function updateCanvasScale() {
   const activeSchema = runtimeSchema.value;
   if (!viewport || !activeSchema) return;
 
-  // 内联态也不再留 inset：留白由外层舞台负责，画布自己吃满视口
-  const inset = 0;
+  // 留白由外层舞台负责，画布自己吃满视口，所以这里不留 inset
   canvasScale.value = calculateDashboardRuntimeScale(
-    activeSchema.canvas.scaleMode ?? "fit-screen",
+    resolveDashboardRuntimeScaleMode(Boolean(props.fullscreen), activeSchema.canvas.scaleMode),
     activeSchema.canvas.width,
     activeSchema.canvas.height,
-    Math.max(1, viewport.clientWidth - inset),
-    Math.max(1, viewport.clientHeight - inset)
+    Math.max(1, viewport.clientWidth),
+    Math.max(1, viewport.clientHeight)
   );
 }
 
@@ -151,17 +150,21 @@ function bindingForWidget(widget: DashboardWidget) {
 .runtime-canvas-viewport {
   display: flex;
   width: 100%;
-  /* 高度由内联样式里的 aspect-ratio 决定；这里只兜住极端比例的画布 */
-  max-height: min(78vh, 920px);
   align-items: center;
   justify-content: center;
   overflow: hidden;
   background: var(--xs-surface, #ffffff);
 }
 
+/* 内联态用 fit-width 缩放，舞台宽高本就等于视口：贴左贴顶，
+   免得 aspect-ratio 与实测宽度的亚像素差被居中摊成上下两条细缝。 */
+.xs-dashboard-runtime:not(.is-fullscreen) .runtime-canvas-viewport {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
 .is-fullscreen .runtime-canvas-viewport {
   height: 100dvh;
-  max-height: none;
   min-height: 100dvh;
 }
 
