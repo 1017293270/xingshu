@@ -7,8 +7,6 @@ import {
   CaretDown,
   ChartLineUp,
   ChartPieSlice,
-  Check,
-  CircleNotch,
   CopySimple,
   Database,
   FileText,
@@ -16,8 +14,7 @@ import {
   MapPin,
   PresentationChart,
   Star,
-  TrendUp,
-  WarningCircle
+  TrendUp
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
@@ -38,7 +35,8 @@ import {
   DataHubCitationChips,
   DataHubExecutionPanel,
   DataHubProcessDock,
-  DataHubResultTable
+  DataHubResultTable,
+  latestExecutionActionLabel
 } from "@/components/xs/datahub";
 import { useNow } from "@/components/xs/datahub/useNow";
 import { useClarifyDock, XsClarifyCard, XsClarifyPanel } from "@/components/xs/conversation";
@@ -88,25 +86,13 @@ import type {
   DataHubCitationDocument,
   DataHubContentBlock,
   DataHubDocumentLookupResult,
-  DataHubReactStepData,
-  DataHubTableResult,
-  DataHubToolResultData
+  DataHubTableResult
 } from "@/types/dataHub";
 import type { QueryAsset } from "@/types/analytics";
 import assistantMark from "@/assets/brand/xingshu-assistant-mark-2x.png";
 import userAvatar from "@/assets/brand/analysis-user-avatar-source.png";
 import { PageFrame } from "./PageFrame";
 import "./styles/analysis-motion.css";
-
-type ThinkingPhaseStatus = "complete" | "active" | "pending" | "error";
-
-type ThinkingPhase = {
-  id: string;
-  title: string;
-  description: string;
-  status: ThinkingPhaseStatus;
-  details: string[];
-};
 
 type AiChartUiState =
   | { status: "idle" }
@@ -266,21 +252,20 @@ function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHub
 }
 
 /**
- * 任务动态：运行中展开为实时编排轨（脉冲 + 走秒 + 阶段链 + 最新动作），
- * 结束后收回成一行摘要，历史轮次不留动效。
+ * 任务动态：问数 / 问知 / 找文档 / 智能编排共用的轮次头部。
+ * 运行中是脉冲 + 状态 + 走秒 + 一行最新执行动作，结束后收成一行摘要，
+ * 历史轮次不留动效。
  */
 function AnalysisTaskDynamics({
-  nodes,
   durationMs,
   status,
-  phases = [],
+  detail,
   running = false,
   startedAt
 }: {
-  nodes: string[];
   durationMs?: number;
   status: string;
-  phases?: ThinkingPhase[];
+  detail?: string;
   running?: boolean;
   startedAt?: number;
 }) {
@@ -292,16 +277,12 @@ function AnalysisTaskDynamics({
       <p className="analysis-task-dynamics" aria-label="任务动态">
         <span>任务动态</span>
         {duration ? <span>{duration}</span> : null}
-        <span>{nodes.length > 0 ? nodes.join(" → ") : status}</span>
+        <span>{status}</span>
       </p>
     );
   }
 
   const elapsed = startedAt ? formatDurationZh(Math.max(0, now - startedAt)) : "";
-  const activePhase = phases.find((phase) => phase.status === "active");
-  const completedCount = phases.filter((phase) => phase.status === "complete").length;
-  // 最新动作优先取真实事件明细，事件未到时退回阶段说明，避免这行空着闪烁。
-  const detail = activePhase ? activePhase.details.at(-1) || activePhase.description : "";
 
   return (
     <div className="analysis-live" role="group" aria-label="任务动态">
@@ -313,35 +294,7 @@ function AnalysisTaskDynamics({
         </span>
         <span className="analysis-live__status">{status}</span>
         {elapsed ? <span className="analysis-live__timer">{elapsed}</span> : null}
-        {phases.length > 0 ? (
-          <span className="analysis-live__count">
-            {completedCount}/{phases.length}
-          </span>
-        ) : null}
       </p>
-      {phases.length > 0 ? (
-        <ol className="analysis-live__rail">
-          {phases.map((phase) => (
-            <li
-              className="analysis-live__step"
-              data-state={phase.status}
-              key={phase.id}
-              title={phase.description}
-            >
-              <span className="analysis-live__step-mark" aria-hidden="true">
-                {phase.status === "complete" ? (
-                  <Check size={12} weight="bold" />
-                ) : phase.status === "error" ? (
-                  <WarningCircle size={13} weight="bold" />
-                ) : phase.status === "active" ? (
-                  <CircleNotch size={13} weight="bold" />
-                ) : null}
-              </span>
-              <span className="analysis-live__step-title">{phase.title}</span>
-            </li>
-          ))}
-        </ol>
-      ) : null}
       {detail ? (
         <p className="analysis-live__detail" key={detail}>
           {detail}
@@ -638,148 +591,6 @@ function scrollElementToBottom(
   }
 }
 
-function getToolName(tool: DataHubToolResultData) {
-  return tool.toolName || tool.tool || tool.name || "tool";
-}
-
-function compactMessages(messages: string[]) {
-  return Array.from(new Set(messages.filter(Boolean)));
-}
-
-function hasStep(steps: DataHubReactStepData[], actions: string[], status?: string) {
-  return steps.some((step) => {
-    const actionMatched = step.action ? actions.includes(step.action) : false;
-    if (!actionMatched) {
-      return false;
-    }
-
-    return status ? step.status === status : true;
-  });
-}
-
-function hasFailedStep(steps: DataHubReactStepData[], actions: string[]) {
-  return steps.some((step) => step.action && actions.includes(step.action) && ["error", "fail"].includes(step.status || ""));
-}
-
-function buildThinkingPhases(
-  askTurn: ReturnType<typeof createDataHubAskTurn>,
-  askDataStatus: DataHubAskDataStatus
-): ThinkingPhase[] {
-  const steps = askTurn.reactSteps;
-  const hasDecompose = Boolean(askTurn.decompose?.subQuestions?.length);
-  const hasRouting = askTurn.routingEvents.length > 0;
-  const hasTable = askTurn.tableResults.length > 0;
-  const isDone = askDataStatus === "done";
-  // 后端有时只发 tool_call/tool_result，不发同名 react_step，两处都要认。
-  const toolNames = new Set([
-    ...askTurn.toolCalls.map(getToolName),
-    ...askTurn.toolResults.map(getToolName)
-  ]);
-  const reached = (actions: string[]) =>
-    hasStep(steps, actions) || actions.some((action) => toolNames.has(action));
-
-  const drafts: Omit<ThinkingPhase, "status">[] = [
-    {
-      id: "understand",
-      title: "理解问题",
-      description: "识别问数意图，拆解为可执行的查询。",
-      details: compactMessages(askTurn.decompose?.subQuestions ?? [])
-    },
-    {
-      id: "scope",
-      title: "确定数据范围",
-      description: "定位空间、数据源和业务语义，确认本次查询边界。",
-      details: compactMessages(askTurn.dataSources.map((dataSource) => `已选择数据源：${dataSource.datasourceName}`))
-    },
-    {
-      id: "process",
-      title: "数据处理",
-      description: "读取业务语义并生成查询结构。",
-      details: []
-    },
-    {
-      id: "execute",
-      title: "执行查询",
-      description: "执行查询并返回结构化数据结果。",
-      details: compactMessages([
-        ...askTurn.toolResults
-          .filter((tool) => getToolName(tool) === "execute_query")
-          .map((tool) => typeof tool.rows === "number" ? `返回 ${tool.rows} 行数据` : "查询已执行")
-      ])
-    },
-    {
-      id: "result",
-      title: "生成结果",
-      description: "汇总答案并整理为可读表格。",
-      details: compactMessages([
-        hasTable ? `已生成 ${askTurn.tableResults.length} 张结果表` : ""
-      ])
-    }
-  ];
-
-  // 每个阶段先只判断"有没有开始"，再从后往前回填：后面的阶段动了，
-  // 前面的阶段必然已经走完。否则模型正文一到，2~4 步会同时打勾而第 1 步还亮着。
-  const started = [
-    Boolean(askTurn.assistantContent) ||
-      hasRouting ||
-      hasDecompose ||
-      steps.length > 0 ||
-      toolNames.size > 0,
-    askTurn.dataSources.length > 0 || reached(["locate_datasource", "match_skill", "load_cube_meta"]),
-    reached(["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"]),
-    reached(["execute_query"]),
-    hasStep(steps, ["finalize"]) || hasTable
-  ];
-  for (let index = started.length - 2; index >= 0; index -= 1) {
-    started[index] = started[index] || started[index + 1];
-  }
-  if (isDone) {
-    started.fill(true);
-  }
-  // 只有下一个阶段开始了（或整轮结束），当前阶段才算完成。
-  const completed = started.map(
-    (_, index) => isDone || (index + 1 < started.length ? started[index + 1] : false)
-  );
-  const failed = [
-    false,
-    hasFailedStep(steps, ["locate_datasource", "match_skill", "load_cube_meta"]),
-    hasFailedStep(steps, ["plan_with_datasource_skill", "generate_query", "nl2sql_fallback"]),
-    hasFailedStep(steps, ["execute_query"]),
-    askDataStatus === "error"
-  ];
-  const activeIndex = started.findIndex(
-    (value, index) => value && !completed[index] && !failed[index]
-  );
-  // 事件还没到时，运行中默认停在第一阶段，而不是整条轨全灰。
-  const runningIndex = activeIndex === -1 ? 0 : activeIndex;
-
-  return drafts.map((phase, index) => {
-    let status: ThinkingPhaseStatus = "pending";
-
-    if (failed[index]) {
-      status = "error";
-    } else if (completed[index]) {
-      status = "complete";
-    } else if (askDataStatus === "streaming" && index === runningIndex) {
-      status = "active";
-    } else if (askDataStatus === "idle" && index === 0) {
-      status = "active";
-    }
-
-    return { ...phase, status };
-  });
-}
-
-function hasLegacyThinkingProcess(turn: DataHubAskTurn) {
-  return Boolean(
-    turn.decompose ||
-      turn.routingEvents.length ||
-      turn.reactSteps.length ||
-      turn.toolCalls.length ||
-      turn.toolResults.length
-  );
-}
-
 function DataHubAnswer({
   blocks,
   hideMarkdownTables = false,
@@ -995,12 +806,10 @@ function DataHubDocumentLookupList({
 }
 
 function DataHubResultLoading({
-  activePhase,
   taskName = "问数",
   title,
   description
 }: {
-  activePhase?: string;
   taskName?: string;
   title?: string;
   description?: string;
@@ -1018,7 +827,7 @@ function DataHubResultLoading({
         </span>
         <div>
           <strong>{title || `AI 正在生成${taskName}结果`}</strong>
-          <span>{description || (activePhase ? `当前步骤：${activePhase}` : `正在${taskName}`)}</span>
+          <span>{description || `正在${taskName}`}</span>
         </div>
       </div>
       <div className="datahub-result-loading__skeleton" aria-hidden="true">
@@ -1878,14 +1687,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const childDocumentResults = isAgentMode
                 ? getDataHubChildDocumentResults(executionProjection)
                 : [];
-              const hasLegacyProcess = isAskMode && hasLegacyThinkingProcess(turnAsk);
-              // 运行中即使编排事件还没到，也先按问数固定阶段链展示（首阶段 active），
-              // 否则用户在首个事件到达前看不到任何“正在跑”的证据。
-              // 五阶段链是问数专属：问知/找文档不再套问数阶段文案，改由思考折叠块呈现过程。
-              const thinkingPhases =
-                isAskMode && (hasLegacyProcess || displayStatus === "streaming")
-                  ? buildThinkingPhases(turnAsk, displayStatus)
-                  : [];
+              // 四种模式共用同一份事件投影，任务动态那行的「最新执行动作」也就统一从主会话取。
+              const latestActionLabel = latestExecutionActionLabel(
+                executionProjection.mainSession
+              );
               const askTables = isAskMode || isAgentMode
                 ? getDataHubAskTableResults(executionProjection, isAskMode)
                 : [];
@@ -1912,9 +1717,6 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 hasRenderableResult || ["done", "error", "cancelled"].includes(displayStatus);
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
               const isHistoryLoadingTurn = isLoadingHistory && isLatestTurn;
-              const taskNodes = thinkingPhases
-                .filter((phase) => phase.status === "complete" || phase.status === "active")
-                .map((phase) => phase.title);
               const taskStatus =
                 isHistoryLoadingTurn
                   ? "正在加载历史对话"
@@ -2065,10 +1867,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                     <img className="analysis-response__mark" src={assistantMark} alt="" width={160} height={160} />
                     <article className="xs-card analysis-card">
                       <AnalysisTaskDynamics
-                        nodes={taskNodes}
                         durationMs={durationMs}
                         status={taskStatus}
-                        phases={thinkingPhases}
+                        detail={latestActionLabel}
                         running={displayStatus === "streaming"}
                         startedAt={turn.startedAt}
                       />
@@ -2078,7 +1879,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         </div>
                       ) : null}
 
-                      {!isAgentMode && !isHistoryLoadingTurn ? (
+                      {!isHistoryLoadingTurn ? (
                         <DataHubProcessDock
                           thinkingContent={turnAsk.thinkingContent}
                           decompose={turnAsk.decompose}
@@ -2096,12 +1897,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           durationMs={durationMs}
                         />
                       ) : null}
-                      {isAgentMode && !isHistoryLoadingTurn ? (
+                      {!isHistoryLoadingTurn ? (
                         <DataHubExecutionPanel
                           projection={executionProjection}
-                          title="智能编排执行"
+                          title={isAgentMode ? "智能编排执行" : `${taskName}执行过程`}
                           className="analysis-orchestration-panel"
                           defaultExpanded={false}
+                          // 单智能体模式的过程就是主智能体那条线性步骤，
+                          // 嵌套的辅助子智能体挂在它下面，而不是反过来切成编排画布
+                          preferDirectMainExecution={!isAgentMode}
                           showMainDocumentBlocks
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);
@@ -2115,11 +1919,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       ) : null}
 
                       <section className="analysis-output" aria-label="分析结果">
-                        {isAgentMode &&
-                        (hasRenderableResult ||
-                          displayStatus === "done" ||
-                          displayStatus === "error" ||
-                          displayStatus === "cancelled") ? (
+                        {hasRenderableResult ||
+                        displayStatus === "done" ||
+                        displayStatus === "error" ||
+                        displayStatus === "cancelled" ? (
                           <div className="section-title-row">
                             <h2>{modeMeta.resultTitle}</h2>
                           </div>

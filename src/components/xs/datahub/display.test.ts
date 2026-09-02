@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { projectDataHubExecutionEvents } from "@/services/dataHubExecutionProjector";
-import { orchestrationEventsForSession } from "./display";
+import { latestExecutionActionLabel, orchestrationEventsForSession } from "./display";
 
 describe("datahub execution display", () => {
   it("merges running and terminal ReAct updates by toolCallId and honors eventSequence", () => {
@@ -47,6 +47,68 @@ describe("datahub execution display", () => {
     expect(events[1]).toMatchObject({
       type: "routing_intent",
       summary: "adaptive_team"
+    });
+  });
+
+  describe("latestExecutionActionLabel", () => {
+    it("returns nothing before any execution block arrives", () => {
+      const projection = projectDataHubExecutionEvents(
+        [{ type: "react_step", content: { action: "locate_datasource" }, sessionId: "main" }],
+        { mainSessionId: "main" }
+      );
+
+      expect(latestExecutionActionLabel(projection.mainSession)).toBeUndefined();
+    });
+
+    it("takes the label of the newest model activity", () => {
+      const projection = projectDataHubExecutionEvents(
+        [
+          { type: "thinking", content: "先看数据源", isThinking: true, sessionId: "main" },
+          {
+            type: "activity",
+            content: {
+              activityId: "tool:execute",
+              kind: "tool",
+              action: "execute_query",
+              label: "执行数据查询",
+              status: "running"
+            },
+            sessionId: "main"
+          }
+        ],
+        { mainSessionId: "main" }
+      );
+
+      expect(latestExecutionActionLabel(projection.mainSession)).toBe("执行数据查询");
+    });
+
+    it("falls back to the block label for non-activity blocks", () => {
+      const projection = projectDataHubExecutionEvents(
+        [
+          { type: "thinking", content: "整理证据", isThinking: true, sessionId: "main" },
+          {
+            type: "citation_document",
+            content: { docId: "doc-1", docName: "报销制度" },
+            sessionId: "main"
+          }
+        ],
+        { mainSessionId: "main" }
+      );
+
+      expect(latestExecutionActionLabel(projection.mainSession)).toBe("引用文档");
+    });
+
+    it("skips blocks that have no Chinese action name", () => {
+      const projection = projectDataHubExecutionEvents(
+        [
+          { type: "text", content: "已给出结论。", sessionId: "main" },
+          { type: "activity", content: { activityId: "raw", kind: "model" }, sessionId: "main" }
+        ],
+        { mainSessionId: "main" }
+      );
+
+      // activity 记录缺 label/action，退回上一个可命名的块，而不是摆出事件类型
+      expect(latestExecutionActionLabel(projection.mainSession)).toBe("正式回答");
     });
   });
 });

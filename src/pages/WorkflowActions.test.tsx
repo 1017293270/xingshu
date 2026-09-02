@@ -129,33 +129,40 @@ describe("workflow page actions", () => {
     vi.restoreAllMocks();
   });
 
-  it("运行中阶段链按顺序推进，模型正文不会让后面的阶段先打勾", () => {
+  it("运行中的任务动态给出统一头部，最新执行动作跟着事件走", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("帮我分析本月经营数据");
-    // 只有模型正文时，编排还停在第一阶段。
-    store.appendAskDataEvent(runId, { type: "content", data: "我来帮您分析本月经营数据。" });
 
     const view = renderPage(<AnalysisPage mode="ask" />);
-    const stepState = (title: string) =>
-      Array.from(view.container.querySelectorAll(".analysis-live__step"))
-        .find((step) => step.textContent?.includes(title))
-        ?.getAttribute("data-state");
+    const detail = () => view.container.querySelector(".analysis-live__detail")?.textContent;
 
-    expect(view.container.querySelectorAll('.analysis-live__step[data-state="complete"]')).toHaveLength(0);
-    expect(stepState("理解问题")).toBe("active");
+    expect(view.container.querySelector(".analysis-live__status")).toHaveTextContent("正在问数");
+    // 事件还没到就不占位，避免第一秒闪一句假动作
+    expect(detail()).toBeUndefined();
 
     act(() => {
       useUiStore.getState().appendAskDataEvent(runId, {
-        type: "react_step",
-        data: { round: 2, action: "execute_query", status: "running", summary: "正在执行 Cube Query" }
+        type: "activity",
+        data: {
+          activityId: "tool:execute",
+          kind: "tool",
+          action: "execute_query",
+          label: "执行数据查询",
+          status: "running"
+        }
       });
     });
 
-    expect(stepState("理解问题")).toBe("complete");
-    expect(stepState("确定数据范围")).toBe("complete");
-    expect(stepState("数据处理")).toBe("complete");
-    expect(stepState("执行查询")).toBe("active");
-    expect(stepState("生成结果")).toBe("pending");
+    expect(detail()).toBe("执行数据查询");
+
+    act(() => {
+      useUiStore.getState().appendAskDataEvent(runId, {
+        type: "table",
+        data: { columns: ["月份"], rows: [["7月"]], totalRows: 1 }
+      });
+    });
+
+    expect(detail()).toBe("查询结果");
   });
 
   it("renders the data-hub ask-data process and expands its result-table summary on demand", async () => {
@@ -177,6 +184,17 @@ describe("workflow page actions", () => {
     store.appendAskDataEvent(runId, {
       type: "react_step",
       data: { round: 2, action: "execute_query", status: "success", summary: "已执行 Cube Query，rows=1" }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "activity",
+      data: {
+        activityId: "tool:execute_query",
+        kind: "tool",
+        action: "execute_query",
+        label: "执行数据查询",
+        status: "success",
+        summary: "返回 1 行数据"
+      }
     });
     store.appendAskDataEvent(runId, {
       type: "table",
@@ -203,15 +221,22 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
     expect(screen.getByText("目前咨询数最多的社区为演示账号，累计咨询记录 716 条。")).toBeInTheDocument();
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("理解问题");
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("确定数据范围");
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("数据处理");
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("执行查询");
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("生成结果");
+    expect(screen.getByRole("heading", { name: "问数结果" })).toBeInTheDocument();
     expect(screen.queryByText("过程细节")).not.toBeInTheDocument();
     expect(screen.queryByText("已匹配事件域业务 Skill")).not.toBeInTheDocument();
+
+    /* 过程区与编排模式同构：执行过程面板默认收起，点开后是主智能体执行卡 */
+    const executionPanel = screen.getByText("问数执行过程").closest(".xs-datahub-execution");
+    expect(executionPanel).not.toBeNull();
+    await user.click(
+      within(executionPanel as HTMLElement).getByRole("button", { name: /问数执行过程/ })
+    );
+    expect(
+      await within(executionPanel as HTMLElement).findByLabelText("主智能体执行过程")
+    ).toBeInTheDocument();
+
     const tableToggle = screen.getByRole("button", { name: /展开结果表汇总/ });
     expect(tableToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("columnheader", { name: "项目名称" })).not.toBeInTheDocument();
@@ -496,6 +521,187 @@ describe("workflow page actions", () => {
     expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
   });
 
+  it("问知轮次与编排同构：思考块、问知执行过程面板、问知结果标题", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("差旅费报销标准是什么？", null, "rag");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+
+    store.appendAskDataEvent(runId, {
+      type: "thinking",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "先检索报销制度，再核对金额门槛。",
+      isThinking: true,
+      replyId: "rag-thinking",
+      modelCallIndex: 1
+    });
+    store.appendAskDataEvent(runId, {
+      type: "activity",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        activityId: "tool:retrieve",
+        kind: "tool",
+        action: "retrieve_knowledge",
+        label: "检索知识证据",
+        status: "success"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "text",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: "单笔差旅费超过 5000 元需要部门负责人复核。",
+      replyId: "rag-answer",
+      modelCallIndex: 2
+    });
+    store.appendAskDataEvent(runId, {
+      type: "citation_document",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        docId: "doc-travel-policy",
+        docKey: "travel-policy.pdf",
+        kbId: "kb-finance",
+        docName: "差旅报销制度",
+        sourceAvailable: true,
+        fragments: ["单笔差旅费超过 5000 元时，需要部门负责人复核。"]
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "问知智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: { mode: "rag", askKnowledge: true, summary: "单笔超过 5000 元需复核。" },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="rag" />);
+
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问知已完成");
+    const thinking = screen.getByLabelText("思考过程");
+    expect(thinking).toHaveTextContent("已思考");
+    await user.click(within(thinking).getByRole("button", { name: /已思考/ }));
+    expect(within(thinking).getByLabelText("模型思考")).toHaveTextContent("先检索报销制度");
+    expect(screen.getByRole("heading", { name: "问知结果" })).toBeInTheDocument();
+
+    /* 结果形态不变：引用原文与引用 chips 仍在结果区 */
+    expect(screen.getByText("根据《差旅报销制度》")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
+    expect(screen.getAllByText("差旅报销制度").length).toBeGreaterThan(0);
+
+    /* 过程区：与编排同款的执行过程面板，展开是主智能体执行卡 */
+    const panel = screen.getByText("问知执行过程").closest(".xs-datahub-execution");
+    expect(panel).not.toBeNull();
+    await user.click(
+      within(panel as HTMLElement).getByRole("button", { name: /问知执行过程/ })
+    );
+    const mainCards = await within(panel as HTMLElement).findByLabelText("主智能体执行过程");
+    expect(
+      within(mainCards).getByRole("region", { name: "模型活动：检索知识证据" })
+    ).toBeInTheDocument();
+    expect(within(mainCards).getByText("引用文档")).toBeInTheDocument();
+  });
+
+  it("找文档轮次与编排同构：找文档执行过程面板、文档结果标题、文档列表", async () => {
+    const user = userEvent.setup();
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("帮我找到最新版员工手册", null, "document_lookup");
+    const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+    const rootSessionId = turn.sessionId!;
+
+    store.appendAskDataEvent(runId, {
+      type: "activity",
+      agentName: "找文档智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        activityId: "tool:find-documents",
+        kind: "tool",
+        action: "find_documents",
+        label: "定位相关文档",
+        status: "success"
+      }
+    });
+    store.appendAskDataEvent(runId, {
+      type: "done",
+      agentName: "找文档智能体",
+      sessionId: rootSessionId,
+      globalSessionId: rootSessionId,
+      chatId: turn.chatId,
+      content: {
+        mode: "document_lookup",
+        documentLookup: true,
+        documentSelectionMode: "single",
+        summary: "已找到员工手册最新版。",
+        documentResults: [
+          {
+            docId: "doc-handbook-2026",
+            docKey: "handbook-2026.pdf",
+            kbId: "kb-hr",
+            kbName: "人事知识库",
+            docName: "员工手册（2026 版）",
+            matchReason: "标题与版本完全匹配",
+            sourceAvailable: true
+          }
+        ]
+      },
+      finished: true
+    });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="document_lookup" />);
+
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("找文档已完成");
+    expect(screen.getByRole("heading", { name: "文档结果" })).toBeInTheDocument();
+
+    /* 结果形态不变：文档列表仍在结果区 */
+    const documentList = screen.getByLabelText("匹配文档");
+    expect(
+      within(documentList).getByRole("button", { name: "打开原文：员工手册（2026 版）" })
+    ).toBeInTheDocument();
+
+    const panel = screen.getByText("找文档执行过程").closest(".xs-datahub-execution");
+    expect(panel).not.toBeNull();
+    await user.click(
+      within(panel as HTMLElement).getByRole("button", { name: /找文档执行过程/ })
+    );
+    const mainCards = await within(panel as HTMLElement).findByLabelText("主智能体执行过程");
+    expect(
+      within(mainCards).getByRole("region", { name: "模型活动：定位相关文档" })
+    ).toBeInTheDocument();
+  });
+
+  it("没有思考内容时不渲染空的思考块", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("本月销售额是多少");
+    store.appendAskDataEvent(runId, {
+      type: "table",
+      data: { columns: ["月份"], rows: [["7月"]], totalRows: 1 }
+    });
+    store.appendAskDataEvent(runId, { type: "done", data: { summary: "本月销售额 128 万元。" } });
+    store.completeAskDataRun(runId);
+
+    renderPage(<AnalysisPage mode="ask" />);
+
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
+    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+  });
+
   it("shows the favorite-question action when the feature is enabled", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("各项目咨询数排名前5名", null);
@@ -595,7 +801,8 @@ describe("workflow page actions", () => {
 
     expect(screen.getByText("智能编排执行")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收起分析过程" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    /* 思考正文只有折叠的思考块渲染，编排卡里仍然只留标签 */
+    expect(screen.getByLabelText("思考过程")).toHaveTextContent("正在拆解跨来源任务。");
     expect(screen.queryByText("Agent 正在思考")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "智能体执行卡" })).not.toBeInTheDocument();
 
@@ -1341,8 +1548,7 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("理解问题");
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("确定数据范围");
+    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
     expect(screen.queryByText("datasourceId=1000002")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取数据源 Skill")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "data-hub 问数步骤" })).not.toBeInTheDocument();

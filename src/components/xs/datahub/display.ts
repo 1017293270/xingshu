@@ -150,31 +150,74 @@ export function formatStructuredContent(value: unknown): string {
   }
 }
 
+const executionBlockLabels: Record<string, string> = {
+  content: "正式回答",
+  text: "正式回答",
+  routing_intent: "意图识别",
+  routing_skill: "能力路由",
+  routing_strategy: "执行策略",
+  routing_decompose: "任务拆解",
+  react_step: "执行步骤",
+  tool_call: "调用企业能力",
+  tool_result: "执行结果",
+  data_source_selected: "数据源",
+  table: "查询结果",
+  chart: "数据图表",
+  citation_document: "引用文档",
+  document_url: "原文",
+  ask_artifact: "问数产物",
+  info: "系统信息",
+  hallucination: "可信度提示",
+  error: "执行错误"
+};
+
 export function executionBlockLabel(block: DataHubExecutionBlock): string {
   if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
     return block.type === "final_thinking" ? "结果复核" : "任务分析";
   }
-  const labels: Record<string, string> = {
-    content: "正式回答",
-    text: "正式回答",
-    routing_intent: "意图识别",
-    routing_skill: "能力路由",
-    routing_strategy: "执行策略",
-    routing_decompose: "任务拆解",
-    react_step: "执行步骤",
-    tool_call: "调用企业能力",
-    tool_result: "执行结果",
-    data_source_selected: "数据源",
-    table: "查询结果",
-    chart: "数据图表",
-    citation_document: "引用文档",
-    document_url: "原文",
-    ask_artifact: "问数产物",
-    info: "系统信息",
-    hallucination: "可信度提示",
-    error: "执行错误"
-  };
-  return labels[block.type] ?? labels[block.sourceType] ?? block.type;
+  return (
+    executionBlockLabels[block.type] ?? executionBlockLabels[block.sourceType] ?? block.type
+  );
+}
+
+/**
+ * 单个执行块对应的动作名。只认识已经有中文说法的块类型：
+ * 未收录的原始事件类型返回 undefined，让调用方跳过而不是把英文事件名摆到界面上。
+ */
+function executionActionLabel(block: DataHubExecutionBlock): string | undefined {
+  if (block.type === "activity") {
+    const record = asRecord(block.content);
+    return (
+      asString(record?.label) ??
+      asString(record?.actionLabel) ??
+      asString(record?.action)
+    );
+  }
+  if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
+    return executionBlockLabel(block);
+  }
+  return executionBlockLabels[block.type] ?? executionBlockLabels[block.sourceType];
+}
+
+/**
+ * 主会话最近一次可读的执行动作，四种模式（问数 / 问知 / 找文档 / 智能编排）
+ * 共用一套事件投影，所以这一行对四种模式都成立。
+ * 事件还没到（或全是无法命名的原始事件）时返回 undefined，由调用方留空，
+ * 避免运行态第一秒闪一句占位文案。
+ */
+export function latestExecutionActionLabel(
+  session: DataHubExecutionSession
+): string | undefined {
+  for (let cardIndex = session.cards.length - 1; cardIndex >= 0; cardIndex -= 1) {
+    const blocks = session.cards[cardIndex]?.blocks ?? [];
+    for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+      const label = executionActionLabel(blocks[blockIndex]);
+      if (label) {
+        return label;
+      }
+    }
+  }
+  return undefined;
 }
 
 function eventContent(event: DataHubStreamEvent): unknown {

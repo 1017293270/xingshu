@@ -65,7 +65,8 @@ export function DataHubProcessDock({
 
   const subQuestions = decompose?.subQuestions?.map((item) => item.trim()).filter(Boolean) ?? [];
   const hasContent = Boolean(thinkingContent.trim()) || subQuestions.length > 0;
-  if (!running && !hasContent) {
+  // 计时与运行态由上方的任务动态承担，这里只在真的有思考内容时出现。
+  if (!hasContent) {
     return null;
   }
 

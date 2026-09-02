@@ -10,7 +10,7 @@ import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
 import { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
 import { DataHubSubagentDag, dataHubDagGhostVisible } from "./DataHubSubagentDag";
 import { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
-import { asRecord, asString } from "./display";
+import { asRecord, asString, orchestrationEventsForSession } from "./display";
 import type { DataHubExecutionPanelProps } from "./types";
 import "../../../pages/styles/datahub-execution.css";
 
@@ -112,31 +112,39 @@ export function DataHubExecutionPanel({
       orchestration.toolCalls.length ||
       orchestration.toolResults.length
   );
-  const showDirectMainExecution =
-    projection.mainSession.cards.length > 0 &&
-    (preferDirectMainExecution || !hasOrchestrationStructure);
-  const directMainCards = projection.mainSession.cards.map((card) => {
-    const seenCitations = new Set<string>();
-    const stageBlocks = card.blocks.filter((block) => {
-      if (block.type === "table") {
-        return false;
-      }
-      if (block.type === "citation_document" || block.type === "document_url") {
-        if (!showMainDocumentBlocks) {
+  const directMainCards = projection.mainSession.cards
+    .map((card) => {
+      const seenCitations = new Set<string>();
+      const stageBlocks = card.blocks.filter((block) => {
+        if (block.type === "table") {
           return false;
         }
-        const identity = citationIdentity(block.content);
-        if (identity && seenCitations.has(identity)) {
-          return false;
+        if (block.type === "citation_document" || block.type === "document_url") {
+          if (!showMainDocumentBlocks) {
+            return false;
+          }
+          const identity = citationIdentity(block.content);
+          if (identity && seenCitations.has(identity)) {
+            return false;
+          }
+          if (identity) seenCitations.add(identity);
         }
-        if (identity) seenCitations.add(identity);
-      }
-      return true;
-    });
-    return stageBlocks.length && stageBlocks.length !== card.blocks.length
-      ? { ...card, blocks: stageBlocks }
-      : card;
-  });
+        return true;
+      });
+      return stageBlocks.length === card.blocks.length
+        ? card
+        : { ...card, blocks: stageBlocks };
+    })
+    // 表格由结果区完整呈现，只剩表格的卡片在过程区是个空壳，直接不出
+    .filter((card) => card.blocks.length > 0);
+  // 单智能体模式优先直出主执行过程：有执行卡就放卡，只有 ReAct 事件就放时间轴，
+  // 两样都没有才退回编排视图，免得留一个空壳容器。
+  const mainTimelineEvents = preferDirectMainExecution
+    ? orchestrationEventsForSession(projection.mainSession)
+    : [];
+  const showDirectMainExecution = preferDirectMainExecution
+    ? directMainCards.length > 0 || mainTimelineEvents.length > 0
+    : directMainCards.length > 0 && !hasOrchestrationStructure;
   // 提问后的首个事件到达前：用幽灵编排画布填充面板，避免空白空状态框
   const ghostVisible = dataHubDagGhostVisible(
     projection.mainSession,
@@ -197,19 +205,23 @@ export function DataHubExecutionPanel({
                     className="xs-datahub-execution__main-cards"
                     aria-label="主智能体执行过程"
                   >
-                    {directMainCards.map((card, index) => (
-                      <DataHubAgentExecutionCard
-                        key={card.id}
-                        card={card}
-                        compact
-                        expandLatestActivity={false}
-                        staggerIndex={index}
-                        onCitationOpen={onCitationOpen}
-                        renderBlock={renderBlock}
-                      />
-                    ))}
+                    {directMainCards.length > 0 ? (
+                      directMainCards.map((card, index) => (
+                        <DataHubAgentExecutionCard
+                          key={card.id}
+                          card={card}
+                          compact
+                          expandLatestActivity={false}
+                          staggerIndex={index}
+                          onCitationOpen={onCitationOpen}
+                          renderBlock={renderBlock}
+                        />
+                      ))
+                    ) : (
+                      <DataHubExecutionTimeline session={projection.mainSession} />
+                    )}
                   </div>
-                  {preferDirectMainExecution && hasOrchestrationStructure ? (
+                  {preferDirectMainExecution && resolvedSubagentTree.length > 0 ? (
                     <DataHubSubagentDag
                       mainSession={projection.mainSession}
                       nodes={resolvedSubagentTree}

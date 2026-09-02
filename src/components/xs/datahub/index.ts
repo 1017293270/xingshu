@@ -11,6 +11,7 @@ export { DataHubBusinessExplanation } from "./DataHubBusinessExplanation";
 export { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
 export { DataHubOrchestrationOverview } from "./DataHubOrchestrationOverview";
 export { DataHubProcessDock } from "./DataHubProcessDock";
+export { latestExecutionActionLabel } from "./display";
 export { DataHubSubagentDag } from "./DataHubSubagentDag";
 export { DataHubSubagentDrawer } from "./DataHubSubagentDrawer";
 export { DataHubSubagentTree } from "./DataHubSubagentTree";

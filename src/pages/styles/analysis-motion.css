@@ -729,8 +729,8 @@
 }
 
 
-/* ---------- 问数运行态：实时编排轨 ----------
-   运行中才挂载：脉冲点 + 走秒 + 阶段链 + 最新动作四层，
+/* ---------- 轮次运行态：任务动态 ----------
+   四种模式共用：运行中才挂载脉冲点 + 走秒 + 最新执行动作，
    都由真实编排事件驱动；结束后整块换成一行摘要（.analysis-task-dynamics）。 */
 .analysis-live {
   display: grid;
@@ -763,138 +763,6 @@
 
 .analysis-live__timer {
   font-variant-numeric: tabular-nums;
-}
-
-.analysis-live__count {
-  padding: 1px 7px;
-  border-radius: 6px;
-  color: var(--xs-info-ink);
-  background: var(--xs-info-soft);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-  font-variant-numeric: tabular-nums;
-}
-
-.analysis-live__rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.analysis-live__step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 9px 4px 5px;
-  border-radius: var(--xs-radius-small);
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-  white-space: nowrap;
-  transition:
-    color var(--xs-motion-state) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-/* 连接线：流程走到本阶段时从左向右填满，这一下是“进度真的动了”的主证据 */
-.analysis-live__step + .analysis-live__step::before {
-  width: 16px;
-  height: 1px;
-  margin-right: 3px;
-  content: "";
-  background-color: var(--xs-border-strong);
-  background-image: linear-gradient(90deg, var(--xs-primary), var(--xs-cyan));
-  background-repeat: no-repeat;
-  background-size: 0% 100%;
-  transition: background-size var(--xs-motion-slow) var(--xs-motion-ease-out);
-}
-
-.analysis-live__step[data-state="complete"] + .analysis-live__step::before,
-.analysis-live__step[data-state="active"]::before,
-.analysis-live__step[data-state="error"]::before {
-  background-size: 100% 100%;
-}
-
-.analysis-live__step-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  color: var(--xs-text-3);
-  background: #f0f5fc;
-  transition:
-    color var(--xs-motion-state) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-.analysis-live__step[data-state="pending"] {
-  opacity: 0.62;
-}
-
-/* 未开始：只留一颗静止的点，阶段图标在 20px 里糊成一团，不如不画 */
-.analysis-live__step[data-state="pending"] .analysis-live__step-mark::before {
-  width: 5px;
-  height: 5px;
-  content: "";
-  border-radius: 50%;
-  background: #b9cbe4;
-}
-
-/* 当前阶段：底色扫光 + 光环呼吸，两条都直接用编排面板的运行态动画 */
-.analysis-live__step[data-state="active"] {
-  color: var(--xs-primary-2);
-  background: linear-gradient(100deg, #e4efff 20%, #cfe5ff 46%, #e4efff 72%);
-  background-size: 220% 100%;
-  animation:
-    xs-datahub-shimmer 1.9s linear infinite,
-    xs-datahub-status-breathe 2.1s ease-in-out infinite;
-}
-
-.analysis-live__step[data-state="active"] .analysis-live__step-mark {
-  color: #fff;
-  background: var(--xs-primary);
-}
-
-/* 编排状态徽章同款转圈 */
-.analysis-live__step[data-state="active"] .analysis-live__step-mark svg {
-  animation: xs-datahub-spin 1.15s linear infinite;
-}
-
-.analysis-live__step[data-state="complete"] {
-  color: var(--xs-text-2);
-}
-
-.analysis-live__step[data-state="complete"] .analysis-live__step-mark {
-  color: var(--xs-primary-2);
-  background: #e6f1ff;
-  animation: xs-datahub-pop-in 300ms var(--xs-motion-ease-spring) backwards;
-}
-
-.analysis-live__step[data-state="error"] {
-  color: var(--xs-danger-ink);
-}
-
-.analysis-live__step[data-state="error"] .analysis-live__step-mark {
-  color: var(--xs-danger-ink);
-  background: var(--xs-danger-soft);
-}
-
-/* 窄屏阶段链换行后首端会挂一截空连线，这里直接收掉，只留状态芯片 */
-@media (max-width: 900px) {
-  .analysis-live__step + .analysis-live__step::before {
-    display: none;
-  }
-
-  .analysis-live__rail {
-    gap: 4px 6px;
-  }
 }
 
 /* 最新动作：内容变化时按 key 重挂载，换行即换一次淡入 */
