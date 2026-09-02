@@ -318,6 +318,52 @@ const agentEvents = (sessionId, chatId) => {
       }
     },
     {
+      type: "thinking",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      isThinking: true,
+      replyId: "child-plan",
+      modelCallIndex: 1,
+      content:
+        "先确认「完成率」在语义模型里的口径是「实际销售额 / 季度目标」，再按区域分组取本季度，避免把退货冲销的部分算进来。"
+    },
+    {
+      type: "activity",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      replyId: "child-plan",
+      modelCallIndex: 1,
+      content: {
+        activityId: "model:child-plan",
+        kind: "model",
+        action: "model_analysis",
+        label: "规划查询",
+        status: "success",
+        summary: "查询方案已生成",
+        startedAt: "2026-08-30T09:32:04.000+08:00",
+        completedAt: "2026-08-30T09:32:07.400+08:00",
+        durationMs: 3400
+      }
+    },
+    {
+      type: "text",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      replyId: "child-plan",
+      modelCallIndex: 1,
+      content:
+        "按区域分组取本季度销售额与完成率三行，完成率沿用语义模型口径，不再单独换算。"
+    },
+    {
       type: "activity",
       agentName: "问数智能体",
       sessionId: childSessionId,
@@ -330,7 +376,10 @@ const agentEvents = (sessionId, chatId) => {
         action: "execute_query",
         label: "执行数据查询",
         status: "success",
-        summary: "返回 3 行数据"
+        summary: "返回 3 行数据",
+        startedAt: "2026-08-30T09:32:07.600+08:00",
+        completedAt: "2026-08-30T09:32:09.100+08:00",
+        durationMs: 1500
       }
     },
     {
@@ -477,6 +526,51 @@ for (const mode of modes) {
   await page.locator(".analysis-question").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${dir}/analysis-${mode.name}-expanded.png` });
+
+  // 主卡里的第一处思考展开后是不是能读到模型原话
+  const thinking = page.locator(".xs-datahub-agent-card__thinking > summary").first();
+  if (await thinking.count()) {
+    await thinking.click();
+    await page.waitForTimeout(500);
+    await thinking.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${dir}/analysis-${mode.name}-thinking.png` });
+  }
+
+  // 子智能体抽屉：编排模式下从 DAG 节点进去看子 agent 的执行叙事
+  const subagentNode = page
+    .getByRole("button", { name: /打开 .*执行详情/ })
+    .first();
+  if (await subagentNode.count()) {
+    await subagentNode.click();
+    await page.getByRole("dialog", { name: "子智能体执行详情" }).waitFor();
+    await page.waitForTimeout(700);
+    await page.screenshot({ path: `${dir}/analysis-${mode.name}-subagent.png` });
+
+    const drawerThinking = page
+      .locator(".xs-datahub-subagent-drawer .xs-datahub-agent-card__thinking > summary")
+      .first();
+    if (await drawerThinking.count()) {
+      await drawerThinking.click();
+      await page.waitForTimeout(500);
+      await page.screenshot({
+        path: `${dir}/analysis-${mode.name}-subagent-thinking.png`
+      });
+    }
+
+    const drawerActivity = page
+      .locator(
+        ".xs-datahub-subagent-drawer .xs-datahub-agent-card__activity-header"
+      )
+      .first();
+    if (await drawerActivity.count()) {
+      await drawerActivity.click();
+      await page.waitForTimeout(500);
+      await page.screenshot({
+        path: `${dir}/analysis-${mode.name}-subagent-activity.png`
+      });
+    }
+  }
 
   const horizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth

@@ -373,17 +373,16 @@ describe("DataHubExecutionPanel", () => {
     );
     expect(within(activity).getByText("问题分析完成")).toBeVisible();
 
-    const technicalDetails = within(activity).getByRole("group", {
-      name: "执行信息"
-    });
-    expect(technicalDetails).toBeVisible();
-    expect(within(activity).getByText("执行信息")).toBeVisible();
-    expect(within(technicalDetails).getByText("任务分析")).toBeVisible();
-    expect(within(technicalDetails).getByText("理解数据问题")).toBeVisible();
-    expect(within(technicalDetails).getByText("已完成")).toBeVisible();
-    expect(within(technicalDetails).getByText(formatExecutionTime("2026-07-31T16:00:32.283+08:00"))).toBeVisible();
-    expect(within(technicalDetails).getByText(formatExecutionTime("2026-07-31T16:00:35.733+08:00"))).toBeVisible();
-    expect(within(technicalDetails).getByText("3.5s")).toBeVisible();
+    /* 技术元数据收敛成一行「类型 · 开始–完成」，六格表不再出现 */
+    expect(
+      within(activity).queryByRole("group", { name: "执行信息" })
+    ).not.toBeInTheDocument();
+    expect(within(activity).queryByText("执行信息")).not.toBeInTheDocument();
+    expect(
+      within(activity).getByText(
+        `任务分析 · ${formatExecutionTime("2026-07-31T16:00:32.283+08:00")}–${formatExecutionTime("2026-07-31T16:00:35.733+08:00")}`
+      )
+    ).toBeVisible();
     expect(within(activity).queryByText(/activity-model-1/)).not.toBeInTheDocument();
 
     await user.click(within(drawer).getByRole("button", { name: "返回列表" }));
@@ -393,6 +392,110 @@ describe("DataHubExecutionPanel", () => {
     expect(
       within(drawer).queryByRole("list", { name: "问数智能体执行时间轴" })
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the model's own thinking text with a readable preview instead of a fixed placeholder", async () => {
+    const user = userEvent.setup();
+    const thinking =
+      "**先确认口径**：本月按自然月统计，需要区域维度的收入与目标完成率，再决定是否要按渠道再拆一层；口径对不上就先回到语义模型里核对指标定义。";
+    const preview =
+      "先确认口径：本月按自然月统计，需要区域维度的收入与目标完成率，再决定是否要按渠道再拆一层；口径对不上就先回到语义模型里核";
+    const thinkingEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "问数智能体",
+        sessionId: "thinking-main",
+        chatId: "thinking-chat"
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "thinking-main",
+        chatId: "thinking-chat",
+        isThinking: true,
+        replyId: "thinking-reply",
+        modelCallIndex: 1,
+        content: thinking
+      },
+      {
+        type: "done",
+        agentName: "问数智能体",
+        sessionId: "thinking-main",
+        chatId: "thinking-chat",
+        content: {},
+        finished: true
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(thinkingEvents, {
+      mainSessionId: "thinking-main",
+      fallbackAgentName: "问数智能体"
+    });
+
+    render(
+      <DataHubExecutionPanel projection={projection} preferDirectMainExecution />
+    );
+
+    expect(
+      screen.queryByText("正在理解问题并组织执行步骤")
+    ).not.toBeInTheDocument();
+    const disclosure = screen.getByText("思考").closest("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(within(disclosure!).getByText(`${preview}…`)).toBeInTheDocument();
+    expect(
+      within(disclosure!).getByText(/口径对不上就先回到语义模型里核对指标定义。/)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByText("思考"));
+    expect(disclosure).toHaveAttribute("open");
+  });
+
+  it("says what a running agent is doing in the header and opens its streaming thinking", () => {
+    const runningEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "问数智能体",
+        sessionId: "running-main",
+        chatId: "running-chat"
+      },
+      {
+        type: "activity",
+        agentName: "问数智能体",
+        sessionId: "running-main",
+        chatId: "running-chat",
+        content: {
+          activityId: "tool:locate",
+          kind: "tool",
+          action: "locate_datasource",
+          label: "匹配可用数据源",
+          status: "running"
+        }
+      },
+      {
+        type: "thinking",
+        agentName: "问数智能体",
+        sessionId: "running-main",
+        chatId: "running-chat",
+        isThinking: true,
+        replyId: "running-reply",
+        modelCallIndex: 1,
+        content: "候选里「生产销售数据」的指标最贴近问题，先取它。"
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(runningEvents, {
+      mainSessionId: "running-main",
+      fallbackAgentName: "问数智能体"
+    });
+
+    render(
+      <DataHubExecutionPanel projection={projection} preferDirectMainExecution />
+    );
+
+    const headerNow = screen
+      .getAllByText("正在匹配可用数据源…")
+      .find((node) => node.classList.contains("xs-datahub-agent-card__now"));
+    expect(headerNow).toBeVisible();
+    expect(screen.getByText("思考").closest("details")).toHaveAttribute("open");
   });
 
   it("renders a flat root document agent as execution stages instead of an empty orchestration summary", async () => {

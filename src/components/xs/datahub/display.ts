@@ -171,13 +171,23 @@ const executionBlockLabels: Record<string, string> = {
   error: "执行错误"
 };
 
+/** 投影后 final_thinking 的 type 被归一成 thinking，原始类型只留在 sourceType 上。 */
+function isFinalThinkingBlock(block: DataHubExecutionBlock): boolean {
+  return block.type === "final_thinking" || block.sourceType === "final_thinking";
+}
+
 export function executionBlockLabel(block: DataHubExecutionBlock): string {
   if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
-    return block.type === "final_thinking" ? "结果复核" : "任务分析";
+    return isFinalThinkingBlock(block) ? "结果复核" : "任务分析";
   }
   return (
     executionBlockLabels[block.type] ?? executionBlockLabels[block.sourceType] ?? block.type
   );
+}
+
+/** 运行中的一句话：后端活动标签有的自带「正在」，统一成一种说法。 */
+export function activityProgressLine(label: string): string {
+  return label.startsWith("正在") ? `${label}…` : `正在${label}…`;
 }
 
 /**
@@ -513,11 +523,11 @@ export function latestExecutionBlock(
 
 export function executionBlockSummary(block: DataHubExecutionBlock): string {
   const record = asRecord(block.content);
+  if (isFinalThinkingBlock(block)) {
+    return "正在复核查询结果";
+  }
   if (block.isThinking || block.type === "thinking") {
     return "正在理解问题并组织执行步骤";
-  }
-  if (block.type === "final_thinking") {
-    return "正在复核查询结果";
   }
   if (block.type === "table") {
     return "已返回结构化查询结果";

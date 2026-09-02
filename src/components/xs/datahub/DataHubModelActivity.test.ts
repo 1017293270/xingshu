@@ -4,13 +4,28 @@ import { groupDataHubModelActivities } from "./DataHubModelActivity";
 
 function block(
   type: string,
-  content: Record<string, unknown>
+  content: Record<string, unknown>,
+  modelCall?: { replyId: string; modelCallIndex: number }
 ): DataHubExecutionBlock {
   return {
     type,
     sourceType: type,
     content,
-    isThinking: type === "thinking"
+    isThinking: type === "thinking",
+    ...modelCall
+  };
+}
+
+function textBlock(
+  content: string,
+  modelCall?: { replyId: string; modelCallIndex: number }
+): DataHubExecutionBlock {
+  return {
+    type: "text",
+    sourceType: "text",
+    content,
+    isThinking: false,
+    ...modelCall
   };
 }
 
@@ -94,5 +109,66 @@ describe("groupDataHubModelActivities", () => {
         status: "success"
       }
     });
+  });
+
+  it("folds same-model-call narrative into the activity and leaves the closing answer standalone", () => {
+    const modelCall = { replyId: "reply-1", modelCallIndex: 1 };
+    const items = groupDataHubModelActivities([
+      block(
+        "activity",
+        {
+          activityId: "model:reply-1",
+          kind: "model",
+          label: "规划查询",
+          status: "success",
+          summary: "查询方案已生成"
+        },
+        modelCall
+      ),
+      textBlock("先按区域拆分，再对齐目标值。", modelCall),
+      block("activity", {
+        activityId: "tool:execute",
+        kind: "tool",
+        label: "执行数据查询",
+        status: "success"
+      }),
+      textBlock("本月总销售额 1242.2 万元。", {
+        replyId: "reply-2",
+        modelCallIndex: 2
+      })
+    ]);
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "model-activity",
+      "model-activity",
+      "block"
+    ]);
+    expect(
+      items[0].kind === "model-activity"
+        ? items[0].activity.narrative.map((entry) => entry.content)
+        : []
+    ).toEqual(["先按区域拆分，再对齐目标值。"]);
+  });
+
+  it("keeps a trailing narrative block standalone even when it shares the model call", () => {
+    const modelCall = { replyId: "reply-1", modelCallIndex: 1 };
+    const items = groupDataHubModelActivities([
+      block(
+        "activity",
+        {
+          activityId: "model:reply-1",
+          kind: "model",
+          label: "组织回答",
+          status: "success"
+        },
+        modelCall
+      ),
+      textBlock("结论：西南区完成率最低。", modelCall)
+    ]);
+
+    expect(items.map((item) => item.kind)).toEqual(["model-activity", "block"]);
+    expect(
+      items[0].kind === "model-activity" ? items[0].activity.narrative : []
+    ).toEqual([]);
   });
 });

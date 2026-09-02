@@ -1,14 +1,11 @@
-import {
-  CheckCircle,
-  CircleNotch,
-  Code,
-  WarningCircle
-} from "@phosphor-icons/react";
+import { CheckCircle, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import type {
   DataHubActivityStatus,
   DataHubExecutionBlock,
 } from "@/types/dataHub";
+import { XsSafeMarkdown } from "../XsSafeMarkdown";
 import {
+  activityProgressLine,
   asNumber,
   asRecord,
   asString,
@@ -26,6 +23,8 @@ export type DataHubModelActivity = {
   status: DataHubActivityStatus;
   blocks: DataHubExecutionBlock[];
   latestBlock: DataHubExecutionBlock;
+  /** 同一次模型调用产出的解说文字，展开后紧跟在摘要之后。 */
+  narrative: DataHubExecutionBlock[];
 };
 
 export type DataHubExecutionDisplayItem =
@@ -97,7 +96,8 @@ function activityLabel(record: UnknownRecord) {
 function createActivity(
   id: string,
   record: UnknownRecord,
-  blocks: DataHubExecutionBlock[]
+  blocks: DataHubExecutionBlock[],
+  narrative: DataHubExecutionBlock[] = []
 ): DataHubModelActivity {
   return {
     id,
@@ -105,8 +105,67 @@ function createActivity(
     record,
     status: activityStatus(record),
     blocks,
-    latestBlock: blocks[blocks.length - 1]
+    latestBlock: blocks[blocks.length - 1],
+    narrative
   };
+}
+
+/** 模型对某一步的解说：同一次模型调用里流出的正文片段。 */
+function isNarrativeBlock(block: DataHubExecutionBlock) {
+  return (
+    !block.isThinking &&
+    (block.type === "text" || block.type === "content") &&
+    typeof block.content === "string" &&
+    block.content.trim().length > 0
+  );
+}
+
+/**
+ * 解说文字和活动是否属于同一次模型调用。后端把 replyId 与 modelCallIndex
+ * 同时写在活动事件和该次调用产出的正文事件上，两者都对上才算同一步。
+ */
+function sharesModelCall(
+  activity: DataHubModelActivity,
+  block: DataHubExecutionBlock
+) {
+  return activity.blocks.some(
+    (candidate) =>
+      candidate.replyId !== undefined &&
+      candidate.modelCallIndex !== undefined &&
+      candidate.replyId === block.replyId &&
+      candidate.modelCallIndex === block.modelCallIndex
+  );
+}
+
+/**
+ * 把紧跟在活动后面、属于同一次模型调用的正文并入该活动，让「这一步做了什么」
+ * 和「模型怎么说」连在一起读。末尾的正文是本轮交付的答案，保持独立展示。
+ */
+function foldNarrativeIntoActivities(
+  items: DataHubExecutionDisplayItem[]
+): DataHubExecutionDisplayItem[] {
+  const folded: DataHubExecutionDisplayItem[] = [];
+  items.forEach((item, index) => {
+    const previous = folded[folded.length - 1];
+    if (
+      index < items.length - 1 &&
+      item.kind === "block" &&
+      isNarrativeBlock(item.block) &&
+      previous?.kind === "model-activity" &&
+      sharesModelCall(previous.activity, item.block)
+    ) {
+      folded[folded.length - 1] = {
+        ...previous,
+        activity: {
+          ...previous.activity,
+          narrative: [...previous.activity.narrative, item.block]
+        }
+      };
+      return;
+    }
+    folded.push(item);
+  });
+  return folded;
 }
 
 /**
@@ -153,7 +212,7 @@ export function groupDataHubModelActivities(
     };
   });
 
-  return items;
+  return foldNarrativeIntoActivities(items);
 }
 
 function activityTimestamp(record: UnknownRecord, key: string) {
@@ -199,9 +258,7 @@ function activitySummary(activity: DataHubModelActivity) {
   if (activity.status === "cancelled") {
     return `${activity.label}未完成`;
   }
-  return activity.label.startsWith("正在")
-    ? `${activity.label}…`
-    : `正在${activity.label}…`;
+  return activityProgressLine(activity.label);
 }
 
 function activityStatusLabel(status: DataHubActivityStatus) {
@@ -231,32 +288,23 @@ function activityKindLabel(record: UnknownRecord) {
   return "执行步骤";
 }
 
-function activityTechnicalDetails(
+/** 一行淡色元信息：「{类型} · {开始}–{完成}」，缺时间就只留类型。 */
+function activityMetaLine(
   activity: DataHubModelActivity,
-  startedAt: string | number | undefined,
-  duration: number | undefined
+  startedAt: string | number | undefined
 ) {
   const completedAt =
     activityTimestamp(activity.record, "completedAt") ??
     (activity.status === "running" ? undefined : activity.latestBlock.timestamp);
-
-  return [
-    { label: "类型", value: activityKindLabel(activity.record) },
-    { label: "动作", value: activity.label },
-    { label: "状态", value: activityStatusLabel(activity.status) },
-    {
-      label: "开始时间",
-      value: startedAt === undefined ? "—" : formatExecutionTime(startedAt)
-    },
-    {
-      label: "完成时间",
-      value: completedAt === undefined ? "—" : formatExecutionTime(completedAt)
-    },
-    {
-      label: "耗时",
-      value: duration === undefined ? "—" : formatExecutionDuration(duration)
-    }
-  ];
+  const started = startedAt === undefined ? "" : formatExecutionTime(startedAt);
+  const completed =
+    completedAt === undefined ? "" : formatExecutionTime(completedAt);
+  const range = started
+    ? completed && completed !== started
+      ? `${started}–${completed}`
+      : `${started} 开始`
+    : "";
+  return [activityKindLabel(activity.record), range].filter(Boolean).join(" · ");
 }
 
 export function DataHubModelActivityCard({
@@ -272,7 +320,7 @@ export function DataHubModelActivityCard({
     activityTimestamp(activity.record, "startedAt") ??
     activity.blocks[0]?.timestamp;
   const duration = activityDuration(activity);
-  const technicalDetails = activityTechnicalDetails(activity, startedAt, duration);
+  const metaLine = activityMetaLine(activity, startedAt);
   const StatusIcon =
     activity.status === "success"
       ? CheckCircle
@@ -313,35 +361,17 @@ export function DataHubModelActivityCard({
           {activitySummary(activity)}
         </p>
 
-        {startedAt !== undefined ? (
-          <dl className="xs-datahub-agent-card__activity-meta">
-          {startedAt !== undefined ? (
-            <div>
-              <dt>开始时间</dt>
-              <dd>{formatExecutionTime(startedAt)}</dd>
-            </div>
-          ) : null}
-          </dl>
-        ) : null}
+        {activity.narrative.map((block, index) => (
+          <XsSafeMarkdown
+            key={block.eventId ?? `${activity.id}-narrative-${index}`}
+            className="xs-datahub-agent-card__activity-narrative"
+            content={String(block.content)}
+          />
+        ))}
 
-        <section className="xs-datahub-agent-card__activity-detail">
-          <div className="xs-datahub-agent-card__activity-detail-title">
-            <Code size={13} aria-hidden="true" />
-            执行信息
-          </div>
-          <dl
-            className="xs-datahub-agent-card__activity-detail-list"
-            role="group"
-            aria-label="执行信息"
-          >
-            {technicalDetails.map((detail) => (
-              <div key={detail.label}>
-                <dt>{detail.label}</dt>
-                <dd>{detail.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+        {metaLine ? (
+          <p className="xs-datahub-agent-card__activity-meta">{metaLine}</p>
+        ) : null}
       </div>
     </details>
   );

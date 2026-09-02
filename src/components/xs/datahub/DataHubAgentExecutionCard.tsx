@@ -26,6 +26,7 @@ import {
 } from "@/services/dataHubFormat";
 import { XsSafeMarkdown } from "../XsSafeMarkdown";
 import {
+  activityProgressLine,
   asNumber,
   asRecord,
   asString,
@@ -356,11 +357,75 @@ function renderCitation(
   );
 }
 
+/** 摘出思考正文的第一句作为折叠时的预览，去掉 Markdown 记号只留可读文字。 */
+function thinkingPreview(text: string, limit = 60) {
+  const plain = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gm, "")
+    .replace(/[*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > limit ? `${plain.slice(0, limit)}…` : plain;
+}
+
+function isFinalThinking(block: DataHubExecutionBlock) {
+  return block.type === "final_thinking" || block.sourceType === "final_thinking";
+}
+
+function renderThinkingBlock(
+  block: DataHubExecutionBlock,
+  options?: {
+    expanded?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
+  }
+) {
+  const final = isFinalThinking(block);
+  const text = textContent(block.content)?.trim();
+  if (!text) {
+    return (
+      <div className="xs-datahub-agent-card__thinking xs-datahub-agent-card__thinking--bare">
+        <Brain size={15} weight="duotone" aria-hidden="true" />
+        <p>{final ? "正在复核查询结果" : "正在理解问题并组织执行步骤"}</p>
+      </div>
+    );
+  }
+  const preview = thinkingPreview(text);
+  return (
+    <details
+      className="xs-datahub-agent-card__thinking"
+      open={options?.expanded}
+      onToggle={(event) => {
+        if (event.currentTarget.open !== options?.expanded) {
+          options?.onExpandedChange?.(event.currentTarget.open);
+        }
+      }}
+    >
+      <summary>
+        <Brain size={14} weight="duotone" aria-hidden="true" />
+        <strong>{final ? "结果复核" : "思考"}</strong>
+        {preview ? (
+          <span className="xs-datahub-agent-card__thinking-preview">{preview}</span>
+        ) : null}
+      </summary>
+      <XsSafeMarkdown content={text} />
+    </details>
+  );
+}
+
 function defaultBlockContent(
   block: DataHubExecutionBlock,
   onCitationOpen?: DataHubAgentExecutionCardProps["onCitationOpen"],
   tableOptions?: {
     compact?: boolean;
+    expanded?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
+  },
+  thinkingOptions?: {
     expanded?: boolean;
     onExpandedChange?: (expanded: boolean) => void;
   }
@@ -369,12 +434,7 @@ function defaultBlockContent(
     block.isThinking || block.type === "thinking" || block.type === "final_thinking";
   const text = textContent(block.content);
   if (isThinking) {
-    return (
-      <div className="xs-datahub-agent-card__thinking">
-        <Brain size={15} weight="duotone" aria-hidden="true" />
-        <p>{block.type === "final_thinking" ? "正在复核查询结果" : "正在理解问题并组织执行步骤"}</p>
-      </div>
-    );
+    return renderThinkingBlock(block, thinkingOptions);
   }
   if (block.type === "tool_call" || block.type === "tool_result") {
     return renderToolBlock(block);
@@ -443,6 +503,23 @@ export function DataHubAgentExecutionCard({
     latestTableKey
   );
   const previousLatestTableKeyRef = useRef(latestTableKey);
+  // 正在流式增长的思考默认展开，落到历史里就收起；用户点过之后一律听用户的。
+  const trailingItemIndex = displayItems.length - 1;
+  const trailingItem = displayItems[trailingItemIndex];
+  const liveThinkingKey =
+    card.status === "running" &&
+    trailingItem?.kind === "block" &&
+    trailingItem.block.isThinking
+      ? displayItemKey(card.id, trailingItem, trailingItemIndex)
+      : undefined;
+  const [thinkingOverrides, setThinkingOverrides] = useState<
+    Record<string, boolean>
+  >({});
+  const runningActivityLabel =
+    card.status === "running"
+      ? activityItems.find((item) => item.activity.id === runningActivityId)
+          ?.activity.label
+      : undefined;
 
   useEffect(() => {
     if (expandLatestActivity && runningActivityId) {
@@ -483,6 +560,12 @@ export function DataHubAgentExecutionCard({
             {startedAt ? ` · ${startedAt}` : ""}
             {updatedAt && updatedAt !== startedAt ? `–${updatedAt}` : ""}
           </p>
+          {runningActivityLabel ? (
+            <p className="xs-datahub-agent-card__now">
+              <span aria-hidden="true" />
+              {activityProgressLine(runningActivityLabel)}
+            </p>
+          ) : null}
         </div>
         <DataHubExecutionStatus status={card.status} compact />
         <button
@@ -551,14 +634,28 @@ export function DataHubAgentExecutionCard({
                         ) : customContent !== undefined ? (
                           customContent
                         ) : (
-                          defaultBlockContent(block, onCitationOpen, {
-                            compact,
-                            expanded: expandedTableKey === itemKey,
-                            onExpandedChange: (nextExpanded) =>
-                              setExpandedTableKey(
-                                nextExpanded ? itemKey : undefined
-                              )
-                          })
+                          defaultBlockContent(
+                            block,
+                            onCitationOpen,
+                            {
+                              compact,
+                              expanded: expandedTableKey === itemKey,
+                              onExpandedChange: (nextExpanded) =>
+                                setExpandedTableKey(
+                                  nextExpanded ? itemKey : undefined
+                                )
+                            },
+                            {
+                              expanded:
+                                thinkingOverrides[itemKey] ??
+                                itemKey === liveThinkingKey,
+                              onExpandedChange: (nextExpanded) =>
+                                setThinkingOverrides((current) => ({
+                                  ...current,
+                                  [itemKey]: nextExpanded
+                                }))
+                            }
+                          )
                         )}
                       </li>
                     );
