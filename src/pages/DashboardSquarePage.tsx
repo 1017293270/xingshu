@@ -93,7 +93,8 @@ export function DashboardSquarePage() {
         <section className="dashboard-list__toolbar xs-page-enter" style={xsEnterStep(1)} aria-label="筛选看板">
           <Input
             allowClear
-            prefix={<MagnifyingGlass size={18} />}
+            className="dashboard-list__toolbar-search"
+            prefix={<MagnifyingGlass size={16} />}
             placeholder="搜索看板名称或说明"
             value={searchQuery}
             onChange={(event) => {
@@ -114,7 +115,9 @@ export function DashboardSquarePage() {
               setPage(1);
             }}
           />
-          <span>{filteredRecords.length} 个看板</span>
+          <span className="dashboard-list__toolbar-count" aria-live="polite">
+            {filteredRecords.length} 个看板
+          </span>
         </section>
       ) : null}
 

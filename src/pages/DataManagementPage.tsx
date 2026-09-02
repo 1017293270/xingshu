@@ -14,7 +14,6 @@ import { XsKnowledgeCard } from "@/components/xs/XsKnowledgeCard";
 import { xsKnowledgeToneFor } from "@/components/xs/knowledgeTone";
 import { XsStatCard } from "@/components/xs/XsStatCard";
 import { xsEnterStep } from "@/components/xs/motion";
-import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { getDataHubKnowledgeAppLinks, openDataHubUrl } from "@/services/dataHubKnowledgeApp";
 import { listDataHubKnowledgeBases } from "@/services/dataHubKnowledgeService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
@@ -169,13 +168,9 @@ export function DataManagementPage() {
           value={query}
           onChange={(event) => handleSearch(event.target.value)}
         />
-        <XsStatusBar
-          tone="info"
-          label={normalizedQuery ? "筛选结果" : "汇总"}
-          message={statusText}
-          transitionKey={normalizedQuery || "all"}
-          reserveSpace
-        />
+        {statusText ? (
+          <span className="asset-filter__count" role="status" aria-live="polite">{statusText}</span>
+        ) : null}
       </section>
       {showMetrics ? (
         <section className="xs-stat-row" aria-label="知识库统计">

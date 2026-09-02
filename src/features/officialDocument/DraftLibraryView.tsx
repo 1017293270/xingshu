@@ -115,26 +115,26 @@ export function DraftLibraryView() {
         loadingVariant="rows"
         contentKey={query.dataUpdatedAt}
       >
+        <OfficialDocumentToolbar
+          searchValue={keyword}
+          searchLabel="搜索草稿标题"
+          searchPlaceholder="搜索草稿标题"
+          onSearchChange={setKeyword}
+          filters={draftFilters.map((filter) => ({
+            key: filter.key,
+            label: filter.label,
+            count: filter.key === "ALL"
+              ? drafts.length
+              : drafts.filter((draft) => draft.status === filter.key).length
+          }))}
+          filterLabel="草稿状态筛选"
+          activeFilter={draftFilter}
+          onFilterChange={setDraftFilter}
+          summary={`${readyCount} 篇可导出`}
+          onRefresh={() => void query.refetch()}
+          isRefreshing={query.isFetching}
+        />
         <div className="official-document-panel">
-          <OfficialDocumentToolbar
-            searchValue={keyword}
-            searchLabel="搜索草稿标题"
-            searchPlaceholder="搜索草稿标题"
-            onSearchChange={setKeyword}
-            filters={draftFilters.map((filter) => ({
-              key: filter.key,
-              label: filter.label,
-              count: filter.key === "ALL"
-                ? drafts.length
-                : drafts.filter((draft) => draft.status === filter.key).length
-            }))}
-            filterLabel="草稿状态筛选"
-            activeFilter={draftFilter}
-            onFilterChange={setDraftFilter}
-            summary={`${readyCount} 篇可导出`}
-            onRefresh={() => void query.refetch()}
-            isRefreshing={query.isFetching}
-          />
           {visibleDrafts.length ? (
             <OfficialDocumentList
               ariaLabel="报告草稿列表"

@@ -99,13 +99,13 @@
   color: var(--tgs-ink-3);
 }
 
+/* 计数是说明文字，不是标记：不描边、不做药丸，与各列表工具条尾部的计数同规格。 */
 .tgs-topbar__count {
   flex: none;
-  padding: 2px 8px;
-  border: 1px solid var(--tgs-line);
-  border-radius: 999px;
   color: var(--tgs-ink-3);
   font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  font-variant-numeric: tabular-nums;
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -114,23 +114,26 @@
   flex: 1 1 auto;
 }
 
+/* 顶栏次级动作对齐全局小号按钮：28px 高、6px 圆角、实描边。 */
 .tgs-topbar__new {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid var(--tgs-line);
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--xs-border-strong);
   border-radius: var(--xs-radius-small);
-  color: var(--xs-interactive-text);
+  color: var(--xs-text);
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-text);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .tgs-topbar__new:hover {
   border-color: var(--xs-primary);
+  color: var(--xs-primary);
   background: var(--xs-info-soft);
 }
 

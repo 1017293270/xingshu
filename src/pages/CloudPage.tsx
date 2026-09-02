@@ -11,7 +11,6 @@ import { XsKnowledgeCard } from "@/components/xs/XsKnowledgeCard";
 import { xsKnowledgeToneFor } from "@/components/xs/knowledgeTone";
 import { XsStatCard } from "@/components/xs/XsStatCard";
 import { xsEnterStep } from "@/components/xs/motion";
-import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import {
   XsGlyphCloudDrive,
   XsGlyphDocumentTotal,
@@ -403,14 +402,11 @@ export function CloudPage() {
                   value={viewMode}
                   onChange={(value) => setViewMode(value as CloudViewMode)}
                 />
+                {filterSummary ? (
+                  <span className="cloud-toolbar__count" aria-live="polite">{filterSummary}</span>
+                ) : null}
               </div>
             </section>
-            <XsStatusBar
-              tone="info"
-              label="筛选结果"
-              message={filterSummary}
-              transitionKey={normalizedQuery}
-            />
           </>
         ) : null}
 

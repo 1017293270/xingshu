@@ -100,11 +100,10 @@ export function HistoryPage() {
     isError: historyQuery.isError,
     hasData: historyQuery.data !== undefined
   });
-  const statusText =
-    actionStatus || (asyncStatus === "ready" ? `已筛选 ${sessions.length} 条历史对话` : "");
+  const filterCountText = asyncStatus === "ready" ? `已筛选 ${sessions.length} 条历史对话` : "";
   const statusTone = useMemo(
-    () => resolveStatusTone(statusText, false),
-    [statusText]
+    () => resolveStatusTone(actionStatus, false),
+    [actionStatus]
   );
 
   useEffect(() => {
@@ -194,14 +193,15 @@ export function HistoryPage() {
               setActionStatus("");
             }}
           />
+          {filterCountText ? (
+            <span className="history-tools__count" aria-live="polite">{filterCountText}</span>
+          ) : null}
         </section>
         <XsStatusBar
           className="history-page__status"
           tone={statusTone}
-          label={statusTone === "info" ? "筛选结果" : undefined}
-          message={statusText}
-          transitionKey={`${statusTone}:${statusText}`}
-          reserveSpace
+          message={actionStatus}
+          transitionKey={`${statusTone}:${actionStatus}`}
         />
       </div>
       <XsAsyncPanel

@@ -38,16 +38,8 @@
   flex: 0 0 auto;
 }
 
-.history-page .history-tools {
-  margin-bottom: 14px;
-}
-
 .history-page__status {
   margin: 0 0 16px;
-}
-
-.history-page__chrome > .xs-status-bar-slot {
-  min-height: 34px;
 }
 
 .history-page__async {
@@ -75,16 +67,8 @@
   min-height: 0;
 }
 
-.history-page .history-tools .ant-input-affix-wrapper {
-  flex: 1 1 320px;
-  min-width: 240px;
-}
-
 .history-page .history-tools .ant-segmented {
   flex: 0 0 auto;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--xs-border);
 }
 
 .history-page .history-list {
@@ -620,7 +604,6 @@
 
 .datahub-step__title .ant-tag {
   margin-inline-end: 0;
-  border-radius: 999px;
   font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-display);
 }
@@ -809,7 +792,7 @@
   margin-top: 9px;
   padding: 0 10px;
   border: 1px solid #d8eaff;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-small);
   color: var(--xs-primary-2);
   background: var(--xs-bg);
   font-size: var(--xs-fs-caption);
@@ -1120,15 +1103,33 @@
   text-align: center;
 }
 
+/* 列表工具条是一条扁平行：搜索 · 筛选 · …… · 计数。
+   控件外观归全局规范，这里只排布。 */
 .history-tools {
-  display: grid;
-  align-items: stretch;
-  gap: 10px;
-  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .history-tools .ant-input-affix-wrapper {
-  min-height: 44px;
+  flex: 0 1 320px;
+  min-width: 280px;
+  max-width: 360px;
+}
+
+/* 计数说明是纯文字，不是状态条：状态条只留给操作结果与错误。
+   云盘与数据资产的工具条排版在各自的样式表里，这里只给计数这一处定字号。 */
+.history-tools__count,
+.cloud-toolbar__count,
+.asset-filter__count {
+  margin-inline-start: auto;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .history-list {
@@ -1218,7 +1219,7 @@
   gap: 6px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--xs-radius-small);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
   font-weight: var(--xs-fw-bold);
@@ -1384,14 +1385,14 @@
     gap: 8px;
   }
 
-  .history-tools {
-    align-items: stretch;
-    flex-direction: column;
+  .history-tools .ant-input-affix-wrapper {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
   }
 
-  .history-page .history-tools .ant-input-affix-wrapper {
-    flex: 0 0 auto;
-    min-width: 0;
+  .history-tools__count {
+    margin-inline-start: 0;
   }
 
   .history-page__pagination {
@@ -1545,7 +1546,7 @@
   color: var(--xs-text-2);
   cursor: pointer;
   border: 1px solid var(--xs-border);
-  border-radius: 999px;
+  border-radius: var(--xs-radius-small);
   background: var(--xs-surface);
   font-size: var(--xs-fs-label);
 }

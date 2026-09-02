@@ -119,28 +119,28 @@ export function TemplateLibraryView() {
         loadingVariant="rows"
         contentKey={query.dataUpdatedAt}
       >
+        <OfficialDocumentToolbar
+          searchValue={keyword}
+          searchLabel="搜索模板名称"
+          searchPlaceholder="搜索模板名称"
+          onSearchChange={setKeyword}
+          filters={templateFilters.map((filter) => ({
+            key: filter.key,
+            label: filter.label,
+            count: filter.key === "ALL"
+              ? templates.length
+              : filter.key === "USABLE"
+                ? usableCount
+                : templates.filter((template) => template.status === filter.key).length
+          }))}
+          filterLabel="模板状态筛选"
+          activeFilter={templateFilter}
+          onFilterChange={setTemplateFilter}
+          summary={`${usableCount} 个模板可用`}
+          onRefresh={() => void query.refetch()}
+          isRefreshing={query.isFetching}
+        />
         <div className="official-document-panel">
-          <OfficialDocumentToolbar
-            searchValue={keyword}
-            searchLabel="搜索模板名称"
-            searchPlaceholder="搜索模板名称"
-            onSearchChange={setKeyword}
-            filters={templateFilters.map((filter) => ({
-              key: filter.key,
-              label: filter.label,
-              count: filter.key === "ALL"
-                ? templates.length
-                : filter.key === "USABLE"
-                  ? usableCount
-                  : templates.filter((template) => template.status === filter.key).length
-            }))}
-            filterLabel="模板状态筛选"
-            activeFilter={templateFilter}
-            onFilterChange={setTemplateFilter}
-            summary={`${usableCount} 个模板可用`}
-            onRefresh={() => void query.refetch()}
-            isRefreshing={query.isFetching}
-          />
           {visibleTemplates.length ? (
             <OfficialDocumentList
               ariaLabel="结构模板列表"

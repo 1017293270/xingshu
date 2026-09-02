@@ -124,7 +124,7 @@ describe("TemplateLibraryView", () => {
     const row = await screen.findByRole("button", { name: "打开模板 请示通知" });
     expect(within(row).getByText("可用")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /待校准/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /可用/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /可用/ })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "上传结构 DOCX" }).length).toBeGreaterThan(0);
   });
 

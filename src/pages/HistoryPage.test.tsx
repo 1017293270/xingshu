@@ -135,7 +135,7 @@ describe("HistoryPage", () => {
     expect(within(historyList).getByRole("heading", { name: "员工报销流程说明" })).toBeInTheDocument();
     expect(within(historyList).queryByRole("heading", { name: "Q2销售业绩分析" })).not.toBeInTheDocument();
     expect(within(historyList).queryByRole("heading", { name: "客户管理系统操作指南" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已筛选 1 条历史对话");
+    expect(screen.getByText("已筛选 1 条历史对话")).toBeInTheDocument();
   });
 
   it("switches category filters and announces the filtered result count", async () => {
@@ -150,17 +150,17 @@ describe("HistoryPage", () => {
     expect(within(historyList).getByRole("heading", { name: "Q2销售业绩分析" })).toBeInTheDocument();
     expect(within(historyList).getByRole("heading", { name: "库存周转率分析" })).toBeInTheDocument();
     expect(within(historyList).queryByRole("heading", { name: "员工报销流程说明" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已筛选 2 条历史对话");
+    expect(screen.getByText("已筛选 2 条历史对话")).toBeInTheDocument();
 
     await user.click(segmentedOption("找文档"));
 
     expect(within(historyList).queryByRole("heading", { name: "Q2销售业绩分析" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已筛选 0 条历史对话");
+    expect(screen.getByText("已筛选 0 条历史对话")).toBeInTheDocument();
 
     await user.click(segmentedOption("全部"));
 
     expect(await screen.findByRole("heading", { name: "员工报销流程说明" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已筛选 5 条历史对话");
+    expect(screen.getByText("已筛选 5 条历史对话")).toBeInTheDocument();
   });
 
   it("restores a selected history conversation", async () => {
@@ -169,7 +169,7 @@ describe("HistoryPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /员工报销流程说明/ }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("已打开历史对话：员工报销流程说明");
+    expect(screen.getByText("已打开历史对话：员工报销流程说明")).toBeInTheDocument();
   });
 
   it("leaves the history list immediately while a slow conversation loads", async () => {

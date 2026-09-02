@@ -1,5 +1,5 @@
 import { ArrowClockwise, CaretRight, MagnifyingGlass } from "@phosphor-icons/react";
-import { Button, Input } from "antd";
+import { Button, Input, Segmented } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 
 const STAGGER_MS = 32;
@@ -55,36 +55,37 @@ export function OfficialDocumentToolbar<TKey extends string>({
 }) {
   return (
     <div className="official-document-toolbar-row">
-      <div className="official-document-filters" role="group" aria-label={filterLabel}>
-        {filters.map((filter) => (
-          <button
-            key={filter.key}
-            type="button"
-            aria-pressed={activeFilter === filter.key}
-            onClick={() => onFilterChange(filter.key)}
-          >
-            {filter.label}
-            <span>{filter.count}</span>
-          </button>
-        ))}
-      </div>
-      <div className="official-document-toolbar-row__tail">
-        <span className="official-document-toolbar-row__summary">{summary}</span>
-        <Input
-          allowClear
-          prefix={<MagnifyingGlass size={15} />}
-          value={searchValue}
-          placeholder={searchPlaceholder}
-          aria-label={searchLabel}
-          onChange={(event) => onSearchChange(event.target.value)}
-        />
-        <Button
-          icon={<ArrowClockwise size={16} />}
-          aria-label="刷新列表"
-          loading={isRefreshing}
-          onClick={onRefresh}
-        />
-      </div>
+      <Input
+        allowClear
+        className="official-document-toolbar-row__search"
+        prefix={<MagnifyingGlass size={16} />}
+        value={searchValue}
+        placeholder={searchPlaceholder}
+        aria-label={searchLabel}
+        onChange={(event) => onSearchChange(event.target.value)}
+      />
+      <Segmented
+        className="official-document-filters"
+        aria-label={filterLabel}
+        value={activeFilter}
+        options={filters.map((filter) => ({
+          value: filter.key,
+          label: (
+            <>
+              {filter.label}
+              <span className="official-document-filters__count">{filter.count}</span>
+            </>
+          )
+        }))}
+        onChange={(value) => onFilterChange(value as TKey)}
+      />
+      <span className="official-document-toolbar-row__summary">{summary}</span>
+      <Button
+        icon={<ArrowClockwise size={16} />}
+        aria-label="刷新列表"
+        loading={isRefreshing}
+        onClick={onRefresh}
+      />
     </div>
   );
 }

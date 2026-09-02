@@ -134,13 +134,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--xs-text-3) 12%, #ffffff);
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface-soft);
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-text);
   transition:
     color var(--xs-motion-state) var(--xs-motion-ease-out),
     background-color var(--xs-motion-state) var(--xs-motion-ease-out),
@@ -148,15 +148,16 @@
 }
 
 .dashboard-card__status.is-published {
-  background: var(--xs-primary);
-  color: var(--xs-surface);
+  background: var(--xs-info-soft);
+  color: var(--xs-interactive-text);
 }
 
+/* 状态点跟着标签走同一支墨色，浅底上不再需要第二种强调色 */
 .dashboard-card__status.is-published::before {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--xs-cyan);
+  background: currentColor;
   content: "";
 }
 
@@ -562,24 +563,33 @@
   }
 }
 
+/* 列表工具条是一条扁平行，不再是自带描边与阴影的卡片：
+   搜索 · 筛选 · …… · 计数。控件外观归全局规范，这里只排布。 */
 .dashboard-list__toolbar {
-  display: grid;
-  grid-template-columns: minmax(240px, 420px) auto 1fr;
+  display: flex;
   align-items: center;
-  gap: 14px;
-  margin: 0 0 20px;
-  padding: 14px;
-  border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: var(--xs-shadow-soft);
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 16px;
 }
 
-.dashboard-list__toolbar > span {
-  justify-self: end;
+.dashboard-list__toolbar-search.ant-input-affix-wrapper {
+  flex: 0 1 320px;
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.dashboard-list__toolbar .ant-segmented {
+  flex: 0 0 auto;
+}
+
+.dashboard-list__toolbar-count {
+  margin-inline-start: auto;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .dashboard-list__pagination {
@@ -716,12 +726,14 @@
 }
 
 @media (max-width: 820px) {
-  .dashboard-list__toolbar {
-    grid-template-columns: minmax(0, 1fr);
+  .dashboard-list__toolbar-search.ant-input-affix-wrapper {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
   }
 
-  .dashboard-list__toolbar > span {
-    justify-self: start;
+  .dashboard-list__toolbar-count {
+    margin-inline-start: 0;
   }
 
   .dashboard-current__toolbar {
