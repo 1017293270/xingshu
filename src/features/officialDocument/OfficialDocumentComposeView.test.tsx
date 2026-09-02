@@ -689,12 +689,15 @@ describe("OfficialDocumentComposeView", () => {
     ]);
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     const context = send.mock.calls[0][1]?.writingContext as {
+      referenceSections: Array<{ id: string }>;
       researchResults?: Array<{ sectionId: string; summary: string }>;
-      outputRules: { allowResearch: boolean };
+      outputRules: { allowResearch: boolean; sectionAnchors: string[] };
     };
-    // 研究结果按标题映射到参考章节锚点，材料随上下文注入
+    // 章节锚点即已确认大纲的 section id，研究结果挂在同一个 id 上随上下文注入
+    expect(context.referenceSections.map((section) => section.id)).toEqual(["s1"]);
+    expect(context.outputRules.sectionAnchors).toEqual(["[[XS_SECTION:s1]]"]);
     expect(context.researchResults).toEqual([
-      expect.objectContaining({ sectionId: "reference-section-1", summary: "全年共完成检查 120 次" })
+      expect.objectContaining({ sectionId: "s1", summary: "全年共完成检查 120 次" })
     ]);
     expect(context.outputRules.allowResearch).toBe(true);
   });
@@ -818,5 +821,57 @@ describe("OfficialDocumentComposeView", () => {
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     expect(mocks.executeResearchPlan).not.toHaveBeenCalled();
+  });
+
+  it("大纲确认环：改过的标题和删掉的章节真正决定成稿骨架", async () => {
+    const user = userEvent.setup();
+    mocks.analyzeContent.mockReset().mockResolvedValue({
+      summary: "",
+      sections: [
+        {
+          id: "s1", order: 0, headingRole: "HEADING_1", title: "一、检查安排",
+          purpose: "交代本次检查的范围", keyPoints: ["覆盖四个环节"], sourceBlockIds: []
+        },
+        {
+          id: "s2", order: 1, headingRole: "HEADING_1", title: "二、工作要求",
+          purpose: "提出整改时限", keyPoints: [], sourceBlockIds: []
+        }
+      ],
+      researchNeeds: [],
+      unassignedSourceBlockIds: [],
+      warnings: []
+    });
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+
+    const outline = await screen.findByRole("region", { name: "写作大纲确认" });
+    const title = within(outline).getByDisplayValue("一、检查安排");
+    await user.clear(title);
+    await user.type(title, "一、检查安排（用户改过）");
+    await user.click(within(outline).getByRole("button", { name: "删除章节：二、工作要求" }));
+    await user.click(within(outline).getByRole("button", { name: "确认大纲并生成" }));
+
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    const context = send.mock.calls[0][1]?.writingContext as {
+      referenceSections: Array<Record<string, unknown>>;
+      outputRules: Record<string, unknown>;
+    };
+    // 章节骨架与 [[XS_SECTION]] 锚点全部来自用户拍板的那份大纲
+    expect(context.referenceSections).toEqual([{
+      id: "s1",
+      order: 0,
+      headingRole: "HEADING_1",
+      title: "一、检查安排（用户改过）",
+      bodyRequired: true,
+      purpose: "交代本次检查的范围",
+      keyPoints: ["覆盖四个环节"]
+    }]);
+    expect(context.outputRules.sectionAnchors).toEqual(["[[XS_SECTION:s1]]"]);
+    expect(context.outputRules.confirmedOutline).toBe(true);
+    // 删掉的章节和参考草稿自身的旧标题都不再进上下文
+    expect(JSON.stringify(context)).not.toContain("二、工作要求");
+    expect(JSON.stringify(context.referenceSections)).not.toContain("一、原章节");
   });
 });

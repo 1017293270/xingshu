@@ -139,6 +139,141 @@ describe("reference draft generation", () => {
     expect((bare.writingContext as { outputRules: { allowResearch: boolean } }).outputRules.allowResearch).toBe(false);
   });
 
+  it("已确认大纲决定章节骨架：改过的标题、删掉的节、purpose/keyPoints 都进上下文", () => {
+    const confirmedPlan = {
+      summary: "",
+      sections: [
+        {
+          id: "s1", order: 0, headingRole: "HEADING_1" as const, title: "一、总体安排（用户改过）",
+          purpose: "交代本次检查的范围与目标", keyPoints: ["覆盖四个环节", "明确责任人"], sourceBlockIds: []
+        },
+        {
+          id: "s2", order: 1, headingRole: "HEADING_2" as const, title: "（一）生产环节",
+          purpose: "", keyPoints: [], sourceBlockIds: []
+        },
+        {
+          id: "s3", order: 2, headingRole: "HEADING_1" as const, title: "二、工作要求",
+          purpose: "提出整改时限", keyPoints: [], sourceBlockIds: []
+        }
+      ],
+      researchNeeds: [],
+      unassignedSourceBlockIds: [],
+      warnings: []
+    };
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "h1", order: 0, role: "HEADING_1", variantId: "heading-v1", text: "一、旧年度情况" },
+        { id: "b1", order: 1, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" },
+        { id: "h2", order: 2, role: "HEADING_1", variantId: "heading-v1", text: "二、被用户删掉的旧章节" },
+        { id: "b2", order: 3, role: "BODY", variantId: "body-v1", text: "这一节不该再出现。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知",
+      confirmedPlan
+    });
+
+    expect(plan.sections).toEqual([
+      {
+        id: "s1",
+        order: 0,
+        headingRole: "HEADING_1",
+        title: "一、总体安排（用户改过）",
+        // 下一节是更深一层的标题，本节是父级，只出标题
+        bodyRequired: false,
+        purpose: "交代本次检查的范围与目标",
+        keyPoints: ["覆盖四个环节", "明确责任人"]
+      },
+      { id: "s2", order: 1, headingRole: "HEADING_2", title: "（一）生产环节", bodyRequired: true },
+      { id: "s3", order: 2, headingRole: "HEADING_1", title: "二、工作要求", bodyRequired: true, purpose: "提出整改时限" }
+    ]);
+    // 锚点跟着大纲 id 走，参考稿里被删掉的旧章节不再出现
+    const { outputRules, referenceSections } = plan.writingContext as {
+      outputRules: Record<string, unknown>;
+      referenceSections: unknown;
+    };
+    expect(outputRules.sectionAnchors).toEqual([
+      "[[XS_SECTION:s1]]",
+      "[[XS_SECTION:s2]]",
+      "[[XS_SECTION:s3]]"
+    ]);
+    expect(referenceSections).toEqual(plan.sections);
+    expect(JSON.stringify(plan.writingContext)).not.toContain("被用户删掉的旧章节");
+    expect(outputRules.confirmedOutline).toBe(true);
+    expect(outputRules.followConfirmedOutline).toContain("用户已确认的写作大纲");
+    expect(outputRules.followConfirmedOutline).toContain("必须直接回答该节的 purpose 与 keyPoints");
+    expect(outputRules.followConfirmedOutline).toContain("不得增删或调换章节");
+  });
+
+  it("有大纲时仍为参考稿首个标题前的引言留一格无标题正文节", () => {
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "lead", order: 0, role: "BODY", variantId: "body-v1", text: "为落实安全生产责任制，现将有关事项通知如下。" },
+        { id: "h1", order: 1, role: "HEADING_1", variantId: "heading-v1", text: "一、旧年度情况" },
+        { id: "b1", order: 2, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知",
+      confirmedPlan: {
+        summary: "",
+        sections: [{
+          id: "s1", order: 0, headingRole: "HEADING_1" as const, title: "一、检查安排",
+          purpose: "", keyPoints: [], sourceBlockIds: []
+        }],
+        researchNeeds: [],
+        unassignedSourceBlockIds: [],
+        warnings: []
+      }
+    });
+
+    expect(plan.sections).toEqual([
+      { id: "reference-body-1", order: 0, title: "正文", bodyRequired: true },
+      { id: "s1", order: 1, headingRole: "HEADING_1", title: "一、检查安排", bodyRequired: true }
+    ]);
+    // 引言那一格没有 headingRole，模型据此只写正文、不多出标题
+    expect(plan.sections[0].headingRole).toBeUndefined();
+  });
+
+  it("没有 confirmedPlan 时章节骨架与从前一字不差", () => {
+    const content = referenceContent([
+      { id: "h1", order: 0, role: "HEADING_1", variantId: "heading-v1", text: "一、旧年度情况" },
+      { id: "b1", order: 1, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+    ]);
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content,
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知"
+    });
+
+    expect(plan.sections).toEqual([{
+      id: "reference-section-1",
+      order: 0,
+      headingRole: "HEADING_1",
+      title: "一、旧年度情况",
+      bodyRequired: true
+    }]);
+    const { outputRules } = plan.writingContext as { outputRules: Record<string, unknown> };
+    expect(outputRules.confirmedOutline).toBeUndefined();
+    expect(outputRules.followConfirmedOutline).toBeUndefined();
+    // 空大纲同样退回旧路径，不是「有 confirmedPlan 这个键」就换骨架
+    const emptyOutline = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content,
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知",
+      confirmedPlan: {
+        summary: "",
+        sections: [],
+        researchNeeds: [],
+        unassignedSourceBlockIds: [],
+        warnings: []
+      }
+    });
+    expect(emptyOutline.sections).toEqual(plan.sections);
+  });
+
   it("mapResearchResultsToReferenceSections 标题优先、序号兜底、无匹配保留原值", () => {
     const analyzed = [
       { id: "s1", order: 0, title: "一、检查安排" },
@@ -170,6 +305,30 @@ describe("reference draft generation", () => {
       "s3",                  // 序号也对不上，保留原值
       "unknown"              // 不在分析章节里，原样保留
     ]);
+  });
+
+  it("mapResearchResultsToReferenceSections 在锚点即大纲 id 时是恒等的", () => {
+    // 已确认大纲直接当章节骨架后两边 id 相同，标题被改空、序号有偏移都不该改判
+    const analyzed = [{ id: "s1", order: 0, title: "" }, { id: "s2", order: 1, title: "二、工作要求" }];
+    const reference = [
+      { id: "reference-body-1", order: 0, title: "正文", bodyRequired: true },
+      { id: "s1", order: 1, title: "第 1 部分", bodyRequired: true },
+      { id: "s2", order: 2, title: "二、工作要求", bodyRequired: true }
+    ];
+    const base = {
+      kind: "ASK_DATA" as const,
+      question: "q",
+      required: false,
+      preferredOutput: "" as const,
+      status: "SUCCESS" as const,
+      summary: "s",
+      citations: []
+    };
+    const mapped = mapResearchResultsToReferenceSections([
+      { ...base, taskId: "a", sectionId: "s1" },
+      { ...base, taskId: "b", sectionId: "s2" }
+    ], analyzed, reference);
+    expect(mapped.map((item) => item.sectionId)).toEqual(["s1", "s2"]);
   });
 
   it("parses fixed fields and rewritten headings into template variants", () => {

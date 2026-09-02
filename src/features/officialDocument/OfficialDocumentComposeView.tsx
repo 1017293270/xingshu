@@ -397,7 +397,9 @@ export function OfficialDocumentComposeView() {
         },
         content,
         templateNodes,
-        userRequirement: requirement
+        userRequirement: requirement,
+        /* 走过大纲确认环时章节骨架以用户拍板的方案为准：改过的标题、删掉的节、purpose/keyPoints 都在这里进上下文。 */
+        ...(research ? { confirmedPlan: research.plan } : {})
       };
       /* 研究结果按内容大纲标注章节，先建一次计划拿到参考章节锚点再做映射注入。 */
       const basePlan = buildOfficialDocumentReferenceWritingPlan(planInput);

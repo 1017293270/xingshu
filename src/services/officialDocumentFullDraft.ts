@@ -3,7 +3,8 @@ import type {
   OfficialDocumentDraftContent,
   OfficialDocumentResearchResult,
   OfficialDocumentRole,
-  OfficialDocumentStructureNode
+  OfficialDocumentStructureNode,
+  OfficialDocumentWritingLogicPlan
 } from "@/types/officialDocument";
 
 export type OfficialDocumentFullDraftPreview = {
@@ -30,6 +31,10 @@ export type OfficialDocumentReferenceSection = {
   headingRole?: Exclude<TextBlockRole, "BODY">;
   title: string;
   bodyRequired: boolean;
+  /** 来自已确认大纲：这一节要回答什么。提示词按它约束正文。 */
+  purpose?: string;
+  /** 来自已确认大纲：这一节必须落到的要点。 */
+  keyPoints?: string[];
 };
 
 export type OfficialDocumentReferenceFixedField = {
@@ -57,6 +62,13 @@ const MAX_REFERENCE_STYLE_CHARS = 6_000;
 const MAX_REFERENCE_STYLE_SAMPLES = 8;
 
 const textRoles = new Set<TextBlockRole>(["HEADING_1", "HEADING_2", "HEADING_3", "BODY"]);
+
+/** 标题层级的数值，用来判断下一节是不是本节的子标题。 */
+const HEADING_DEPTH: Record<Exclude<TextBlockRole, "BODY">, number> = {
+  HEADING_1: 1,
+  HEADING_2: 2,
+  HEADING_3: 3
+};
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, "").replace(/[“”‘’]/g, "").toLocaleLowerCase();
@@ -136,6 +148,12 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
   userRequirement: string;
   /** 前端已执行的资料研究结果；提供时注入 writingContext 并放开 allowResearch。 */
   researchResults?: OfficialDocumentResearchResult[];
+  /**
+   * 用户在大纲确认环里改完并拍板的写作大纲。提供时章节骨架以它为准——
+   * 改过的标题、删掉的章节、每节的 purpose/keyPoints 都由此进入成稿；
+   * 不提供时完全按参考草稿自身的标题推断，行为与从前一致。
+   */
+  confirmedPlan?: OfficialDocumentWritingLogicPlan;
 }): OfficialDocumentReferenceWritingPlan {
   const userRequirement = input.userRequirement.trim();
   if (!userRequirement) throw new Error("请描述要生成的公文内容");
@@ -148,9 +166,37 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
     .map((block, index) => ({ block, index }))
     .filter(({ block }) => block.role === "HEADING_1" || block.role === "HEADING_2" || block.role === "HEADING_3");
   const sections: OfficialDocumentReferenceSection[] = [];
-  if (headingIndexes.length) {
-    const leadingBody = orderedBlocks.slice(0, headingIndexes[0].index)
+  const confirmedSections = [...(input.confirmedPlan?.sections ?? [])].sort((left, right) => left.order - right.order);
+  const leadingBody = headingIndexes.length > 0
+    && orderedBlocks.slice(0, headingIndexes[0].index)
       .some((block) => block.role === "BODY" && block.text.trim());
+
+  if (confirmedSections.length) {
+    /*
+     * 参考稿第一个标题之前的引言（主送语之后的发文缘由那一段）不是大纲里的章节，
+     * 大纲卡也没有「新增章节」这个动作。它属于参考稿的版式而不是章节安排，
+     * 所以已确认大纲仍然只决定「有哪些标题、什么顺序、写什么」，引言照旧留一格。
+     * 这一格没有 headingRole，模型据此只写正文、不多出任何标题。
+     */
+    if (leadingBody) {
+      sections.push({ id: "reference-body-1", order: sections.length, title: "正文", bodyRequired: true });
+    }
+    confirmedSections.forEach((section, index) => {
+      const next = confirmedSections[index + 1];
+      const title = section.title.trim();
+      const purpose = section.purpose.trim();
+      sections.push({
+        id: section.id,
+        order: sections.length,
+        headingRole: section.headingRole,
+        title: title || `第 ${index + 1} 部分`,
+        // 下一节更深一层时本节是父级标题，只出标题、不强加正文
+        bodyRequired: !next || HEADING_DEPTH[next.headingRole] <= HEADING_DEPTH[section.headingRole],
+        ...(purpose ? { purpose } : {}),
+        ...(section.keyPoints.length ? { keyPoints: [...section.keyPoints] } : {})
+      });
+    });
+  } else if (headingIndexes.length) {
     if (leadingBody) {
       sections.push({ id: "reference-body-1", order: sections.length, title: "正文", bodyRequired: true });
     }
@@ -258,6 +304,12 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         // 标题和首句写在同一行时整行会被当成正文，只能靠解析阶梯事后补救；
         // 这条规则和 sectionAnchors 一样随 writingContext 原样注入提示词，加了即刻生效。
         sectionHeadingFirstLine: "每个 [[XS_SECTION:section-id]] 锚点后的第一行必须是该章节标题，标题文字可以按本次主题改写，但必须独立成行、行尾不带句号冒号等标点，不得与正文写在同一行",
+        // 走过大纲确认环时，referenceSections 已经是用户拍板的方案而不是参考稿的推断结果，
+        // 这条规则和 sectionHeadingFirstLine 一样随 writingContext 原样注入提示词。
+        ...(confirmedSections.length ? {
+          confirmedOutline: true,
+          followConfirmedOutline: "referenceSections 是用户已确认的写作大纲：章节标题按 title 输出，可按本次主题微调措辞但不得改变含义；正文必须直接回答该节的 purpose 与 keyPoints；不得增删或调换章节；与参考草稿旧正文冲突时以已确认大纲为准"
+        } : {}),
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
@@ -280,8 +332,11 @@ export function mapResearchResultsToReferenceSections(
   const normalize = (value: string) => value.replace(/[\s、，。：:.\-·（）()一二三四五六七八九十\d]/g, "");
   const byTitle = new Map(referenceSections.map((section) => [normalize(section.title), section.id]));
   const analyzedById = new Map(analyzedSections.map((section) => [section.id, section]));
+  const referenceIds = new Set(referenceSections.map((section) => section.id));
 
   return results.map((result) => {
+    // 章节骨架直接由已确认大纲生成时两边 id 相同，无需也不该再按标题或序号改判。
+    if (referenceIds.has(result.sectionId)) return result;
     const analyzed = analyzedById.get(result.sectionId);
     if (!analyzed) {
       return result;
