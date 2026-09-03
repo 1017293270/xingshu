@@ -1,5 +1,5 @@
 import { Button, Input, Pagination, Segmented } from "antd";
-import { ArrowLeft, MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowLeft, MagicWand, MagnifyingGlass } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { XsEmptyState } from "@/components/xs/XsEmptyState";
@@ -63,6 +63,12 @@ export function DashboardSquarePage() {
             <ArrowLeft size={16} aria-hidden="true" />
             返回我的看板
           </Link>
+          <Button
+            icon={<MagicWand size={16} weight="bold" aria-hidden="true" />}
+            onClick={() => navigate("/dashboard/smart")}
+          >
+            智享大屏
+          </Button>
           {queryAssetFeatureEnabled ? (
             <Button disabled={library.createMutation.isPending} onClick={() => library.requestCreate("favorites")}>
               从收藏问数创建

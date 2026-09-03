@@ -1,4 +1,4 @@
-import { GearSix } from "@phosphor-icons/react";
+import { GearSix, MagicWand } from "@phosphor-icons/react";
 import { Button, Dropdown, Modal, Select, type MenuProps } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -127,6 +127,12 @@ export function DashboardPage() {
             onClick={() => library.requestCreate("blank")}
           >
             新建看板
+          </Button>
+          <Button
+            icon={<MagicWand size={16} weight="bold" aria-hidden="true" />}
+            onClick={() => navigate("/dashboard/smart")}
+          >
+            智享大屏
           </Button>
           <Button onClick={() => navigate("/dashboard/square")}>看板广场</Button>
           {hasWorkbench && current ? (

@@ -29,6 +29,7 @@ function renderPage() {
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/dashboard/square" element={<div>看板广场目标页</div>} />
+          <Route path="/dashboard/smart" element={<div>智享大屏目标页</div>} />
           <Route path="/dashboard-editor" element={<div>编辑器目标页</div>} />
         </Routes>
       </MemoryRouter>
@@ -102,6 +103,15 @@ describe("DashboardPage", () => {
     await user.click(screen.getAllByRole("button", { name: "看板广场" })[0]);
 
     expect(await screen.findByText("看板广场目标页")).toBeInTheDocument();
+  });
+
+  it("opens the smart dashboard entry from the header toolbar", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "智享大屏" }));
+
+    expect(await screen.findByText("智享大屏目标页")).toBeInTheDocument();
   });
 
   it("mounts the stored current dashboard inline instead of full screen", async () => {

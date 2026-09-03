@@ -15,6 +15,12 @@ vi.mock("@/features/dashboardStudio/DashboardDesignerIsland", () => ({
   DashboardDesignerIsland: () => <div aria-label="星数大屏设计器">Vue 大屏工作区</div>
 }));
 
+/* 智享大屏入口页会拉收藏问数；路由用例只关心它挂上了，列表本身在页面测试里覆盖。 */
+vi.mock("@/services/queryAssetService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/queryAssetService")>();
+  return { ...actual, listQueryAssets: vi.fn(async () => []) };
+});
+
 vi.mock("@/services/dataHubKnowledgeService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/dataHubKnowledgeService")>();
   return { ...actual, listDataHubKnowledgeBases: vi.fn() };
@@ -100,6 +106,7 @@ describe("AppRoutes", () => {
     ["/writing", "报告智写", "报告智写工作台"],
     ["/dashboard", "我的看板", "我的看板空状态"],
     ["/dashboard/square", "看板广场", "看板广场空状态"],
+    ["/dashboard/smart", "智享大屏", "选择设计用数据"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
     ["/welcome", "欢迎来到星数", "星数欢迎页"],
     ["/login", /让每一次问数.*都有据可依/, "星数登录页"],

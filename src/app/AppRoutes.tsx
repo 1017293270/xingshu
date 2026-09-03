@@ -35,6 +35,9 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) =
 const DashboardSquarePage = lazy(() =>
   import("@/pages/DashboardSquarePage").then((module) => ({ default: module.DashboardSquarePage }))
 );
+const SmartDashboardPage = lazy(() =>
+  import("@/pages/SmartDashboardPage").then((module) => ({ default: module.SmartDashboardPage }))
+);
 const DashboardEditorPage = lazy(() =>
   import("@/pages/DashboardEditorPage").then((module) => ({ default: module.DashboardEditorPage }))
 );
@@ -114,6 +117,7 @@ export function AppRoutes() {
             <Route path="/table/:sessionId" element={<TableSessionPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/dashboard/square" element={<DashboardSquarePage />} />
+            <Route path="/dashboard/smart" element={<SmartDashboardPage />} />
             <Route path="/data-dashboard" element={<DataDashboardPage />} />
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />

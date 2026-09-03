@@ -434,5 +434,26 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
 
 ## 8. 遗留与备注
 
-- 本机没有 JDK/Maven，后端切片的编译与单测需在有 Java 环境的机器或 CI 上跑；派遣令里要求 agent 如实汇报「未能本地验证」。
+### 8.1 落地状态（2026-09-03）
+
+| 切片 | 状态 | 验证 |
+| --- | --- | --- |
+| A 引擎/契约/服务 | 已提交 932bff2 | vitest 80 例 |
+| F 审美包 | 已提交 89f8668 | 对比度/背景图测试 + `scripts/screenshot-board-themes.mjs` 十档截图人工看过 |
+| C 设计器接线 + 面板 | 已提交 | hook/面板/编辑页/岛组件测试 + `scripts/screenshot-smart-dashboard.mjs` 四步截图 |
+| D 入口页/首页卡/大屏库入口 | 见后续提交 | 页面测试 + 路由表测试 |
+| E 后端 SSE（ai-service）+ BFF 路由 | **未提交**，在 DataHub 两个仓库工作区里 | Docker 离线 Maven 单测通过（详见 [[datahub-maven-docker]] 记忆） |
+
+### 8.2 后端上线清单
+
+1. ai-service 分支 `feat/beta0.3-contracts`：`DashboardDesignController`、`dashboarddesign/*`、两份提示词、`sql/20260903_insert_ai_scene_config_xingshu_dashboard_design.sql`。提交需另行批准。
+2. BFF 分支 `wzx/beta0.3-deploy`：`application.yml` 新增 `ai-dashboard-design` 路由（`/api/v1/dashboard-design/** → /ai/**`）+ `DashboardDesignRouteTest`。
+3. 执行 SQL 种子后，在管理台把场景 `xingshu_dashboard_design` 绑到 Kimi（OpenAI 兼容协议），温度 0.3、max_tokens 6000；未绑定时前端每轮都会走本地兜底，不会报错但没有「审美」。
+4. 部署 addons overlay 需同步新增的 prompt 文件。
+
+### 8.3 已知取舍
+
+- 生成后的画布高度按内容自动扩展（例：三卡 + 主图 + 两图 + 明细 = 1920×1552），与「一键美化」一致；要严格 1080 得让模型少放组件或后续加「压缩到一屏」操作。
+- 候选卡用色块示意而不是真图表：候选未上画布，真渲染会把面板拖慢；用户看效果靠「应用 → 撤销」一步来回。
+- 本机 `npx vue-tsc` 与仓库 TypeScript 版本不兼容，Vue 单文件的类型只靠 Vite 构建 + 浏览器走查兜底。
 - `aiChartPlannerService` 的无关改动已于 2026-09-03 单独提交（175508c）。

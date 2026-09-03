@@ -17,6 +17,7 @@ function renderPage() {
           <Route path="/dashboard" element={<div>我的看板目标页</div>} />
           <Route path="/dashboard-editor" element={<div>编辑器目标页</div>} />
           <Route path="/dashboard-view" element={<div>运行态目标页</div>} />
+          <Route path="/dashboard/smart" element={<div>智享大屏目标页</div>} />
         </Routes>
       </MemoryRouter>
     </AppProviders>
@@ -78,6 +79,15 @@ describe("DashboardSquarePage", () => {
     await user.click(screen.getByRole("link", { name: "返回我的看板" }));
 
     expect(await screen.findByText("我的看板目标页")).toBeInTheDocument();
+  });
+
+  it("opens the smart dashboard entry from the page head", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "智享大屏" }));
+
+    expect(await screen.findByText("智享大屏目标页")).toBeInTheDocument();
   });
 
   it("renders saved dashboards as management cards", async () => {
