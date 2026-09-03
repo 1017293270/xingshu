@@ -2,6 +2,7 @@ import "@/styles/tokens.css";
 import "@/components/xs/xs.css";
 import "@/features/dashboardStudio/dashboardStudio.css";
 import { mountDashboardRuntime } from "@/features/dashboardStudio/vue/mountDashboardRuntime";
+import { applyDashboardBoardTheme } from "@/features/dashboardStudio/core/dashboardBoardThemes";
 import { createDashboardDraftFromTables } from "@/services/dashboardGenerationService";
 import type { DashboardRecord } from "@/types/dashboardStudio";
 import type { DataHubTableResult } from "@/types/dataHub";
@@ -34,11 +35,15 @@ const trendTable: DataHubTableResult = {
   groupLabel: "近7日事件数量上报趋势"
 };
 
-const schema = createDashboardDraftFromTables({
+const draft = createDashboardDraftFromTables({
   question: "事件上报量最多的3个社区",
   summary: "苍天工程报事报修群的上报数量最高，为 772 件。",
   tables: [communityTable, trendTable]
 });
+
+// ?theme=<整板主题 id> 让截图脚本逐档取样；不带参数时保持生成器原样，别掩盖默认输出的问题。
+const requestedTheme = new URLSearchParams(window.location.search).get("theme");
+const schema = requestedTheme ? applyDashboardBoardTheme(draft, requestedTheme) : draft;
 
 const record: DashboardRecord = {
   id: "preview", status: "published", revision: 1,

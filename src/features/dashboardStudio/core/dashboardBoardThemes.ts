@@ -28,9 +28,9 @@ export type DashboardBoardTheme = {
   canvasBackground: string;
   /**
    * 画布底图（data URI）。
-   * resolveCanvasBackgroundStyle 在没有自定义底图时会强制铺一张浅冰蓝的内置底图，
-   * 深色档必须自带底图，否则深色卡片会压在浅色照片上，比现状更丑。
-   * 浅色档留空即可复用内置底图。
+   * resolveCanvasBackgroundStyle 在没有自定义底图时会强制铺一张浅冰蓝科技图，
+   * 只有 ice-light 与它同色系，可以留空复用；其余每档——深色档会被浅照片压穿，
+   * 纸白/米白/暖米档会被冰蓝染冷——都必须自带底图。
    */
   backdrop?: string;
   /** 关联的图表主题 id：卡面与图表面板取同一张皮，设计器的主题下拉才能正确回显。 */
@@ -62,10 +62,18 @@ const CARD_RADIUS = 16;
 const CHART_TYPES = new Set<DashboardWidget["type"]>(dashboardChartWidgetTypes);
 
 /**
- * 深色档自带的画布底：对角渐变 + 两团柔光，比纯色更有纵深，且不会抢卡片的视线。
+ * 画布底：对角渐变 + 两团柔光，比纯色更有纵深，且不会抢卡片的视线。
  * 用 SVG data URI 而不是位图，整张不到 1KB，且随画布任意拉伸都不糊。
+ *
+ * glowOpacity 必须可调：同一组不透明度放到浅色底上会把纸感染成有色块，
+ * 浅色档的柔光要比深色档淡一个量级才只剩「纵深」不剩「颜色」。
  */
-function backdropDataUrl(stops: [string, string, string], glowTop: string, glowBottom: string) {
+function backdropDataUrl(
+  stops: [string, string, string],
+  glowTop: string,
+  glowBottom: string,
+  glowOpacity: [number, number] = [0.3, 0.2]
+) {
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="none">' +
     "<defs>" +
@@ -75,11 +83,11 @@ function backdropDataUrl(stops: [string, string, string], glowTop: string, glowB
     `<stop offset="1" stop-color="${stops[2]}"/>` +
     "</linearGradient>" +
     '<radialGradient id="glowTop" cx="0.16" cy="0.1" r="0.62">' +
-    `<stop offset="0" stop-color="${glowTop}" stop-opacity="0.3"/>` +
+    `<stop offset="0" stop-color="${glowTop}" stop-opacity="${glowOpacity[0]}"/>` +
     `<stop offset="1" stop-color="${glowTop}" stop-opacity="0"/>` +
     "</radialGradient>" +
     '<radialGradient id="glowBottom" cx="0.88" cy="0.92" r="0.55">' +
-    `<stop offset="0" stop-color="${glowBottom}" stop-opacity="0.2"/>` +
+    `<stop offset="0" stop-color="${glowBottom}" stop-opacity="${glowOpacity[1]}"/>` +
     `<stop offset="1" stop-color="${glowBottom}" stop-opacity="0"/>` +
     "</radialGradient>" +
     "</defs>" +
@@ -89,6 +97,9 @@ function backdropDataUrl(stops: [string, string, string], glowTop: string, glowB
     "</svg>";
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
+
+/** 浅色档的柔光基准：0.3/0.2 落在纸白上会直接变成两块色斑。 */
+const PAPER_GLOW: [number, number] = [0.16, 0.1];
 
 type BoardThemeSeed = Omit<DashboardBoardTheme, "seriesColors" | "surface" | "fontFamily"> & {
   cardBlur: number;
@@ -190,6 +201,129 @@ export const dashboardBoardThemes: DashboardBoardTheme[] = [
       background: "rgba(251,191,36,0.08)",
       borderColor: "rgba(251,191,36,0.3)",
       accent: "#FBBF24",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "gov-navy",
+    title: "政务藏青",
+    description: "藏青底配金色细描边，朱红只点在单张指标上，党政机关值班大屏与领导视察用。",
+    mode: "dark",
+    canvasBackground: "#071129",
+    // 金色柔光压在右下角当远景，蓝光在左上——朱红不进底图，只留给单张卡当强调。
+    backdrop: backdropDataUrl(["#0E1D42", "#081431", "#040A1B"], "#2C4E9E", "#C8A96A", [0.28, 0.16]),
+    chartThemeId: "gov-navy",
+    cardBlur: 8,
+    metricAccents: ["#6E9BE8", "#C8A96A", "#5FB3A1", "#DE6A62"],
+    headingColor: "#F2F5FC",
+    textAccent: "#C8A96A",
+    imageSurface: { background: "rgba(10,20,44,0.62)", borderColor: "rgba(200,169,106,0.22)", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(200,169,106,0.08)",
+      borderColor: "rgba(200,169,106,0.3)",
+      accent: "#C8A96A",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "gov-paper",
+    title: "政务米白",
+    description: "米白纸底配藏青墨字，朱红只做小面积强调，正式汇报材料与会议投屏。",
+    mode: "light",
+    canvasBackground: "#F4F1E9",
+    backdrop: backdropDataUrl(["#FAF7F0", "#F4F1E9", "#EBE5D8"], "#C8A96A", "#1E3A6E", PAPER_GLOW),
+    chartThemeId: "gov-paper",
+    cardBlur: 0,
+    metricAccents: ["#1E3A6E", "#9C7420", "#2E7D6B", "#A8352A"],
+    headingColor: "#1B2B4B",
+    textAccent: "#A8352A",
+    imageSurface: { background: "#FBF8F1", borderColor: "#E4DCCB", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(168,53,42,0.06)",
+      borderColor: "#DCCFBC",
+      accent: "#A8352A",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "minimal-paper",
+    title: "极简纸白",
+    description: "纸白底、黑灰墨、极淡描边，只留一个蓝点缀，对外路演和印刷截图最干净。",
+    mode: "light",
+    canvasBackground: "#F6F7F8",
+    // 中性灰柔光 + 一点蓝，几乎看不见：这一档的纵深靠卡片投影，不靠底图。
+    backdrop: backdropDataUrl(["#FBFBFC", "#F6F7F8", "#EEEFF1"], "#98A2B3", "#2563EB", [0.1, 0.06]),
+    chartThemeId: "minimal-paper",
+    cardBlur: 0,
+    // 四张 KPI 走「深蓝 → 墨黑 → 亮蓝 → 石板灰」，同一套黑白灰蓝里也分得清是四张卡。
+    metricAccents: ["#1D4ED8", "#1F2328", "#3B82F6", "#64748B"],
+    headingColor: "#111417",
+    textAccent: "#2563EB",
+    imageSurface: { background: "#FFFFFF", borderColor: "#EAECEF", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(37,99,235,0.05)",
+      borderColor: "#E3E6EA",
+      accent: "#2563EB",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "aurora-violet",
+    title: "星云紫",
+    description: "深紫底上一团紫、一团青的柔光，玻璃卡面，算法与研发效能看板的一档。",
+    mode: "dark",
+    canvasBackground: "#0B0A1F",
+    backdrop: backdropDataUrl(["#1A1440", "#0E0C26", "#050411"], "#7C5CFF", "#22D3EE", [0.3, 0.18]),
+    chartThemeId: "aurora-violet",
+    cardBlur: 10,
+    metricAccents: ["#8B7CF6", "#38BDF8", "#2DD4BF", "#E48AC7"],
+    headingColor: "#F0EDFE",
+    textAccent: "#A78BFA",
+    imageSurface: { background: "rgba(19,16,42,0.62)", borderColor: "rgba(150,130,255,0.22)", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(139,124,246,0.09)",
+      borderColor: "rgba(150,130,255,0.3)",
+      accent: "#8B7CF6",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "forest-green",
+    title: "生态绿",
+    description: "墨绿底从翠绿走到琥珀，环保、农业、能源这类指标屏的自然色档。",
+    mode: "dark",
+    canvasBackground: "#06170F",
+    backdrop: backdropDataUrl(["#0C2C1D", "#071A11", "#020A06"], "#34D399", "#D9A441", [0.26, 0.18]),
+    chartThemeId: "forest-green",
+    cardBlur: 8,
+    metricAccents: ["#3FBE86", "#A9CF5A", "#EFB44B", "#4EA8C9"],
+    headingColor: "#E9F8EE",
+    textAccent: "#5FD3A0",
+    imageSurface: { background: "rgba(8,30,21,0.62)", borderColor: "rgba(63,190,134,0.22)", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(63,190,134,0.08)",
+      borderColor: "rgba(63,190,134,0.3)",
+      accent: "#3FBE86",
+      borderRadius: CARD_RADIUS
+    }
+  }),
+  createBoardTheme({
+    id: "sunset-warm",
+    title: "暖阳橙",
+    description: "暖米底配橙珊瑚强调，零售、门店与消费类经营看板的浅色暖档。",
+    mode: "light",
+    canvasBackground: "#FBF3EA",
+    backdrop: backdropDataUrl(["#FFF9F2", "#FBF3EA", "#F4E4D3"], "#F59E0B", "#E2725B", PAPER_GLOW),
+    chartThemeId: "sunset-warm",
+    cardBlur: 0,
+    metricAccents: ["#CF5D26", "#B03354", "#B98220", "#2F7669"],
+    headingColor: "#3A2A20",
+    textAccent: "#CF5D26",
+    imageSurface: { background: "#FFFAF4", borderColor: "#F0E1D1", borderRadius: CARD_RADIUS },
+    decorationSurface: {
+      background: "rgba(207,93,38,0.06)",
+      borderColor: "#EFDCC8",
+      accent: "#CF5D26",
       borderRadius: CARD_RADIUS
     }
   })

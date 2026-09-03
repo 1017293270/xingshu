@@ -14,6 +14,40 @@ import { dashboardChartWidgetTypes } from "./dashboardComponentRegistry";
 
 const CARD_TYPES = new Set<DashboardWidget["type"]>(["metric", "table", ...dashboardChartWidgetTypes]);
 
+/* 对比度自查：主题里的颜色只有 #rrggbb 与 rgba() 两种写法，够用就好，不引第三方色库。 */
+function parseColor(value: string): [number, number, number, number] {
+  const hex = value.trim().match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const raw = hex[1]!;
+    return [parseInt(raw.slice(0, 2), 16), parseInt(raw.slice(2, 4), 16), parseInt(raw.slice(4, 6), 16), 1];
+  }
+  const rgba = value.replace(/\s+/g, "").match(/^rgba?\((\d+),(\d+),(\d+)(?:,(\d*\.?\d+))?\)$/i);
+  if (!rgba) throw new Error(`主题色写法未覆盖：${value}`);
+  return [Number(rgba[1]), Number(rgba[2]), Number(rgba[3]), rgba[4] === undefined ? 1 : Number(rgba[4])];
+}
+
+function compositeOver(top: string, bottom: string) {
+  const [r, g, b, alpha] = parseColor(top);
+  const [br, bg, bb] = parseColor(bottom);
+  const blend = (fg: number, back: number) => Math.round(fg * alpha + back * (1 - alpha));
+  return `#${[blend(r, br), blend(g, bg), blend(b, bb)].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function relativeLuminance(value: string) {
+  const [r, g, b] = parseColor(value);
+  const channel = (part: number) => {
+    const ratio = part / 255;
+    return ratio <= 0.03928 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 function everyTypeBoard(): DashboardSchema {
   const schema = createBlankDashboard();
   schema.canvas.background = "#123456";
@@ -50,17 +84,39 @@ describe("dashboardBoardThemes", () => {
     expect(getDashboardBoardTheme("does-not-exist").id).toBe(DEFAULT_DASHBOARD_BOARD_THEME_ID);
   });
 
-  it("carries a self-contained backdrop on every dark preset", () => {
+  it("carries a self-contained backdrop wherever the built-in ice-blue photo would clash", () => {
     for (const theme of dashboardBoardThemes) {
-      if (theme.mode === "light") {
+      if (theme.id === DEFAULT_DASHBOARD_BOARD_THEME_ID) {
+        // 内置底图就是这一档的冰蓝科技图，默认档复用它才对
         expect(theme.backdrop).toBeUndefined();
         continue;
       }
-      // 画布渲染在没有自定义底图时会强铺一张浅色内置底图，深色档必须自带底图才压得住
+      // 其余档要么被浅照片压穿（深色档），要么被冰蓝染冷（纸白/米白/暖米档）
       expect(theme.backdrop).toMatch(/^data:image\/svg\+xml/);
       expect(theme.backdrop!.length).toBeLessThan(4096);
       expect(theme.backdrop).not.toContain('"');
     }
+  });
+
+  it("keeps every canvas background unique so the designer can echo the current preset", () => {
+    // getMatchingDashboardBoardThemeId 只按 canvasBackground + title 回显，撞色就会认错档
+    const backgrounds = dashboardBoardThemes.map((theme) => theme.canvasBackground.toLowerCase());
+    expect(new Set(backgrounds).size).toBe(dashboardBoardThemes.length);
+    expect(new Set(dashboardBoardThemes.map((theme) => theme.title)).size).toBe(dashboardBoardThemes.length);
+  });
+
+  it("clears WCAG AA on card ink and canvas headings for every preset", () => {
+    const failures = dashboardBoardThemes.flatMap((theme) => {
+      // 半透明卡面先叠到画布底色上：直接拿 rgba 的 rgb 三元组算会高估成一片纯深色
+      const card = compositeOver(theme.surface.background, theme.canvasBackground);
+      const ink = contrastRatio(theme.surface.color, card);
+      const heading = contrastRatio(theme.headingColor, theme.canvasBackground);
+      return [
+        ...(ink >= 4.5 ? [] : [`${theme.id} 卡面墨色 ${ink.toFixed(2)}:1`]),
+        ...(heading >= 4.5 ? [] : [`${theme.id} 画布标题 ${heading.toFixed(2)}:1`])
+      ];
+    });
+    expect(failures).toEqual([]);
   });
 });
 

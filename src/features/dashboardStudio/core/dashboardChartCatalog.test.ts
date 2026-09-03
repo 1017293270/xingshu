@@ -11,7 +11,18 @@ describe("dashboard chart catalog", () => {
   });
 
   it("keeps all eight original chart themes and detects exact theme matches", () => {
-    expect(dashboardChartThemes).toHaveLength(8);
+    const originalIds = [
+      "command-default",
+      "calm-tech",
+      "growth-contrast",
+      "risk-signal",
+      "executive-gold",
+      "vivid-compare",
+      "mint-lake",
+      "high-contrast"
+    ];
+    expect(dashboardChartThemes.slice(0, originalIds.length).map((theme) => theme.id)).toEqual(originalIds);
+    expect(dashboardChartThemes.length).toBeGreaterThanOrEqual(originalIds.length);
     const theme = dashboardChartThemes[0]!;
     expect(getMatchingDashboardChartThemeId({
       background: theme.background,
