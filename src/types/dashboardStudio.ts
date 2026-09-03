@@ -168,6 +168,18 @@ export type DashboardSchema = {
     mode: "manual" | "interval";
     intervalSeconds?: number;
   };
+  /**
+   * 智享大屏的设计意图：整板主题与构图原型。
+   * 卡面颜色能被逐个组件改掉，所以光靠反推认不出用户当初选的档；这里显式记一笔，
+   * 下一轮对话式修改才知道「保持当前主题」到底指哪一档。后端只校验 id/title/canvas/
+   * dataBindings/widgets，多出来的字段照常持久化。
+   */
+  design?: {
+    archetype?: string;
+    themeId?: string;
+    /** 用户在对话里点名加宽/收窄过的组件，重排时要守住这些意图。 */
+    emphasisById?: Record<string, string>;
+  };
   createdAt: string;
   updatedAt: string;
 };
