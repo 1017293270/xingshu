@@ -21,6 +21,7 @@ type PlanAiChartOptions = {
 
 const supportedChartTypes: AiChartType[] = ["bar", "line", "pie"];
 const sampleRowLimit = 3;
+const chartPlanTableLimit = 8;
 const emptyDominatedShare = 0.5;
 const nonComparableDimensionPattern = /^(?:[-—–−]|未知|空值|空|null|none|n\/a|合计|总计|小计|全部|汇总|total)$/i;
 
@@ -285,7 +286,7 @@ function isHealthyRankingTable(table: DataHubTableResult, index = 0): boolean {
     keys.dimensionColumn.key,
     [keys.metricColumn.key]
   );
-  return comparableRows.length > 1
+  return comparableRows.length > 0
     && !isEmptyDominatedTable(table, keys.dimensionColumn.key, [keys.metricColumn.key]);
 }
 
@@ -309,9 +310,22 @@ export function resolveAiChartTables(request: AiChartPlanRequest): DataHubTableR
 }
 
 export function createAiChartPlanRequestSummary(request: AiChartPlanRequest): AiChartPlanRequestSummary {
+  const tables = resolveAiChartTables(request);
+  const selectedTables = tables.length <= chartPlanTableLimit
+    ? tables
+    : tables
+        .map((table, index) => ({
+          table,
+          index,
+          chartable: isHealthyRankingTable(table, table.tableIndex ?? index)
+        }))
+        .sort((left, right) => Number(right.chartable) - Number(left.chartable) || left.index - right.index)
+        .slice(0, chartPlanTableLimit)
+        .map(({ table }) => table);
+
   return {
     question: request.question,
-    tables: resolveAiChartTables(request).map(summarizeTable)
+    tables: selectedTables.map(summarizeTable)
   };
 }
 
@@ -335,14 +349,14 @@ function getPreferredChartKeys(table: AiChartTableSummary) {
 
 function scoreChartableTable(table: AiChartTableSummary, source?: DataHubTableResult): number {
   const keys = getPreferredChartKeys(table);
-  if (!keys || table.totalRows <= 1) {
+  if (!keys || table.totalRows === 0) {
     return Number.NEGATIVE_INFINITY;
   }
 
   const comparableCount = source
     ? getComparableChartRows(source, keys.dimensionColumn.key, [keys.metricColumn.key]).length
     : table.totalRows;
-  if (comparableCount <= 1) {
+  if (comparableCount === 0) {
     return Number.NEGATIVE_INFINITY;
   }
 
@@ -445,11 +459,12 @@ function getLocalGuardResult(
     return { chartable: false, reason: "结果中没有可度量的数值字段，不适合生成图表。" };
   }
 
-  if (totalRows <= 1) {
+  const chartableShape = findChartableShape(summary, tables);
+  if (totalRows <= 1 && !chartableShape) {
     return { chartable: false, reason: "结果只有一个具体数值，不适合生成图表。" };
   }
 
-  if (!findChartableShape(summary, tables)) {
+  if (!chartableShape) {
     return { chartable: false, reason: "结果缺少维度与数值的对应关系，不适合生成图表。" };
   }
 

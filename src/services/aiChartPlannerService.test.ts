@@ -38,6 +38,38 @@ describe("aiChartPlannerService", () => {
     expect(dataHubPlanner).not.toHaveBeenCalled();
   });
 
+  it("asks AI to chart a single-bucket categorical distribution", async () => {
+    const dataHubPlanner = vi.fn(async () => ({
+      chartable: true,
+      reason: "单一记录类型仍可展示分布。",
+      chartType: "bar" as const,
+      allowedTypes: ["bar" as const],
+      title: "事件记录类型分布",
+      tableIndex: 0,
+      dimensionKey: "recordType",
+      metricKeys: ["count"]
+    }));
+
+    const result = await planAiChart(
+      {
+        question: "昨天的事件分布",
+        tables: [
+          table(
+            [
+              { key: "recordType", title: "事件记录类型" },
+              { key: "count", title: "记录数", type: "number" }
+            ],
+            [{ recordType: "ISSUE", count: 6 }]
+          )
+        ]
+      },
+      { dataHubPlanner }
+    );
+
+    expect(dataHubPlanner).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ chartable: true, dimensionKey: "recordType" });
+  });
+
   it("summarizes only schema, samples and counts for AI", () => {
     const summary = createAiChartPlanRequestSummary({
       question: "每个收入人群占比多少",
@@ -63,6 +95,34 @@ describe("aiChartPlannerService", () => {
       { key: "income_group", title: "收入人群", type: "dimension" },
       { key: "ratio", title: "占比", type: "number" }
     ]);
+  });
+
+  it("limits AI chart planning to eight tables while retaining a chartable result", () => {
+    const scalarTables = Array.from({ length: 8 }, (_, index) => ({
+      ...table([{ key: "count", title: "记录数", type: "number" }], [{ count: index + 1 }]),
+      tableIndex: index
+    }));
+    const chartableTable = {
+      ...table(
+        [
+          { key: "hour", title: "小时" },
+          { key: "count", title: "记录数", type: "number" }
+        ],
+        [
+          { hour: "10:00", count: 2 },
+          { hour: "11:00", count: 1 }
+        ]
+      ),
+      tableIndex: 8
+    };
+
+    const summary = createAiChartPlanRequestSummary({
+      question: "昨天的事件分布",
+      tables: [...scalarTables, chartableTable]
+    });
+
+    expect(summary.tables).toHaveLength(8);
+    expect(summary.tables.some((candidate) => candidate.tableIndex === 8)).toBe(true);
   });
 
   it("uses AI judgment to build pie chart options for category ratios", async () => {
