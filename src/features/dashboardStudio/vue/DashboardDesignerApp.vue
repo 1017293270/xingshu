@@ -27,6 +27,7 @@ import {
   PhImageSquare,
   PhLock,
   PhLockOpen,
+  PhMagicWand,
   PhMagnifyingGlass,
   PhNumberSquareOne,
   PhPlus,
@@ -156,6 +157,8 @@ const props = defineProps<{
   initialVisibility?: "PRIVATE" | "SPACE";
   initialResourcePanel?: "assets";
   initialAssetId?: string;
+  initialSmartPanelOpen?: boolean;
+  onSmartPanelToggle?: (open: boolean) => void;
   saveDraft: SaveHandler;
   publishDashboard: SaveHandler;
   dataActions: DashboardDesignerDataActions;
@@ -2028,6 +2031,28 @@ async function exitDesigner() {
   }
   props.exit();
 }
+/**
+ * 智享面板（React 侧）通过这几个出口和设计器对话：
+ * 读当前 schema、整份替换并落成一步撤销、同步工具栏按钮的按压态。
+ * 面板本身不住在 Vue 里——会话组件全是 React 的，这里只给出口。
+ */
+const smartPanelOpen = ref(props.initialSmartPanelOpen ?? false);
+
+function toggleSmartPanel() {
+  smartPanelOpen.value = !smartPanelOpen.value;
+  props.onSmartPanelToggle?.(smartPanelOpen.value);
+}
+
+function setSmartPanelOpen(open: boolean) {
+  smartPanelOpen.value = open;
+}
+
+async function applySchema(nextSchema: DashboardSchema, notice = "已应用智享方案，可撤销") {
+  await applySchemaChange(clone(nextSchema));
+  showCanvasNotice(notice);
+}
+
+defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
 </script>
 
 <template>
@@ -2118,6 +2143,17 @@ async function exitDesigner() {
           @click="activeDrawer = activeDrawer === 'property' ? null : 'property'"
         >
           <PhSlidersHorizontal :size="19" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="designer-toolbar__button designer-toolbar__smart-button"
+          :aria-pressed="smartPanelOpen"
+          :disabled="lifecycle === 'saving'"
+          title="用对话生成与修改大屏"
+          @click="toggleSmartPanel"
+        >
+          <PhMagicWand :size="15" aria-hidden="true" />
+          <span>智享</span>
         </button>
         <button
           type="button"

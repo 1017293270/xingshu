@@ -22,6 +22,10 @@ type DashboardDesignerIslandProps = {
   dataActions?: DashboardDesignerDataActions;
   initialResourcePanel?: "assets";
   initialAssetId?: string;
+  initialSmartPanelOpen?: boolean;
+  onSmartPanelToggle?: (open: boolean) => void;
+  /** 设计器挂好后把句柄交给宿主（智享面板靠它读写画布），卸载时回传 null。 */
+  onHandle?: (handle: DashboardDesignerHandle | null) => void;
   onExit: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onChange?: (schema: DashboardSchema) => void;
@@ -48,6 +52,9 @@ export function DashboardDesignerIsland({
   dataActions,
   initialResourcePanel,
   initialAssetId,
+  initialSmartPanelOpen,
+  onSmartPanelToggle,
+  onHandle,
   onExit,
   onDirtyChange,
   onChange,
@@ -55,12 +62,30 @@ export function DashboardDesignerIsland({
 }: DashboardDesignerIslandProps) {
   const effectiveDataActions = dataActions ?? unavailableDataActions;
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const optionsRef = useRef({ saveDraft, publishDashboard, dataActions: effectiveDataActions, onExit, onDirtyChange, onChange });
+  const optionsRef = useRef({
+    saveDraft,
+    publishDashboard,
+    dataActions: effectiveDataActions,
+    onExit,
+    onDirtyChange,
+    onChange,
+    onSmartPanelToggle,
+    onHandle
+  });
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
-  optionsRef.current = { saveDraft, publishDashboard, dataActions: effectiveDataActions, onExit, onDirtyChange, onChange };
+  optionsRef.current = {
+    saveDraft,
+    publishDashboard,
+    dataActions: effectiveDataActions,
+    onExit,
+    onDirtyChange,
+    onChange,
+    onSmartPanelToggle,
+    onHandle
+  };
 
   useEffect(() => {
     const element = mountRef.current;
@@ -82,6 +107,8 @@ export function DashboardDesignerIsland({
           record,
           initialResourcePanel,
           initialAssetId,
+          initialSmartPanelOpen,
+          onSmartPanelToggle: (open) => optionsRef.current.onSmartPanelToggle?.(open),
           saveDraft: (...args) => optionsRef.current.saveDraft(...args),
           publishDashboard: (...args) => optionsRef.current.publishDashboard(...args),
           dataActions: {
@@ -108,6 +135,7 @@ export function DashboardDesignerIsland({
             }
           }
         });
+        optionsRef.current.onHandle?.(handle);
       })
       .catch((error: unknown) => {
         if (!disposed) {
@@ -118,9 +146,10 @@ export function DashboardDesignerIsland({
 
     return () => {
       disposed = true;
+      optionsRef.current.onHandle?.(null);
       handle?.unmount();
     };
-  }, [initialAssetId, initialResourcePanel, loadAttempt, loader, record.id]);
+  }, [initialAssetId, initialResourcePanel, initialSmartPanelOpen, loadAttempt, loader, record.id]);
 
   return (
     <div className="dashboard-designer-island" data-state={state}>

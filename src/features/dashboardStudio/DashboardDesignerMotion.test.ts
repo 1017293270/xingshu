@@ -8,6 +8,7 @@ import {
   type DashboardDesignerDataActions,
   type DashboardDesignerHandle
 } from "./vue/mountDashboardDesigner";
+import { dashboardBoardThemes } from "./core/dashboardBoardThemes";
 
 vi.mock("@/features/dashboardStudio/core/dashboardCanvasBackground", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/dashboardStudio/core/dashboardCanvasBackground")>();
@@ -625,7 +626,8 @@ describe("dashboard designer motion states", () => {
     // 构图与配色全部走本地引擎，后端 /layout-plan 端点从未存在，一发都不许白打
     expect(dataActions.planLayout).not.toHaveBeenCalled();
     expect(dialog).toHaveTextContent("星数冰蓝");
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    // 配色档位随整板主题包增减，按目录长度断言而不是写死
+    expect(screen.getAllByRole("radio")).toHaveLength(dashboardBoardThemes.length);
     expect(host.querySelectorAll(".layout-preview__block")).toHaveLength(4);
 
     fireEvent.click(screen.getByRole("radio", { name: /深空指挥/ }));

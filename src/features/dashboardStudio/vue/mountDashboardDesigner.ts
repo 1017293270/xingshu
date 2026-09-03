@@ -13,6 +13,9 @@ export type DashboardDesignerMountOptions = {
   record: DashboardRecord;
   initialResourcePanel?: "assets";
   initialAssetId?: string;
+  /** 智享面板的初始开合；工具栏按钮切换时通过 onSmartPanelToggle 告诉 React 侧显隐面板。 */
+  initialSmartPanelOpen?: boolean;
+  onSmartPanelToggle?: (open: boolean) => void;
   saveDraft: (schema: DashboardSchema, expectedRevision: number, visibility: "PRIVATE" | "SPACE") => Promise<DashboardRecord>;
   publishDashboard: (schema: DashboardSchema, expectedRevision: number, visibility: "PRIVATE" | "SPACE") => Promise<DashboardRecord>;
   exit: () => void;
@@ -42,7 +45,16 @@ export type DashboardDesignerDataActions = {
 
 export type DashboardDesignerHandle = {
   unmount: () => void;
+  /** 当前画布上的 schema（深拷贝）。 */
+  getSchema: () => DashboardSchema;
+  /** 整份替换画布并落成一步撤销历史，画布上会弹出提示。 */
+  applySchema: (schema: DashboardSchema, notice?: string) => Promise<void>;
+  /** React 侧关掉面板后同步工具栏按钮的按压态。 */
+  setSmartPanelOpen: (open: boolean) => void;
 };
+
+/** DashboardDesignerApp 通过 defineExpose 暴露给宿主的那几个方法。 */
+type DashboardDesignerExposed = Pick<DashboardDesignerHandle, "getSchema" | "applySchema" | "setSmartPanelOpen">;
 
 const mountedApps = new WeakMap<HTMLElement, VueApp>();
 const unavailableDataActions: DashboardDesignerDataActions = {
@@ -70,6 +82,8 @@ export function mountDashboardDesigner(
     initialVisibility: options.record.visibility ?? "PRIVATE",
     initialResourcePanel: options.initialResourcePanel,
     initialAssetId: options.initialAssetId,
+    initialSmartPanelOpen: options.initialSmartPanelOpen,
+    onSmartPanelToggle: options.onSmartPanelToggle,
     saveDraft: options.saveDraft,
     publishDashboard: options.publishDashboard,
     dataActions: options.dataActions ?? unavailableDataActions,
@@ -82,7 +96,7 @@ export function mountDashboardDesigner(
   app.config.errorHandler = (error) => {
     options.onError?.(error instanceof Error ? error : new Error(String(error)));
   };
-  app.mount(element);
+  const exposed = app.mount(element) as unknown as DashboardDesignerExposed;
   mountedApps.set(element, app);
 
   return {
@@ -92,6 +106,9 @@ export function mountDashboardDesigner(
       }
       app.unmount();
       element.replaceChildren();
-    }
+    },
+    getSchema: () => exposed.getSchema(),
+    applySchema: (schema, notice) => exposed.applySchema(schema, notice),
+    setSmartPanelOpen: (open) => exposed.setSmartPanelOpen(open)
   };
 }

@@ -527,3 +527,14 @@
     transition: none;
   }
 }
+
+/* 工具栏「智享」按钮：设计器样式是 scoped 的，按压态从宿主这边补。 */
+.dashboard-designer-island .designer-toolbar__smart-button {
+  gap: 6px;
+  color: var(--studio-primary);
+}
+
+.dashboard-designer-island .designer-toolbar__smart-button[aria-pressed="true"] {
+  border-color: var(--studio-primary);
+  background: rgba(22, 119, 255, 0.1);
+}

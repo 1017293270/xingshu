@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import type { DashboardRecord } from "@/types/dashboardStudio";
 import { DashboardDesignerIsland } from "./DashboardDesignerIsland";
+import type { DashboardDesignerHandle } from "./vue/mountDashboardDesigner";
+
+function fakeHandle(schema: DashboardRecord["schema"], unmount: () => void = () => undefined): DashboardDesignerHandle {
+  return {
+    unmount,
+    getSchema: () => schema,
+    applySchema: async () => undefined,
+    setSmartPanelOpen: () => undefined
+  };
+}
 
 function record(): DashboardRecord {
   const schema = createBlankDashboard({ title: "测试大屏", idFactory: (prefix) => `${prefix}-1` });
@@ -19,13 +29,13 @@ function record(): DashboardRecord {
 describe("DashboardDesignerIsland", () => {
   it("mounts the Vue designer once and unmounts it with the React host", async () => {
     const unmount = vi.fn();
+    const dashboardRecord = record();
     const mountDashboardDesigner = vi.fn((element: HTMLElement, options: { onReady?: () => void }) => {
       element.textContent = "Vue 大屏工作区";
       options.onReady?.();
-      return { unmount };
+      return fakeHandle(dashboardRecord.schema, unmount);
     });
     const loader = vi.fn(async () => ({ mountDashboardDesigner }));
-    const dashboardRecord = record();
     const saveDraft = vi.fn(async () => dashboardRecord);
     const publishDashboard = vi.fn(async () => dashboardRecord);
 
@@ -48,14 +58,14 @@ describe("DashboardDesignerIsland", () => {
   });
 
   it("shows a recoverable branded error when the Vue chunk fails", async () => {
+    const dashboardRecord = record();
     const loader = vi.fn().mockRejectedValueOnce(new Error("chunk unavailable")).mockResolvedValueOnce({
       mountDashboardDesigner: (element: HTMLElement, options: { onReady?: () => void }) => {
         element.textContent = "已恢复";
         options.onReady?.();
-        return { unmount: () => undefined };
+        return fakeHandle(dashboardRecord.schema);
       }
     });
-    const dashboardRecord = record();
 
     render(
       <DashboardDesignerIsland
@@ -72,5 +82,44 @@ describe("DashboardDesignerIsland", () => {
 
     await waitFor(() => expect(screen.getByText("已恢复")).toBeInTheDocument());
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands the designer handle to the host and clears it on unmount", async () => {
+    const dashboardRecord = record();
+    const handle = fakeHandle(dashboardRecord.schema);
+    const onHandle = vi.fn();
+    const onSmartPanelToggle = vi.fn();
+    let toggle: ((open: boolean) => void) | undefined;
+    const loader = vi.fn(async () => ({
+      mountDashboardDesigner: (
+        element: HTMLElement,
+        options: { onReady?: () => void; onSmartPanelToggle?: (open: boolean) => void }
+      ) => {
+        element.textContent = "Vue 大屏工作区";
+        toggle = options.onSmartPanelToggle;
+        options.onReady?.();
+        return handle;
+      }
+    }));
+
+    const view = render(
+      <DashboardDesignerIsland
+        record={dashboardRecord}
+        saveDraft={async () => dashboardRecord}
+        publishDashboard={async () => dashboardRecord}
+        onExit={() => undefined}
+        onHandle={onHandle}
+        onSmartPanelToggle={onSmartPanelToggle}
+        loader={loader}
+      />
+    );
+
+    await screen.findByText("Vue 大屏工作区");
+    expect(onHandle).toHaveBeenLastCalledWith(handle);
+    toggle?.(true);
+    expect(onSmartPanelToggle).toHaveBeenCalledWith(true);
+
+    view.unmount();
+    expect(onHandle).toHaveBeenLastCalledWith(null);
   });
 });
