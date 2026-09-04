@@ -61,7 +61,7 @@ export function getDataHubDocumentLookupResults(
 
     const { docId, kbId } = rawResult;
     const docKey = optionalText(rawResult.docKey);
-    // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能丢结果。
+    // PRD A-6 后身份以 docId 为准，docKey 仅展示、可为空，两者都不能当结果过滤条件。
     if (!isDocumentIdentifier(docId) || !isDocumentIdentifier(kbId)) {
       continue;
     }
@@ -90,11 +90,10 @@ export function getDataHubDocumentLookupResults(
         ? rawResult.score
         : undefined,
       docStatus: optionalText(rawResult.docStatus, 40),
-      sourceAvailable: docKey
-        ? typeof rawResult.sourceAvailable === "boolean"
-          ? rawResult.sourceAvailable
-          : undefined
-        : false
+      // 取原文靠 docId，别再因为缺 docKey 把可开的文档标成「原文不可用」。
+      sourceAvailable: typeof rawResult.sourceAvailable === "boolean"
+        ? rawResult.sourceAvailable
+        : undefined
     });
 
     if (results.length >= limit) {

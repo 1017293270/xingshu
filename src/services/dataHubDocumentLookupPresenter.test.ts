@@ -51,7 +51,7 @@ describe("dataHubDocumentLookupPresenter", () => {
     ]);
   });
 
-  it("keeps a result without docKey but marks it not openable", () => {
+  it("keeps a result without docKey openable: PRD A-6 之后取原文认 docId", () => {
     const results = getDataHubDocumentLookupResults({
       documentLookup: true,
       documentSelectionMode: "single",
@@ -70,8 +70,20 @@ describe("dataHubDocumentLookupPresenter", () => {
       docId: "doc-a6",
       docKey: undefined,
       title: "PRD A-6 之后的检索结果",
-      sourceAvailable: false
+      sourceAvailable: true
     });
+  });
+
+  it("后端说原文不可用时照样标不可用", () => {
+    const results = getDataHubDocumentLookupResults({
+      documentLookup: true,
+      documentSelectionMode: "single",
+      documentResults: [
+        { docId: "doc-gone", kbId: "kb-policy", docName: "已归档文档", sourceAvailable: false }
+      ]
+    });
+
+    expect(results[0]).toMatchObject({ docId: "doc-gone", sourceAvailable: false });
   });
 
   it.each(["none", "uncertain"] as const)(

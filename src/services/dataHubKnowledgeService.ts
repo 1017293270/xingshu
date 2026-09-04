@@ -25,9 +25,21 @@ export type DataHubSourceDocumentAccess = {
   revoke?: () => void;
 };
 
+/**
+ * 文档身份以 docId 为准（ai-service PRD A-6 起授权链路已 docKeys→docIds，
+ * 制品也按 kb_<kbId>/<docId>/ 落 MinIO），docKey 只是仍被后端接受的旧参数。
+ * docId 是雪花号字符串，超出 JS 安全整数范围，全程按字符串传、不要 Number()。
+ */
+function sourceDocumentId(citation: Pick<DataHubCitationDocument, "docId">) {
+  const docId = citation.docId?.trim();
+  // 后端把 doc_id 声明成 Long，非数字形态送过去会直接 400，交给 doc_key 兜底。
+  return docId && /^\d+$/.test(docId) ? docId : undefined;
+}
+
 function requireSourceIdentity(citation: DataHubCitationDocument) {
   const session = readDataHubSession();
-  if (!session.spaceId || !citation.docKey || !citation.kbId) {
+  const hasIdentity = Boolean(sourceDocumentId(citation) || citation.docKey?.trim());
+  if (!session.spaceId || !citation.kbId || !hasIdentity) {
     throw new DataHubServiceError("原文链接信息不完整，暂无法打开");
   }
 
@@ -35,12 +47,20 @@ function requireSourceIdentity(citation: DataHubCitationDocument) {
 }
 
 function sourceDocumentParams(spaceId: number, citation: DataHubCitationDocument) {
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     space_id: String(spaceId),
-    kb_id: citation.kbId,
-    // requireSourceIdentity 已保证非空；?? "" 仅收窄类型
-    doc_key: citation.docKey ?? ""
+    kb_id: citation.kbId
   });
+  // 两个都带上：后端优先用 doc_id，没有时才走 doc_key 那条旧解析。
+  const docId = sourceDocumentId(citation);
+  if (docId) {
+    params.set("doc_id", docId);
+  }
+  const docKey = citation.docKey?.trim();
+  if (docKey) {
+    params.set("doc_key", docKey);
+  }
+  return params;
 }
 
 function normalizePreviewUrl(value: string) {
@@ -172,32 +192,29 @@ async function loadDataHubSourceDocumentBlob(
   };
 }
 
+/** 云盘/知识库那边的文档形状转成取原文用的引用身份。 */
+function knowledgeDocumentCitation(
+  kbId: string,
+  document: DataHubKnowledgeDocument
+): DataHubCitationDocument {
+  return {
+    docId: document.docId?.trim() || document.docKey?.trim() || "",
+    docKey: document.docKey?.trim() || undefined,
+    kbId,
+    docName: document.title,
+    sourceAvailable: true,
+    fragments: []
+  };
+}
+
 export async function loadDataHubKnowledgeSource(
   kbId: string,
   document: DataHubKnowledgeDocument
 ): Promise<DataHubSourceDocumentAccess> {
-  const docKey = document.docKey?.trim();
-  if (!docKey) {
-    throw new DataHubServiceError("原文链接信息不完整，暂无法打开");
-  }
+  const citation = knowledgeDocumentCitation(kbId, document);
+  const { session, spaceId } = requireSourceIdentity(citation);
 
-  const { session, spaceId } = requireSourceIdentity({
-    docId: document.docId || docKey,
-    docKey,
-    kbId,
-    docName: document.title,
-    sourceAvailable: true,
-    fragments: []
-  });
-
-  return loadDataHubSourceDocumentBlob(spaceId, {
-    docId: document.docId || docKey,
-    docKey,
-    kbId,
-    docName: document.title,
-    sourceAvailable: true,
-    fragments: []
-  }, session.token);
+  return loadDataHubSourceDocumentBlob(spaceId, citation, session.token);
 }
 
 function unwrapMarkdownContent(payload: unknown): string {
@@ -231,27 +248,9 @@ export async function loadDataHubKnowledgeMarkdown(
   kbId: string,
   document: DataHubKnowledgeDocument
 ): Promise<{ markdown: string }> {
-  const docKey = document.docKey?.trim();
-  if (!docKey) {
-    throw new DataHubServiceError("原文链接信息不完整，暂无法打开");
-  }
-
-  const { spaceId } = requireSourceIdentity({
-    docId: document.docId || docKey,
-    docKey,
-    kbId,
-    docName: document.title,
-    sourceAvailable: true,
-    fragments: []
-  });
-  const params = sourceDocumentParams(spaceId, {
-    docId: document.docId || docKey,
-    docKey,
-    kbId,
-    docName: document.title,
-    sourceAvailable: true,
-    fragments: []
-  });
+  const citation = knowledgeDocumentCitation(kbId, document);
+  const { spaceId } = requireSourceIdentity(citation);
+  const params = sourceDocumentParams(spaceId, citation);
   const markdown = unwrapMarkdownContent(
     await requestDataHub<unknown>(`/api/ai/rag/kb/file_content?${params.toString()}`, {
       method: "GET",
@@ -502,7 +501,7 @@ function normalizeKnowledgeDocument(value: unknown, index: number): DataHubKnowl
   // MinIO archive status is not the same as "can fetch the original". Contract
   // libraries often report source_available=false / sourceDocument.status=failed
   // while GET /kb/source_document still returns the PDF.
-  const sourceAvailable = Boolean(docKey);
+  const sourceAvailable = Boolean(docId || docKey);
 
   return {
     id,

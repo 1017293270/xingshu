@@ -255,7 +255,7 @@ export type DataHubAdaptiveSourceResult = {
 
 export type DataHubDocumentLookupResult = {
   docId: string | number;
-  /** PRD A-6 后为仅展示字段，可缺席；缺席时原文不可打开 */
+  /** PRD A-6 后为仅展示字段，可缺席；取原文以 docId 为准 */
   docKey?: string;
   kbId: string | number;
   kbName?: string;
@@ -335,7 +335,7 @@ export type DataHubDataSourceSelected = {
 
 export type DataHubCitationDocument = {
   docId: string;
-  /** PRD A-6 后为仅展示字段，可缺席；缺席时原文不可打开 */
+  /** PRD A-6 后为仅展示字段，可缺席；取原文以 docId 为准 */
   docKey?: string;
   kbId: string;
   kbName?: string;

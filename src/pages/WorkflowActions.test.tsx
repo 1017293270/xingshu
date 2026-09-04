@@ -664,6 +664,11 @@ describe("workflow page actions", () => {
     });
     store.completeAskDataRun(runId);
 
+    vi.spyOn(knowledgeService, "loadDataHubCitationDocument").mockResolvedValue({
+      url: "blob:handbook",
+      contentType: "application/pdf"
+    });
+
     renderPage(<AnalysisPage mode="document_lookup" />);
 
     expect(screen.getByLabelText("任务动态")).toHaveTextContent("找文档已完成");
@@ -671,9 +676,15 @@ describe("workflow page actions", () => {
 
     /* 结果形态不变：文档列表仍在结果区 */
     const documentList = screen.getByLabelText("匹配文档");
-    expect(
-      within(documentList).getByRole("button", { name: "打开原文：员工手册（2026 版）" })
-    ).toBeInTheDocument();
+    const openButton = within(documentList).getByRole("button", { name: "打开原文：员工手册（2026 版）" });
+
+    /* 点卡片走站内弹窗，身份按 docId 传给取原文（PRD A-6 之后的权威标识） */
+    await user.click(openButton);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(knowledgeService.loadDataHubCitationDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ docId: "doc-handbook-2026", kbId: "kb-hr" })
+    );
+    await user.click(screen.getByRole("button", { name: "关闭原文预览" }));
 
     const panel = screen.getByText("找文档执行过程").closest(".xs-datahub-execution");
     expect(panel).not.toBeNull();

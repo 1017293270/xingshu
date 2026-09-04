@@ -84,6 +84,63 @@ describe("dataHubKnowledgeService", () => {
     );
   });
 
+  it("sends doc_id as the primary identity: PRD A-6 起后端授权链路认 docId", async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request) => new Response(
+      JSON.stringify({ mode: "proxy" }),
+      { headers: { "Content-Type": "application/json" } }
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loadDataHubCitationDocument({
+      ...citation,
+      // 雪花号超出 JS 安全整数范围，必须原样按字符串带过去
+      docId: "1957231184920649729"
+    }).catch(() => undefined);
+
+    const previewUrl = String(fetchMock.mock.calls[0]?.[0]);
+    expect(previewUrl).toContain("doc_id=1957231184920649729");
+    expect(previewUrl).toContain("doc_key=contract-policy");
+  });
+
+  it("opens a document that only carries doc_id", async () => {
+    const createObjectURL = vi.fn(() => "blob:xingshu-source");
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("source_document_preview")) {
+        return new Response(JSON.stringify({ mode: "proxy" }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]), {
+        headers: { "Content-Type": "application/pdf" }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const access = await loadDataHubCitationDocument({
+      docId: "1957231184920649729",
+      kbId: "kb-1",
+      sourceAvailable: true,
+      fragments: []
+    });
+
+    expect(access.contentType).toBe("application/pdf");
+    const sourceUrl = String(fetchMock.mock.calls.at(-1)?.[0]);
+    expect(sourceUrl).toContain("doc_id=1957231184920649729");
+    expect(sourceUrl).not.toContain("doc_key=");
+  });
+
+  it("refuses only when neither doc_id nor doc_key is usable", async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request) => new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadDataHubCitationDocument({ docId: "", kbId: "kb-1", sourceAvailable: true, fragments: [] })
+    ).rejects.toThrow("原文链接信息不完整，暂无法打开");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("opens a knowledge-base file through the authenticated source-document blob", async () => {
     const createObjectURL = vi.fn(() => "blob:xingshu-source");
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });

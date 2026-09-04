@@ -51,7 +51,8 @@ function sourceFileName(title: string, contentType?: string) {
 }
 
 export function canBrowseKnowledgeDocument(document: DataHubKnowledgeDocument) {
-  return Boolean(document.docKey?.trim());
+  // docId 是 PRD A-6 之后的权威身份，docKey 只是还被接受的旧参数。
+  return Boolean(document.docId?.trim() || document.docKey?.trim());
 }
 
 export function isInlinePdfPreview(contentType?: string) {
