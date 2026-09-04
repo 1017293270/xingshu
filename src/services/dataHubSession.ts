@@ -7,25 +7,19 @@ export const DATA_HUB_SESSION_EXPIRED_EVENT = "xingshu:data-hub-session-expired"
 export const DATA_HUB_SESSION_EXPIRED_MESSAGE = "登录状态已过期，请重新登录";
 export const DATA_HUB_SESSION_EXPIRED_NOTICE_KEY = "xingshu_datahub_session_expired";
 
+const SESSION_KEYS = [DATA_HUB_TOKEN_KEY, DATA_HUB_USER_KEY, DATA_HUB_SPACE_ID_KEY];
+
 export type DataHubSessionSnapshot = {
   token: string | null;
   user: DataHubLoginResponse | null;
   spaceId: number | null;
 };
 
+/**
+ * 登录态存放在 localStorage：会话若随浏览器关闭而丢失，用户每开一个新窗口就得重新登录一次。
+ * 令牌本身 24 小时过期，401 时会被清理；内嵌的 DataHub 页面同样从 localStorage 读取该令牌。
+ */
 function getStorage() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
-function getLegacyStorage() {
   if (typeof window === "undefined") {
     return null;
   }
@@ -37,29 +31,39 @@ function getLegacyStorage() {
   }
 }
 
-function migrateLegacySession() {
+/** 一次性提示（如「登录状态已过期」）只属于当前标签页，不跨窗口共享。 */
+function getNoticeStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** 接管仍留在 sessionStorage 中的会话，避免升级时把正在使用的用户踢下线。 */
+function adoptTabScopedSession() {
   const storage = getStorage();
-  const legacyStorage = getLegacyStorage();
-  if (!storage || !legacyStorage) {
+  const tabScopedStorage = getNoticeStorage();
+  if (!storage || !tabScopedStorage) {
     return;
   }
 
-  const keys = [DATA_HUB_TOKEN_KEY, DATA_HUB_USER_KEY, DATA_HUB_SPACE_ID_KEY];
   try {
-    if (!storage.getItem(DATA_HUB_TOKEN_KEY)) {
-      const legacyToken = legacyStorage.getItem(DATA_HUB_TOKEN_KEY);
-      if (legacyToken) {
-        for (const key of keys) {
-          const value = legacyStorage.getItem(key);
-          if (value !== null) {
-            storage.setItem(key, value);
-          }
+    if (!storage.getItem(DATA_HUB_TOKEN_KEY) && tabScopedStorage.getItem(DATA_HUB_TOKEN_KEY)) {
+      for (const key of SESSION_KEYS) {
+        const value = tabScopedStorage.getItem(key);
+        if (value !== null) {
+          storage.setItem(key, value);
         }
       }
     }
 
-    for (const key of keys) {
-      legacyStorage.removeItem(key);
+    for (const key of SESSION_KEYS) {
+      tabScopedStorage.removeItem(key);
     }
   } catch {
     // Continue with the best available storage. Login can establish a fresh session.
@@ -86,7 +90,7 @@ function readJson<T>(key: string): T | null {
 }
 
 export function readDataHubSession(): DataHubSessionSnapshot {
-  migrateLegacySession();
+  adoptTabScopedSession();
   const storage = getStorage();
   const rawSpaceId = storage?.getItem(DATA_HUB_SPACE_ID_KEY) ?? null;
   const parsedSpaceId = rawSpaceId ? Number(rawSpaceId) : null;
@@ -155,39 +159,28 @@ export function writeDataHubSession(user: DataHubLoginResponse, spaceId: number)
 }
 
 export function clearDataHubSession() {
-  const storage = getStorage();
-  const legacyStorage = getLegacyStorage();
-
-  for (const targetStorage of [storage, legacyStorage]) {
+  for (const targetStorage of [getStorage(), getNoticeStorage()]) {
     if (!targetStorage) {
       continue;
     }
 
-    targetStorage.removeItem(DATA_HUB_TOKEN_KEY);
-    targetStorage.removeItem(DATA_HUB_USER_KEY);
-    targetStorage.removeItem(DATA_HUB_SPACE_ID_KEY);
-  }
-}
-
-function getSessionStorage() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
+    try {
+      for (const key of SESSION_KEYS) {
+        targetStorage.removeItem(key);
+      }
+    } catch {
+      // Signing out must continue even when a storage backend is unavailable.
+    }
   }
 }
 
 export function hasDataHubSessionExpiredNotice() {
-  return getSessionStorage()?.getItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY) === "1";
+  return getNoticeStorage()?.getItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY) === "1";
 }
 
 export function markDataHubSessionExpiredNotice() {
   try {
-    getSessionStorage()?.setItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY, "1");
+    getNoticeStorage()?.setItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY, "1");
   } catch {
     // The in-memory auth state still preserves the notice when session storage is unavailable.
   }
@@ -195,7 +188,7 @@ export function markDataHubSessionExpiredNotice() {
 
 export function clearDataHubSessionExpiredNotice() {
   try {
-    getSessionStorage()?.removeItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY);
+    getNoticeStorage()?.removeItem(DATA_HUB_SESSION_EXPIRED_NOTICE_KEY);
   } catch {
     // Clearing auth must continue even when session storage is unavailable.
   }

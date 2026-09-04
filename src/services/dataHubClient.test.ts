@@ -55,8 +55,8 @@ describe("dataHubClient", () => {
     const headers = init.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer token-123");
     expect(headers.get("X-Space-Id")).toBe("7");
-    expect(sessionStorage.getItem("xingshu_datahub_token")).toBe("token-123");
-    expect(localStorage.getItem("xingshu_datahub_token")).toBeNull();
+    expect(localStorage.getItem("xingshu_datahub_token")).toBe("token-123");
+    expect(sessionStorage.getItem("xingshu_datahub_token")).toBeNull();
   });
 
   it("blocks authenticated requests to origins outside the configured DataHub target", async () => {
