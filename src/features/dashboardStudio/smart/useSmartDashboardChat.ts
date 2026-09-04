@@ -82,6 +82,14 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/** 警示条里最多放这么长：后端会把模型原文片段一并带回来，整段贴出来没人读得完。 */
+const MAX_FALLBACK_REASON = 400;
+
+function fallbackReasonOf(failure: string) {
+  const reason = failure.trim() || "大屏设计服务没有返回可用的设计稿";
+  return reason.length > MAX_FALLBACK_REASON ? `${reason.slice(0, MAX_FALLBACK_REASON)}…` : reason;
+}
+
 /** 板上已经绑定过的资产：改版时模型也可以从这些资产里再加一张图。 */
 export function boundAssetIds(schema: DashboardSchema): string[] {
   const ids = new Set<string>();
@@ -427,14 +435,14 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
           const local = buildLocalDesignSpec(schema, data, trimmed);
           if (local.widgets.length > 0) {
             const applied = applyDashboardDesignSpec(schema, local, data);
-            const reason = failure || "大屏设计服务没有返回可用的设计稿";
             patchTurn(turnId, (turn) => ({
               ...turn,
               status: "ready",
               fallback: true,
-              fallbackReason: reason,
+              fallbackReason: fallbackReasonOf(failure),
               candidate: applied,
-              narrative: `${turn.narrative ? `${turn.narrative}\n` : ""}模型这次没有给出可用的设计稿（${reason}），先按本地规则搭了一版，可以在这基础上继续改。`
+              // 原因可能是一整段模型原文，只放在下方警示条里说一次；叙事句保持一行，不跟着变长。
+              narrative: `${turn.narrative ? `${turn.narrative}\n` : ""}模型这次没有给出可用的设计稿，先按本地规则搭了一版，具体原因见下方提示。`
             }));
             return;
           }

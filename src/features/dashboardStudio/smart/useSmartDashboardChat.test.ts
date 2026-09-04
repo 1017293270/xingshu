@@ -144,7 +144,9 @@ describe("useSmartDashboardChat", () => {
     // 兜底原因要透传到面板，用户才知道是后端没部署还是模型没绑定
     expect(turn.fallbackReason).toBe("大屏设计服务连接失败");
     expect(turn.narrative).toContain("本地规则");
-    expect(turn.narrative).toContain("大屏设计服务连接失败");
+    expect(turn.narrative).toContain("具体原因见下方提示");
+    // 原因只在警示条里说一次，叙事句不跟着变长
+    expect(turn.narrative).not.toContain("大屏设计服务连接失败");
     expect(turn.candidate?.schema.widgets.length).toBeGreaterThan(1);
   });
 
@@ -159,6 +161,24 @@ describe("useSmartDashboardChat", () => {
 
     await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
     expect(result.current.turns[0]?.fallbackReason).toBe("Not Found");
+  });
+
+  it("truncates a very long fallback reason so the notice stays readable", async () => {
+    const long = `大屏设计服务返回了空的事件流：${"模型原文".repeat(200)}`;
+    scriptStream([{ type: "error", code: 500, message: long }]);
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.assets).toHaveLength(4));
+    act(() => {
+      result.current.send("营收总览");
+    });
+
+    await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
+    const turn = result.current.turns[0]!;
+    expect(turn.fallbackReason).toHaveLength(401);
+    expect(turn.fallbackReason?.endsWith("…")).toBe(true);
+    expect(turn.fallbackReason?.startsWith("大屏设计服务返回了空的事件流：")).toBe(true);
+    expect(turn.narrative).not.toContain("模型原文");
   });
 
   it("sends an edit turn with ops when the board already has content", async () => {
