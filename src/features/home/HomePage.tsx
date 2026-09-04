@@ -12,7 +12,6 @@ import appMeetingMinutesIcon from "@/assets/generated-icons/app-meeting-minutes.
 import appReportGenerationIcon from "@/assets/generated-icons/app-report-generation.png";
 import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import homeWaveBg from "@/assets/home/xingshu-home-wave-bg-image2.webp";
-import smartDashboardIcon from "@/assets/icon-kit/xingshu-image2-v1/icon-business-dashboard.png";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { streamAgentMessage } from "@/services/agentService";
 import { invalidateDataAssetOverview } from "@/services/dataAssetService";
@@ -71,16 +70,6 @@ const recommendedApps: RecommendedApp[] = [
     imageSrc: appReportGenerationIcon,
     imageSource: "xingshu-home-apps-image2-v1",
     tone: "orange"
-  },
-  {
-    id: "smart-dashboard",
-    title: "智享大屏",
-    description: "说需求，AI 直接在大屏里生成与修改",
-    prompt: "根据收藏问数生成一块经营大屏",
-    routeTo: "/dashboard-editor?smart=1",
-    imageSrc: smartDashboardIcon,
-    imageSource: "xingshu-image2-v1",
-    tone: "cyan"
   },
   {
     id: "writing",

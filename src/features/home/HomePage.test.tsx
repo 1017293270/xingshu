@@ -167,7 +167,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     const { container } = renderHomePage();
 
-    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "智享大屏", "报告智写", "会议纪要"];
+    const expectedApps = ["智能问数", "知识问答", "文档助手", "报表生成", "报告智写", "会议纪要"];
 
     for (const appName of expectedApps) {
       expect(screen.getByRole("button", { name: new RegExp(`打开 ${appName}`) })).toHaveAttribute(
@@ -177,8 +177,10 @@ describe("HomePage", () => {
     }
 
     expect(screen.queryByText("👋")).not.toBeInTheDocument();
+    // 3×2 排布靠固定 6 张：多一张就会退化成 4+2，跟命令框那条轴对不齐
+    expect(container.querySelectorAll(".xs-app-card")).toHaveLength(6);
     expect(container.querySelectorAll('[data-icon-source="xingshu-home-apps-image2-v1"]')).toHaveLength(6);
-    expect(container.querySelectorAll('[data-icon-source="xingshu-image2-v1"]')).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /打开 智享大屏/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /打开 更多应用/ })).not.toBeInTheDocument();
     expect(container.querySelectorAll(".xs-app-card .xs-icon-tile svg")).toHaveLength(0);
 
@@ -263,7 +265,6 @@ describe("HomePage", () => {
 
   it.each([
     ["报表生成", "/table"],
-    ["智享大屏", "/dashboard-editor?smart=1"],
     ["报告智写", "/writing"]
   ])("routes %s to its product workspace", async (appName, expectedPath) => {
     const user = userEvent.setup();

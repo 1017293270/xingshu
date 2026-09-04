@@ -252,14 +252,13 @@
   letter-spacing: 0;
 }
 
-/* 760px 轨道下一行摆满会把卡片挤成 86px，所以给卡片定下限让列数自己收敛：
-   满轨道是 4 列（约 175px/张），7 张推荐应用正好两行；退回 3 列就会多出第三行，
-   把闲置态挤出「一屏放下」那条验收线。 */
-/* gap 是唯一一个不跟着视口高度收缩的间距：它和 160px 下限一起决定一行摆几张，
-   动它就会把纵向节奏的改动漏到横向去。矮屏要省的高度全从卡片自己的壳子里出。 */
+/* 6 张推荐应用固定排成 3×2：列数写死才和命令框共用同一条左右轴，
+   auto-fit 会按 760px 轨道自己收敛成 4 列，把第二行摆成 4+2。
+   gap 是唯一一个不跟着视口高度收缩的间距，动它会把纵向节奏的改动漏到横向去；
+   矮屏要省的高度全从卡片自己的壳子里出。 */
 .home-page__app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
 
@@ -600,10 +599,6 @@
 
 .home-page__app-grid > .xs-app-card:nth-child(6) {
   animation-delay: calc(var(--xs-motion-stagger) * 6);
-}
-
-.home-page__app-grid > .xs-app-card:nth-child(7) {
-  animation-delay: calc(var(--xs-motion-stagger) * 7);
 }
 
 @media (prefers-reduced-motion: reduce) {
