@@ -446,10 +446,11 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
 
 ### 8.2 后端上线清单
 
-1. ai-service 分支 `feat/beta0.3-contracts`：`DashboardDesignController`、`dashboarddesign/*`、两份提示词、`sql/20260903_insert_ai_scene_config_xingshu_dashboard_design.sql`。提交需另行批准。
-2. BFF 分支 `wzx/beta0.3-deploy`：`application.yml` 新增 `ai-dashboard-design` 路由（`/api/v1/dashboard-design/** → /ai/**`）+ `DashboardDesignRouteTest`。
-3. 执行 SQL 种子后，在管理台把场景 `xingshu_dashboard_design` 绑到 Kimi（OpenAI 兼容协议），温度 0.3、max_tokens 6000；未绑定时前端每轮都会走本地兜底，不会报错但没有「审美」。
-4. 部署 addons overlay 需同步新增的 prompt 文件。
+1. ai-service 分支 `feat/beta0.3-contracts`：`DashboardDesignController`、`dashboarddesign/*`、两份提示词（已提交 071ef18）。
+2. BFF 分支 `wzx/beta0.3-deploy`：`application.yml` 新增 `ai-dashboard-design` 路由（`/api/v1/dashboard-design/** → /ai/**`）+ `DashboardDesignRouteTest`（已提交 3b22011）。
+3. 模型绑定：场景 `xingshu_dashboard_design` 未单独配置时自动跟随「小智运行配置」（`opencode` 场景）的供应商与模型，输出上限固定 6000、温度跟小智；要单独绑（例如 Kimi、温度 0.3）就在管理台「场景配置 → 智享大屏设计（星数）」保存一份。两者都没配时回落默认供应商；供应商完全不可用时前端每轮走本地兜底，不报错但没有「审美」。
+4. 供应商协议：管理台可选 OpenAI / Anthropic Claude（原生 Messages 协议）/ 月之暗面 Kimi / 智谱 GLM / DeepSeek 等；Anthropic 供应商给小智用时 OpenCode 服务端需能安装 `@ai-sdk/anthropic`。
+5. 部署 addons overlay 需同步新增的 prompt 文件。
 
 ### 8.3 已知取舍
 
