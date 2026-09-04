@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { XsRouteFallback, type XsRouteFallbackVariant } from "@/components/xs/XsRouteFallback";
 import { resolveRouteTitle } from "@/components/xs/navigation";
+import { AppVersionBadge } from "./AppVersionBadge";
 import { DataHubSessionExpiryHandler } from "./DataHubSessionExpiryHandler";
 import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -99,6 +100,7 @@ export function AppRoutes() {
   return (
     <>
       <AppRouteTitle />
+      <AppVersionBadge />
       <DataHubSessionExpiryHandler />
       <Suspense fallback={<AppRouteFallback />}>
         <Routes>

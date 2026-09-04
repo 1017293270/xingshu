@@ -2,7 +2,18 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import vue from "@vitejs/plugin-vue";
 import { loadEnv } from "vite";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+
+/** 版本号跟着 package.json 走：三条版本分支各自 bump，构建产物就自带身份。 */
+function readPackageVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as { version?: string };
+    return typeof pkg.version === "string" ? pkg.version : "";
+  } catch {
+    return "";
+  }
+}
 
 type ProxyTargetInputs = {
   command: "build" | "serve";
@@ -138,6 +149,9 @@ export default defineConfig(({ command, mode }) => {
   const ragImageProxyTarget = resolveRagImageProxyTarget({ env, processEnv: process.env });
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(readPackageVersion())
+    },
     plugins: [react(), vue()],
     resolve: {
       alias: {

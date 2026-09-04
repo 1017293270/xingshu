@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
+/** vite.config.ts 的 define 注入，值取自 package.json 的 version */
+declare const __APP_VERSION__: string;
+
 interface ImportMetaEnv {
+  readonly VITE_APP_VERSION?: string;
   readonly VITE_DATAHUB_APP_URL?: string;
   readonly VITE_DATAHUB_API_BASE_URL?: string;
   readonly VITE_DATAHUB_PROXY_TARGET?: string;

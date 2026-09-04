@@ -10,6 +10,30 @@
   border: 0;
 }
 
+/* 版本水印：右下角只读标记，用来分辨 dev/beta/prod 三套环境各是哪一版。
+   z-index 压得很低，弹窗、抽屉一律盖在它上面；pointer-events 关掉，
+   保证它永远不会挡住底部的发送键或返回键。 */
+.xs-app-version {
+  position: fixed;
+  z-index: 1;
+  right: 12px;
+  bottom: 8px;
+  color: var(--xs-text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media print {
+  .xs-app-version {
+    display: none;
+  }
+}
+
 .xs-shell {
   position: fixed;
   inset: 0;
