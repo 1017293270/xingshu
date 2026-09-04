@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  DASHBOARD_SMART_HANDOFF_KEY,
-  dashboardDesignArchetypes,
-  dashboardDesignRoles
-} from "./dashboardDesign";
+import { dashboardDesignArchetypes, dashboardDesignRoles } from "./dashboardDesign";
 
 /**
- * 这三个常量是模型 prompt、引擎校验与交接存储的共同口径，
- * 改名等于同时改后端 prompt 与已经写进用户浏览器的交接键，所以钉死在测试里。
+ * 这两个枚举是模型 prompt 与引擎校验的共同口径，
+ * 改名等于同时改后端 prompt，所以钉死在测试里。
  */
 describe("dashboardDesign 契约常量", () => {
   it("角色枚举覆盖六种语义角色", () => {
@@ -28,9 +24,5 @@ describe("dashboardDesign 契约常量", () => {
       "comparison-grid",
       "ranking-detail"
     ]);
-  });
-
-  it("交接存储键带版本号", () => {
-    expect(DASHBOARD_SMART_HANDOFF_KEY).toBe("xingshu.dashboard.smart-handoff.v1");
   });
 });

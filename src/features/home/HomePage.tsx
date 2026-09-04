@@ -75,9 +75,9 @@ const recommendedApps: RecommendedApp[] = [
   {
     id: "smart-dashboard",
     title: "智享大屏",
-    description: "选数据、说需求，AI 生成可对话修改的大屏",
+    description: "说需求，AI 直接在大屏里生成与修改",
     prompt: "根据收藏问数生成一块经营大屏",
-    routeTo: "/dashboard/smart",
+    routeTo: "/dashboard-editor?smart=1",
     imageSrc: smartDashboardIcon,
     imageSource: "xingshu-image2-v1",
     tone: "cyan"

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import {
@@ -22,6 +22,17 @@ vi.mock("@/features/dashboardStudio/DashboardRuntimeIsland", () => ({
   )
 }));
 
+/* 智享入口只有跳转参数能证明它是否带上了当前草稿，所以编辑器桩把 search 单独挂出来。 */
+function EditorTarget() {
+  const location = useLocation();
+  return (
+    <>
+      <div>编辑器目标页</div>
+      <div aria-label="编辑器路由参数">{location.search}</div>
+    </>
+  );
+}
+
 function renderPage() {
   return render(
     <AppProviders>
@@ -29,8 +40,7 @@ function renderPage() {
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/dashboard/square" element={<div>看板广场目标页</div>} />
-          <Route path="/dashboard/smart" element={<div>智享大屏目标页</div>} />
-          <Route path="/dashboard-editor" element={<div>编辑器目标页</div>} />
+          <Route path="/dashboard-editor" element={<EditorTarget />} />
         </Routes>
       </MemoryRouter>
     </AppProviders>
@@ -105,13 +115,29 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("看板广场目标页")).toBeInTheDocument();
   });
 
-  it("opens the smart dashboard entry from the header toolbar", async () => {
+  it("opens the editor with the smart panel expanded from the header toolbar", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole("button", { name: "智享大屏" }));
 
-    expect(await screen.findByText("智享大屏目标页")).toBeInTheDocument();
+    await screen.findByText("编辑器目标页");
+    expect(screen.getByLabelText("编辑器路由参数")).toHaveTextContent("?smart=1");
+  });
+
+  it("carries the current dashboard draft into the smart editor", async () => {
+    const user = userEvent.setup();
+    createStoredDashboard("经营驾驶舱", "cockpit", { published: true });
+    localStorage.setItem(CURRENT_DASHBOARD_STORAGE_KEY, "dashboard-cockpit");
+    renderPage();
+
+    await screen.findByRole("region", { name: "当前看板：经营驾驶舱" });
+    await user.click(screen.getByRole("button", { name: "智享大屏" }));
+
+    await screen.findByText("编辑器目标页");
+    expect(screen.getByLabelText("编辑器路由参数")).toHaveTextContent(
+      "?draft=dashboard-cockpit&smart=1"
+    );
   });
 
   it("mounts the stored current dashboard inline instead of full screen", async () => {

@@ -1,12 +1,23 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { CURRENT_DASHBOARD_STORAGE_KEY } from "@/features/dashboard/currentDashboard";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
 import { DashboardSquarePage } from "./DashboardSquarePage";
+
+/* 智享入口跳的是编辑器 + `smart=1`，桩把 search 单独挂出来才能断言面板会展开。 */
+function EditorTarget() {
+  const location = useLocation();
+  return (
+    <>
+      <div>编辑器目标页</div>
+      <div aria-label="编辑器路由参数">{location.search}</div>
+    </>
+  );
+}
 
 function renderPage() {
   return render(
@@ -15,9 +26,8 @@ function renderPage() {
         <Routes>
           <Route path="/dashboard/square" element={<DashboardSquarePage />} />
           <Route path="/dashboard" element={<div>我的看板目标页</div>} />
-          <Route path="/dashboard-editor" element={<div>编辑器目标页</div>} />
+          <Route path="/dashboard-editor" element={<EditorTarget />} />
           <Route path="/dashboard-view" element={<div>运行态目标页</div>} />
-          <Route path="/dashboard/smart" element={<div>智享大屏目标页</div>} />
         </Routes>
       </MemoryRouter>
     </AppProviders>
@@ -81,13 +91,14 @@ describe("DashboardSquarePage", () => {
     expect(await screen.findByText("我的看板目标页")).toBeInTheDocument();
   });
 
-  it("opens the smart dashboard entry from the page head", async () => {
+  it("opens the editor with the smart panel expanded from the page head", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole("button", { name: "智享大屏" }));
 
-    expect(await screen.findByText("智享大屏目标页")).toBeInTheDocument();
+    await screen.findByText("编辑器目标页");
+    expect(screen.getByLabelText("编辑器路由参数")).toHaveTextContent("?smart=1");
   });
 
   it("renders saved dashboards as management cards", async () => {

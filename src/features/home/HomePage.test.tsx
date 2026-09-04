@@ -263,7 +263,7 @@ describe("HomePage", () => {
 
   it.each([
     ["报表生成", "/table"],
-    ["智享大屏", "/dashboard/smart"],
+    ["智享大屏", "/dashboard-editor?smart=1"],
     ["报告智写", "/writing"]
   ])("routes %s to its product workspace", async (appName, expectedPath) => {
     const user = userEvent.setup();

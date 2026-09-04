@@ -16,7 +16,6 @@ import {
   saveRefreshSchedule,
   upgradeDashboardModule
 } from "@/services/dashboardAnalyticsService";
-import { consumeDashboardSmartHandoff } from "@/services/dashboardDesignHandoffService";
 import { createBlankDashboard, replanLegacyDashboardDraft } from "@/services/dashboardGenerationService";
 import {
   listQueryAssets,
@@ -25,7 +24,6 @@ import {
   reaskQueryAsset,
   changeQueryAssetVisibility
 } from "@/services/queryAssetService";
-import type { DashboardSmartHandoff } from "@/types/dashboardDesign";
 import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
 
 function resolveEditorReturnPath(value: string | null) {
@@ -52,7 +50,6 @@ export function DashboardEditorPage() {
   const [smartOpen, setSmartOpen] = useState(smartRequested);
   const [liveSchema, setLiveSchema] = useState<DashboardSchema | null>(null);
   const designerRef = useRef<DashboardDesignerHandle | null>(null);
-  const handoffRef = useRef<{ draftId: string; handoff: DashboardSmartHandoff | null } | null>(null);
 
   const recordQuery = useQuery({
     queryKey: sessionQueryKey(sessionScope, "analytics-dashboard-editor", draftId),
@@ -85,15 +82,6 @@ export function DashboardEditorPage() {
       createMutation.mutate();
     }
   }, [createMutation, draftId]);
-
-  /* 入口页的交接单只读一次；ref 挡住 StrictMode 的二次求值，换草稿再读。 */
-  const handoff = useMemo(() => {
-    if (!draftId) return null;
-    if (handoffRef.current?.draftId !== draftId) {
-      handoffRef.current = { draftId, handoff: consumeDashboardSmartHandoff(draftId) };
-    }
-    return handoffRef.current.handoff;
-  }, [draftId]);
 
   const updateRecord = useCallback((record: DashboardRecord) => {
     queryClient.setQueryData(sessionQueryKey(sessionScope, "analytics-dashboard-editor", record.id), record);
@@ -235,8 +223,6 @@ export function DashboardEditorPage() {
           listAssets={listQueryAssets}
           previewAsset={previewAsset}
           schema={liveSchema ?? record.schema}
-          initialBrief={handoff?.brief}
-          initialAssetIds={handoff?.assetIds}
           onClose={closeSmartPanel}
         />
       ) : null}

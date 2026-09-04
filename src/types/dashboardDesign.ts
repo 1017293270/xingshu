@@ -169,13 +169,3 @@ export type DashboardDesignIssue = {
   /** 一键修复对应的 op 列表；缺省表示只提示。 */
   fix?: DashboardDesignOp[];
 };
-
-/** 入口页 → 编辑器交接（sessionStorage，读一次即清）。 */
-export const DASHBOARD_SMART_HANDOFF_KEY = "xingshu.dashboard.smart-handoff.v1";
-export type DashboardSmartHandoff = {
-  version: 1;
-  draftId: string;
-  brief: string;
-  assetIds: string[];
-  createdAt: string;
-};

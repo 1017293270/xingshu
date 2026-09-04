@@ -130,7 +130,9 @@ export function DashboardPage() {
           </Button>
           <Button
             icon={<MagicWand size={16} weight="bold" aria-hidden="true" />}
-            onClick={() => navigate("/dashboard/smart")}
+            onClick={() => navigate(
+              current ? `${dashboardEditorPath(current.id)}&smart=1` : "/dashboard-editor?smart=1"
+            )}
           >
             智享大屏
           </Button>

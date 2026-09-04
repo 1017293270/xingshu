@@ -2,7 +2,7 @@
 
 - 状态：契约定稿，进入实施（2026-09-03）
 - 原始诉求（用户原话）：「结合我们现在的大屏库和编辑器，让 AI 根据我们所选的数据去进行大屏设计，要充分发挥那些顶级线上 AI 的顶级审美……claude 的 api 太贵了，可能去用中国的便宜 ai 比如说 kimi 啥的比较有性价比，可以通过对话式的进行生成和编辑，有点类似于 claude design 和 pen cli」
-- 已拍板（2026-09-03）：设计器面板与独立入口页一起做；首页加「智享大屏」应用卡；后端走 SSE（先叙事后 JSON）；只建一个场景 `xingshu_dashboard_design` 绑 Kimi，不建润色场景；审美包全部内置让用户选。
+- 已拍板（2026-09-03）：设计器面板与独立入口页一起做；**已改口（2026-09-04）：独立入口页撤销，智享只作为大屏编辑器右侧面板存在**；首页加「智享大屏」应用卡；后端走 SSE（先叙事后 JSON）；只建一个场景 `xingshu_dashboard_design` 绑 Kimi，不建润色场景；审美包全部内置让用户选。
 
 ## 1. 目标
 
@@ -257,16 +257,6 @@ export type DashboardDesignIssue = {
   /** 一键修复对应的 op 列表；缺省表示只提示。 */
   fix?: DashboardDesignOp[];
 };
-
-/** 入口页 → 编辑器交接（sessionStorage，读一次即清）。 */
-export const DASHBOARD_SMART_HANDOFF_KEY = "xingshu.dashboard.smart-handoff.v1";
-export type DashboardSmartHandoff = {
-  version: 1;
-  draftId: string;
-  brief: string;
-  assetIds: string[];
-  createdAt: string;
-};
 ```
 
 ### 4.2 语义规则（切片 A 实现，切片 C/D 只调用）
@@ -360,8 +350,7 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
   `isTrustedDataHubAuthTarget`，头 `Authorization` 与 `X-Space-Id` 同 `requestDataHub`；401 → `expireDataHubSession`；
   非 2xx → 解析信封 message 抛 `DataHubServiceError`；`data:` 行 JSON 用 `type` 分发，未知 type 忽略；
   `done` 或流关闭 → `onDone`。路径 `/api/v1/dashboard-design/generate|edit`。
-- `src/services/dashboardDesignHandoffService.ts`：`writeDashboardSmartHandoff` / `consumeDashboardSmartHandoff(draftId)`
-  （读一次即删）/ `clearDashboardSmartHandoff`，sessionStorage，全部 try/catch。
+- 入口页 → 编辑器的 sessionStorage 交接单服务：随入口页于 2026-09-04 一并删除，无替代物。
 
 ### 4.5 设计器接线（切片 C）
 
@@ -373,17 +362,19 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
   组件实例转发到 handle。其余 Vue 逻辑不动。
 - `DashboardEditorPage` 变成横向 flex：岛 `flex: 1 1 auto; min-width: 0`，右侧 `SmartDashboardPanel`
   宽 400（≤ 1280 时 360），面板关闭时不占位；画布靠 ResizeObserver 自适应。
-  URL `smart=1` 时自动展开面板并消费交接（`consumeDashboardSmartHandoff(draftId)`），拿到 brief + assetIds 后自动发起首轮 generate。
+  URL `smart=1` 时自动展开面板（2026-09-04 起不再有交接单，面板一律空开，需求由用户在面板里说）。
 
-### 4.6 入口页与首页（切片 D）
+### 4.6 入口（切片 D，2026-09-04 改口）
 
-- 路由 `/dashboard/smart` → `SmartDashboardPage`（`PageFrame` 标题「智享大屏」）。左栏：收藏问数资产列表
-  （`listQueryAssets`，搜索，个人/空间 Segmented，多选，选中项展示列与行数）；右栏：`XsComposerBox` hero 态
-  的需求输入 + 示例提示 + 主按钮「开始设计」。
-- 提交：`createDashboard(createBlankDashboard({ title: brief 前 24 字 }))` → `writeDashboardSmartHandoff` →
-  `navigate("/dashboard-editor?draft=<id>&smart=1")`。
-- 我的看板工具条与看板广场页头各加一个主动作「智享大屏」（跳 `/dashboard/smart`）；首页推荐应用加
-  `smart-dashboard` 卡（`routeTo: "/dashboard/smart"`，图标先复用 `icon-kit/xingshu-image2-v1/icon-business-dashboard.png`）。
+原方案的独立入口页（左栏选收藏问数 + 右栏填大屏需求 + 「开始设计」）**已撤销并删除**
+（用户：「智享大屏直接在每个大屏的顶部出现吧，点击之后侧边就出现，图里的界面就不要了」）。现状：
+
+- 智享只有一个落点——大屏编辑器右侧面板。编辑器工具栏「智享」按钮就地切换；URL `smart=1` 打开即展开。
+- 我的看板工具条「智享大屏」跳当前草稿的编辑器并带 `&smart=1`（无当前草稿则 `/dashboard-editor?smart=1`，
+  编辑器会自建空白草稿并保留 `smart=1`）；看板广场页头与首页 `smart-dashboard` 应用卡跳
+  `/dashboard-editor?smart=1`。
+- `SmartDashboardPanel` 的 `initialBrief` / `initialAssetIds` 保留，仅供免登录预览壳
+  `preview-smart-dashboard.tsx` 造场景用。
 
 ## 5. 产品形态
 
@@ -423,11 +414,11 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
 
 | 切片 | 文件域 | 依赖 |
 | --- | --- | --- |
-| A 引擎+服务 | `src/types/dashboardDesign.ts`；`src/features/dashboardStudio/core/dashboardDesignContext.ts` / `dashboardDesignSpec.ts` / `dashboardDesignApply.ts` / `dashboardDesignArchetypes.ts` / `dashboardDesignCritique.ts`；`src/services/dashboardDesignService.ts` / `dashboardDesignHandoffService.ts`；各自 `.test.ts` | 无 |
+| A 引擎+服务 | `src/types/dashboardDesign.ts`；`src/features/dashboardStudio/core/dashboardDesignContext.ts` / `dashboardDesignSpec.ts` / `dashboardDesignApply.ts` / `dashboardDesignArchetypes.ts` / `dashboardDesignCritique.ts`；`src/services/dashboardDesignService.ts`；各自 `.test.ts` | 无 |
 | E 后端 | ai-service：`controller/DashboardDesignController.java`、`dashboarddesign/*`、两份 prompt、SQL 种子、测试；bff：`application.yml` 路由 + `DashboardDesignRouteTest` | 无（契约已定） |
 | F 审美包 | `core/dashboardBoardThemes.ts`、`core/dashboardChartThemes.ts` 及测试；`preview-dashboard.ts`；`scripts/screenshot-board-themes.mjs` | 无 |
 | C 设计器接线 | `vue/mountDashboardDesigner.ts`、`vue/DashboardDesignerApp.vue`（仅 expose + 按钮）、`DashboardDesignerIsland.tsx`、`pages/DashboardEditorPage.tsx`、`features/dashboardStudio/smart/*`、`dashboardStudio.css` 面板布局、测试 | A |
-| D 入口页 | `pages/SmartDashboardPage.tsx`（+css/test）、`app/AppRoutes.tsx`（+test）、`features/home/HomePage.tsx`（+test）、`pages/DashboardPage.tsx`、`pages/DashboardSquarePage.tsx` 及测试 | A |
+| D 入口 | `app/AppRoutes.tsx`（+test）、`features/home/HomePage.tsx`（+test）、`pages/DashboardPage.tsx`、`pages/DashboardSquarePage.tsx` 及测试（原计划的独立入口页已于 2026-09-04 撤销删除） | A |
 
 第一轮并行：A、E、F。第二轮并行：C、D。验收：`npm run verify` 全量、后端单测、Playwright 在
 1440/1672/2200 断言面板不挤压画布；测试环境真跑「选两份资产 → 生成 → 换主题 → 撤销 → 发布」。
@@ -441,7 +432,7 @@ history ≤ 6 轮且每条 ≤ 300 字；序列化超过 60k 字符时依次丢�
 | A 引擎/契约/服务 | 已提交 932bff2 | vitest 80 例 |
 | F 审美包 | 已提交 89f8668 | 对比度/背景图测试 + `scripts/screenshot-board-themes.mjs` 十档截图人工看过 |
 | C 设计器接线 + 面板 | 已提交 | hook/面板/编辑页/岛组件测试 + `scripts/screenshot-smart-dashboard.mjs` 四步截图 |
-| D 入口页/首页卡/大屏库入口 | 见后续提交 | 页面测试 + 路由表测试 |
+| D 入口（首页卡/大屏库/广场统一跳 `?smart=1` 直开编辑器面板） | 独立入口页已于 2026-09-04 撤销删除 | 页面测试 + 路由表测试 |
 | E 后端 SSE（ai-service）+ BFF 路由 | **未提交**，在 DataHub 两个仓库工作区里 | Docker 离线 Maven 单测通过（详见 [[datahub-maven-docker]] 记忆） |
 
 ### 8.2 后端上线清单

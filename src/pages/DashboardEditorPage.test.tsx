@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
-import { writeDashboardSmartHandoff } from "@/services/dashboardDesignHandoffService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
 import { DashboardEditorPage } from "./DashboardEditorPage";
 
@@ -132,26 +131,18 @@ describe("DashboardEditorPage", () => {
     expect(await screen.findByLabelText("内部 Vue 大屏设计器")).toHaveTextContent("未命名大屏");
   });
 
-  it("opens the smart panel from the entry-page handoff and hands over the brief once", async () => {
+  it("opens the smart panel from the smart=1 entry without any brief handoff", async () => {
     const user = userEvent.setup();
     const repository = createDashboardRepository(localStorage);
     const schema = createBlankDashboard({ title: "智享草稿", idFactory: (prefix) => `${prefix}-smart` });
     repository.saveDraft(schema);
-    writeDashboardSmartHandoff({
-      version: 1,
-      draftId: schema.id,
-      brief: "面向经营例会的营收总览",
-      assetIds: ["asset-total", "asset-revenue"],
-      createdAt: "2026-09-03T00:00:00.000Z"
-    });
 
     renderEditorPage(`/dashboard-editor?draft=${schema.id}&smart=1`);
 
     const panel = await screen.findByLabelText("智享大屏");
-    expect(panel).toHaveAttribute("data-brief", "面向经营例会的营收总览");
-    expect(panel).toHaveAttribute("data-assets", "asset-total,asset-revenue");
+    expect(panel).toHaveAttribute("data-brief", "");
+    expect(panel).toHaveAttribute("data-assets", "");
     expect(screen.getByLabelText("内部 Vue 大屏设计器")).toHaveAttribute("data-smart-open", "true");
-    expect(sessionStorage.getItem("xingshu.dashboard.smart-handoff.v1")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "关闭智享面板" }));
     expect(screen.queryByLabelText("智享大屏")).not.toBeInTheDocument();
