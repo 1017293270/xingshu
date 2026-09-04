@@ -49,6 +49,16 @@ function adaptEvent(payload: unknown): DashboardDesignStreamEvent | null {
 }
 
 /**
+ * data: 后面的载荷。线上抓到过外层多包一层字符串的形态
+ * （`data:"{\"type\":\"message\",\"delta\":\"这一\"}"`），
+ * 第一次 parse 出来的是字符串就再 parse 一次；最多两层，再多就是后端在乱套了。
+ */
+function parsePayload(payload: string): unknown {
+  const first = JSON.parse(payload) as unknown;
+  return typeof first === "string" ? JSON.parse(first) : first;
+}
+
+/**
  * 按空行切块解析 SSE，剩下的半行留在 rest 里等下一个 chunk 补齐。
  * 后端可能推 `[DONE]` 也可能推 `{"type":"done"}`，两种都当收流。
  */
@@ -74,7 +84,7 @@ export function parseDashboardDesignSseChunk(text: string): {
       events.push({ type: "done" });
     } else if (payload) {
       try {
-        const event = adaptEvent(JSON.parse(payload));
+        const event = adaptEvent(parsePayload(payload));
         if (event) events.push(event);
       } catch {
         // 半截 JSON 或后端的调试输出，丢掉即可；真正的失败会走 error 事件。
@@ -119,6 +129,32 @@ async function readErrorDetail(response: Response) {
 async function readErrorMessage(response: Response) {
   const detail = await readErrorDetail(response);
   return `${errorHeadline(response.status)}${detail ? `：${detail}` : ""}`;
+}
+
+/** 提示条里只放前 160 字：够看出后端到底返回了什么，又不会把整页 HTML 糊进面板。 */
+const MAX_BODY_PREVIEW = 160;
+
+function bodyPreview(text: string) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > MAX_BODY_PREVIEW ? flat.slice(0, MAX_BODY_PREVIEW) : flat;
+}
+
+/**
+ * 整条流读完一条可识别事件都没有时的说法。
+ * content-type 不作数——线上后端就是顶着 application/json 推的合法 SSE，
+ * 按响应头拦会把正常的流也拦掉；只有「什么都没解析出来」才是真出了事。
+ * 正文能解析成 JSON 且带 message，说明收到的是信封而不是流，把这句话直接告诉用户。
+ */
+function emptyStreamMessage(text: string) {
+  try {
+    const payload = JSON.parse(text) as unknown;
+    const message = isRecord(payload) && typeof payload.message === "string" ? payload.message.trim() : "";
+    if (message) return `大屏设计服务返回了非事件流响应：${message}`;
+  } catch {
+    // 不是 JSON，按空流加正文预览处理。
+  }
+  const preview = bodyPreview(text);
+  return `大屏设计服务返回了空的事件流${preview ? `：${preview}` : ""}`;
 }
 
 export function streamDashboardDesign(
@@ -166,13 +202,13 @@ export function streamDashboardDesign(
 
       const body = response.body;
       if (!body) {
-        finish();
-        return;
+        throw new Error("大屏设计服务返回了空的事件流");
       }
 
       const reader = body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let received = 0;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -180,6 +216,7 @@ export function streamDashboardDesign(
         const parsed = parseDashboardDesignSseChunk(buffer);
         buffer = parsed.rest;
         for (const event of parsed.events) {
+          received += 1;
           handlers.onEvent(event);
           if (event.type === "done") finish();
         }
@@ -190,9 +227,16 @@ export function streamDashboardDesign(
       if (!finished && buffer.trim()) {
         const flushed = parseDashboardDesignSseChunk(`${buffer}\n\n`);
         for (const event of flushed.events) {
+          received += 1;
           handlers.onEvent(event);
           if (event.type === "done") finish();
         }
+      }
+      // 一条可识别事件都没有：流是空的，或者收到的根本是个 JSON 信封。
+      // 静默 onDone 只会让面板说不清原因，这里把实际收到的东西说出来。
+      // 切不出事件块的正文会原样留在 buffer 里（JSON 信封、登录页都没有空行边界），拿它说事。
+      if (received === 0) {
+        throw new Error(emptyStreamMessage(buffer.trim()));
       }
       finish();
     } catch (error) {

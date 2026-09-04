@@ -106,18 +106,41 @@ export function shortWidgetTitle({
   return clip(topic ? `${topic}明细` : cleanQuestionText(asset?.question ?? ""), MAX_WIDGET_TITLE) || "明细";
 }
 
-/** 只剩这些词的需求句没有主题可言，用户说的是「做个大屏」而不是「做什么」。 */
-const GENERIC_BRIEF_PATTERN = /^(?:数据|可视化|智能|企业级)?(?:大屏|看板|驾驶舱|页面|界面|图表|报表)$/;
+/** 只描述长相、不说内容的修饰词：「企业级的」「深色」都属于这一类。 */
+const BRIEF_STYLE_WORDS =
+  "数据|可视化|智能|企业级|专业|高级|好看|漂亮|简洁|简约|极简|大气|炫酷|现代|深色|浅色|暗色|亮色|科技风|科技感|政务风|商务风";
+const BRIEF_ARTIFACT_WORDS = "大屏|看板|驾驶舱|页面|界面|图表|报表";
 
-/** 剥掉「帮我设计个企业级的」这层指令外壳，留下真正的主题。 */
+/**
+ * 只剩「（修饰词）+ 大屏」的需求句没有主题可言：用户说的是「做个深色大屏」而不是「做什么」。
+ * 「营收驾驶舱」不在此列——「营收」不是修饰词，那是主题。
+ */
+const GENERIC_BRIEF_PATTERN = new RegExp(
+  `^(?:(?:${BRIEF_STYLE_WORDS})(?:的)?)*(?:${BRIEF_ARTIFACT_WORDS})$`
+);
+
+/**
+ * 指令外壳一层层剥：动词、量词、「企业级的」这类带「的」的修饰、以及剥完后留在句首的标点。
+ * 「生成一个企业级的，深色大屏」剥到只剩「深色大屏」，才轮得到 GENERIC 判定接手；
+ * 修饰词只在带「的」时剥，否则「高级人才流动分析」会被砍成「人才流动分析」。
+ */
+const BRIEF_LEAD_PATTERNS: RegExp[] = [
+  /^[\s，,、。.：:；;·—-]+/,
+  /^(?:帮我|帮忙|请|麻烦|给我)/,
+  /^(?:设计|制作|搭建|生成|做|搭|画|来|出)(?:一)?[块个张份版]?/,
+  /^(?:一)?[块个张份版]/,
+  new RegExp(`^(?:${BRIEF_STYLE_WORDS})的`),
+  /^的/
+];
+
 function stripBriefInstruction(text: string) {
-  return text
-    .replace(/^(?:帮我|帮忙|请|麻烦|给我)+/, "")
-    .replace(/^(?:设计|制作|搭建|生成|做|搭|画|来|出)(?:一)?(?:[块个张份版])?/, "")
-    .replace(/^(?:一)?[块个张份版]/, "")
-    .replace(/^(?:企业级|专业|高级|好看|漂亮|简洁|大气)(?:的)?/, "")
-    .replace(/^的/, "")
-    .trim();
+  let current = text.trim();
+  for (let guard = 0; guard < 8; guard += 1) {
+    const next = BRIEF_LEAD_PATTERNS.reduce((value, pattern) => value.replace(pattern, ""), current).trim();
+    if (next === current) break;
+    current = next;
+  }
+  return current.replace(/[\s，,、。.：:；;]+$/, "").trim();
 }
 
 /**

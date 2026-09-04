@@ -23,15 +23,29 @@ const request: DashboardDesignRequest = {
   history: []
 };
 
-/** 服务只碰 ok / status / body.getReader / text，不必造真的 Response。 */
-function sseResponse(chunks: string[], init: { ok?: boolean; status?: number; statusText?: string } = {}) {
+/** 服务只碰 ok / status / headers / body.getReader / text，不必造真的 Response。 */
+function sseResponse(
+  chunks: string[],
+  init: {
+    ok?: boolean;
+    status?: number;
+    statusText?: string;
+    /** 默认按事件流返回；给别的值就是模拟网关把 JSON 信封或错误页当成功响应发回来。 */
+    contentType?: string;
+    body?: null;
+  } = {}
+) {
   const encoder = new NodeTextEncoder();
   let index = 0;
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
     statusText: init.statusText ?? "OK",
-    body: {
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === "content-type" ? init.contentType ?? "text/event-stream" : null
+    },
+    body: init.body === null ? null : {
       getReader: () => ({
         read: async () =>
           index < chunks.length
@@ -206,6 +220,62 @@ describe("streamDashboardDesign", () => {
 
     expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
       "大屏设计服务异常（HTTP 500）：opencode 场景未绑定模型"
+    );
+  });
+
+  /* 线上后端顶着 application/json 推合法 SSE，还把 data 的 JSON 多包了一层字符串。 */
+  it("响应头是 application/json、data 双重编码时照样识别出事件", async () => {
+    const { events, onDone, onError, finished } = collect(
+      "generate",
+      [
+        'data:"{\\"type\\":\\"message\\",\\"delta\\":\\"这一\\"}"\n\n',
+        'data:"{\\"type\\":\\"ops\\",\\"ops\\":{\\"ops\\":[]}}"\n\n',
+        'data:"{\\"type\\":\\"done\\",\\"modelId\\":\\"kimi-k2\\"}"\n\n'
+      ],
+      { contentType: "application/json" }
+    );
+    await finished;
+
+    expect(events).toEqual([
+      { type: "message", delta: "这一" },
+      { type: "ops", ops: { ops: [] } },
+      { type: "done", modelId: "kimi-k2" }
+    ]);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("整条流读完一条事件都没有、正文是 JSON 信封时，把信封里的 message 交给 onError", async () => {
+    const { events, onDone, onError, finished } = collect(
+      "generate",
+      ['{"code":0,"data":null,"message":"模型返回的设计稿无效"}'],
+      { contentType: "application/json" }
+    );
+    await finished;
+
+    expect(events).toEqual([]);
+    expect(onDone).not.toHaveBeenCalled();
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
+      "大屏设计服务返回了非事件流响应：模型返回的设计稿无效"
+    );
+  });
+
+  it("事件流里一条可识别事件都没有时报空流，而不是静默收场", async () => {
+    const { events, onDone, onError, finished } = collect("generate", ["", ": keep-alive\n\n"]);
+    await finished;
+
+    expect(events).toEqual([]);
+    expect(onDone).not.toHaveBeenCalled();
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe("大屏设计服务返回了空的事件流");
+  });
+
+  it("空流带残留正文时把开头贴出来，方便看出后端到底推了什么", async () => {
+    const { onDone, onError, finished } = collect("generate", ["<!doctype html><html><body>请先登录</body></html>"]);
+    await finished;
+
+    expect(onDone).not.toHaveBeenCalled();
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
+      "大屏设计服务返回了空的事件流：<!doctype html><html><body>请先登录</body></html>"
     );
   });
 

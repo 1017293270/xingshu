@@ -61,6 +61,22 @@ describe("boardTitle", () => {
     expect(boardTitle("做个看板", contractAsset)).toBe("合同主数据总览");
   });
 
+  it("剥完指令外壳后留在句首的标点不能印上标题条", () => {
+    const title = boardTitle("生成一个企业级的，深色大屏", contractAsset);
+
+    expect(title).not.toContain("，");
+    expect(title).toBe("合同主数据总览");
+  });
+
+  it("只说长相不说内容的需求一律走资产主题", () => {
+    expect(boardTitle("做一块简约看板", contractAsset)).toBe("合同主数据总览");
+    expect(boardTitle("来个科技风大屏", contractAsset)).toBe("合同主数据总览");
+    expect(boardTitle("深色大屏", contractAsset)).toBe("合同主数据总览");
+    // 「营收」不是修饰词，这句有主题
+    expect(boardTitle("营收驾驶舱", contractAsset)).toBe("营收驾驶舱");
+    expect(boardTitle("高级人才流动分析", contractAsset)).toBe("高级人才流动分析");
+  });
+
   it("有主题的需求原样保留，只剥掉指令外壳", () => {
     expect(boardTitle("经营例会营收总览。", contractAsset)).toBe("经营例会营收总览");
     expect(boardTitle("做一块面向经营例会的营收总览", contractAsset)).toBe("面向经营例会的营收总览");
