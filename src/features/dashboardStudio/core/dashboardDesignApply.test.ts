@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
-import { standardDesignData } from "@/test/dashboardDesignFixtures";
+import { contractDesignData, standardDesignData } from "@/test/dashboardDesignFixtures";
 import type { DashboardDesignSpec, DashboardDesignSpecWidget } from "@/types/dashboardDesign";
 import type { DashboardSchema } from "@/types/dashboardStudio";
 import { getDashboardBoardTheme } from "./dashboardBoardThemes";
 import { applyDashboardDesignOps, applyDashboardDesignSpec, resolveDashboardBoardThemeId } from "./dashboardDesignApply";
+import { buildDashboardChartOption, resolveDashboardMetric } from "./dashboardWidgetData";
 
 const kpi = (ref: string, metricKey: string, title: string, extra: Partial<DashboardDesignSpecWidget> = {}): DashboardDesignSpecWidget => ({
   ref,
@@ -440,5 +441,161 @@ describe("applyDashboardDesignOps", () => {
     expect(result.changes).toEqual([]);
     expect(result.rejected).toEqual([]);
     expect(result.schema.widgets.map((widget) => widget.title)).toEqual(current.widgets.map((widget) => widget.title));
+  });
+});
+
+/**
+ * 合同主数据这一组回归钉死线上那块「数据没对上」的板：
+ * 金额是带千分位的字符串、年度是纯数字、编号是高基数字符串，
+ * 三者以前都会被当成指标，于是指标卡「暂无指标数据」、图表「还没选到可绘制的数值指标」。
+ */
+describe("合同主数据落板", () => {
+  const data = contractDesignData();
+
+  function contractSpec(widgets: DashboardDesignSpecWidget[]): DashboardDesignSpec {
+    return { narrative: "", title: "合同主数据总览", themeId: "ice-light", archetype: "kpi-led", widgets };
+  }
+
+  function bindingOf(schema: DashboardSchema, title: string) {
+    const widget = findByTitle(schema, title);
+    return { widget, binding: schema.dataBindings[widget.bindingId!] };
+  }
+
+  it("带千分位与货币符号的金额取得到数，图表画得出来", () => {
+    const result = applyDashboardDesignSpec(
+      createBlankDashboard(),
+      contractSpec([
+        {
+          ref: "k1",
+          role: "kpi",
+          assetId: "asset-contract",
+          outputKey: "contract",
+          metricKey: "contractAmount",
+          valueMode: "sum",
+          title: "合同金额合计"
+        },
+        {
+          ref: "b1",
+          role: "comparison",
+          assetId: "asset-payment",
+          outputKey: "payment",
+          variant: "bar-vertical",
+          dimensionKey: "customer",
+          metricKeys: ["paidAmount"],
+          title: "客户回款金额"
+        }
+      ]),
+      data
+    );
+
+    expect(result.rejected).toEqual([]);
+    const kpi = bindingOf(result.schema, "合同金额合计");
+    expect(resolveDashboardMetric(kpi.widget, kpi.binding)).toBe(152500);
+    expect(kpi.widget.mapping.displayUnit).toBe("万元");
+
+    const bar = bindingOf(result.schema, "客户回款金额");
+    const option = buildDashboardChartOption(bar.widget, bar.binding, { animation: false });
+    expect(option).not.toBeNull();
+    expect((option?.series as Array<{ data?: Array<{ value: number | null }> }>)[0]?.data).toEqual([
+      expect.objectContaining({ value: 12000 }),
+      expect.objectContaining({ value: 8600 }),
+      expect.objectContaining({ value: 21400 }),
+      expect.objectContaining({ value: 5200 })
+    ]);
+  });
+
+  it("年度与合同编号当不了指标，改用真正的数值列并给出中文理由", () => {
+    const result = applyDashboardDesignSpec(
+      createBlankDashboard(),
+      contractSpec([
+        {
+          ref: "k1",
+          role: "kpi",
+          assetId: "asset-contract",
+          outputKey: "contract",
+          metricKey: "contractYear",
+          title: "年度指标"
+        },
+        {
+          ref: "t1",
+          role: "trend",
+          assetId: "asset-contract",
+          outputKey: "contract",
+          variant: "line-smooth",
+          dimensionKey: "contractYear",
+          metricKeys: ["contractNo"],
+          title: "编号趋势"
+        }
+      ]),
+      data
+    );
+
+    expect(result.rejected.map((item) => item.reason)).toEqual([
+      "「合同签订或归属年度」没有可解析的数值，已改用「合同金额（万元）」",
+      "「合同编号」没有可解析的数值，已按推断取列"
+    ]);
+    const kpi = bindingOf(result.schema, "年度指标");
+    expect(kpi.widget.mapping.metricKeys).toEqual(["contractAmount"]);
+    expect(resolveDashboardMetric(kpi.widget, kpi.binding)).not.toBeNull();
+
+    const trend = bindingOf(result.schema, "编号趋势");
+    expect(trend.widget.mapping.metricKeys).toEqual(["contractAmount"]);
+    expect(trend.widget.mapping.dimensionKey).toBe("contractYear");
+    expect(buildDashboardChartOption(trend.widget, trend.binding, { animation: false })).not.toBeNull();
+  });
+
+  it("数值指标不能当维度，引擎换一列并说明", () => {
+    const result = applyDashboardDesignSpec(
+      createBlankDashboard(),
+      contractSpec([
+        {
+          ref: "b1",
+          role: "comparison",
+          assetId: "asset-payment",
+          outputKey: "payment",
+          variant: "bar-vertical",
+          dimensionKey: "paidAmount",
+          metricKeys: ["creditLimit"],
+          title: "回款对比"
+        }
+      ]),
+      data
+    );
+
+    expect(result.rejected.map((item) => item.reason)).toEqual([
+      "维度列「paidAmount」是数值指标，画不出分类，已改用「客户名称」"
+    ]);
+    const bar = bindingOf(result.schema, "回款对比");
+    expect(bar.widget.mapping.dimensionKey).toBe("customer");
+    expect(bar.widget.mapping.metricKeys).toEqual(["creditLimit"]);
+    expect(buildDashboardChartOption(bar.widget, bar.binding, { animation: false })).not.toBeNull();
+  });
+
+  it("整列取不到数的结果表不落图，也不落指标卡", () => {
+    const noMetricData = contractDesignData();
+    const output = noMetricData["asset-payment"]!.execution.outputs[0]!;
+    output.rows = output.rows.map((row) => ({ ...row, paidAmount: "面议", creditLimit: "另议" }));
+
+    const result = applyDashboardDesignSpec(
+      createBlankDashboard(),
+      contractSpec([
+        { ref: "k1", role: "kpi", assetId: "asset-payment", outputKey: "payment", title: "回款金额" },
+        {
+          ref: "b1",
+          role: "comparison",
+          assetId: "asset-payment",
+          outputKey: "payment",
+          dimensionKey: "customer",
+          title: "回款对比"
+        }
+      ]),
+      noMetricData
+    );
+
+    expect(result.rejected).toEqual([
+      { target: "回款金额", reason: "该结果表没有数值列，做不了指标卡" },
+      { target: "回款对比", reason: "该结果表没有可解析的数值列，画不了图" }
+    ]);
+    expect(result.schema.widgets.filter((widget) => widget.type !== "text")).toEqual([]);
   });
 });

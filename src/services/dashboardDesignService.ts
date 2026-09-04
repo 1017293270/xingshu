@@ -87,16 +87,38 @@ export function parseDashboardDesignSseChunk(text: string): {
   return { events, rest: buffer };
 }
 
-async function readErrorMessage(response: Response) {
+/** Spring 兜底的占位文案，透给用户等于没说。 */
+const EMPTY_BACKEND_MESSAGE = "No message available";
+
+/**
+ * 状态码先给一句用户看得懂的中文主句。
+ * 这条消息会一路透到智享面板的「模型未参与本次设计：{原因}」，
+ * 直接甩「No message available」或「Not Found」用户没法判断该找谁。
+ */
+function errorHeadline(status: number) {
+  if (status === 401 || status === 403) return "登录已过期或没有权限";
+  if (status === 404) return "大屏设计接口不存在（HTTP 404），后端尚未部署该接口";
+  if (status === 408 || status === 504) return "大屏设计服务响应超时";
+  if (status >= 500) return `大屏设计服务异常（HTTP ${status}）`;
+  return `大屏设计服务返回 HTTP ${status}`;
+}
+
+/** 只认信封里的 message：非 JSON 的错误体（网关的 HTML 404 页）不该整页贴进提示条。 */
+async function readErrorDetail(response: Response) {
   try {
-    const text = await response.text();
-    if (!text) return response.statusText;
+    const text = (await response.text()).trim();
+    if (!text) return "";
     const payload = JSON.parse(text) as unknown;
-    if (isRecord(payload) && typeof payload.message === "string") return payload.message;
-    return text;
+    const message = isRecord(payload) && typeof payload.message === "string" ? payload.message.trim() : "";
+    return message === EMPTY_BACKEND_MESSAGE ? "" : message;
   } catch {
-    return response.statusText;
+    return "";
   }
+}
+
+async function readErrorMessage(response: Response) {
+  const detail = await readErrorDetail(response);
+  return `${errorHeadline(response.status)}${detail ? `：${detail}` : ""}`;
 }
 
 export function streamDashboardDesign(

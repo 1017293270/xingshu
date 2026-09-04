@@ -1,9 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDashboardDesignSpec } from "@/features/dashboardStudio/core/dashboardDesignApply";
+import {
+  buildDashboardChartOption,
+  resolveDashboardMetric
+} from "@/features/dashboardStudio/core/dashboardWidgetData";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { streamDashboardDesign } from "@/services/dashboardDesignService";
-import { standardDesignData } from "@/test/dashboardDesignFixtures";
+import { contractDesignData, standardDesignData } from "@/test/dashboardDesignFixtures";
 import type { DashboardDesignSpec, DashboardDesignStreamEvent } from "@/types/dashboardDesign";
 import type { DashboardSchema } from "@/types/dashboardStudio";
 import { boundAssetIds, buildLocalDesignSpec, useSmartDashboardChat } from "./useSmartDashboardChat";
@@ -137,8 +141,24 @@ describe("useSmartDashboardChat", () => {
     await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
     const turn = result.current.turns[0]!;
     expect(turn.fallback).toBe(true);
+    // 兜底原因要透传到面板，用户才知道是后端没部署还是模型没绑定
+    expect(turn.fallbackReason).toBe("大屏设计服务连接失败");
     expect(turn.narrative).toContain("本地规则");
+    expect(turn.narrative).toContain("大屏设计服务连接失败");
     expect(turn.candidate?.schema.widgets.length).toBeGreaterThan(1);
+  });
+
+  it("falls back with a stated reason when the endpoint is not deployed", async () => {
+    scriptStream([{ type: "error", code: 404, message: "Not Found" }]);
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.assets).toHaveLength(4));
+    act(() => {
+      result.current.send("营收总览");
+    });
+
+    await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
+    expect(result.current.turns[0]?.fallbackReason).toBe("Not Found");
   });
 
   it("sends an edit turn with ops when the board already has content", async () => {
@@ -188,6 +208,57 @@ describe("buildLocalDesignSpec", () => {
       expect.arrayContaining(["kpi", "trend", "comparison", "composition"])
     );
     expect(local.widgets.length).toBeLessThanOrEqual(12);
+    expect(local.themeId).toBe("ice-light");
+    // 主图 + 侧轨：构图器靠这两个标记排出主从结构
+    expect(local.widgets.filter((widget) => widget.emphasis === "hero")).toHaveLength(1);
+    expect(local.widgets.some((widget) => widget.placement === "rail")).toBe(true);
+  });
+
+  it("一句指令式需求不当标题，改用资产主题；组件标题不再是整段资产描述", () => {
+    const contractData = contractDesignData();
+    const brief = "帮我设计个企业级的大屏";
+    const local = buildLocalDesignSpec(createBlankDashboard({ title: "空板" }), contractData, brief);
+
+    expect(local.title).not.toBe(brief);
+    expect(local.title).toBe("合同主数据总览");
+    expect(local.title.length).toBeLessThanOrEqual(16);
+    for (const widget of local.widgets) {
+      expect(widget.title!.length).toBeLessThanOrEqual(widget.role === "kpi" ? 12 : 16);
+    }
+    expect(local.widgets.filter((widget) => widget.role === "kpi").length).toBeLessThanOrEqual(4);
+  });
+
+  it("八十行合同明细只出指标卡与明细表，不硬画一条重复年度的折线", () => {
+    const contractData = contractDesignData();
+    const local = buildLocalDesignSpec(createBlankDashboard({ title: "空板" }), contractData, "合同总览");
+    const contractWidgets = local.widgets.filter((widget) => widget.assetId === "asset-contract");
+
+    expect(contractWidgets.map((widget) => widget.role).sort()).toEqual(["detail", "kpi"]);
+    const kpi = contractWidgets.find((widget) => widget.role === "kpi")!;
+    expect(kpi.metricKey).toBe("contractAmount");
+    expect(kpi.valueMode).toBe("sum");
+    expect(kpi.title).toBe("合同金额合计");
+  });
+
+  it("兜底方案落板后指标取得到数、图表画得出来", () => {
+    const contractData = contractDesignData();
+    const schema = createBlankDashboard({ title: "空板" });
+    const local = buildLocalDesignSpec(schema, contractData, "帮我设计个企业级的大屏");
+    const applied = applyDashboardDesignSpec(schema, local, contractData);
+
+    expect(applied.rejected).toEqual([]);
+    const metrics = applied.schema.widgets.filter((widget) => widget.type === "metric");
+    expect(metrics.length).toBeGreaterThan(0);
+    for (const widget of metrics) {
+      expect(resolveDashboardMetric(widget, applied.schema.dataBindings[widget.bindingId!])).not.toBeNull();
+    }
+    const charts = applied.schema.widgets.filter((widget) => ["line", "bar", "pie"].includes(widget.type));
+    expect(charts.length).toBeGreaterThan(0);
+    for (const widget of charts) {
+      expect(
+        buildDashboardChartOption(widget, applied.schema.dataBindings[widget.bindingId!], { animation: false })
+      ).not.toBeNull();
+    }
   });
 });
 

@@ -29,13 +29,14 @@ import {
 import { dashboardCanvasPresets } from "./dashboardCanvas";
 import { dashboardChartVariants } from "./dashboardChartPresets";
 import { fitDashboardCanvasHeight } from "./dashboardCompose";
+import { classifyColumn, numericMetricColumns } from "./dashboardColumnSemantics";
 import { getDashboardComponentDefinition } from "./dashboardComponentRegistry";
 import {
   composeDashboardWithArchetype,
   dashboardDesignArchetypeCatalog,
   type DashboardDesignFlowEmphasis
 } from "./dashboardDesignArchetypes";
-import { inferDashboardDesignColumnKind, inferDashboardDesignOutputShape } from "./dashboardDesignContext";
+import { inferDashboardDesignOutputShape } from "./dashboardDesignContext";
 
 /**
  * 把模型的语义稿落成真实 schema：这里是唯一做语义校验的地方。
@@ -169,8 +170,28 @@ function bindingShape(binding?: DashboardDataBinding) {
   });
 }
 
+/** 能落成指标的列：判成数值、并且真的取得到数（「1,200.50」「￥12,000」算，「面议」不算）。 */
 function numericColumnsOf(columns: QueryColumnDefinition[], rows: Record<string, unknown>[]) {
-  return columns.filter((column) => inferDashboardDesignColumnKind(column, rows) === "number");
+  return numericMetricColumns(columns, rows);
+}
+
+function columnLabel(column: QueryColumnDefinition) {
+  return column.label || column.title || column.key;
+}
+
+/**
+ * 维度列的红线：数值指标不能当维度。
+ * 「合同金额」放到 x 轴上会画出 80 个各不相同的类目，什么也读不出来；
+ * 时间列（含「合同签订或归属年度」）与编号、分类列都放行。
+ */
+function isMetricLikeDimension(
+  columns: QueryColumnDefinition[],
+  rows: Record<string, unknown>[],
+  key: string | undefined
+) {
+  if (!key) return false;
+  const column = columns.find((item) => item.key === key);
+  return Boolean(column && classifyColumn(column, rows) === "number");
 }
 
 function applyMappingColumns(
@@ -294,6 +315,11 @@ function buildDesignWidget(
     context.rejected.push({ target: label, reason: "该结果表没有数值列，做不了指标卡" });
     return null;
   }
+  // 一张取不到数的图会在画布上显示「还没选到可绘制的数值指标」，宁可不落板也不让它上屏。
+  if ((role === "trend" || role === "comparison" || role === "composition") && numericColumns.length === 0) {
+    context.rejected.push({ target: label, reason: "该结果表没有可解析的数值列，画不了图" });
+    return null;
+  }
   if (role === "trend" && shape !== "time-series") {
     context.rejected.push({ target: label, reason: "该结果表没有时间列，画不了趋势图" });
     return null;
@@ -362,7 +388,13 @@ function buildDesignWidget(
     const requested = spec.metricKey ?? spec.metricKeys?.[0];
     const metric = numericColumns.find((column) => column.key === requested) ?? numericColumns[0]!;
     if (requested && metric.key !== requested) {
-      context.rejected.push({ target: label, reason: `指标列「${requested}」不在该结果表里，已改用「${metric.label}」` });
+      const existing = columns.find((column) => column.key === requested);
+      context.rejected.push({
+        target: label,
+        reason: existing
+          ? `「${columnLabel(existing)}」没有可解析的数值，已改用「${columnLabel(metric)}」`
+          : `指标列「${requested}」不在该结果表里，已改用「${columnLabel(metric)}」`
+      });
     }
     const valueMode: DashboardDesignValueMode = spec.valueMode
       ?? (output.rows.length === 1 ? "first" : shape === "time-series" ? "latest" : "sum");
@@ -377,20 +409,52 @@ function buildDesignWidget(
     widget.mapping = {};
   } else {
     const metricLimit = role === "composition" ? 1 : 2;
+    const numericKeys = new Set(numericColumns.map((column) => column.key));
     const requestedMetrics = spec.metricKeys?.slice(0, metricLimit);
     const unknownMetrics = requestedMetrics?.filter((key) => !columns.some((column) => column.key === key)) ?? [];
     if (unknownMetrics.length > 0) {
       context.rejected.push({ target: label, reason: `指标列「${unknownMetrics.join("、")}」不在该结果表里，已按推断取列` });
     }
+    // 存在但取不到数的列（年度、编号、整列「面议」）不能当指标：画出来是一条 y=1 的直线。
+    const unusableMetrics = (requestedMetrics ?? [])
+      .map((key) => columns.find((column) => column.key === key))
+      .filter((column): column is QueryColumnDefinition => Boolean(column && !numericKeys.has(column.key)));
+    for (const column of unusableMetrics) {
+      context.rejected.push({ target: label, reason: `「${columnLabel(column)}」没有可解析的数值，已按推断取列` });
+    }
     if (spec.dimensionKey && !columns.some((column) => column.key === spec.dimensionKey)) {
       context.rejected.push({ target: label, reason: `维度列「${spec.dimensionKey}」不在该结果表里，已按推断取列` });
     }
+
+    let dimensionKey = spec.dimensionKey;
+    if (isMetricLikeDimension(columns, output.rows, dimensionKey)) {
+      const replacement = columns.find(
+        (column) => column.key !== dimensionKey && !isMetricLikeDimension(columns, output.rows, column.key)
+      );
+      context.rejected.push({
+        target: label,
+        reason: `维度列「${dimensionKey}」是数值指标，画不出分类${replacement ? `，已改用「${columnLabel(replacement)}」` : ""}`
+      });
+      dimensionKey = replacement?.key;
+    }
+
     widget.mapping = applyMappingColumns(
       { ...widget.mapping, metricKeys: widget.mapping.metricKeys?.slice(0, metricLimit), metricColumnIds: widget.mapping.metricColumnIds?.slice(0, metricLimit) },
       columns,
-      spec.dimensionKey,
-      requestedMetrics?.filter((key) => columns.some((column) => column.key === key))
+      dimensionKey,
+      requestedMetrics?.filter((key) => numericKeys.has(key))
     );
+
+    // 落板前的最后一道闸：不管映射是模型给的还是收藏问数默认带的，指标列一律得取得到数。
+    const usableMetrics = (widget.mapping.metricKeys ?? []).filter((key) => numericKeys.has(key));
+    const metrics = (usableMetrics.length > 0 ? usableMetrics : numericColumns.slice(0, metricLimit).map((column) => column.key))
+      .slice(0, metricLimit);
+    widget.mapping = applyMappingColumns({ ...widget.mapping, metricKeys: undefined, metricColumnIds: undefined }, columns, undefined, metrics);
+    if (isMetricLikeDimension(columns, output.rows, widget.mapping.dimensionKey)) {
+      const replacement = columns.find((column) => !isMetricLikeDimension(columns, output.rows, column.key));
+      widget.mapping.dimensionKey = replacement?.key;
+      widget.mapping.dimensionColumnId = replacement?.columnId;
+    }
   }
 
   if (spec.title) widget.title = spec.title;

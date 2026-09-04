@@ -157,11 +157,11 @@ describe("streamDashboardDesign", () => {
     expect(events).toEqual([]);
     expect(onDone).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
-    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe("登录已过期");
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe("登录已过期或没有权限：登录已过期");
     expect(expireDataHubSession).toHaveBeenCalledWith("token-1");
   });
 
-  it("其它非 2xx 只把信封里的 message 交给 onError", async () => {
+  it("其它非 2xx 在中文主句后追加信封里的 message", async () => {
     const { onError, finished } = collect(
       "generate",
       ['{"code":503,"message":"设计服务暂不可用"}'],
@@ -169,8 +169,44 @@ describe("streamDashboardDesign", () => {
     );
     await finished;
 
-    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe("设计服务暂不可用");
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe("大屏设计服务异常（HTTP 503）：设计服务暂不可用");
     expect(expireDataHubSession).not.toHaveBeenCalled();
+  });
+
+  /* 兜底提示条会原样显示这句话，所以它必须是用户读得懂的中文，而不是 Spring 的占位符。 */
+  it("404 空响应体只给中文主句，指明接口没部署", async () => {
+    const { onError, finished } = collect("generate", [""], { ok: false, status: 404, statusText: "Not Found" });
+    await finished;
+
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
+      "大屏设计接口不存在（HTTP 404），后端尚未部署该接口"
+    );
+  });
+
+  it("404 带 Spring 占位文案时不把「No message available」透给用户", async () => {
+    const { onError, finished } = collect(
+      "generate",
+      ['{"timestamp":"2026-09-03T00:00:00.000Z","status":404,"error":"Not Found","message":"No message available","path":"/api/v1/dashboard-design/generate"}'],
+      { ok: false, status: 404, statusText: "Not Found" }
+    );
+    await finished;
+
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
+      "大屏设计接口不存在（HTTP 404），后端尚未部署该接口"
+    );
+  });
+
+  it("500 带中文 message 时主句与细节都在", async () => {
+    const { onError, finished } = collect(
+      "generate",
+      ['{"code":500,"message":"opencode 场景未绑定模型"}'],
+      { ok: false, status: 500, statusText: "Internal Server Error" }
+    );
+    await finished;
+
+    expect((onError.mock.calls[0] as unknown as [Error])[0].message).toBe(
+      "大屏设计服务异常（HTTP 500）：opencode 场景未绑定模型"
+    );
   });
 
   it("主动取消不算错误", async () => {

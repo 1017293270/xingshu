@@ -13,6 +13,8 @@ export type SmartDesignPreviewCardProps = {
   rejected: DashboardDesignRejection[];
   status: "ready" | "applied" | "discarded";
   fallback?: boolean;
+  /** 兜底原因：模型为什么没参与这次设计。 */
+  fallbackReason?: string;
   onApply: () => void;
   onDiscard: () => void;
 };
@@ -28,6 +30,7 @@ export function SmartDesignPreviewCard({
   rejected,
   status,
   fallback,
+  fallbackReason,
   onApply,
   onDiscard
 }: SmartDesignPreviewCardProps) {
@@ -37,6 +40,14 @@ export function SmartDesignPreviewCard({
 
   return (
     <article className="smart-design-card" data-status={status} aria-label="智享候选方案">
+      {fallback ? (
+        <p className="smart-design-card__fallback" role="status">
+          <WarningCircle size={14} weight="bold" aria-hidden="true" />
+          <span>
+            {`模型未参与本次设计${fallbackReason ? `：${fallbackReason}` : ""}。这是本地规则版，检查后端是否已部署 /api/v1/dashboard-design 或场景是否绑定模型。`}
+          </span>
+        </p>
+      ) : null}
       <header className="smart-design-card__head">
         <strong>{schema.title || "未命名大屏"}</strong>
         <span className="smart-design-card__meta">

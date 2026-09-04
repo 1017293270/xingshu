@@ -6,40 +6,15 @@ import {
   resolveDashboardWidgetStyle,
   xingshuIceSeriesColors
 } from "./dashboardChartThemes";
+import { classifyColumn, parseNumericCell } from "./dashboardColumnSemantics";
 
+/* 取数与列种类统一走 dashboardColumnSemantics：时间/编号列不算指标，带货币/单位的字符串也能取到数。 */
 function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim().replace(/,/g, "").replace(/%$/, "");
-  if (!normalized) {
-    return null;
-  }
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isTimeColumn(column: DataHubTableColumn) {
-  return /date|time|year|month|day|week|quarter|日期|时间|年份|月份|季度|周/i.test(
-    `${column.key} ${column.title} ${column.type ?? ""}`
-  );
+  return parseNumericCell(value);
 }
 
 function isNumericColumn(column: DataHubTableColumn, rows: Record<string, unknown>[]) {
-  if (isTimeColumn(column)) return false;
-  if (/int|long|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率|记录数/i.test(
-    `${column.key} ${column.title} ${column.type ?? ""}`
-  )) {
-    return true;
-  }
-  const samples = rows
-    .slice(0, 12)
-    .map((row) => row[column.key])
-    .filter((value) => value !== null && value !== undefined && value !== "");
-  return samples.length > 0 && samples.every((value) => toFiniteNumber(value) !== null);
+  return classifyColumn(column, rows) === "number";
 }
 
 export function inferDashboardBindingColumns(binding?: DashboardDataBinding) {

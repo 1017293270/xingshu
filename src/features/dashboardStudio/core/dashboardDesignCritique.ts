@@ -16,6 +16,8 @@ const MAX_KPI = 4;
 const MIN_CHARTS_FOR_HERO = 3;
 const MAX_PIE_CATEGORIES = 8;
 const MAX_TITLE_CHARS = 16;
+/** 主图至少要比同屏其它图宽这么多倍，否则就是「几张一样大」。 */
+const HERO_WIDTH_RATIO = 1.5;
 
 function bindingRows(schema: DashboardSchema, widget: DashboardWidget) {
   const binding = widget.bindingId ? schema.dataBindings[widget.bindingId] : undefined;
@@ -55,7 +57,10 @@ export function critiqueDashboard(schema: DashboardSchema): DashboardDesignIssue
   }
 
   if (charts.length >= MIN_CHARTS_FOR_HERO) {
-    const hero = charts.find((widget) => widget.position.w >= (canvasWidth * 2) / 3);
+    // 通栏主图算主图；带侧轨的主图占不满三分之二画布，但只要明显宽过同屏其它图，视线一样有落点。
+    const widest = charts.reduce((best, widget) => (widget.position.w > best.position.w ? widget : best));
+    const hero = widest.position.w >= (canvasWidth * 2) / 3
+      || charts.every((widget) => widget === widest || widest.position.w >= widget.position.w * HERO_WIDTH_RATIO);
     if (!hero) {
       const candidate = charts.reduce((best, widget) =>
         bindingRows(schema, widget) > bindingRows(schema, best) ? widget : best

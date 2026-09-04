@@ -13,7 +13,7 @@ import type {
   DashboardDesignerHandle
 } from "@/features/dashboardStudio/vue/mountDashboardDesigner";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
-import { standardDesignData } from "@/test/dashboardDesignFixtures";
+import { contractDesignData, standardDesignData } from "@/test/dashboardDesignFixtures";
 import { antdTheme } from "@/theme/antdTheme";
 import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
 
@@ -21,9 +21,11 @@ import type { DashboardRecord, DashboardSchema } from "@/types/dashboardStudio";
  * 智享大屏免登录预览壳：真设计器 + 真智享面板，收藏问数用测试夹具，
  * 模型流由截图脚本（scripts/screenshot-smart-dashboard.mjs）在网络层拦截伪造。
  * ?brief=<需求>&assets=<id,id> 会像入口页交接那样自动发起首轮设计。
+ * ?dataset=contract 换成合同主数据那一组（长资产名、带千分位的金额、纯数字年度），
+ * 专门用来验兜底方案的标题与数据绑定。
  */
 const params = new URLSearchParams(window.location.search);
-const data = standardDesignData();
+const data = params.get("dataset") === "contract" ? contractDesignData() : standardDesignData();
 const assets = Object.values(data).map((entry) => entry.asset);
 const blank = createBlankDashboard({ title: "智享预览" });
 const initialRecord: DashboardRecord = {

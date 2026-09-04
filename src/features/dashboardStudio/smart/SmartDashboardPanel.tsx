@@ -143,6 +143,7 @@ export function SmartDashboardPanel({
                   rejected={turn.candidate.rejected}
                   status={turn.status === "applied" ? "applied" : turn.status === "discarded" ? "discarded" : "ready"}
                   fallback={turn.fallback}
+                  fallbackReason={turn.fallbackReason}
                   onApply={() => void chat.apply(turn.id)}
                   onDiscard={() => chat.discard(turn.id)}
                 />

@@ -1,4 +1,10 @@
+import {
+  classifyColumn,
+  numericMetricColumns,
+  parseNumericCell
+} from "@/features/dashboardStudio/core/dashboardColumnSemantics";
 import { getDashboardComponentDefinition } from "@/features/dashboardStudio/core/dashboardComponentRegistry";
+import { cleanQuestionText } from "@/features/dashboardStudio/core/dashboardDesignTitles";
 import type {
   QueryAsset,
   QueryColumnDefinition,
@@ -31,8 +37,6 @@ const CHART_SERIES_COLORS = ["#1677FF", "#00A6E8", "#16A37A", "#F59E0B", "#6C7FF
 const DETAIL_INTENT_PATTERN = /哪些|哪几|列出|罗列|列表|明细|清单|详情|逐条|台账|名录|\blist\b|\bdetails?\b/i;
 const AGGREGATE_INTENT_PATTERN = /汇总|统计|趋势|变化|对比|分布|占比|构成|排名|合计|总计|平均|\btop(?:\s*\d+)?\b/i;
 
-type ColumnKind = "number" | "time" | "dimension";
-
 type OutputAnalysis = {
   numericColumns: QueryColumnDefinition[];
   timeColumn?: QueryColumnDefinition;
@@ -54,41 +58,21 @@ function createId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
+/* 列种类与取数统一走 dashboardColumnSemantics，和智享大屏引擎同一口径。 */
 function toFiniteNumber(value: unknown) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().replace(/,/g, "").replace(/%$/, "");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function inferColumnKind(column: QueryColumnDefinition, rows: Record<string, unknown>[]): ColumnKind {
-  const descriptor = `${column.key} ${column.label} ${column.title ?? ""} ${column.type ?? ""}`.toLowerCase();
-  if (/date|time|year|month|day|week|quarter|日期|时间|年份|月份|季度|周/.test(descriptor)) {
-    return "time";
-  }
-  if (/int|long|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率|记录数/.test(descriptor)) {
-    return "number";
-  }
-
-  const samples = rows
-    .slice(0, 12)
-    .map((row) => row[column.key])
-    .filter((value) => value !== null && value !== undefined && value !== "");
-  return samples.length > 0 && samples.every((value) => toFiniteNumber(value) !== null)
-    ? "number"
-    : "dimension";
+  return parseNumericCell(value);
 }
 
 function analyzeOutput(output: QueryExecutionOutput): OutputAnalysis {
-  const kindByColumnId = new Map(
-    output.columns.map((column) => [column.columnId, inferColumnKind(column, output.rows)])
+  const roleByColumnId = new Map(
+    output.columns.map((column) => [column.columnId, classifyColumn(column, output.rows)])
   );
-  const numericColumns = output.columns.filter((column) => kindByColumnId.get(column.columnId) === "number");
-  const timeColumn = output.columns.find((column) => kindByColumnId.get(column.columnId) === "time");
+  const numericColumns = numericMetricColumns(output.columns, output.rows);
+  const timeColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "time");
+  // 真分类列优先，实在没有才退到编号列：拿「合同编号」当维度只会画出一排各不相同的柱子。
   const dimensionColumn = timeColumn
-    ?? output.columns.find((column) => kindByColumnId.get(column.columnId) === "dimension");
+    ?? output.columns.find((column) => roleByColumnId.get(column.columnId) === "dimension")
+    ?? output.columns.find((column) => roleByColumnId.get(column.columnId) === "identifier");
   return { numericColumns, timeColumn, dimensionColumn };
 }
 
@@ -158,13 +142,7 @@ function chartTitle(asset: QueryAsset, analysis: OutputAnalysis) {
     return `${dimensionTitle}${metricTitle} TOP ${topCount}`;
   }
 
-  const normalizedQuestion = asset.resolvedQuestion
-    .trim()
-    .replace(/[？?。！!]+$/g, "")
-    .replace(/^(?:请|帮我|麻烦)?(?:统计一下|查询一下|查一下|看一下|分析一下|统计|查询|分析)/, "")
-    .replace(/(?:如何|怎么样|是多少|有多少)$/g, "")
-    .replace(/(?:的)?(?:情况|数据|结果)$/g, "")
-    .trim();
+  const normalizedQuestion = cleanQuestionText(asset.resolvedQuestion);
   if (normalizedQuestion) {
     return normalizedQuestion.length > 28 ? `${normalizedQuestion.slice(0, 28)}…` : normalizedQuestion;
   }

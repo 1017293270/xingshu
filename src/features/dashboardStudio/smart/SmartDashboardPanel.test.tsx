@@ -97,6 +97,26 @@ describe("SmartDashboardPanel", () => {
     expect(await screen.findByRole("article", { name: "智享候选方案" })).toBeInTheDocument();
   });
 
+  it("模型没参与时在候选卡顶部说明这是本地兜底版并给出排查方向", async () => {
+    const user = userEvent.setup();
+    streamMock.mockImplementation((_kind, _request, handlers) => {
+      queueMicrotask(() => handlers.onError?.(new Error("Not Found")));
+      return new AbortController();
+    });
+    renderPanel();
+
+    await screen.findByText("已选 2 份");
+    await user.type(screen.getByLabelText("设计需求"), "帮我设计个企业级的大屏");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    const card = await screen.findByRole("article", { name: "智享候选方案" });
+    expect(card).toHaveTextContent("模型未参与本次设计：Not Found");
+    expect(card).toHaveTextContent("/api/v1/dashboard-design");
+    // 指令式需求不当标题条，走资产主题
+    expect(card).toHaveTextContent("订单合计总览");
+    expect(card.querySelector(".smart-design-card__head")).not.toHaveTextContent("帮我设计个企业级的大屏");
+  });
+
   it("closes through the header button", async () => {
     const user = userEvent.setup();
     const { onClose } = renderPanel();

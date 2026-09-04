@@ -80,6 +80,19 @@ describe("critiqueDashboard", () => {
     expect(issue.fix).toEqual([{ op: "set_emphasis", widgetId: "c2", emphasis: "hero" }]);
   });
 
+  it("带侧轨的主图占不满通栏，但明显更宽就不再报「没有主图」", () => {
+    const schema = board(
+      [
+        widget("c1", "line", { x: 32, y: 32, w: 1232, h: 456 }, { bindingId: "b1" }),
+        widget("c2", "bar", { x: 1288, y: 32, w: 600, h: 216 }, { bindingId: "b2" }),
+        widget("c3", "pie", { x: 1288, y: 272, w: 600, h: 216 }, { bindingId: "b3" })
+      ],
+      [binding("b1", 6), binding("b2", 4), binding("b3", 4)]
+    );
+
+    expect(codes(schema)).not.toContain("no-hero");
+  });
+
   it("独占一行的窄卡被判为落单，修法是加宽", () => {
     const schema = board([
       widget("k1", "metric", { x: 32, y: 32, w: 600, h: 160 }),

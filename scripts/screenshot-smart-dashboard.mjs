@@ -4,6 +4,7 @@ import { chromium } from "@playwright/test";
 // 用法：node scripts/screenshot-smart-dashboard.mjs
 // 打开 preview-smart-dashboard.html，拦截大屏设计 SSE 接口伪造模型回复，
 // 走完「自动首轮生成 → 应用 → 对话改版 → 应用」四步，截图到 outputs/ui-audit/smart-dashboard-*.png。
+// 最后再跑一遍合同主数据的本地兜底（接口返回 404），产出 smart-dashboard-fallback-contract.png。
 const BASE = process.env.PREVIEW_BASE ?? "http://127.0.0.1:5173";
 const dir = "outputs/ui-audit";
 mkdirSync(dir, { recursive: true });
@@ -97,5 +98,37 @@ await page.waitForFunction(() => document.querySelectorAll('.smart-design-card[d
 await page.waitForTimeout(1800);
 await page.screenshot({ path: `${dir}/smart-dashboard-4-edited.png` });
 console.log("smart-dashboard-4-edited.png");
+
+await page.close();
+
+/* 兜底一遍：后端没部署（404）时，本地规则版应该标题短、指标有数、图表画得出来。 */
+const fallback = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+fallback.on("pageerror", (error) => console.error(`page error: ${error.message}`));
+fallback.on("console", (message) => {
+  if (message.type() === "error") console.error(`console error: ${message.text()}`);
+});
+await fallback.route("**/api/v1/dashboard-design/**", (route) => route.fulfill({
+  status: 404,
+  contentType: "application/json",
+  body: JSON.stringify({ message: "No message available" })
+}));
+
+const fallbackQuery = new URLSearchParams({
+  dataset: "contract",
+  brief: "帮我设计个企业级的大屏",
+  assets: "asset-contract,asset-invoice,asset-equipment,asset-payment"
+});
+await fallback.goto(`${BASE}/preview-smart-dashboard.html?${fallbackQuery}`, { waitUntil: "networkidle" });
+// 404 兜底几乎瞬间就出候选卡，得先等 Vue 设计器挂完，否则「应用」会撞上「设计器尚未就绪」。
+await fallback.waitForSelector('section[aria-label="星数大屏设计器"]', { timeout: 20000 });
+await fallback.waitForSelector(card, { timeout: 20000 });
+await fallback.waitForTimeout(600);
+await fallback.screenshot({ path: `${dir}/smart-dashboard-fallback-candidate.png` });
+console.log("smart-dashboard-fallback-candidate.png");
+await fallback.getByRole("button", { name: "应用", exact: true }).click();
+await fallback.waitForSelector("text=已应用到画布", { timeout: 10000 });
+await fallback.waitForTimeout(1800);
+await fallback.screenshot({ path: `${dir}/smart-dashboard-fallback-contract.png` });
+console.log("smart-dashboard-fallback-contract.png");
 
 await browser.close();

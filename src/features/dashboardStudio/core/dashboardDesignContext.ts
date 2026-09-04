@@ -20,6 +20,7 @@ import type { DashboardSchema, DashboardWidget } from "@/types/dashboardStudio";
 import { dashboardBoardThemes, getMatchingDashboardBoardThemeId } from "./dashboardBoardThemes";
 import { dashboardCanvasPresets, resolveDashboardCanvasPreset } from "./dashboardCanvas";
 import { dashboardChartVariants } from "./dashboardChartPresets";
+import { classifyColumn } from "./dashboardColumnSemantics";
 import { dashboardDesignArchetypeCatalog } from "./dashboardDesignArchetypes";
 import { widgetSemanticRole } from "./dashboardLayoutSolver";
 
@@ -39,41 +40,29 @@ const MAX_TEXT_CONTENT_CHARS = 120;
 const MAX_REQUEST_CHARS = 60_000;
 const FALLBACK_CANVAS = { width: 1920, height: 1080 };
 
-const TIME_COLUMN_PATTERN = /date|time|year|month|day|week|quarter|日期|时间|年份|月份|季度|周/;
-const NUMBER_COLUMN_PATTERN =
-  /int|long|float|double|decimal|numeric|number|count|amount|ratio|percent|金额|数量|占比|比例|率|记录数/;
-
-function toFiniteNumber(value: unknown) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().replace(/,/g, "").replace(/%$/, "");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-/** 列种类推断与 dashboardModuleService 同口径：先看列名与声明类型，再拿样本值兜底。 */
+/**
+ * 列种类对外仍是三档（模型的语义契约不变），编号列归入 dimension：
+ * 模型只需要知道「这列不是指标也不是时间」，编号与分类的区别由引擎自己把握。
+ */
 export function inferDashboardDesignColumnKind(
   column: QueryColumnDefinition,
   rows: Record<string, unknown>[]
 ): DashboardDesignColumnKind {
-  const descriptor = `${column.key} ${column.label} ${column.title ?? ""} ${column.type ?? ""}`.toLowerCase();
-  if (TIME_COLUMN_PATTERN.test(descriptor)) return "time";
-  if (NUMBER_COLUMN_PATTERN.test(descriptor)) return "number";
-
-  const samples = rows
-    .slice(0, 12)
-    .map((row) => row[column.key])
-    .filter((value) => value !== null && value !== undefined && value !== "");
-  return samples.length > 0 && samples.every((value) => toFiniteNumber(value) !== null) ? "number" : "dimension";
+  const role = classifyColumn(column, rows);
+  return role === "identifier" ? "dimension" : role;
 }
 
+/**
+ * 结果表形状。
+ * 单行且有数值列就是标量（不要求每一列都是数值——现实里的单值结果常常带一列口径说明）；
+ * 时间序列要求至少两行，一行画不出趋势；剩下有分类列的算 category。
+ */
 export function inferDashboardDesignOutputShape(output: QueryExecutionOutput): DashboardDesignOutputShape {
   if (output.columns.length === 0) return "table";
-  const kinds = output.columns.map((column) => inferDashboardDesignColumnKind(column, output.rows));
-  if (kinds.includes("time")) return "time-series";
-  if (kinds.includes("dimension")) return "category";
-  if (kinds.every((kind) => kind === "number") && output.rows.length === 1) return "scalar";
+  const roles = output.columns.map((column) => classifyColumn(column, output.rows));
+  if (output.rows.length === 1) return roles.includes("number") ? "scalar" : "table";
+  if (roles.includes("time") && roles.includes("number")) return "time-series";
+  if (roles.includes("dimension") || roles.includes("identifier")) return "category";
   return "table";
 }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
+import { parseNumericCell } from "../../core/dashboardColumnSemantics";
 import { formatDashboardMetric, resolveDashboardMetric } from "../../core/dashboardWidgetData";
 import { isLightDashboardSurface, resolveDashboardWidgetStyle } from "../../core/dashboardChartThemes";
 
@@ -56,9 +57,10 @@ const trend = computed(() => {
   const key = props.widget.mapping.metricKeys?.[0];
   const rows = props.binding?.table.rows ?? [];
   if (!key || rows.length < 2) return 0;
-  const previous = Number(rows.at(-2)?.[key]);
-  const current = Number(rows.at(-1)?.[key]);
-  return Number.isFinite(previous) && previous !== 0 && Number.isFinite(current)
+  /* 与取数同一把尺子：「1,200.50」「￥12,000」「3.5万」都要算得出环比，算不出就不显示涨跌。 */
+  const previous = parseNumericCell(rows.at(-2)?.[key]);
+  const current = parseNumericCell(rows.at(-1)?.[key]);
+  return previous !== null && previous !== 0 && current !== null
     ? ((current - previous) / Math.abs(previous)) * 100
     : 0;
 });

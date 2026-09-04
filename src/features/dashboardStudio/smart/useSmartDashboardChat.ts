@@ -5,13 +5,18 @@ import {
   resolveDashboardBoardThemeId
 } from "@/features/dashboardStudio/core/dashboardDesignApply";
 import {
+  classifyColumn,
+  metricColumnPriority,
+  numericMetricColumns
+} from "@/features/dashboardStudio/core/dashboardColumnSemantics";
+import {
   buildDashboardDesignRequest,
-  inferDashboardDesignColumnKind,
   inferDashboardDesignOutputShape
 } from "@/features/dashboardStudio/core/dashboardDesignContext";
+import { boardTitle, shortWidgetTitle } from "@/features/dashboardStudio/core/dashboardDesignTitles";
 import { parseDashboardDesignOps, parseDashboardDesignSpec } from "@/features/dashboardStudio/core/dashboardDesignSpec";
 import { streamDashboardDesign } from "@/services/dashboardDesignService";
-import type { QueryAsset, QueryExecution } from "@/types/analytics";
+import type { QueryAsset, QueryColumnDefinition, QueryExecution } from "@/types/analytics";
 import type {
   DashboardDesignAssetData,
   DashboardDesignChange,
@@ -19,7 +24,8 @@ import type {
   DashboardDesignIssue,
   DashboardDesignRejection,
   DashboardDesignSpec,
-  DashboardDesignSpecWidget
+  DashboardDesignSpecWidget,
+  DashboardDesignValueMode
 } from "@/types/dashboardDesign";
 import type { DashboardSchema } from "@/types/dashboardStudio";
 
@@ -42,6 +48,8 @@ export type SmartDashboardTurn = {
   candidate?: SmartDashboardCandidate;
   /** 模型没给出可用方案、由本地规则兜底搭出来的那一版。 */
   fallback?: boolean;
+  /** 兜底的原因（后端 404、流断了、JSON 坏了…），面板要原样告诉用户。 */
+  fallbackReason?: string;
 };
 
 export type UseSmartDashboardChatInput = {
@@ -52,7 +60,19 @@ export type UseSmartDashboardChatInput = {
   initialAssetIds?: string[];
 };
 
+/** 一屏 12 个组件封顶，与引擎侧同一条线。 */
 const MAX_LOCAL_WIDGETS = 12;
+/** 指标卡超过四张就没有主次了，与设计诊断的 too-many-kpi 同一条线。 */
+const MAX_LOCAL_KPI = 4;
+/** 环形图挤过八个扇区就分不清了。 */
+const MAX_LOCAL_COMPOSITION_CATEGORIES = 8;
+/**
+ * 渲染层不做聚合，一行就是一根柱子：明细表直接画对比图会出来几十根重名的柱子。
+ * 超过这个行数的结果表只给指标卡与明细表。
+ */
+const MAX_PLOTTABLE_ROWS = 12;
+/** 时间列几乎每行一个值才算真的趋势，否则只是一张按年度分组前的明细。 */
+const MIN_SERIES_UNIQUE_RATIO = 0.8;
 
 function createId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
@@ -74,88 +94,172 @@ export function boundAssetIds(schema: DashboardSchema): string[] {
   return [...ids];
 }
 
+function distinctCount(rows: Record<string, unknown>[], key: string) {
+  return new Set(rows.map((row) => String(row[key] ?? ""))).size;
+}
+
+/** 分类维度里挑基数最小的那一列：六家甲方比八十个合同名称好读得多。 */
+function pickDimension(columns: QueryColumnDefinition[], rows: Record<string, unknown>[]) {
+  const byRole = (role: string) =>
+    columns
+      .filter((column) => classifyColumn(column, rows) === role)
+      .sort((left, right) => distinctCount(rows, left.key) - distinctCount(rows, right.key));
+  return byRole("dimension")[0] ?? byRole("identifier")[0];
+}
+
 /**
  * 本地兜底方案：模型崩了、JSON 坏了或一条组件都不合法时，按结果表形状搭一版规矩的板。
  * 宁可给一版平淡但正确的，也不让用户对着一条错误干等。
+ *
+ * 三条硬规矩：标题走 shortWidgetTitle（资产名往往是一整段资产描述，不能直接当标题）；
+ * 指标只取解析得出数的列；同一份结果表最多出两种表达，不把 KPI/趋势/对比/占比全堆上去。
  */
 export function buildLocalDesignSpec(
   schema: DashboardSchema,
   data: DashboardDesignAssetData,
   brief: string
 ): DashboardDesignSpec {
-  const widgets: DashboardDesignSpecWidget[] = [];
-  let hasTrend = false;
-  const push = (widget: DashboardDesignSpecWidget) => {
-    if (widgets.length < MAX_LOCAL_WIDGETS) widgets.push(widget);
-  };
+  const kpis: Array<{ widget: DashboardDesignSpecWidget; priority: number }> = [];
+  const charts: Array<{ widget: DashboardDesignSpecWidget; weight: number }> = [];
+  const details: DashboardDesignSpecWidget[] = [];
 
   for (const { asset, execution } of Object.values(data)) {
+    const titleAsset = { name: asset.name, question: asset.resolvedQuestion || asset.originalQuestion };
     for (const output of execution.outputs) {
       const ref = `${asset.id}:${output.outputKey}`;
       const base = { assetId: asset.id, outputKey: output.outputKey };
-      const kinds = output.columns.map((column) => inferDashboardDesignColumnKind(column, output.rows));
-      const numeric = output.columns.filter((_, index) => kinds[index] === "number");
-      const time = output.columns.find((_, index) => kinds[index] === "time");
-      const dimension = output.columns.find((_, index) => kinds[index] === "dimension");
-      const metric = numeric[0];
+      const metrics = numericMetricColumns(output.columns, output.rows);
+      const metric = metrics[0];
+      const time = output.columns.find((column) => classifyColumn(column, output.rows) === "time");
+      const dimension = pickDimension(output.columns, output.rows);
       const shape = inferDashboardDesignOutputShape(output);
+      const detail: DashboardDesignSpecWidget = {
+        ref: `${ref}:detail`,
+        role: "detail",
+        ...base,
+        title: shortWidgetTitle({ role: "detail", asset: titleAsset })
+      };
 
       if (!metric) {
-        push({ ref: `${ref}:detail`, role: "detail", ...base, title: asset.name });
+        details.push(detail);
         continue;
       }
+      const kpi = (
+        valueMode: DashboardDesignValueMode,
+        options: { showTrend?: boolean; qualifier?: string } = {}
+      ): DashboardDesignSpecWidget => ({
+        ref: `${ref}:kpi`,
+        role: "kpi",
+        ...base,
+        metricKey: metric.key,
+        valueMode,
+        showTrend: options.showTrend ?? false,
+        title: shortWidgetTitle({
+          role: "kpi",
+          metricLabel: metric.label,
+          asset: titleAsset,
+          ...(options.qualifier ? { qualifier: options.qualifier } : {})
+        })
+      });
+
       if (shape === "scalar") {
-        push({ ref: `${ref}:kpi`, role: "kpi", ...base, metricKey: metric.key, valueMode: "first", title: metric.label || asset.name });
+        kpis.push({ widget: kpi("first"), priority: metricColumnPriority(metric) });
         continue;
       }
-      if (shape === "time-series" && time) {
-        hasTrend = true;
-        push({ ref: `${ref}:kpi`, role: "kpi", ...base, metricKey: metric.key, valueMode: "latest", showTrend: true, title: `最新${metric.label}` });
-        push({
-          ref: `${ref}:trend`,
-          role: "trend",
-          ...base,
-          variant: "line-smooth",
-          dimensionKey: time.key,
-          metricKeys: [metric.key],
-          title: `${asset.name}趋势`
-        });
-        continue;
-      }
-      if (shape === "category" && dimension) {
-        push({
-          ref: `${ref}:bar`,
-          role: "comparison",
-          ...base,
-          variant: "bar-vertical",
-          dimensionKey: dimension.key,
-          metricKeys: [metric.key],
-          title: asset.name
-        });
-        if (output.totalRows <= 8) {
-          push({
-            ref: `${ref}:pie`,
-            role: "composition",
+      // 真正的时间序列每行一个时间点；八十行合同挤在三个年度上不是趋势，是一张明细表。
+      const plottableSeries = time
+        && shape === "time-series"
+        && distinctCount(output.rows, time.key) >= output.rows.length * MIN_SERIES_UNIQUE_RATIO;
+      if (time && plottableSeries) {
+        kpis.push({ widget: kpi("latest", { showTrend: true }), priority: metricColumnPriority(metric) });
+        charts.push({
+          widget: {
+            ref: `${ref}:trend`,
+            role: "trend",
             ...base,
-            variant: "pie-donut",
+            variant: "line-smooth",
+            dimensionKey: time.key,
+            metricKeys: [metric.key],
+            title: shortWidgetTitle({ role: "trend", metricLabel: metric.label, asset: titleAsset })
+          },
+          // 趋势图最适合当主图，同样行数下压过对比图。
+          weight: output.rows.length * 2
+        });
+        continue;
+      }
+      if (dimension && output.rows.length <= MAX_PLOTTABLE_ROWS) {
+        charts.push({
+          widget: {
+            ref: `${ref}:bar`,
+            role: "comparison",
+            ...base,
+            variant: "bar-vertical",
             dimensionKey: dimension.key,
             metricKeys: [metric.key],
-            title: `${metric.label}占比`
+            title: shortWidgetTitle({
+              role: "comparison",
+              metricLabel: metric.label,
+              dimensionLabel: dimension.label,
+              asset: titleAsset
+            })
+          },
+          weight: output.rows.length
+        });
+        if (distinctCount(output.rows, dimension.key) <= MAX_LOCAL_COMPOSITION_CATEGORIES) {
+          charts.push({
+            widget: {
+              ref: `${ref}:pie`,
+              role: "composition",
+              ...base,
+              variant: "pie-donut",
+              dimensionKey: dimension.key,
+              metricKeys: [metric.key],
+              title: shortWidgetTitle({ role: "composition", metricLabel: metric.label, asset: titleAsset })
+            },
+            // 占比图不当主图：一个大环形图撑不起一整屏。
+            weight: 0
           });
         }
         continue;
       }
-      push({ ref: `${ref}:detail`, role: "detail", ...base, title: asset.name });
+      // 行数太多画不了图，但金额合计仍然值得一张卡，明细表照常沉底。
+      kpis.push({ widget: kpi("sum", { qualifier: "合计" }), priority: metricColumnPriority(metric) });
+      details.push(detail);
     }
   }
 
-  const firstAsset = Object.values(data)[0]?.asset.name ?? "";
-  const title = brief.replace(/[。！？!?]+$/g, "").trim().slice(0, 12) || firstAsset || schema.title;
+  const rankedKpis = kpis
+    .map((item, index) => ({ ...item, index }))
+    .sort((left, right) => left.priority - right.priority || left.index - right.index)
+    .slice(0, MAX_LOCAL_KPI)
+    .map((item) => item.widget);
+  // 数据最厚的那张图占主图位，紧随其后的两张贴到侧轨——构图器认的就是这个顺序。
+  const heroIndex = charts.reduce(
+    (best, item, index) => (item.weight > (charts[best]?.weight ?? -1) ? index : best),
+    0
+  );
+  const ordered = charts.length > 0 ? [charts[heroIndex]!, ...charts.filter((_, index) => index !== heroIndex)] : [];
+  const composedCharts = ordered.map((item, index) => (
+    index === 0
+      ? { ...item.widget, emphasis: "hero" as const }
+      : index <= 2
+        ? { ...item.widget, placement: "rail" as const }
+        : item.widget
+  ));
+  const widgets = [...rankedKpis, ...composedCharts, ...details].slice(0, MAX_LOCAL_WIDGETS);
+
+  const firstAsset = Object.values(data)[0]?.asset;
+  const title = boardTitle(
+    brief,
+    firstAsset ? { name: firstAsset.name, question: firstAsset.resolvedQuestion } : undefined,
+    schema.title
+  );
   return {
     narrative: "",
     title,
+    insight: `按 ${Object.keys(data).length} 份收藏问数的结果形状自动编排`,
     themeId: resolveDashboardBoardThemeId(schema),
-    archetype: hasTrend ? "trend-led" : "kpi-led",
+    archetype: composedCharts.some((widget) => widget.role === "trend") ? "trend-led" : "kpi-led",
     widgets
   };
 }
@@ -323,12 +427,14 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
           const local = buildLocalDesignSpec(schema, data, trimmed);
           if (local.widgets.length > 0) {
             const applied = applyDashboardDesignSpec(schema, local, data);
+            const reason = failure || "大屏设计服务没有返回可用的设计稿";
             patchTurn(turnId, (turn) => ({
               ...turn,
               status: "ready",
               fallback: true,
+              fallbackReason: reason,
               candidate: applied,
-              narrative: `${turn.narrative ? `${turn.narrative}\n` : ""}模型这次没有给出可用的设计稿${failure ? `（${failure}）` : ""}，先按本地规则搭了一版，可以在这基础上继续改。`
+              narrative: `${turn.narrative ? `${turn.narrative}\n` : ""}模型这次没有给出可用的设计稿（${reason}），先按本地规则搭了一版，可以在这基础上继续改。`
             }));
             return;
           }
