@@ -645,7 +645,29 @@ function applyCustomCanvasSize() {
   clampWidgetsToCanvas();
 }
 
+/**
+ * 工具栏「更多」：窄容器下模板/访问范围/一键美化/预览收进这里。
+ * 宽容器时按钮本身是 display:none，这个开关不影响平铺形态。
+ */
+const toolbarOverflowRef = ref<HTMLElement | null>(null);
+const toolbarOverflowOpen = ref(false);
+
+function closeToolbarOverflow() {
+  toolbarOverflowOpen.value = false;
+}
+
+function handleToolbarOverflowPointerDown(event: PointerEvent) {
+  if (!toolbarOverflowOpen.value) return;
+  const root = toolbarOverflowRef.value;
+  if (root && event.target instanceof Node && !root.contains(event.target)) closeToolbarOverflow();
+}
+
+function handleToolbarOverflowKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeToolbarOverflow();
+}
+
 function handlePresetChange(event: Event) {
+  closeToolbarOverflow();
   const select = event.target as HTMLSelectElement;
   const preset = dashboardStudioPresets.find((item) => item.id === select.value);
   select.value = "";
@@ -680,6 +702,8 @@ watch([isFitZoom, canvasZoom], () => {
 
 onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
+  window.addEventListener("pointerdown", handleToolbarOverflowPointerDown);
+  window.addEventListener("keydown", handleToolbarOverflowKeydown);
   if (typeof ResizeObserver !== "undefined" && canvasScroll.value) {
     canvasResizeObserver = new ResizeObserver(updateCanvasScale);
     canvasResizeObserver.observe(canvasScroll.value);
@@ -698,6 +722,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("beforeunload", beforeUnload);
+  window.removeEventListener("pointerdown", handleToolbarOverflowPointerDown);
+  window.removeEventListener("keydown", handleToolbarOverflowKeydown);
   clearHistoryTimer();
   if (settlingWidgetTimer !== null) window.clearTimeout(settlingWidgetTimer);
   canvasResizeObserver?.disconnect();
@@ -1720,6 +1746,7 @@ function selectBeautifyPreset(presetId: string) {
 }
 
 function openBeautifyDialog() {
+  closeToolbarOverflow();
   if (layoutPlanning.value || schema.widgets.length === 0) return;
   layoutPlanning.value = true;
   try {
@@ -1943,6 +1970,7 @@ function updateZIndex(event: Event) {
 }
 
 function markDashboardVisibilityDirty() {
+  closeToolbarOverflow();
   if (lifecycle.value === "saving") return;
   lifecycle.value = "dirty";
   errorMessage.value = "";
@@ -2086,23 +2114,30 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
       </div>
 
       <div class="designer-toolbar__cluster" aria-label="历史操作">
-        <button type="button" class="designer-toolbar__button" aria-label="撤销" :disabled="!canUndo" @click="undoChange">撤销</button>
-        <button type="button" class="designer-toolbar__button" aria-label="重做" :disabled="!canRedo" @click="redoChange">重做</button>
-        <select class="designer-toolbar__preset-select" aria-label="应用大屏模板" value="" :disabled="lifecycle === 'saving'" @change="handlePresetChange">
-          <option value="">模板</option>
-          <option v-for="preset in dashboardStudioPresets" :key="preset.id" :value="preset.id">{{ preset.title }}</option>
-        </select>
+        <button type="button" class="designer-toolbar__button designer-toolbar__button--collapsible" aria-label="撤销" title="撤销" :disabled="!canUndo" @click="undoChange">
+          <PhArrowCounterClockwise :size="15" aria-hidden="true" />
+          <span class="designer-toolbar__label">撤销</span>
+        </button>
+        <button type="button" class="designer-toolbar__button designer-toolbar__button--collapsible" aria-label="重做" title="重做" :disabled="!canRedo" @click="redoChange">
+          <PhArrowClockwise :size="15" aria-hidden="true" />
+          <span class="designer-toolbar__label">重做</span>
+        </button>
       </div>
 
       <div class="designer-toolbar__cluster designer-toolbar__cluster--zoom" aria-label="缩放控制">
         <button
           type="button"
-          class="designer-toolbar__button"
+          class="designer-toolbar__button designer-toolbar__button--collapsible"
           :class="{ 'is-active': isFitZoom }"
           :aria-pressed="isFitZoom"
+          aria-label="适应窗口"
+          title="适应窗口"
           :disabled="lifecycle === 'saving'"
           @click="fitCanvasToViewport"
-        >适应窗口</button>
+        >
+          <PhCornersOut :size="15" aria-hidden="true" />
+          <span class="designer-toolbar__label">适应窗口</span>
+        </button>
         <button type="button" class="designer-toolbar__icon-button" aria-label="缩小" :disabled="canvasScale <= .25 || lifecycle === 'saving'" @click="stepCanvasZoom(-1)">-</button>
         <select :value="isFitZoom ? 'fit' : canvasZoom" aria-label="缩放" :disabled="lifecycle === 'saving'" @change="handleZoomChange">
           <option v-if="isFitZoom" value="fit" disabled>{{ canvasScaleLabel }}</option>
@@ -2112,10 +2147,6 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
       </div>
 
       <div class="designer-toolbar__actions" aria-label="大屏操作">
-        <select v-model="dashboardVisibility" class="designer-toolbar__preset-select" aria-label="看板访问范围" :disabled="lifecycle === 'saving'" @change="markDashboardVisibilityDirty">
-          <option value="PRIVATE">仅自己</option>
-          <option value="SPACE">空间可用</option>
-        </select>
         <button
           v-if="queryAssetFeatureEnabled"
           type="button"
@@ -2146,36 +2177,67 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
         </button>
         <button
           type="button"
-          class="designer-toolbar__button designer-toolbar__smart-button"
+          class="designer-toolbar__button designer-toolbar__button--collapsible designer-toolbar__smart-button"
           :aria-pressed="smartPanelOpen"
           :disabled="lifecycle === 'saving'"
+          aria-label="智享"
           title="用对话生成与修改大屏"
           @click="toggleSmartPanel"
         >
           <PhMagicWand :size="15" aria-hidden="true" />
-          <span>智享</span>
+          <span class="designer-toolbar__label">智享</span>
         </button>
-        <button
-          type="button"
-          class="designer-toolbar__button designer-toolbar__layout-button"
-          :disabled="layoutPlanning || lifecycle === 'saving' || schema.widgets.length === 0"
-          :title="schema.widgets.length === 0 ? '先向画布添加组件' : '自动配色并重新构图，应用前可预览'"
-          @click="openBeautifyDialog"
-        >
-          <PhSparkle :size="15" aria-hidden="true" />
-          <span>{{ layoutPlanning ? '生成中…' : '一键美化' }}</span>
-        </button>
-        <a
-          class="designer-toolbar__button designer-toolbar__link-button"
-          :class="{ 'is-disabled': !canPreviewPublished }"
-          :href="runtimePreviewHref"
-          target="_blank"
-          rel="noreferrer"
-          :aria-disabled="!canPreviewPublished"
-          :tabindex="canPreviewPublished ? 0 : -1"
-          :title="canPreviewPublished ? '打开已发布运行态预览' : '请先发布已保存的改动再预览'"
-          @click="!canPreviewPublished && $event.preventDefault()"
-        >预览</a>
+
+        <!-- 窄容器里这一组收进「更多」；宽容器下 display:contents 让它们照旧平铺在操作区。 -->
+        <div ref="toolbarOverflowRef" class="designer-toolbar__overflow">
+          <div class="designer-toolbar__overflow-group" :data-open="toolbarOverflowOpen ? 'true' : 'false'">
+            <select class="designer-toolbar__preset-select" aria-label="应用大屏模板" value="" :disabled="lifecycle === 'saving'" @change="handlePresetChange">
+              <option value="">模板</option>
+              <option v-for="preset in dashboardStudioPresets" :key="preset.id" :value="preset.id">{{ preset.title }}</option>
+            </select>
+            <select v-model="dashboardVisibility" class="designer-toolbar__preset-select" aria-label="看板访问范围" :disabled="lifecycle === 'saving'" @change="markDashboardVisibilityDirty">
+              <option value="PRIVATE">仅自己</option>
+              <option value="SPACE">空间可用</option>
+            </select>
+            <button
+              type="button"
+              class="designer-toolbar__button designer-toolbar__button--collapsible designer-toolbar__layout-button"
+              :disabled="layoutPlanning || lifecycle === 'saving' || schema.widgets.length === 0"
+              :aria-label="layoutPlanning ? '生成中…' : '一键美化'"
+              :title="schema.widgets.length === 0 ? '先向画布添加组件' : '自动配色并重新构图，应用前可预览'"
+              @click="openBeautifyDialog"
+            >
+              <PhSparkle :size="15" aria-hidden="true" />
+              <span class="designer-toolbar__label">{{ layoutPlanning ? '生成中…' : '一键美化' }}</span>
+            </button>
+            <a
+              class="designer-toolbar__button designer-toolbar__button--collapsible designer-toolbar__link-button"
+              :class="{ 'is-disabled': !canPreviewPublished }"
+              :href="runtimePreviewHref"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="预览"
+              :aria-disabled="!canPreviewPublished"
+              :tabindex="canPreviewPublished ? 0 : -1"
+              :title="canPreviewPublished ? '打开已发布运行态预览' : '请先发布已保存的改动再预览'"
+              @click="closeToolbarOverflow(); !canPreviewPublished && $event.preventDefault()"
+            >
+              <PhEye :size="15" aria-hidden="true" />
+              <span class="designer-toolbar__label">预览</span>
+            </a>
+          </div>
+          <button
+            type="button"
+            class="designer-toolbar__icon-button designer-toolbar__overflow-button"
+            aria-label="更多操作"
+            aria-haspopup="true"
+            :aria-expanded="toolbarOverflowOpen ? 'true' : 'false'"
+            title="更多操作"
+            @click="toolbarOverflowOpen = !toolbarOverflowOpen"
+          >
+            <PhDotsThree :size="19" aria-hidden="true" />
+          </button>
+        </div>
         <button type="button" class="designer-toolbar__button designer-toolbar__button--primary" :disabled="lifecycle === 'saving' || !hasValidName" @click="save">{{ lifecycle === 'saving' && activeSaveIntent === 'draft' ? '保存中' : '保存' }}</button>
         <button type="button" class="designer-toolbar__button" :disabled="lifecycle === 'saving' || !hasValidName" @click="publish">{{ lifecycle === 'saving' && activeSaveIntent === 'publish' ? '发布中' : '发布' }}</button>
       </div>

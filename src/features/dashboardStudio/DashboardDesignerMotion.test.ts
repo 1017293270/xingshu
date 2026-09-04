@@ -717,4 +717,48 @@ describe("dashboard designer motion states", () => {
       expect(canvas.style.backgroundImage).toContain("xingshu-dashboard-default");
     });
   });
+  it("collapses secondary toolbar actions into an overflow menu that closes on escape and outside clicks", async () => {
+    const schema = createBlankDashboard({ title: "工具栏收起测试" });
+    const record: DashboardRecord = {
+      id: schema.id,
+      schema,
+      status: "draft",
+      revision: 1,
+      createdAt: schema.createdAt,
+      updatedAt: schema.updatedAt
+    };
+    host = document.createElement("div");
+    document.body.append(host);
+    handle = mountDashboardDesigner(host, {
+      record,
+      saveDraft: vi.fn(async () => record),
+      publishDashboard: vi.fn(async () => record),
+      exit: vi.fn()
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "更多操作" })).toBeInTheDocument());
+    const trigger = screen.getByRole("button", { name: "更多操作" });
+    const group = host.querySelector<HTMLElement>(".designer-toolbar__overflow-group")!;
+
+    // 收起档里模板、访问范围、一键美化、预览都住在这一组，窄容器下才靠「更多」露出来
+    expect(group).toContainElement(screen.getByRole("combobox", { name: "应用大屏模板" }));
+    expect(group).toContainElement(screen.getByRole("combobox", { name: "看板访问范围" }));
+    expect(group).toContainElement(screen.getByRole("button", { name: "一键美化" }));
+    expect(group).toContainElement(screen.getByLabelText("预览"));
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(group.dataset.open).toBe("false");
+
+    fireEvent.click(trigger);
+    await waitFor(() => expect(group.dataset.open).toBe("true"));
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(group.dataset.open).toBe("false"));
+
+    fireEvent.click(trigger);
+    await waitFor(() => expect(group.dataset.open).toBe("true"));
+
+    fireEvent.pointerDown(screen.getByRole("textbox", { name: "大屏名称" }));
+    await waitFor(() => expect(group.dataset.open).toBe("false"));
+  });
 });

@@ -20,7 +20,7 @@
   align-items: center;
   gap: 14px;
   min-height: 64px;
-  padding: 10px 18px 10px 72px;
+  padding: 10px 16px 10px 64px;
   border-bottom: 1px solid var(--studio-border);
   background: color-mix(in srgb, var(--studio-surface) 94%, #e0f2fe);
 }
@@ -134,6 +134,17 @@
   justify-content: flex-end;
 }
 
+/* 控件全变图标以后只靠间距分不出组，补一根细分隔线。 */
+.designer-toolbar__cluster--zoom::before,
+.designer-toolbar__actions::before {
+  width: 1px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  background: var(--studio-border);
+  content: "";
+}
+
 .designer-toolbar__button,
 .designer-toolbar__icon-button,
 .designer-toolbar__preset-select,
@@ -155,6 +166,31 @@
 
 .designer-toolbar__link-button {
   text-decoration: none;
+}
+
+.designer-toolbar__button {
+  gap: 6px;
+}
+
+.designer-toolbar__button svg {
+  flex: 0 0 auto;
+}
+
+.designer-toolbar__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 宽容器下「更多」不存在：整组直接摊平在操作区，形态与收起前一致。 */
+.designer-toolbar__overflow,
+.designer-toolbar__overflow-group {
+  display: contents;
+}
+
+.designer-toolbar__icon-button.designer-toolbar__overflow-button {
+  display: none;
 }
 
 .designer-toolbar__layout-button {
@@ -184,15 +220,15 @@
 .designer-toolbar__back {
   position: absolute;
   top: 50%;
-  left: 20px;
+  left: 16px;
   z-index: 1;
   color: var(--studio-text);
   transform: translateY(-50%);
 }
 
 .designer-toolbar__preset-select {
-  width: 150px;
-  padding: 0 28px 0 8px;
+  width: 124px;
+  padding: 0 26px 0 8px;
 }
 
 .designer-toolbar__cluster--zoom select {
@@ -800,24 +836,6 @@
     min-height: 760px;
   }
 
-  .designer-toolbar {
-    grid-template-columns: 1fr auto;
-    align-items: start;
-  }
-
-  .designer-toolbar__identity {
-    grid-column: 1 / -1;
-  }
-
-  .designer-toolbar__cluster,
-  .designer-toolbar__actions {
-    flex-wrap: wrap;
-  }
-
-  .designer-toolbar__actions {
-    justify-content: flex-start;
-  }
-
   .designer-workspace {
     grid-template-columns: 220px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) 320px;
@@ -888,6 +906,158 @@
 
   .designer-properties {
     grid-column: auto;
+  }
+}
+
+/*
+ * 智享面板只压窄编辑器外壳、视口一点没变，所以工具栏的降级必须按容器宽度走：
+ * 用 @media 的话面板一开断点全不触发，四组控件会被挤成 26px 一格并互相压穿。
+ * 四档依次让路：状态文案 → 按钮文案 → 次要控件进「更多」→ 双行。
+ */
+@container (max-width: 1400px) {
+  .designer-toolbar {
+    grid-template-columns: minmax(200px, 1fr) auto auto auto;
+    gap: 10px;
+    padding-right: 12px;
+    padding-left: 58px;
+  }
+
+  .designer-toolbar__back {
+    left: 14px;
+  }
+
+  .designer-toolbar__identity {
+    grid-template-columns: minmax(132px, 300px) auto;
+    gap: 8px;
+  }
+
+  .designer-toolbar__status-text {
+    display: none;
+  }
+
+  /* 文案收了状态不能跟着没：把状态点显式撑成方块，颜色仍由 data-state 决定。 */
+  .designer-toolbar__status {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .designer-toolbar__status > i {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #16a37a;
+  }
+
+  .designer-toolbar__preset-select {
+    width: 96px;
+  }
+
+  /* 加减号和百分比下拉重复，先让位换回模板/访问范围的完整下拉 */
+  .designer-toolbar__cluster--zoom .designer-toolbar__icon-button {
+    display: none;
+  }
+
+  .designer-toolbar__button--collapsible {
+    width: 34px;
+    padding: 0;
+  }
+
+  .designer-toolbar__button--collapsible .designer-toolbar__label {
+    display: none;
+  }
+}
+
+@container (max-width: 1000px) {
+  .designer-toolbar {
+    grid-template-columns: minmax(180px, 1fr) auto auto auto;
+    gap: 10px;
+  }
+
+  .designer-toolbar__identity {
+    grid-template-columns: minmax(120px, 240px) auto;
+  }
+
+  .designer-toolbar__overflow {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .designer-toolbar__icon-button.designer-toolbar__overflow-button {
+    display: inline-flex;
+  }
+
+  .designer-toolbar__overflow-group {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 8px);
+    right: 0;
+    display: none;
+    width: 216px;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--studio-border);
+    border-radius: 12px;
+    background: var(--studio-surface);
+    box-shadow: 0 18px 46px rgba(24, 77, 145, .18);
+  }
+
+  .designer-toolbar__overflow-group[data-open="true"] {
+    display: grid;
+  }
+
+  /* 浮层里空间管够，图标按钮恢复成图标 + 文案的整条 */
+  .designer-toolbar__overflow-group .designer-toolbar__preset-select,
+  .designer-toolbar__overflow-group .designer-toolbar__button {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+
+  .designer-toolbar__overflow-group .designer-toolbar__button--collapsible .designer-toolbar__label {
+    display: block;
+  }
+}
+
+@container (max-width: 860px) {
+  .designer-toolbar {
+    grid-template-columns: minmax(140px, 1fr) auto auto auto;
+    gap: 8px;
+    padding-left: 50px;
+  }
+
+  .designer-toolbar__back {
+    left: 10px;
+  }
+
+  .designer-toolbar__identity {
+    grid-template-columns: minmax(96px, 200px) auto;
+  }
+
+  .designer-toolbar__record-status {
+    display: none;
+  }
+}
+
+/* 兜底：再窄就换行，名称占一整行，四组控件排第二行，绝不互相压穿。 */
+@container (max-width: 680px) {
+  .designer-toolbar {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    padding: 8px 10px 8px 46px;
+    row-gap: 8px;
+  }
+
+  /* 换行后返回键不能再按整条工具栏垂直居中，跟名称那一行对齐 */
+  .designer-toolbar__back {
+    top: 10px;
+    transform: none;
+  }
+
+  .designer-toolbar__identity {
+    grid-column: 1 / -1;
   }
 }
 
