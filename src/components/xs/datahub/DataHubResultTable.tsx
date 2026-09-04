@@ -1,5 +1,6 @@
 import { CopySimple, DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { copyText } from "@/services/clipboard";
 import { formatDataHubColumnTitle, formatDataHubTableTitle, getDataHubColumnMinWidth } from "@/services/dataHubFormat";
 import {
   buildDataHubTablesCsv,
@@ -96,13 +97,8 @@ export function DataHubResultTable({
             className="analysis-icon-button"
             aria-label="复制表格"
             onClick={async () => {
-              const csv = buildDataHubTablesCsv([table]);
-              try {
-                await navigator.clipboard.writeText(csv);
-                onStatus?.(`已复制 ${table.rows.length} 行表格`);
-              } catch {
-                onStatus?.("复制表格失败，请稍后重试");
-              }
+              const copied = await copyText(buildDataHubTablesCsv([table]));
+              onStatus?.(copied ? `已复制 ${table.rows.length} 行表格` : "复制表格失败，请稍后重试");
             }}
           >
             <CopySimple size={16} aria-hidden="true" />

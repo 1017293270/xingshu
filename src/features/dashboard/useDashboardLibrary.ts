@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { copyText } from "@/services/clipboard";
 import {
   archiveDashboard,
   copyDashboard,
@@ -90,7 +91,7 @@ export function useDashboardLibrary() {
 
   const copyShareLink = async (record: DashboardRecord) => {
     const link = `${window.location.origin}${dashboardRuntimePath(record.id)}`;
-    try { await navigator.clipboard?.writeText(link); } catch { /* 页面仍会展示链接 */ }
+    await copyText(link); // 复制失败也不打断：页面仍会展示链接
     setShareLinks((current) => ({ ...current, [record.id]: link }));
   };
 
