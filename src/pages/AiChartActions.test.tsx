@@ -298,21 +298,23 @@ describe("AI chart actions", () => {
     ) as {
       question: string;
       tables: Array<{
+        title: string;
         totalRows: number;
         sampleRows: Array<Record<string, unknown>>;
       }>;
     };
-    expect(request).toMatchObject({
-      question: "统计咨询对象排名",
-      tables: [
-        {
-          totalRows: 2,
-          sampleRows: [
-            { 咨询对象: "小治", 咨询量: 456 },
-            { 咨询对象: "Senrun", 咨询量: 93 }
-          ]
-        }
+    expect(request.question).toBe("统计咨询对象排名");
+    expect(request.tables[0]).toMatchObject({
+      totalRows: 2,
+      sampleRows: [
+        { 咨询对象: "小治", 咨询量: 456 },
+        { 咨询对象: "Senrun", 咨询量: 93 }
       ]
+    });
+    // 正文里的排名一并送给规划模型，图表口径要跟正文对齐
+    expect(request.tables[1]).toMatchObject({
+      title: "结果表 2 - 回答中的排行表",
+      totalRows: 2
     });
   });
 

@@ -4,6 +4,7 @@ import {
 } from "@phosphor-icons/react";
 import { useId, useMemo, useRef, useState } from "react";
 import { buildDataHubSubagentTree } from "@/services/dataHubExecutionProjector";
+import { dataHubAnswerCovers } from "@/services/dataHubAnswerDedupe";
 import { DataHubExecutionStatus } from "./DataHubExecutionStatus";
 import { DataHubExecutionTimeline } from "./DataHubExecutionTimeline";
 import { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
@@ -45,6 +46,15 @@ function useControllableSelection(
   return [value, update] as const;
 }
 
+/** 执行块的正文可能是裸字符串，也可能是 `{ text }` / `{ content }` 包装。 */
+function blockAnswerText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  const record = asRecord(content);
+  return asString(record?.text) ?? asString(record?.content) ?? "";
+}
+
 function citationIdentity(content: unknown): string {
   const record = asRecord(content);
   const docId = asString(record?.docId) ?? asString(record?.doc_id);
@@ -61,6 +71,7 @@ export function DataHubExecutionPanel({
   emptyDescription = "本次响应没有可展示的编排事件。",
   defaultExpanded = true,
   preferDirectMainExecution = false,
+  answerText,
   drawerOpen,
   defaultDrawerOpen = false,
   onDrawerOpenChange,
@@ -117,6 +128,14 @@ export function DataHubExecutionPanel({
       const seenCitations = new Set<string>();
       const stageBlocks = card.blocks.filter((block) => {
         if (block.type === "table") {
+          return false;
+        }
+        if (
+          answerText &&
+          !block.isThinking &&
+          (block.type === "text" || block.type === "content") &&
+          dataHubAnswerCovers(answerText, blockAnswerText(block.content))
+        ) {
           return false;
         }
         if (block.type === "citation_document" || block.type === "document_url") {

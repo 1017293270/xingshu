@@ -24,100 +24,158 @@ function sse(events) {
   return `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
 }
 
-const askEvents = (sessionId, chatId) => [
-  { type: "agent_start", agentName: "问数智能体", sessionId, chatId },
-  {
-    type: "thinking",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    isThinking: true,
-    replyId: "ask-think",
-    modelCallIndex: 1,
-    content: "先确认口径：本月按自然月统计，需要区域维度的收入与目标完成率。"
-  },
-  {
-    type: "activity",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    content: {
-      activityId: "tool:locate",
-      kind: "tool",
-      action: "locate_datasource",
-      label: "匹配可用数据源",
-      status: "success",
-      summary: "命中「生产销售数据」"
+const askEvents = (sessionId, chatId) => {
+  // 数据源选择在真实后端是子智能体，事件带 parentSessionId；
+  // 放在根会话就试不出「怎么查」能不能写出数据源名。
+  const pickerSessionId = "shot-ask-datasource";
+  return [
+    { type: "agent_start", agentName: "问数智能体", sessionId, chatId },
+    {
+      type: "thinking",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      isThinking: true,
+      replyId: "ask-think",
+      modelCallIndex: 1,
+      content: "先确认口径：本月按自然月统计，需要区域维度的收入与目标完成率。"
+    },
+    {
+      type: "activity",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      content: {
+        activityId: "tool:locate",
+        kind: "tool",
+        action: "locate_datasource",
+        label: "匹配可用数据源",
+        status: "success",
+        summary: "命中「生产销售数据」"
+      }
+    },
+    {
+      type: "subagent_exposed",
+      agentName: "数据源选择智能体",
+      sessionId: pickerSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      content: {
+        agentId: "data-source-select",
+        sessionId: pickerSessionId,
+        subagentId: "shot-subagent-datasource",
+        label: "数据源选择"
+      }
+    },
+    {
+      type: "data_source_selected",
+      agentName: "数据源选择智能体",
+      sessionId: pickerSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      content: { datasourceId: 1000002, datasourceName: "生产销售数据" }
+    },
+    {
+      type: "done",
+      agentName: "数据源选择智能体",
+      sessionId: pickerSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      content: { mode: "ask", summary: "已选定「生产销售数据」。" }
+    },
+    {
+      type: "react_step",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      content: { round: 1, action: "generate_query", status: "success", summary: "已生成 Cube Query" }
+    },
+    {
+      type: "activity",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      content: {
+        activityId: "tool:execute",
+        kind: "tool",
+        action: "execute_query",
+        label: "执行数据查询",
+        status: "success",
+        summary: "返回 4 行数据"
+      }
+    },
+    {
+      type: "table",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      content: {
+        columns: [
+          { name: "SalesOrder.region", title: "销售明细表，记录各区域月度销售额。区域" },
+          { name: "SalesOrder.revenue", title: "销售明细表，记录各区域月度销售额。销售额（万元）", type: "number" },
+          { name: "SalesOrder.rate", title: "销售明细表，记录各区域月度销售额。目标完成率", type: "number" }
+        ],
+        rows: [
+          { "SalesOrder.region": "华东", "SalesOrder.revenue": 486.2, "SalesOrder.rate": 1.04 },
+          { "SalesOrder.region": "华南", "SalesOrder.revenue": 331.7, "SalesOrder.rate": 0.92 },
+          { "SalesOrder.region": "华北", "SalesOrder.revenue": 268.4, "SalesOrder.rate": 0.87 },
+          { "SalesOrder.region": "西南", "SalesOrder.revenue": 155.9, "SalesOrder.rate": 0.78 }
+        ],
+        totalRows: 4,
+        source: "cube",
+        tableComment: "销售明细表，记录各区域月度销售额与目标完成率",
+        annotation: {
+          measures: {
+            "SalesOrder.revenue": {
+              title: "销售明细表，记录各区域月度销售额。销售额（万元）",
+              shortTitle: "销售额（万元）",
+              type: "sum",
+              businessDefinition: "已确认收入的销售额合计，单位万元",
+              businessTerms: ["营收", "销售收入"]
+            }
+          },
+          dimensions: {
+            "SalesOrder.region": {
+              title: "销售明细表，记录各区域月度销售额。区域",
+              shortTitle: "区域"
+            },
+            "SalesOrder.month": {
+              title: "销售明细表，记录各区域月度销售额。统计月份"
+            }
+          }
+        },
+        query: {
+          measures: ["SalesOrder.revenue"],
+          dimensions: ["SalesOrder.region"],
+          filters: [
+            { member: "SalesOrder.month", operator: "equals", values: ["2026-08"] }
+          ]
+        }
+      }
+    },
+    {
+      type: "text",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      replyId: "ask-answer",
+      modelCallIndex: 2,
+      content:
+        "本月总销售额 1242.2 万元，整体目标完成率 92%。华东区已超额完成（104%），西南区完成率最低（78%），是本月主要缺口。"
+    },
+    {
+      type: "done",
+      agentName: "问数智能体",
+      sessionId,
+      chatId,
+      finished: true,
+      content: { mode: "ask", summary: "本月销售额 1242.2 万元，整体完成率 92%。", totalDurationMs: 18400 }
     }
-  },
-  {
-    type: "data_source_selected",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    content: { datasourceId: 1000002, datasourceName: "生产销售数据" }
-  },
-  {
-    type: "react_step",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    content: { round: 1, action: "generate_query", status: "success", summary: "已生成 Cube Query" }
-  },
-  {
-    type: "activity",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    content: {
-      activityId: "tool:execute",
-      kind: "tool",
-      action: "execute_query",
-      label: "执行数据查询",
-      status: "success",
-      summary: "返回 4 行数据"
-    }
-  },
-  {
-    type: "table",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    content: {
-      columns: [
-        { name: "region", title: "区域" },
-        { name: "revenue", title: "销售额（万元）", type: "number" },
-        { name: "rate", title: "目标完成率", type: "number" }
-      ],
-      rows: [
-        { region: "华东", revenue: 486.2, rate: 1.04 },
-        { region: "华南", revenue: 331.7, rate: 0.92 },
-        { region: "华北", revenue: 268.4, rate: 0.87 },
-        { region: "西南", revenue: 155.9, rate: 0.78 }
-      ],
-      totalRows: 4,
-      source: "cube"
-    }
-  },
-  {
-    type: "text",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    replyId: "ask-answer",
-    modelCallIndex: 2,
-    content:
-      "本月总销售额 1242.2 万元，整体目标完成率 92%。华东区已超额完成（104%），西南区完成率最低（78%），是本月主要缺口。"
-  },
-  {
-    type: "done",
-    agentName: "问数智能体",
-    sessionId,
-    chatId,
-    finished: true,
-    content: { mode: "ask", summary: "本月销售额 1242.2 万元，整体完成率 92%。", totalDurationMs: 18400 }
-  }
-];
+  ];
+};
 
 const ragEvents = (sessionId, chatId) => [
   { type: "agent_start", agentName: "问知智能体", sessionId, chatId },
@@ -318,6 +376,15 @@ const agentEvents = (sessionId, chatId) => {
       }
     },
     {
+      type: "data_source_selected",
+      agentName: "问数智能体",
+      sessionId: childSessionId,
+      globalSessionId: sessionId,
+      parentSessionId: sessionId,
+      chatId,
+      content: { datasourceId: 1000007, datasourceName: "经营分析数据" }
+    },
+    {
       type: "thinking",
       agentName: "问数智能体",
       sessionId: childSessionId,
@@ -401,7 +468,17 @@ const agentEvents = (sessionId, chatId) => {
           { region: "西南", revenue: 465.1, rate: 0.71 }
         ],
         totalRows: 3,
-        source: "cube"
+        source: "cube",
+        tableComment: "区域业绩表，记录各区域季度销售额与目标完成率",
+        annotation: {
+          measures: {
+            revenue: { title: "季度销售额（万元）", shortTitle: "季度销售额（万元）", type: "sum" }
+          },
+          dimensions: {
+            region: { title: "区域", shortTitle: "区域" }
+          }
+        },
+        query: { measures: ["revenue"], dimensions: ["region"] }
       }
     },
     {
@@ -519,6 +596,20 @@ for (const mode of modes) {
   await page.locator(".analysis-question").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${dir}/analysis-${mode.name}-collapsed.png` });
+
+  // 查询过程结束后会自动收成一行，展开它才能看到「怎么查 / 查到了什么」。
+  const businessToggle = page.getByRole("button", { name: /查询过程/ }).first();
+  if (await businessToggle.count()) {
+    if ((await businessToggle.getAttribute("aria-expanded")) === "false") {
+      await businessToggle.click();
+    }
+    await page.waitForTimeout(600);
+    await businessToggle.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${dir}/analysis-${mode.name}-business.png` });
+    await businessToggle.click();
+    await page.waitForTimeout(400);
+  }
 
   const panelToggle = page.locator(".xs-datahub-execution__heading").first();
   await panelToggle.click();

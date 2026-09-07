@@ -1,6 +1,8 @@
-import { CaretDown, FileText } from "@phosphor-icons/react";
+import { CaretDown, FileText, Plus } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { DataHubCitationDocument } from "@/types/dataHub";
+import { citationDisplayTitle, citationLocationText } from "./citationLabels";
+import { DataHubCitationFragments } from "./DataHubCitationFragments";
 
 type DataHubCitationChipsProps = {
   citations: DataHubCitationDocument[];
@@ -8,19 +10,6 @@ type DataHubCitationChipsProps = {
   /** 结果区底部默认收合，用户点开后保持展开。 */
   defaultCollapsed?: boolean;
 };
-
-export function citationDisplayTitle(citation: DataHubCitationDocument) {
-  return citation.docName || citation.fileName || citation.docKey || citation.docId;
-}
-
-/** 章节/页码定位徽标：缺失的部分不显示，都缺时返回空串。 */
-export function citationLocationText(citation: DataHubCitationDocument) {
-  const chapter = citation.chapter?.trim();
-  const rawPage = citation.pageNumber?.trim();
-  const page = rawPage ? (/^\d+$/.test(rawPage) ? `第${rawPage}页` : rawPage) : "";
-  const shortChapter = chapter && chapter.length > 24 ? `${chapter.slice(0, 24)}…` : chapter;
-  return [shortChapter, page].filter(Boolean).join(" · ");
-}
 
 function groupByKnowledgeBase(citations: DataHubCitationDocument[]) {
   const groups = new Map<string, DataHubCitationDocument[]>();
@@ -41,6 +30,7 @@ export function DataHubCitationChips({
   defaultCollapsed = true
 }: DataHubCitationChipsProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [fragmentsCitation, setFragmentsCitation] = useState<DataHubCitationDocument>();
   if (citations.length === 0) {
     return null;
   }
@@ -70,25 +60,45 @@ export function DataHubCitationChips({
                   const title = citationDisplayTitle(citation);
                   const location = citationLocationText(citation);
                   return (
-                    <button
-                      type="button"
-                      className="knowledge-citation-chip"
+                    <span
+                      className="knowledge-citation-chip-group"
                       key={`${citation.docId}::${citation.docKey ?? ""}`}
-                      aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}${location ? `（${location}）` : ""}`}
-                      disabled={!citation.sourceAvailable}
-                      onClick={() => onOpen(citation)}
                     >
-                      <FileText size={15} aria-hidden="true" />
-                      <span>{title}</span>
-                      {location ? (
-                        <span className="knowledge-citation-chip__location">{location}</span>
-                      ) : null}
-                    </button>
+                      <button
+                        type="button"
+                        className="knowledge-citation-chip"
+                        aria-label={`${citation.sourceAvailable ? "打开原文" : "原文不可用"}：${title}${location ? `（${location}）` : ""}`}
+                        disabled={!citation.sourceAvailable}
+                        onClick={() => onOpen(citation)}
+                      >
+                        <FileText size={15} aria-hidden="true" />
+                        <span>{title}</span>
+                        {location ? (
+                          <span className="knowledge-citation-chip__location">{location}</span>
+                        ) : null}
+                      </button>
+                      {/* 切块与原文是两条链路：原文不可用时片段仍然读得到，所以不跟着 disabled。 */}
+                      <button
+                        type="button"
+                        className="knowledge-citation-chip__more"
+                        aria-label={`浏览文档片段：${title}`}
+                        title={`浏览文档片段：${title}`}
+                        onClick={() => setFragmentsCitation(citation)}
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                      </button>
+                    </span>
                   );
                 })}
               </div>
             </section>
           ))}
+      <DataHubCitationFragments
+        open={Boolean(fragmentsCitation)}
+        citation={fragmentsCitation}
+        onClose={() => setFragmentsCitation(undefined)}
+        onOpen={onOpen}
+      />
     </section>
   );
 }

@@ -348,6 +348,34 @@ export type DataHubCitationDocument = {
   fragments: string[];
 };
 
+export type DataHubBusinessMeasure = {
+  label: string;
+  /** 聚合动作的中文说法，如「计数」「求和」，直接进「对X计数」这类句子。 */
+  aggregation: string;
+};
+
+/**
+ * 一次数据查询的结构化要素。
+ * 已拼好的字符串数组只够罗列，写不出「按X分组对Y计数」这种句子，
+ * 所以叙事所需的成分单独留一份结构。
+ */
+export type DataHubBusinessQuery = {
+  dataSource?: string;
+  table?: string;
+  dimensions: string[];
+  measures: DataHubBusinessMeasure[];
+  filters: string[];
+  time: string[];
+  rows?: number;
+  /**
+   * 结果里最值得复述的几行（按数值降序取前三），value 已带好单位。
+   * 只说「得到 10 行结果」等于什么都没说，读者要的是哪几家、各多少。
+   */
+  preview?: Array<{ label: string; value: string }>;
+  /** grouped=按维度分组统计，single=单行单值，list=只有明细行。 */
+  rowKind?: "grouped" | "single" | "list";
+};
+
 export type DataHubBusinessQueryContext = {
   dataTables: string[];
   fields: string[];
@@ -357,6 +385,8 @@ export type DataHubBusinessQueryContext = {
   metricDefinitions: string[];
   synonymMappings: string[];
   time: string[];
+  /** 后端没给可解析的 query 时缺席，叙事退回字符串数组。 */
+  query?: DataHubBusinessQuery;
 };
 
 export type DataHubBusinessTask = {
@@ -388,6 +418,8 @@ export type DataHubBusinessTrace = {
   synonymMappings: string[];
   time: string[];
   documents: DataHubBusinessDocument[];
+  /** 每份结果表一条，用于「怎么查 / 查到了什么」；缺席时退回上面的字符串数组。 */
+  queries?: DataHubBusinessQuery[];
 };
 
 export type DataHubTableColumn = {

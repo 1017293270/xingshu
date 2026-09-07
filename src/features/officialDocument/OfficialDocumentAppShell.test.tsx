@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   OfficialDocumentAppActions,
   OfficialDocumentAppShell,
-  resolveOfficialDocumentExitPath,
   useOfficialDocumentAppChrome,
   type OfficialDocumentAppChrome
 } from "./OfficialDocumentAppShell";
@@ -28,7 +27,7 @@ function renderShell(
       <OfficialDocumentAppShell>
         <ChromeProbe
           stage={options.chrome?.stage ?? "library"}
-          context={options.chrome?.context ?? "结构模板"}
+          context={options.chrome?.context ?? "模板库"}
           contextDetail={options.chrome?.contextDetail}
           actionLabel={options.chrome?.actionLabel}
         />
@@ -51,68 +50,35 @@ describe("OfficialDocumentAppShell", () => {
     expect(html).not.toContain("official-document-app__actions--inline");
   });
 
-  it("only allows safe in-app exit paths", () => {
-    expect(resolveOfficialDocumentExitPath(undefined)).toBe("/");
-    expect(resolveOfficialDocumentExitPath("/dashboard")).toBe("/dashboard");
-    expect(resolveOfficialDocumentExitPath("/ask-data?q=1#hit")).toBe("/ask-data?q=1#hit");
-    expect(resolveOfficialDocumentExitPath("/login")).toBe("/");
-    expect(resolveOfficialDocumentExitPath("/welcome")).toBe("/");
-    expect(resolveOfficialDocumentExitPath("/writing")).toBe("/");
-    expect(resolveOfficialDocumentExitPath("/writing/drafts/1")).toBe("/");
-    expect(resolveOfficialDocumentExitPath("//evil.example")).toBe("/");
-    expect(resolveOfficialDocumentExitPath("https://evil.example/")).toBe("/");
-  });
+  it("gives the writing stage no navigation rail and no page header", () => {
+    render(
+      <MemoryRouter initialEntries={["/writing"]}>
+        <OfficialDocumentAppShell>
+          <ChromeProbe stage="compose" context="公文写作" />
+        </OfficialDocumentAppShell>
+      </MemoryRouter>
+    );
 
-  it("separates compose, structure templates, and the draft box in the side navigation", () => {
-    renderShell("/writing/templates");
-
-    const navigation = screen.getByRole("navigation", { name: "报告智写导航" });
-    const composeLink = within(navigation).getByRole("link", { name: /公文写作/ });
-    const templateLink = within(navigation).getByRole("link", { name: /结构模板/ });
-    const draftLink = within(navigation).getByRole("link", { name: /草稿箱/ });
-
-    expect(composeLink).toHaveAttribute("href", "/writing");
-    expect(composeLink).not.toHaveAttribute("aria-current");
-    expect(templateLink).toHaveAttribute("href", "/writing/templates");
-    expect(templateLink).toHaveAttribute("aria-current", "page");
-    expect(draftLink).toHaveAttribute("href", "/writing/drafts");
-    expect(draftLink).not.toHaveAttribute("aria-current");
-  });
-
-  it("marks the draft box as current on draft routes", () => {
-    renderShell("/writing/drafts", { chrome: { stage: "drafts", context: "草稿箱" } });
-
-    const navigation = screen.getByRole("navigation", { name: "报告智写导航" });
-    expect(within(navigation).getByRole("link", { name: /草稿箱/ })).toHaveAttribute("aria-current", "page");
-    expect(within(navigation).getByRole("link", { name: /结构模板/ })).not.toHaveAttribute("aria-current");
-    expect(within(navigation).getByRole("link", { name: /公文写作/ })).not.toHaveAttribute("aria-current");
-  });
-
-  it("identifies the workspace with text only, no app-card gradient mark", () => {
-    renderShell("/writing/templates");
-
-    const heading = screen.getByRole("heading", { name: "报告智写" });
-    const identity = heading.closest(".official-document-rail__app");
-    expect(identity).not.toBeNull();
-    expect(identity).toHaveTextContent("套模板 · 对话成稿 · 出定稿");
-    /* 渐变应用图标只属于首页应用卡那一层，不和导航的线性图标同处一列 */
-    expect(identity!.querySelector("img")).toBeNull();
-  });
-
-  it("shows the library context without a redundant page-header shortcut", async () => {
-    renderShell("/writing/templates");
-
-    expect(screen.getByRole("heading", { name: "报告智写" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "报告智写" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("报告智写工作台")).toBeInTheDocument();
-    expect(within(screen.getByRole("banner")).queryByRole("link", { name: "结构模板" })).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("结构模板");
-    });
-    expect(screen.queryByText("Agent 应用")).not.toBeInTheDocument();
   });
 
-  it("updates the top-bar context for template structure and draft canvas", async () => {
+  it("gives list and detail stages a slim header that leads back to writing", async () => {
+    renderShell("/writing/templates");
+
+    const banner = screen.getByRole("banner");
+    expect(within(banner).getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("模板库");
+    });
+  });
+
+  it("updates the slim header context for template structure and draft canvas", async () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={["/writing/templates/template-1"]}>
         <OfficialDocumentAppShell>
@@ -121,14 +87,9 @@ describe("OfficialDocumentAppShell", () => {
       </MemoryRouter>
     );
 
-    expect(within(screen.getByRole("banner")).getByRole("link", { name: "结构模板" })).toHaveAttribute(
-      "href",
-      "/writing/templates"
-    );
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("季度工作通知");
     });
-    expect(screen.getByText("模板结构")).toBeInTheDocument();
     expect(screen.getByText("版本 v2")).toBeInTheDocument();
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__actions")).toContainElement(
@@ -147,16 +108,8 @@ describe("OfficialDocumentAppShell", () => {
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("关于联调进展的通报");
     });
-    expect(within(screen.getByRole("banner")).getByRole("link", { name: "草稿箱" })).toHaveAttribute(
-      "href",
-      "/writing/drafts"
-    );
-    expect(screen.getByText("结构化起草")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "返回公文写作" })).toBeInTheDocument();
     expect(screen.getByText("通知模板 · 文件版本 v1")).toBeInTheDocument();
   });
 
-  it("returns to the safe origin page recorded in location state", () => {
-    renderShell("/writing/templates", { state: { from: "/dashboard" } });
-    expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/dashboard");
-  });
 });

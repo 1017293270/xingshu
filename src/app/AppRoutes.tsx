@@ -80,11 +80,13 @@ export function resolveRouteFallbackVariant(pathname: string): XsRouteFallbackVa
     pathname === "/ask-agent" ||
     pathname === "/analysis" ||
     pathname === "/dashboard-editor" ||
+    pathname === "/writing" ||
+    pathname.startsWith("/writing/") ||
     pathname.startsWith("/table/")
   ) {
     return "workspace";
   }
-  if (pathname === "/dashboard-view" || pathname === "/writing" || pathname.startsWith("/writing/")) {
+  if (pathname === "/dashboard-view") {
     return "fullscreen";
   }
   return "cards";
@@ -118,13 +120,13 @@ export function AppRoutes() {
             <Route path="/data-management" element={<DataManagementPage />} />
             <Route path="/cloud" element={<CloudPage />} />
             <Route path="/cloud/:kbId" element={<CloudKnowledgeDetailPage />} />
-          </Route>
-          <Route element={<ProtectedRoute><OfficialDocumentAppLayout /></ProtectedRoute>}>
-            <Route path="/writing" element={<WritingPage />} />
-            <Route path="/writing/templates" element={<WritingTemplatesPage />} />
-            <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
-            <Route path="/writing/drafts" element={<WritingDraftsPage />} />
-            <Route path="/writing/drafts/:draftId" element={<WritingDraftDetailPage />} />
+            <Route element={<OfficialDocumentAppLayout />}>
+              <Route path="/writing" element={<WritingPage />} />
+              <Route path="/writing/templates" element={<WritingTemplatesPage />} />
+              <Route path="/writing/templates/:templateId" element={<WritingTemplateDetailPage />} />
+              <Route path="/writing/drafts" element={<WritingDraftsPage />} />
+              <Route path="/writing/drafts/:draftId" element={<WritingDraftDetailPage />} />
+            </Route>
           </Route>
           <Route
             path="/dashboard-editor"

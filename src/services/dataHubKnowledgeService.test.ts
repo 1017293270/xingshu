@@ -6,6 +6,7 @@ import {
   listDataHubKnowledgeBases,
   listDataHubKnowledgeDocuments,
   loadDataHubCitationDocument,
+  loadDataHubKnowledgeDocumentChunks,
   loadDataHubKnowledgeMarkdown,
   loadDataHubKnowledgeSource,
   normalizeDataHubKnowledgeBases,
@@ -222,6 +223,119 @@ describe("dataHubKnowledgeService", () => {
     })).resolves.toEqual({
       markdown: "# 高新技术企业认定咨询合作合同\n\n甲方..."
     });
+  });
+
+  it("reads document chunks by space_id/kb_id/doc_id and orders them by chunk_order_index", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer token-123");
+      expect(headers.get("X-Space-Id")).toBe("7");
+      expect(String(url)).toContain("/api/ai/rag/kb/document-chunks?");
+      expect(String(url)).toContain("space_id=7");
+      expect(String(url)).toContain("kb_id=kb-1");
+      expect(String(url)).toContain("doc_id=9001");
+      return new Response(JSON.stringify({
+        space_id: 7,
+        kb_id: 1,
+        doc_id: "9001",
+        doc_name: "采购合同szsz-2024-cg0007.pdf",
+        chunks: [
+          { chunk_id: "c-b", chunk_order_index: 1, tokens: 256, content: " 第二章 结算方式。 " },
+          { chunk_id: "c-a", chunk_order_index: 0, tokens: 128, content: "第一章 总则。" }
+        ]
+      }), { headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "9001",
+      kbId: "kb-1",
+      docName: "采购合同szsz-2024-cg0007.pdf",
+      sourceAvailable: true,
+      fragments: []
+    })).resolves.toEqual({
+      docId: "9001",
+      docName: "采购合同szsz-2024-cg0007.pdf",
+      chunks: [
+        { id: "c-a", order: 0, tokens: 128, content: "第一章 总则。" },
+        { id: "c-b", order: 1, tokens: 256, content: "第二章 结算方式。" }
+      ]
+    });
+  });
+
+  it("falls back to the array index when chunk_order_index is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      doc_id: "9001",
+      chunks: [{ content: "甲方..." }, { content: "乙方...", tokens: "64" }]
+    }), { headers: { "Content-Type": "application/json" } })));
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "9001",
+      kbId: "kb-1",
+      fileName: "采购合同.pdf",
+      sourceAvailable: true,
+      fragments: []
+    })).resolves.toEqual({
+      docId: "9001",
+      docName: "采购合同.pdf",
+      chunks: [
+        { id: "chunk-0", order: 0, tokens: undefined, content: "甲方..." },
+        { id: "chunk-1", order: 1, tokens: 64, content: "乙方..." }
+      ]
+    });
+  });
+
+  it("keeps an empty chunk list when the artifact has no chunks, and surfaces backend errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      doc_id: "9001",
+      doc_name: "采购合同.pdf",
+      chunks: []
+    }), { headers: { "Content-Type": "application/json" } })));
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "9001",
+      kbId: "kb-1",
+      sourceAvailable: true,
+      fragments: []
+    })).resolves.toEqual({ docId: "9001", docName: "采购合同.pdf", chunks: [] });
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ message: "文档不存在或已被删除" }),
+      { status: 404, headers: { "Content-Type": "application/json" } }
+    )));
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "9001",
+      kbId: "kb-1",
+      sourceAvailable: true,
+      fragments: []
+    })).rejects.toThrow("文档不存在或已被删除");
+  });
+
+  it("browses chunks with only a doc_key, and refuses when the identity is incomplete", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      expect(String(url)).toContain("doc_key=%E9%87%87%E8%B4%AD%E5%90%88%E5%90%8C.pdf");
+      expect(String(url)).not.toContain("doc_id=");
+      return new Response(JSON.stringify({ chunks: [] }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "doc-1",
+      docKey: "采购合同.pdf",
+      kbId: "kb-1",
+      sourceAvailable: false,
+      fragments: []
+    })).resolves.toMatchObject({ chunks: [] });
+
+    await expect(loadDataHubKnowledgeDocumentChunks({
+      docId: "",
+      kbId: "kb-1",
+      sourceAvailable: true,
+      fragments: []
+    })).rejects.toThrow(DataHubServiceError);
   });
 
   it("rejects empty file-content payloads instead of opening a PDF original", async () => {

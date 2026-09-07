@@ -1595,7 +1595,7 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
     name: "查看来源片段：财务报销制度（2026）"
   });
   await expect(sourceFragmentButton).toBeVisible();
-  await expect(page.locator(".datahub-business-explanation__documents")).not.toContainText(
+  await expect(page.locator(".datahub-business-explanation__findings")).not.toContainText(
     "单笔差旅费超过 5000 元时"
   );
   await sourceFragmentButton.click();

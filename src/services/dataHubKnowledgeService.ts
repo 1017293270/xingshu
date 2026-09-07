@@ -265,6 +265,102 @@ export async function loadDataHubKnowledgeMarkdown(
   return { markdown };
 }
 
+export type DataHubKnowledgeChunk = {
+  id: string;
+  /** 后端 chunk_order_index（0 基），缺省用数组下标；展示时才 +1。 */
+  order: number;
+  tokens?: number;
+  content: string;
+};
+
+export type DataHubKnowledgeDocumentChunks = {
+  docId: string;
+  docName: string;
+  chunks: DataHubKnowledgeChunk[];
+};
+
+function unwrapChunkRows(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  for (const key of ["chunks", "items", "list", "records"]) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  // requestDataHub 只拆一层 {code,data} 信封，再嵌一层的形状在这里兜底。
+  return isRecord(payload.data) || Array.isArray(payload.data) ? unwrapChunkRows(payload.data) : [];
+}
+
+function normalizeChunk(value: unknown, index: number): DataHubKnowledgeChunk {
+  if (typeof value === "string") {
+    return { id: `chunk-${index}`, order: index, content: value.trim() };
+  }
+  if (!isRecord(value)) {
+    return { id: `chunk-${index}`, order: index, content: "" };
+  }
+
+  const order = asCount(value.chunk_order_index) ?? asCount(value.chunkOrderIndex) ?? index;
+  const content = typeof value.content === "string"
+    ? value.content
+    : asText(value.text) || asText(value.chunk);
+  return {
+    id: asText(value.chunk_id) || asText(value.chunkId) || asText(value.id) || `chunk-${order}`,
+    order,
+    tokens: asCount(value.tokens) ?? asCount(value.token_count) ?? asCount(value.tokenCount),
+    content: content.trim()
+  };
+}
+
+function normalizeDocumentChunks(
+  payload: unknown,
+  citation: DataHubCitationDocument
+): DataHubKnowledgeDocumentChunks {
+  const record = isRecord(payload) ? payload : undefined;
+  const seen = new Set<string>();
+  const chunks = unwrapChunkRows(payload)
+    .map((row, index) => ({ chunk: normalizeChunk(row, index), index }))
+    // chunk_order_index 才是切块顺序；数组顺序只是它缺席时的兜底。
+    .sort((left, right) => left.chunk.order - right.chunk.order || left.index - right.index)
+    .map(({ chunk, index }) => {
+      if (!seen.has(chunk.id)) {
+        seen.add(chunk.id);
+        return chunk;
+      }
+      // React key 不能撞；制品里 chunk_id 缺席时的兜底 id 可能重复。
+      return { ...chunk, id: `${chunk.id}-${index}` };
+    });
+
+  return {
+    docId: asText(record?.doc_id) || citation.docId,
+    docName:
+      asText(record?.doc_name) || citation.docName || citation.fileName || citation.docKey || "",
+    chunks
+  };
+}
+
+/**
+ * PRD U-6 的切块制品（MinIO chunks.json）。响应是裸 JSON 不是 {code,data} 信封；
+ * 没有制品时 chunks 为空数组，文档已删是 404、制品坏了是 500，都由 requestDataHub 抛。
+ */
+export async function loadDataHubKnowledgeDocumentChunks(
+  citation: DataHubCitationDocument
+): Promise<DataHubKnowledgeDocumentChunks> {
+  const { spaceId } = requireSourceIdentity(citation);
+  const params = sourceDocumentParams(spaceId, citation);
+  const payload = await requestDataHub<unknown>(
+    `/api/ai/rag/kb/document-chunks?${params.toString()}`,
+    { method: "GET", spaceId, cache: "no-store" }
+  );
+  return normalizeDocumentChunks(payload, citation);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

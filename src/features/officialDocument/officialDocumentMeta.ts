@@ -21,14 +21,6 @@ export const templateStatusLabel: Record<OfficialDocumentTemplateStatus, string>
   FAILED: "分析失败"
 };
 
-export const templateStatusColor: Record<OfficialDocumentTemplateStatus, string> = {
-  ANALYZING: "processing",
-  NEEDS_REVIEW: "success",
-  PUBLISHED: "success",
-  BLOCKED: "error",
-  FAILED: "error"
-};
-
 export const riskLabel: Record<OfficialDocumentRiskSeverity, string> = {
   INFO: "提示",
   WARNING: "需确认",

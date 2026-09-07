@@ -1,0 +1,363 @@
+/* ---------- 公文写作输入盒与 @ 浮层：参考 Codex 的中性材质，仅作用于写作输入区 ---------- */
+
+.official-document-composer-slot {
+  position: relative;
+  width: 100%;
+  margin-bottom: 26px;
+}
+
+.official-document-composer {
+  --composer-ink: #484848;
+  --composer-muted: #8f8f8f;
+  --composer-border: #ebebeb;
+  position: relative;
+  display: grid;
+  width: 100%;
+  border: 1px solid var(--composer-border);
+  border-radius: 24px;
+  background: var(--xs-surface);
+  color: var(--composer-ink);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 3%);
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.official-document-composer:focus-within {
+  border-color: #d4d4d4;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 4%);
+}
+
+.official-document-composer[data-busy] {
+  border-color: var(--composer-border);
+}
+
+.official-document-composer__input {
+  display: block;
+  width: 100%;
+  padding: 14px 12px 4px;
+  color: #252525;
+  border: 0;
+  border-radius: 24px 24px 0 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 22px;
+  resize: none;
+  scrollbar-width: thin;
+}
+
+/* 焦点态由整个输入盒承担（:focus-within），内层文本域不再单独画一圈全局焦点环 */
+.official-document-composer__input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.official-document-composer__input::placeholder {
+  color: #a6a6a6;
+}
+
+.official-document-composer__input:disabled {
+  color: var(--composer-muted);
+  cursor: not-allowed;
+}
+
+/* 工具条：左边是 + 号与本轮引用，右边只有一个发送 */
+.official-document-composer__toolbar {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px 8px;
+}
+
+.official-document-composer__lead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.official-document-composer__tail {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* + 号是行内次级动作：28px、幽灵、真圆形 */
+.official-document-composer__plus.ant-btn {
+  color: #252525;
+  box-shadow: none;
+}
+
+.official-document-composer__plus.ant-btn:hover:not(:disabled) {
+  color: #161616;
+  background: #f5f5f5;
+}
+
+/* 压过页面通用 icon-only 尺寸，保持 +、发送与停止为正圆。 */
+.official-document-composer .official-document-composer__toolbar .ant-btn.ant-btn-circle {
+  width: var(--xs-control-height-sm);
+  height: var(--xs-control-height-sm);
+  min-width: var(--xs-control-height-sm);
+  border: 0;
+  box-shadow: none;
+}
+
+.official-document-composer__send.ant-btn-primary:not(:disabled) {
+  color: #fff;
+  background: #252525;
+}
+
+.official-document-composer__send.ant-btn-primary:hover:not(:disabled) {
+  background: #424242;
+}
+
+.official-document-composer__send.ant-btn-primary:disabled {
+  color: #bcbcbc;
+  background: #f3f3f3;
+}
+
+.official-document-composer__stop.ant-btn {
+  color: #fff;
+  background: #f47932;
+}
+
+.official-document-composer__stop.ant-btn:hover {
+  color: #fff;
+  background: #e96b24;
+}
+
+.official-document-composer__footnote {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 100%;
+  margin: 0;
+  color: #8f8f8f;
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.official-document-composer[data-mode="chat"] .official-document-composer__input {
+  font-size: var(--xs-fs-control);
+}
+
+.official-document-composer-slot:has(.official-document-composer[data-mode="chat"]) {
+  margin-bottom: 4px;
+}
+
+.official-document-composer[data-mode="chat"] ~ .official-document-composer__footnote {
+  display: none;
+}
+
+.official-document-composer__scroll-to-bottom.ant-btn {
+  position: absolute;
+  z-index: 4;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  color: var(--xs-text-2);
+  border: 1px solid var(--xs-border);
+  background: var(--xs-surface);
+  box-shadow: var(--xs-shadow-overlay);
+  transform: translateX(-50%);
+}
+
+.official-document-composer__scroll-to-bottom.ant-btn:hover {
+  color: var(--xs-primary);
+  border-color: var(--xs-border-strong);
+}
+
+/* ---------- 工具条上的芯片：本轮引用是蓝的，参考资料是灰的 ---------- */
+
+.official-document-compose__chip {
+  display: inline-flex;
+  max-width: 260px;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  height: var(--xs-control-height-sm);
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface-soft);
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+}
+
+.official-document-compose__chip[data-tone="reference"] {
+  border-color: #cfe0fb;
+  background: var(--xs-info-soft);
+  color: var(--xs-primary-2);
+}
+
+.official-document-compose__chip[data-tone="error"] {
+  border-color: #f7cfcf;
+  background: #fff4f4;
+  color: var(--xs-danger-ink);
+}
+
+.official-document-compose__chip svg {
+  flex: none;
+}
+
+.official-document-compose__chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__chip em {
+  color: var(--xs-text-3);
+  font-style: normal;
+}
+
+.official-document-compose__chip button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  place-items: center;
+  color: inherit;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.official-document-compose__chip button:hover:not(:disabled) {
+  background: rgba(8, 26, 58, 0.08);
+  opacity: 1;
+}
+
+/* ---------- @ 浮层 ---------- */
+
+.official-document-compose__mentions {
+  position: absolute;
+  z-index: 6;
+  bottom: calc(100% + 8px);
+  /* 负 1px 对齐输入盒的外边缘：浮层和输入盒必须是同一条竖线 */
+  left: -1px;
+  right: -1px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--composer-border);
+  border-radius: 20px;
+  background: var(--xs-surface);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 2%);
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #e5e5e5 transparent;
+}
+
+.official-document-compose__mentions::-webkit-scrollbar {
+  width: 10px;
+}
+
+.official-document-compose__mentions::-webkit-scrollbar-thumb {
+  border: 2px solid #fff;
+  border-radius: 10px;
+  background: #e5e5e5;
+}
+
+.official-document-compose__mention-group + .official-document-compose__mention-group {
+  margin-top: 8px;
+}
+
+.official-document-compose__mention-title {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--composer-muted);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-text);
+  line-height: 20px;
+}
+
+.official-document-compose__mention-item {
+  display: flex;
+  width: 100%;
+  height: 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 15px;
+  background: transparent;
+  color: var(--composer-ink);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+  line-height: 20px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.official-document-compose__mention-item[data-active] {
+  background: #f5f5f5;
+}
+
+.official-document-compose__mention-item:disabled {
+  color: #c5c5c5;
+  cursor: not-allowed;
+}
+
+.official-document-compose__mention-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  color: inherit;
+}
+
+.official-document-compose__mention-icon img,
+.official-document-compose__mention-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.official-document-compose__mention-label {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  font-size: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__mention-note {
+  min-width: 0;
+  overflow: hidden;
+  color: #a0a0a0;
+  font-size: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.official-document-compose__mention-empty {
+  margin: 0;
+  padding: 12px 8px;
+  color: var(--composer-muted);
+  font-size: var(--xs-fs-control);
+}
+
+@media (max-width: 640px) {
+  .official-document-compose__mention-item {
+    height: 36px;
+    border-radius: 18px;
+  }
+
+  .official-document-compose__chip {
+    max-width: 160px;
+  }
+}

@@ -595,4 +595,359 @@ describe("dataHubAskDataPresenter", () => {
 
     expect(turn.clarifications).toEqual([]);
   });
+
+  it("keeps one copy when the result event resends the streamed answer under a new replyId", () => {
+    const turn = createDataHubAskTurn(
+      "本月收入是多少？",
+      [
+        { type: "text", data: "本月收入为 128 万元，", replyId: "reply-1", modelCallIndex: 1 },
+        { type: "text", data: "同比增长 12%。", replyId: "reply-1", modelCallIndex: 1 },
+        {
+          type: "text",
+          data: "本月收入为 128 万元，同比增长 12%。",
+          replyId: "reply-2",
+          modelCallIndex: 1
+        },
+        { type: "done", data: { mode: "ask" } }
+      ],
+      "done"
+    );
+
+    expect(turn.answerBlocks).toEqual([
+      expect.objectContaining({ content: "本月收入为 128 万元，同比增长 12%。" })
+    ]);
+    expect(turn.assistantContent).toBe("本月收入为 128 万元，同比增长 12%。");
+  });
+
+  it("collapses a whole-answer resend that lands inside the same model call", () => {
+    const turn = createDataHubAskTurn(
+      "本月收入是多少？",
+      [
+        { type: "text", data: "本月收入为 128 万元，", replyId: "reply-1", modelCallIndex: 1 },
+        { type: "text", data: "同比增长 12%。", replyId: "reply-1", modelCallIndex: 1 },
+        {
+          type: "text",
+          data: "本月收入为 128 万元，同比增长 12%。",
+          replyId: "reply-1",
+          modelCallIndex: 1
+        },
+        { type: "done", data: { mode: "ask" } }
+      ],
+      "done"
+    );
+
+    expect(turn.answerBlocks).toHaveLength(1);
+    expect(turn.assistantContent).toBe("本月收入为 128 万元，同比增长 12%。");
+  });
+
+  it("keeps a single copy when an orchestration root publishes the same conclusion twice", () => {
+    const turn = createDataHubAskTurn(
+      "对比华东华北业绩",
+      [
+        {
+          type: "text",
+          data: "华东区域销售额领先，占比 38%。",
+          replyId: "reply-1",
+          modelCallIndex: 1
+        },
+        {
+          type: "text",
+          data: "**华东区域销售额领先，占比 38%。**",
+          replyId: "reply-2",
+          modelCallIndex: 2
+        },
+        { type: "done", data: { mode: "agent", adaptiveTeam: true, summary: "均已完成" } }
+      ],
+      "done"
+    );
+
+    expect(turn.answerBlocks).toHaveLength(1);
+    expect(turn.assistantContent).toBe("华东区域销售额领先，占比 38%。");
+  });
+
+  it("shows the rag summary once when done repeats the streamed text", () => {
+    const turn = createDataHubAskTurn(
+      "审批流程？",
+      [
+        { type: "text", data: "审批需经过部门和法务审核。", replyId: "reply-1" },
+        {
+          type: "done",
+          data: {
+            mode: "rag",
+            askKnowledge: true,
+            summary: "审批需经过部门和法务审核。"
+          }
+        }
+      ],
+      "done"
+    );
+
+    expect(turn.answerBlocks).toEqual([
+      expect.objectContaining({ content: "审批需经过部门和法务审核。" })
+    ]);
+  });
+
+  it("keeps every distinct model-call block of a multi-step answer", () => {
+    const turn = createDataHubAskTurn(
+      "分区域说明业绩",
+      [
+        {
+          type: "text",
+          data: "华东区域销售额领先，占比 38%。",
+          replyId: "reply-1",
+          modelCallIndex: 1
+        },
+        {
+          type: "text",
+          data: "华北区域同比下滑 8%，需要关注。",
+          replyId: "reply-2",
+          modelCallIndex: 2
+        },
+        { type: "done", data: { mode: "agent", adaptiveTeam: true, summary: "均已完成" } }
+      ],
+      "done"
+    );
+
+    expect(turn.answerBlocks.map((block) => block.content)).toEqual([
+      "华东区域销售额领先，占比 38%。",
+      "华北区域同比下滑 8%，需要关注。"
+    ]);
+  });
+});
+
+describe("buildDataHubBusinessTrace 查询过程", () => {
+  // 顶部 import 另有 agent 在动，这里只在文件末尾追加，符号按需动态取。
+  async function presenter() {
+    return import("./dataHubAskDataPresenter");
+  }
+
+  const cubeTableEvent: DataHubStreamEvent = {
+    type: "table",
+    data: {
+      columns: [
+        { name: "Contract.partyB", title: "合同主数据清单，记录合同编号、名称。合同乙方单位名称" },
+        { name: "Contract.count", title: "合同主数据清单，记录合同编号、名称。记录数", type: "number" }
+      ],
+      rows: [
+        { "Contract.partyB": "永安镇人民政府", "Contract.count": 2 },
+        { "Contract.partyB": "双流区水务局", "Contract.count": 1 }
+      ],
+      totalRows: 3,
+      tableComment: "合同主数据清单，记录合同编号、名称、年度、签约双方及合同金额（万元）",
+      annotation: {
+        measures: {
+          "Contract.count": {
+            title: "合同主数据清单，记录合同编号、名称。记录数",
+            shortTitle: "记录数",
+            type: "number"
+          }
+        },
+        dimensions: {
+          "Contract.partyB": {
+            title: "合同主数据清单，记录合同编号、名称。合同乙方单位名称",
+            shortTitle: "合同乙方单位名称"
+          },
+          "Contract.partyA": {
+            title: "合同主数据清单，记录合同编号、名称。合同甲方单位名称"
+          }
+        }
+      },
+      query: {
+        measures: ["Contract.count"],
+        dimensions: ["Contract.partyB"],
+        filters: [
+          {
+            member: "Contract.partyA",
+            operator: "contains",
+            values: ["善治数字科技（成都）有限公司"]
+          },
+          { member: "Contract.unnamedColumn", operator: "contains", values: ["永安镇"] }
+        ]
+      }
+    }
+  } as DataHubStreamEvent;
+
+  it("carries the query structure a readable narrative needs", async () => {
+    const { buildDataHubBusinessTrace, createDataHubAskTurn } = await presenter();
+    const turn = createDataHubAskTurn(
+      "善治数字科技签了多少合同",
+      [
+        {
+          type: "data_source_selected",
+          data: { datasourceId: 1000002, datasourceName: "合同数据系统" }
+        } as DataHubStreamEvent,
+        cubeTableEvent,
+        { type: "done", data: { mode: "ask", summary: "共 3 份合同。" } } as DataHubStreamEvent
+      ],
+      "done"
+    );
+
+    const trace = buildDataHubBusinessTrace(turn, "善治数字科技签了多少合同", "ASK_DATA");
+
+    expect(trace.queries).toEqual([
+      {
+        dataSource: "合同数据系统",
+        // groupLabel 是整段表注释，取第一个逗号前的部分当表名。
+        table: "合同主数据清单",
+        dimensions: ["合同乙方单位名称"],
+        measures: [{ label: "记录数", aggregation: "计数" }],
+        filters: ["合同甲方单位名称包含“善治数字科技（成都）有限公司”"],
+        time: [],
+        rows: 3,
+        // 「得到 3 行结果」等于什么都没说，叙事要的是哪几家、各多少。
+        rowKind: "grouped",
+        preview: [
+          { label: "永安镇人民政府", value: "2 条" },
+          { label: "双流区水务局", value: "1 条" }
+        ]
+      }
+    ]);
+  });
+
+  it("drops a filter it cannot name instead of writing 业务字段 1", async () => {
+    const { buildDataHubBusinessTrace, createDataHubAskTurn } = await presenter();
+    const turn = createDataHubAskTurn("善治数字科技签了多少合同", [cubeTableEvent], "done");
+
+    const trace = buildDataHubBusinessTrace(turn, "善治数字科技签了多少合同", "ASK_DATA");
+
+    expect(trace.filters).toEqual(["合同甲方单位名称包含“善治数字科技（成都）有限公司”"]);
+    expect(JSON.stringify(trace)).not.toContain("业务字段");
+  });
+
+  it("still reports the data source and row count without a cube query", async () => {
+    const { buildDataHubBusinessTrace, createDataHubAskTurn } = await presenter();
+    const turn = createDataHubAskTurn(
+      "本月销售额",
+      [
+        {
+          type: "data_source_selected",
+          data: { datasourceId: 7, datasourceName: "生产销售数据" }
+        } as DataHubStreamEvent,
+        {
+          type: "table",
+          data: {
+            columns: [
+              { name: "region", title: "区域" },
+              { name: "revenue", title: "销售额（万元）", type: "number" }
+            ],
+            rows: [{ region: "华东", revenue: 486.2 }],
+            totalRows: 4
+          }
+        } as DataHubStreamEvent
+      ],
+      "done"
+    );
+
+    const trace = buildDataHubBusinessTrace(turn, "本月销售额", "ASK_DATA");
+
+    expect(trace.queries).toEqual([
+      {
+        dataSource: "生产销售数据",
+        table: undefined,
+        dimensions: [],
+        measures: [],
+        filters: [],
+        time: [],
+        rows: 4
+      }
+    ]);
+  });
+
+  it("previews the top rows with the unit taken from the measure name", async () => {
+    const { buildDataHubBusinessTrace, createDataHubAskTurn } = await presenter();
+    const turn = createDataHubAskTurn(
+      "各区域销售额",
+      [
+        {
+          type: "data_source_selected",
+          data: { datasourceId: 3, datasourceName: "生产销售数据" }
+        } as DataHubStreamEvent,
+        {
+          type: "table",
+          data: {
+            columns: [
+              { name: "Sales.region", title: "销售明细表，记录各区域销售额。区域" },
+              {
+                name: "Sales.revenue",
+                title: "销售明细表，记录各区域销售额。销售额（万元）",
+                type: "number"
+              }
+            ],
+            rows: [
+              { "Sales.region": "华南", "Sales.revenue": 331.7 },
+              { "Sales.region": "华东", "Sales.revenue": 486.2 }
+            ],
+            totalRows: 2,
+            annotation: {
+              measures: {
+                "Sales.revenue": {
+                  title: "销售明细表，记录各区域销售额。销售额（万元）",
+                  shortTitle: "销售额（万元）",
+                  type: "sum"
+                }
+              },
+              dimensions: {
+                "Sales.region": {
+                  title: "销售明细表，记录各区域销售额。区域",
+                  shortTitle: "区域"
+                }
+              }
+            },
+            query: { measures: ["Sales.revenue"], dimensions: ["Sales.region"] }
+          }
+        } as DataHubStreamEvent
+      ],
+      "done"
+    );
+
+    const trace = buildDataHubBusinessTrace(turn, "各区域销售额", "ASK_DATA");
+
+    // 降序，销售额最高的排在最前面。
+    expect(trace.queries?.[0].preview).toEqual([
+      { label: "华东", value: "486.2 万元" },
+      { label: "华南", value: "331.7 万元" }
+    ]);
+    expect(trace.queries?.[0].rowKind).toBe("grouped");
+  });
+
+  it("reads a one-row one-value result as a single number", async () => {
+    const { buildDataHubBusinessTrace, createDataHubAskTurn } = await presenter();
+    const turn = createDataHubAskTurn(
+      "上半年合同金额",
+      [
+        {
+          type: "table",
+          data: {
+            columns: [
+              {
+                name: "Contract.amount",
+                title: "合同主数据清单，记录合同金额。合同金额（万元）",
+                type: "number"
+              }
+            ],
+            rows: [{ "Contract.amount": 1242.2 }],
+            totalRows: 1,
+            annotation: {
+              measures: {
+                "Contract.amount": {
+                  title: "合同主数据清单，记录合同金额。合同金额（万元）",
+                  shortTitle: "合同金额（万元）",
+                  type: "sum"
+                }
+              }
+            },
+            query: { measures: ["Contract.amount"], dimensions: [] }
+          }
+        } as DataHubStreamEvent
+      ],
+      "done"
+    );
+
+    const trace = buildDataHubBusinessTrace(turn, "上半年合同金额", "ASK_DATA");
+
+    expect(trace.queries?.[0].rowKind).toBe("single");
+    expect(trace.queries?.[0].preview).toEqual([
+      { label: "合同金额（万元）", value: "1,242.2 万元" }
+    ]);
+  });
 });

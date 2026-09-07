@@ -1,9 +1,8 @@
 export { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
-export {
-  DataHubCitationChips,
-  citationDisplayTitle,
-  citationLocationText
-} from "./DataHubCitationChips";
+export { DataHubCitationChips } from "./DataHubCitationChips";
+export { citationDisplayTitle, citationLocationText } from "./citationLabels";
+export { DataHubCitationFragments } from "./DataHubCitationFragments";
+export type { DataHubCitationFragmentsProps } from "./DataHubCitationFragments";
 export { DataHubResultTable } from "./DataHubResultTable";
 export { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 export { DataHubExecutionStatus } from "./DataHubExecutionStatus";

@@ -740,4 +740,73 @@ describe("DataHubExecutionPanel", () => {
       screen.queryByText("本次响应没有独立的路由、ReAct 或工具调用事件。")
     ).not.toBeInTheDocument();
   });
+
+  it("hides main-session text that the result area already shows as the answer", () => {
+    const answerEvents: DataHubStreamEvent[] = [
+      {
+        type: "agent_start",
+        agentName: "问数智能体",
+        sessionId: "answer-main",
+        chatId: "answer-chat"
+      },
+      {
+        type: "text",
+        agentName: "问数智能体",
+        sessionId: "answer-main",
+        chatId: "answer-chat",
+        content: "**本月收入为 128 万元**，同比增长 12%。"
+      },
+      {
+        type: "activity",
+        agentName: "问数智能体",
+        sessionId: "answer-main",
+        chatId: "answer-chat",
+        content: {
+          activityId: "model:understand",
+          kind: "model",
+          action: "model_analysis",
+          label: "理解数据问题",
+          status: "success",
+          summary: "问题分析完成"
+        }
+      },
+      {
+        type: "done",
+        agentName: "问数智能体",
+        sessionId: "answer-main",
+        chatId: "answer-chat",
+        content: {},
+        finished: true
+      }
+    ];
+    const projection = projectDataHubExecutionEvents(answerEvents, {
+      mainSessionId: "answer-main",
+      fallbackAgentName: "问数智能体"
+    });
+
+    const { unmount } = render(
+      <DataHubExecutionPanel
+        projection={projection}
+        title="问数执行过程"
+        preferDirectMainExecution
+        answerText="本月收入为 128 万元，同比增长 12%。"
+      />
+    );
+
+    expect(screen.queryByText(/本月收入为 128 万元/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "模型活动：理解数据问题" })
+    ).toBeInTheDocument();
+
+    unmount();
+    render(
+      <DataHubExecutionPanel
+        projection={projection}
+        title="问数执行过程"
+        preferDirectMainExecution
+      />
+    );
+
+    expect(screen.getByText(/本月收入为 128 万元/)).toBeInTheDocument();
+  });
 });

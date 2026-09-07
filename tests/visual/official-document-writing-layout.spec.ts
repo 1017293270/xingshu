@@ -70,7 +70,7 @@ const DOCUMENT = `
   <div class="template-document">
     <article class="template-document__page">
       ${DOCUMENT_LINES.map(([role, text], index) => `
-        <p class="template-document__line" data-role="${role}"${index === 10 ? " data-active" : ""}>${text}</p>
+        <p class="official-document-line template-document__line" data-role="${role}"${index === 10 ? " data-active" : ""}>${text}</p>
       `).join("")}
     </article>
   </div>`;
@@ -78,9 +78,7 @@ const DOCUMENT = `
 function templateStage(mode: "write" | "calibrate") {
   return `
   <div class="official-document-app" style="height: 900px">
-    <aside class="official-document-rail"></aside>
-    <div class="official-document-app__main">
-      <header class="official-document-app__bar"></header>
+    <header class="official-document-app__bar"></header>
       <div class="official-document-app__workspace" data-stage="template">
         <div class="official-document-calibration" data-mode="${mode}">
           <div class="official-document-calibration-workspace">
@@ -103,7 +101,6 @@ function templateStage(mode: "write" | "calibrate") {
           </div>
         </div>
       </div>
-    </div>
   </div>`;
 }
 
@@ -166,18 +163,24 @@ test("真实 React 页面可通过 @ 搜索并选择草稿", async ({ page }) =>
   const input = page.getByRole("textbox", { name: "公文写作要求" });
   await expect(input).toBeVisible();
   await expect(page.getByRole("heading", { name: "想写一篇什么公文？" })).toBeVisible();
-  const box = page.locator(".official-document-compose__box");
-  expect((await box.boundingBox())!.width).toBeLessThanOrEqual(1120);
+  const box = page.locator(".official-document-composer");
+  const boxBox = (await box.boundingBox())!;
+  expect(boxBox.width).toBeLessThanOrEqual(1120);
   await input.pressSequentially("@");
-  await expect(page.getByText("季度经营通报", { exact: true })).toBeVisible();
+  const menu = page.getByRole("listbox", { name: "引用与动作" });
+  await expect(menu).toBeVisible();
+  // 浮层与输入盒同宽并浮在它正上方，和 Codex 一样
+  const menuBox = (await menu.boundingBox())!;
+  expect(Math.round(menuBox.width)).toBe(Math.round(boxBox.width));
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(boxBox.y + 1);
   await page.screenshot({ path: "outputs/report-writing/compose-app-mention-1440.png", fullPage: false });
 
-  await page.getByText("季度经营通报", { exact: true }).click();
-  await expect(page.getByLabel("已选择参考草稿")).toContainText("@季度经营通报");
+  await menu.getByRole("option", { name: /季度经营通报/ }).click();
+  await expect(page.getByLabel("本轮引用", { exact: true })).toContainText("@季度经营通报");
   await input.fill("撰写2026年第三季度经营工作通报");
   const submit = page.getByRole("button", { name: "生成完整公文" });
   await expect(submit).toBeEnabled();
-  await expect(submit).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(submit).toHaveCSS("background-color", "rgb(37, 37, 37)");
   await page.screenshot({ path: "outputs/report-writing/compose-app-selected-1440.png", fullPage: false });
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -273,9 +276,7 @@ const CHAT = `
 function draftStage(chatOpen: boolean) {
   return `
   <div class="official-document-app" style="height: 900px">
-    <aside class="official-document-rail"></aside>
-    <div class="official-document-app__main">
-      <header class="official-document-app__bar"></header>
+    <header class="official-document-app__bar"></header>
       <div class="official-document-app__workspace" data-stage="draft">
         <div class="official-document-draft-workspace"${chatOpen ? " data-chat-open" : ""}>
           <div class="structured-draft-editor-frame">
@@ -287,7 +288,6 @@ function draftStage(chatOpen: boolean) {
           ${CHAT}
         </div>
       </div>
-    </div>
   </div>`;
 }
 

@@ -13,6 +13,8 @@ import {
   buildOfficialDocumentReferenceWritingPlan,
   buildOfficialDocumentPreviewLines,
   mapResearchResultsToReferenceSections,
+  MAX_REFERENCE_MATERIALS_CHARS,
+  MAX_REFERENCE_MATERIAL_CHARS,
   parseOfficialDocumentReferenceGeneration,
   stripOfficialDocumentAnchors
 } from "./officialDocumentFullDraft";
@@ -208,6 +210,58 @@ describe("reference draft generation", () => {
     expect(outputRules.followConfirmedOutline).toContain("用户已确认的写作大纲");
     expect(outputRules.followConfirmedOutline).toContain("必须直接回答该节的 purpose 与 keyPoints");
     expect(outputRules.followConfirmedOutline).toContain("不得增删或调换章节");
+  });
+
+  it("参考资料随上下文注入，并被单文件与总量两道上限压住", () => {
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "b1", order: 0, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知",
+      referenceMaterials: [
+        { name: "隐患台账.md", content: "上季度共发现隐患 18 处。" },
+        { name: "超长材料.txt", content: "字".repeat(MAX_REFERENCE_MATERIAL_CHARS + 2_000) },
+        { name: "再来一份.txt", content: "字".repeat(MAX_REFERENCE_MATERIAL_CHARS) },
+        { name: "还有一份.txt", content: "字".repeat(MAX_REFERENCE_MATERIAL_CHARS) },
+        { name: "放不下了.txt", content: "字".repeat(MAX_REFERENCE_MATERIAL_CHARS) },
+        { name: "空白.txt", content: "   " }
+      ]
+    });
+
+    const { referenceMaterials, outputRules } = plan.writingContext as {
+      referenceMaterials: Array<{ name: string; content: string }>;
+      outputRules: { referenceMaterialsRule?: string };
+    };
+    expect(referenceMaterials[0]).toEqual({ name: "隐患台账.md", content: "上季度共发现隐患 18 处。" });
+    expect(referenceMaterials[1].content).toHaveLength(MAX_REFERENCE_MATERIAL_CHARS);
+    // 总量用尽之后的材料整份不进上下文，空白材料同样不占位
+    const total = referenceMaterials.reduce((sum, material) => sum + material.content.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_REFERENCE_MATERIALS_CHARS);
+    expect(referenceMaterials.map((material) => material.name)).not.toContain("放不下了.txt");
+    expect(referenceMaterials.map((material) => material.name)).not.toContain("空白.txt");
+    expect(outputRules.referenceMaterialsRule).toBe(
+      "referenceMaterials 是用户本轮上传的参考资料，可作为事实与素材来源引用"
+    );
+  });
+
+  it("没有参考资料时上下文里既没有材料也没有那条规则", () => {
+    const plan = buildOfficialDocumentReferenceWritingPlan({
+      referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },
+      content: referenceContent([
+        { id: "b1", order: 0, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
+      ]),
+      templateNodes,
+      userRequirement: "撰写2026年安全生产通知"
+    });
+
+    const context = plan.writingContext as {
+      referenceMaterials?: unknown;
+      outputRules: { referenceMaterialsRule?: string };
+    };
+    expect(context.referenceMaterials).toBeUndefined();
+    expect(context.outputRules.referenceMaterialsRule).toBeUndefined();
   });
 
   it("有大纲时仍为参考稿首个标题前的引言留一格无标题正文节", () => {

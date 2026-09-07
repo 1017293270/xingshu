@@ -1,5 +1,6 @@
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import { normalizeDataHubTableResult } from "@/services/dataHubAskDataPresenter";
+import { dedupeDataHubAnswerBlocks } from "@/services/dataHubAnswerDedupe";
 import type {
   AskArtifactRef,
   DataHubContentBlock,
@@ -206,7 +207,8 @@ export function getDataHubChildAnswerBlocks(
     }
   }
 
-  return blocks;
+  // 子会话完成时会把去掉思考标签的结论整段重发一遍，同一段话在这里会收到两份。
+  return dedupeDataHubAnswerBlocks(blocks);
 }
 
 function createTarget(

@@ -1,7 +1,8 @@
 import { chromium } from "@playwright/test";
 
 // 用法：先启动 npm run dev，再执行 node scripts/screenshot-writing-module.mjs
-// 截公文写作模块：模板库列表页、草稿箱列表页与两个详情页，覆盖 1440/1672/1920/390 四档。
+// 截公文写作模块：模板库网格页、草稿箱列表页与两个详情页，覆盖 1440/1672/1920/390 四档。
+// 写作台本身（输入盒、@ 浮层、模板面板）由 scripts/screenshot-writing-compose.mjs 负责。
 // 所有 /api/** 请求都被本脚本拦截，不会打到真实后端。
 const dir = "outputs/ui-audit";
 const base = process.env.XS_QA_BASE_URL ?? "http://127.0.0.1:5173";
@@ -164,11 +165,13 @@ async function shot(name, width, height, path, readySelector, extra) {
 }
 
 const listReady = ".official-document-list__rows .official-document-row";
+// 模板库改成卡片网格之后，它自己的就绪信号也换了一个
+const gridReady = ".official-document-templates__grid";
 
-await shot("writing-templates-1440", 1440, 900, "/writing/templates", listReady);
-await shot("writing-templates-1672", 1672, 1000, "/writing/templates", listReady);
-await shot("writing-templates-1920", 1920, 1080, "/writing/templates", listReady);
-await shot("writing-templates-390", 390, 844, "/writing/templates", listReady);
+await shot("writing-templates-1440", 1440, 900, "/writing/templates", gridReady);
+await shot("writing-templates-1672", 1672, 1000, "/writing/templates", gridReady);
+await shot("writing-templates-1920", 1920, 1080, "/writing/templates", gridReady);
+await shot("writing-templates-390", 390, 844, "/writing/templates", gridReady);
 await shot("writing-drafts-1440", 1440, 900, "/writing/drafts", listReady);
 await shot("writing-drafts-390", 390, 844, "/writing/drafts", listReady);
 await shot(

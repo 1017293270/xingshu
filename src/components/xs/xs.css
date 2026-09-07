@@ -198,13 +198,14 @@
   color: var(--xs-surface);
   border-radius: var(--xs-radius-control);
   background: var(--xs-primary-2);
-  box-shadow: var(--xs-shadow-soft);
   text-decoration: none;
   transform: translateY(-160%);
   transition: transform var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
+/* 投影只在真正露出时才画：藏在视口上方时软投影会在页顶漏出一道蓝边 */
 .xs-skip-link:focus-visible {
+  box-shadow: var(--xs-shadow-soft);
   transform: translateY(0);
 }
 

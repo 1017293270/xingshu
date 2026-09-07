@@ -76,6 +76,10 @@ import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializat
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
+import {
+  dataHubRootAnsweredAfterChildren,
+  dedupeDataHubAnswerBlocks
+} from "@/services/dataHubAnswerDedupe";
 import { AnalysisCitationPreview } from "./AnalysisCitationPreview";
 import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
@@ -1695,16 +1699,16 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 ? getDataHubAskTableResults(executionProjection, isAskMode)
                 : [];
               const visibleTables = askTables.length > 0 ? askTables : turnAsk.tableResults;
-              const childAnswerBlocks = isAgentMode
-                ? getDataHubChildAnswerBlocks(executionProjection).filter((block) =>
-                    !turnAsk.answerBlocks.some(
-                      (answer) =>
-                        answer.content.includes(block.content) ||
-                        block.content.includes(answer.content)
-                    )
-                  )
-                : [];
-              const visibleAnswerBlocks = [...turnAsk.answerBlocks, ...childAnswerBlocks];
+              // 编排根在子结论之后给出的回答就是对它们的综合改写，两者并列等于同一结论说两遍。
+              // 根只在派活前说过开场白（或干脆没说）时，子结论仍要顶上来，否则结果区只剩一句「我来帮您查…」。
+              const childAnswerBlocks =
+                isAgentMode && !dataHubRootAnsweredAfterChildren(turn.events)
+                  ? dedupeDataHubAnswerBlocks(getDataHubChildAnswerBlocks(executionProjection))
+                  : [];
+              const visibleAnswerBlocks = dedupeDataHubAnswerBlocks([
+                ...turnAsk.answerBlocks,
+                ...childAnswerBlocks
+              ]);
               const hasRenderableResult = Boolean(
                 (supportsClarification && turnAsk.clarifications.length) ||
                 (!isDocumentLookupMode && visibleAnswerBlocks.length) ||
@@ -1767,11 +1771,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 : displayStatus === "streaming"
                   ? "loading"
                   : "empty";
+              // 复制的必须与看到的是同一份：直接取渲染用的块，别再拼一次原始文本。
               const answerText = stripMarkdownTables(
-                [
-                  turnAsk.assistantContent || turnAsk.done?.summary || "",
-                  ...childAnswerBlocks.map((block) => block.content)
-                ]
+                (visibleAnswerBlocks.length > 0
+                  ? visibleAnswerBlocks.map((block) => block.content)
+                  : [turnAsk.assistantContent || turnAsk.done?.summary || ""]
+                )
                   .filter(Boolean)
                   .join("\n\n")
               );
@@ -1791,23 +1796,27 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       .map((session) => session.label || session.agentName || "子智能体")
                       .filter((name) => !name.includes("数据源选择"))
                   : [],
-                isAgentMode
-                  ? {
-                      tableResults: visibleTables,
-                      citationDocuments: [
-                        ...executionProjection.mainSession.citationDocuments,
-                        ...executionProjection.subagentSessions.flatMap(
-                          (session) => session.citationDocuments
-                        )
-                      ],
-                      dataSources: [
-                        ...executionProjection.mainSession.dataSources,
-                        ...executionProjection.subagentSessions.flatMap(
-                          (session) => session.dataSources
-                        )
-                      ]
-                    }
-                  : undefined
+                {
+                  // 数据源选择本身是子智能体，事件带 parentSessionId，不会落进 turnAsk.dataSources；
+                  // 四种模式都从执行投影里取，否则「怎么查」写不出数据源名。
+                  dataSources: [
+                    ...executionProjection.mainSession.dataSources,
+                    ...executionProjection.subagentSessions.flatMap(
+                      (session) => session.dataSources
+                    )
+                  ],
+                  ...(isAgentMode
+                    ? {
+                        tableResults: visibleTables,
+                        citationDocuments: [
+                          ...executionProjection.mainSession.citationDocuments,
+                          ...executionProjection.subagentSessions.flatMap(
+                            (session) => session.citationDocuments
+                          )
+                        ]
+                      }
+                    : {})
+                }
               );
               const answerPreamble = buildDataHubAnswerPreamble(businessKind, businessTrace, answerText);
               const traceStatus =
@@ -1906,6 +1915,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           // 单智能体模式的过程就是主智能体那条线性步骤，
                           // 嵌套的辅助子智能体挂在它下面，而不是反过来切成编排画布
                           preferDirectMainExecution={!isAgentMode}
+                          // 正式回答已经在结果区完整呈现，过程区不再复述同一段正文
+                          answerText={turnAsk.assistantContent}
                           showMainDocumentBlocks
                           onCitationOpen={(content) => {
                             const citation = normalizeExecutionDocument(content);

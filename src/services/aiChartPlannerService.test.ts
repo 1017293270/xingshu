@@ -4,6 +4,7 @@ import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
   createAiChartPlanRequestSummary,
+  extractAnswerRankingList,
   planAiChart,
   resolveAiChartTables
 } from "./aiChartPlannerService";
@@ -591,6 +592,276 @@ describe("aiChartPlannerService", () => {
 
     expect(plan.dimensionKey).toBe("问题类型");
     expect(series[0]?.data).toEqual([493, 492, 174]);
+  });
+
+  it("charts the answer ranking when no result table reproduces the answer numbers", () => {
+    const question = "与善治签合同数量 Top3 公司";
+    const answer = [
+      "与善治签合同数量 Top3 公司",
+      "",
+      "- **广州思迈特软件有限公司（13 份）**：其中善治作为甲方的有 6 份，作为乙方的有 7 份。",
+      "- **杭州海康威视科技有限公司（5 份）**：5 份合同中善治均为甲方。",
+      "- **成都卓一信息技术有限公司（4 份）**：4 份合同中善治均为乙方。"
+    ].join("\n");
+    const partyBTable = table(
+      [
+        { key: "party_b", title: "乙方单位名称" },
+        { key: "count", title: "记录数", type: "number" }
+      ],
+      [
+        { party_b: "广州思迈特软件有限公司", count: 6 },
+        { party_b: "杭州海康威视科技有限公司", count: 5 },
+        { party_b: "云南蚁象网络科技有限公司", count: 3 }
+      ]
+    );
+    const partyATable = {
+      ...table(
+        [
+          { key: "party_a", title: "甲方单位名称" },
+          { key: "count", title: "记录数", type: "number" }
+        ],
+        [
+          { party_a: "广州思迈特软件有限公司", count: 7 },
+          { party_a: "成都卓一信息技术有限公司", count: 4 }
+        ]
+      ),
+      tableIndex: 1
+    };
+    const chartTables = resolveAiChartTables({ question, tables: [partyBTable, partyATable], answer });
+
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "Table 0 包含 3 行数据，每行有维度（乙方单位名称）和数值（记录数）。",
+        chartType: "bar",
+        allowedTypes: ["bar"],
+        title: "与善治签合同数量 Top3 公司",
+        tableIndex: 0,
+        dimensionKey: "party_b",
+        metricKeys: ["count"]
+      },
+      chartTables
+    );
+    const option = buildGeneratedChartOption(spec!, "bar");
+    const series = option.series as Array<{ data?: unknown[] }>;
+    const xAxis = option.xAxis as { data?: unknown[] };
+
+    expect(spec).toMatchObject({
+      title: "与善治签合同数量 Top3 公司",
+      reason: "图表按回答中的数值绘制，与正文口径一致。",
+      tableTitle: "回答中的排名",
+      dimensionKey: "name",
+      metricKeys: ["value"],
+      allowedTypes: ["bar", "pie"]
+    });
+    expect(xAxis.data).toEqual([
+      "广州思迈特软件有限公司",
+      "杭州海康威视科技有限公司",
+      "成都卓一信息技术有限公司"
+    ]);
+    expect(series[0]?.data).toEqual([13, 5, 4]);
+    expect(spec?.table.columns).toEqual([
+      { key: "name", title: "公司", type: "dimension" },
+      { key: "value", title: "数量（份）", type: "number" }
+    ]);
+  });
+
+  it("keeps the result table when the answer ranking reproduces its values", () => {
+    const question = "咨询类型分布";
+    const answer = [
+      "咨询类型分布",
+      "",
+      "- 物业咨询：18 条",
+      "- 民生咨询：12 条"
+    ].join("\n");
+    const consultTable = table(
+      [
+        { key: "consult_type", title: "咨询类型" },
+        { key: "count", title: "记录数", type: "number" }
+      ],
+      [
+        { consult_type: "物业咨询", count: 18 },
+        { consult_type: "民生咨询", count: 12 }
+      ]
+    );
+    const chartTables = resolveAiChartTables({ question, tables: [consultTable], answer });
+
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "包含咨询类型和记录数，适合柱状图。",
+        chartType: "bar",
+        allowedTypes: ["bar"],
+        title: "咨询类型分布",
+        tableIndex: 0,
+        dimensionKey: "consult_type",
+        metricKeys: ["count"]
+      },
+      chartTables
+    );
+
+    expect(spec).toMatchObject({
+      reason: "包含咨询类型和记录数，适合柱状图。",
+      tableIndex: 0,
+      tableTitle: "结果表 1",
+      dimensionKey: "consult_type",
+      metricKeys: ["count"]
+    });
+  });
+
+  it("charts the result table that reproduces the answer ranking instead of the answer copy", () => {
+    const question = "问题类型咨询量 Top2";
+    const answer = ["- 身份证办理：493 条", "- 居住证办理：492 条"].join("\n");
+    const monthlyTable = table(
+      [
+        { key: "month", title: "月份", type: "time" },
+        { key: "count", title: "记录数", type: "number" }
+      ],
+      [
+        { month: "2025-04", count: 10 },
+        { month: "2025-05", count: 14 }
+      ]
+    );
+    const rankingTable = {
+      ...table(
+        [
+          { key: "problem_type", title: "问题类型" },
+          { key: "count", title: "咨询数量", type: "number" }
+        ],
+        [
+          { problem_type: "身份证办理/补办/换领", count: 493 },
+          { problem_type: "居住证办理/续签/立等可取", count: 492 }
+        ]
+      ),
+      tableIndex: 1
+    };
+    const chartTables = resolveAiChartTables({ question, tables: [monthlyTable, rankingTable], answer });
+
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "按月份展示趋势。",
+        chartType: "line",
+        allowedTypes: ["line"],
+        title: "问题类型咨询量 Top2",
+        tableIndex: 0,
+        dimensionKey: "month",
+        metricKeys: ["count"]
+      },
+      chartTables
+    );
+    const series = buildGeneratedChartOption(spec!, "bar").series as Array<{ data?: unknown[] }>;
+
+    expect(spec).toMatchObject({
+      chartType: "bar",
+      reason: "图表按回答中的数值绘制，与正文口径一致。",
+      tableIndex: 1,
+      tableTitle: "结果表 2",
+      dimensionKey: "problem_type",
+      metricKeys: ["count"]
+    });
+    expect(series[0]?.data).toEqual([493, 492]);
+  });
+
+  it.each([
+    [
+      "numbered amounts",
+      ["合同金额 Top2 单位", "1. 甲单位：1,200.5 万元", "2. 乙单位：980 万元"],
+      {
+        columns: [
+          { key: "name", title: "单位", type: "dimension" },
+          { key: "value", title: "金额（万元）", type: "number" }
+        ],
+        rows: [
+          { name: "甲单位", value: 1200.5 },
+          { name: "乙单位", value: 980 }
+        ],
+        groupLabel: "合同金额 Top2 单位"
+      }
+    ],
+    [
+      "bold percentages",
+      ["区域分布", "- **华东（45.5%）**", "- **华南（30%）**"],
+      {
+        columns: [
+          { key: "name", title: "地区", type: "dimension" },
+          { key: "value", title: "占比（%）", type: "number" }
+        ],
+        rows: [
+          { name: "华东", value: 45.5 },
+          { name: "华南", value: 30 }
+        ],
+        groupLabel: "区域分布"
+      }
+    ],
+    [
+      "bare lines",
+      ["重点客户", "**小治科技**（12 家）", "Senrun 9 家"],
+      {
+        columns: [
+          { key: "name", title: "名称", type: "dimension" },
+          { key: "value", title: "数量（家）", type: "number" }
+        ],
+        rows: [
+          { name: "小治科技", value: 12 },
+          { name: "Senrun", value: 9 }
+        ],
+        groupLabel: "重点客户"
+      }
+    ]
+  ])("parses answer rankings written as %s", (_case, lines, expected) => {
+    expect(extractAnswerRankingList(lines.join("\n"))).toEqual([
+      { ...expected, totalRows: expected.rows.length, source: "answer" }
+    ]);
+  });
+
+  it("ignores answer lists that mix units, repeat names or only state one item", () => {
+    expect(extractAnswerRankingList("- 甲公司：13 份\n- 乙公司：5 家")).toEqual([]);
+    expect(extractAnswerRankingList("- 甲公司：13 份\n- 甲公司：5 份")).toEqual([]);
+    expect(extractAnswerRankingList("- **广州思迈特软件有限公司（13 份）**：其中 6 份为甲方。")).toEqual([]);
+    expect(extractAnswerRankingList("- 统计口径：按签署日期\n- 样本量：716 条")).toEqual([]);
+  });
+
+  it("keeps the answer ranking when the answer restates a single company", () => {
+    const question = "与善治签合同最多的公司";
+    const answer = "- **广州思迈特软件有限公司（13 份）**：其中善治作为甲方的有 6 份。";
+    const contractTable = table(
+      [
+        { key: "party_b", title: "乙方单位名称" },
+        { key: "count", title: "记录数", type: "number" }
+      ],
+      [
+        { party_b: "广州思迈特软件有限公司", count: 6 },
+        { party_b: "杭州海康威视科技有限公司", count: 5 }
+      ]
+    );
+
+    expect(resolveAiChartTables({ question, tables: [contractTable], answer })).toEqual([contractTable]);
+  });
+
+  it("keeps one answer ranking table when the result tables exceed the AI planning limit", () => {
+    const sqlTables = Array.from({ length: 9 }, (_, index) => ({
+      ...table(
+        [
+          { key: "name", title: "项目名称" },
+          { key: "count", title: "记录数", type: "number" }
+        ],
+        [
+          { name: `项目${index + 1}`, count: index + 2 },
+          { name: `项目${index + 1}-B`, count: index + 1 }
+        ]
+      ),
+      tableIndex: index
+    }));
+
+    const summary = createAiChartPlanRequestSummary({
+      question: "各口径统计",
+      tables: sqlTables,
+      answer: "- 甲公司：13 份\n- 乙公司：5 份"
+    });
+
+    expect(summary.tables).toHaveLength(8);
+    expect(summary.tables.filter((candidate) => candidate.title.includes("回答中的排名"))).toHaveLength(1);
   });
 
   it("includes the dominant metric row in the AI sample instead of only the first three rows", () => {

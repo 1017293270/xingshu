@@ -681,3 +681,78 @@ final result: passed for 受控澄清 module scope（契约、交互、三态排
 **Findings**
 - [P1] 上面那批 officialDocument 改动会让 `npm test` 从 16 红涨到 34 红，其中 `OfficialDocumentComposeView.test.tsx` 是整文件挂掉。修的时候先补 mock 导出。
 - [P2] 四档视口截图、真实输入框贴合、端到端手测，三条与上一轮相同，仍未做。
+
+## 模板库视觉改版（2026-09-07）
+
+- 范围：共用 `TemplateGallery`、模板库样式和独立页居中；保留现有模板、上传、详情与本轮引用流程。
+- 视觉：浅冰蓝底、白色文档卡、14px 圆角、统一蓝色文件图标；展示两行名称、原文件名、版本、结构规模、更新时间和可用状态。
+- 交互：名称/文件名搜索、全部/可用/待处理筛选、清空筛选、不可用模板禁用使用；覆盖层打开后聚焦搜索。
+- 修正：固定高度覆盖层按内容计算网格行高，避免窄屏工具栏被模板列表挤压；关闭按钮在移动端右上角。
+- 当前验证：3 个相关组件测试文件共 47 项通过；定向 ESLint、生产构建、视觉测试类型检查通过。构建仍有现有 ECharts 大分块提示。
+- 浏览器回归：`tests/visual/official-document-template-gallery.spec.ts` 通过；两个入口均截图检查 1440、1672、1920、2200、390px，覆盖长名称、错误/分析中状态、搜索、筛选和关闭后焦点恢复；axe 无违规，减少动效模式通过。
+- 截图：`outputs/template-library/library-{width}.png`、`outputs/template-library/overlay-{width}.png`，采用 17 份确定性模板夹具，非生产数据截图。
+- 真实页面：已在现有 `127.0.0.1:5173/writing` 标签页核验 17 份模板、16 份可用、1 份有错误；实际搜索“合同”返回 1 份，待处理返回 1 份，最后恢复全部模板。
+- 边界：本次为前端视觉与交互验收，未执行上传写入、AI 生成、导出或部署，也不代表整个未提交工作树全量测试通过。
+
+
+## 写作输入区与 Codex 参考对齐（2026-09-07）
+
+本轮范围是 `OfficialDocumentComposer` 与 `OfficialDocumentMentionMenu`。依据用户的菜单、输入框截图和后续“颜色可以多丰富一点，手绘一下 svg”，新增四枚本地 SVG；菜单中的业务项仍为模板、参考资料和草稿。
+
+**视觉证据与归一化**
+
+- 原始参考：`/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-14001e80-4857-4e1a-90cd-6714730c17f8.png`（1708×728）、`codex-clipboard-2615e57e-0bb1-4716-bcfb-a636ca70ec31.png`（1668×252）、`codex-clipboard-1059d340-c95c-49f6-afd7-a38ac79da3f7.png`（1050×818）。副本保存在 `outputs/ui-audit/codex-composer/reference-{menu,input,icons}.png`。
+- 参考截图按 0.5 倍归一化；依据文字、边框与控件尺寸推断约为 2 倍像素截图，原始设备倍率未提供。菜单裁切后约 737×320，输入框约 739×100。
+- 实现通过真实 `/writing` 页面渲染，使用本地确定性测试数据。Playwright 的视口是 1440×900、1672×960、1920×1080、390×844；另用 768×900、deviceScaleFactor=1 捕获 736×343 菜单和 736×101 输入框作组件尺寸对照。
+- 全图截图：`outputs/ui-audit/codex-composer/menu-{1440,1672,1920,390}.png`；相同尺寸下另有 `composer-*.png`、`selected-*.png`。
+- 全组件并排对照：`outputs/ui-audit/codex-composer/reference-comparison-final.png`。彩色 SVG 局部对照：`outputs/ui-audit/codex-composer/icon-comparison-final.png`。生成状态与停止按钮：`generating-1440.png`、`stop-detail.png`。内置浏览器截图：`in-app-final.png`。
+- 状态边界：菜单均为展开并选中一项，选中项的业务内容不同；输入框基准为未聚焦空输入。参考输入图含 Codex 的权限、模型和语音控件，本实现采用星数已有的附件、引用、发送/停止；停止按钮另在真实前端生成中状态检查。模板/草稿多一组，因此整体菜单高度不要求等于 Codex 的插件列表。
+
+**对照发现与修正**
+
+- [P1，已修复] 原来的蓝色边框、蓝灰文本与较重投影偏离参考。限定在写作输入组件内采用中性灰边框与字体，菜单 20px 圆角、输入框 24px 圆角，选中背景使用参考图采样的 `#f5f5f5`。
+- [P2，已修复] 第一版截图 `menu-1440-v1.png` 中通用 `.ant-btn-icon-only` 规则把发送按钮撑成 36×28 椭圆。局部提高尺寸规则优先级，最终发送和停止均为 28×28 正圆。
+- [P2，已修复] 第一轮同尺寸对照 `reference-comparison.png` 中菜单字体和分组留白偏大。最终菜单正文为 13px、桌面行高 28px，收紧分组标题内边距；移动端保留 36px 行高。修正后的证据为 `reference-comparison-final.png`。
+- [P2，已修复] 实测 Esc keyup 会重开菜单、键盘切到末行时选中项部分被裁切。用 textarea 的 `onSelect` 同步真实光标变化，并让高亮项按原生 `scrollIntoView({ block: "nearest" })` 滚入可视范围。新增回归用例先复现失败，修复后通过。
+
+**五项视觉核验**
+
+- 字体：复用系统字体与 PingFang SC 回退，正文常规字重、标题中等字重；长标签和说明单行省略，未出现两行挤压。
+- 间距：菜单与输入框同宽同左沿，顶部不越出视口；输入框约 100px 高，底部按钮对齐；全部指定视口无横向溢出。
+- 颜色：白底、浅灰边框和选中底色；蓝紫模板库、橙色资料、蓝色文档、绿色草稿；生成停止为橙色。未改全站品牌 token。
+- 图像：四枚 24×24 viewBox 的独立 SVG，在 18px 槽位中渲染清晰，所有图片实际加载通过；此手绘 SVG 路径由用户本轮明确要求。
+- 文案：保留星数已有模板、参考资料、草稿与生成操作名称；没有把参考截图里的第三方插件项变成业务入口。
+
+**验证**
+
+- 相关 Vitest：2 个文件、42 项通过，含菜单 Esc 回归与停止生成。
+- `npm run build`、本轮 TSX 的 ESLint、`npm run test:visual:typecheck`、`git diff --check` 通过。构建仍提示既有 ECharts 大 chunk。
+- 现有 Playwright `/writing` 搜索并选择草稿用例通过。
+- 本地浏览器检查通过全部五档视口：同宽、视口边界、正圆按钮、SVG 加载、键盘高亮可见、Esc 关闭、搜索/选择、发送可用、多行输入自动增高及内部滚动；另检查生成中的橙色停止按钮与取消恢复输入。
+- 浏览器运行时错误为 0；内置浏览器错误日志为空。未将本地测试数据的检查描述为后端生成/导出验收。
+
+**后续细节**
+
+- [P3] 不同系统的字形抗锯齿和滚动条可见策略会有轻微差异；输入框提示语保留星数业务文案，长度不同于参考。
+
+final result: passed
+
+
+## 报告智写保留星数侧栏（2026-09-07）
+
+- 用户要求：点击“报告智写”后显示星数侧栏，不再进入独立的全屏布局。
+- 将 `/writing` 及模板、草稿子路由嵌入现有 `AppLayout`；沿用主侧栏、选中态、收起/展开和移动端导航抽屉。
+- 写作工作区通过 flex 使用主布局剩余高度，取消独立 `100dvh` 最小高度；专用样式仅匹配包含写作模块的主区。
+- 真实浏览器验证从模板页导航点击“报告智写”；1440×900、1672×960、1920×1080 和 390×844 均无横向溢出，主区高度未超过视口，浏览器运行时错误为 0。
+- 截图：`outputs/ui-audit/writing-sidebar/writing-{1440,1672,1920,390}.png`、`writing-collapsed.png`、`writing-mobile-navigation.png`、`writing-menu.png`。人工复核了桌面、手机及收起状态；收起后的宽度等待实际达到 80px 再截图，避免把侧栏过渡帧误判为布局缺陷。
+- `AppRoutes.test.tsx` 与 `OfficialDocumentAppShell.test.tsx` 共 44 项通过；路由回归覆盖从侧栏进入写作、侧栏实例保留、当前导航选中、草稿页导航保留。
+- 构建和 `git diff --check` 通过；本轮路由文件 ESLint 为 0 errors，仍有既有的混合导出 Fast Refresh 提示。
+
+final result: passed
+
+
+## 移除“返回星数”按钮（2026-09-07）
+
+已移除写作页返回入口及其专用样式、已无调用的返回路径解析；保留主侧栏和列表/详情中的“返回公文写作”。6 项相关测试、构建、视觉测试类型检查和 `git diff --check` 通过。1440 / 1672 / 1920 / 390 四档实际浏览器检查确认返回入口不存在，侧栏或手机导航正常；截图在 `outputs/ui-audit/writing-no-exit/`。
+
+final result: passed

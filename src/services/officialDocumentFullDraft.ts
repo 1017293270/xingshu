@@ -61,6 +61,9 @@ export type OfficialDocumentReferenceGeneration = {
 export const MAX_REFERENCE_REQUIREMENT_CHARS = 20_000;
 const MAX_REFERENCE_STYLE_CHARS = 6_000;
 const MAX_REFERENCE_STYLE_SAMPLES = 8;
+/* 用户上传的参考资料整段原样进提示词，两道上限一起把 writingContext 压在 DataHub 的 100k 闸门之下。 */
+export const MAX_REFERENCE_MATERIAL_CHARS = 10_000;
+export const MAX_REFERENCE_MATERIALS_CHARS = 30_000;
 
 const textRoles = new Set<TextBlockRole>(["HEADING_1", "HEADING_2", "HEADING_3", "BODY"]);
 
@@ -149,6 +152,8 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
   userRequirement: string;
   /** 前端已执行的资料研究结果；提供时注入 writingContext 并放开 allowResearch。 */
   researchResults?: OfficialDocumentResearchResult[];
+  /** 用户本轮上传的参考资料，按上限截断后原样进写作上下文。 */
+  referenceMaterials?: Array<{ name: string; content: string }>;
   /**
    * 用户在大纲确认环里改完并拍板的写作大纲。提供时章节骨架以它为准——
    * 改过的标题、删掉的章节、每节的 purpose/keyPoints 都由此进入成稿；
@@ -274,6 +279,15 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
     ...result,
     chart: result.chart ? { ...result.chart, base64: undefined } : undefined
   }));
+  const referenceMaterials: Array<{ name: string; content: string }> = [];
+  let materialChars = 0;
+  for (const material of input.referenceMaterials ?? []) {
+    const budget = Math.min(MAX_REFERENCE_MATERIAL_CHARS, MAX_REFERENCE_MATERIALS_CHARS - materialChars);
+    const content = material.content.slice(0, Math.max(0, budget));
+    if (!content.trim()) continue;
+    referenceMaterials.push({ name: material.name, content });
+    materialChars += content.length;
+  }
   return {
     sections,
     fixedFields,
@@ -293,6 +307,7 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         rows: []
       }],
       ...(researchResults.length ? { researchResults } : {}),
+      ...(referenceMaterials.length ? { referenceMaterials } : {}),
       templateOutline,
       structureRoles: templateOutline,
       outputRules: {
@@ -310,6 +325,10 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         ...(confirmedSections.length ? {
           confirmedOutline: true,
           followConfirmedOutline: "referenceSections 是用户已确认的写作大纲：章节标题按 title 输出，可按本次主题微调措辞但不得改变含义；正文必须直接回答该节的 purpose 与 keyPoints；不得增删或调换章节；与参考草稿旧正文冲突时以已确认大纲为准"
+        } : {}),
+        // 参考资料是用户这一轮亲手传的，和参考稿的旧事实不是一回事，得单说一句。
+        ...(referenceMaterials.length ? {
+          referenceMaterialsRule: "referenceMaterials 是用户本轮上传的参考资料，可作为事实与素材来源引用"
         } : {}),
         keepSectionOrder: true,
         allowHeadingRewrite: true,

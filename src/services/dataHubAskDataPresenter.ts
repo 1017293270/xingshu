@@ -2,6 +2,8 @@ import type {
   DataHubAskDataStatus,
   AskArtifactRef,
   DataHubAskTurn,
+  DataHubBusinessMeasure,
+  DataHubBusinessQuery,
   DataHubBusinessQueryContext,
   DataHubBusinessTrace,
   DataHubCitationDocument,
@@ -17,6 +19,10 @@ import type {
   DataHubToolResultData
 } from "@/types/dataHub";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
+import {
+  dedupeDataHubAnswerBlocks,
+  mergeRepeatedAnswerChunk
+} from "@/services/dataHubAnswerDedupe";
 import {
   appendDataHubClarification,
   applyDataHubClarificationResponse,
@@ -263,25 +269,41 @@ function annotationMember(
   return undefined;
 }
 
+/** 「合同主数据清单，记录…。合同甲方单位名称」这类带表注释的标题，末段才是字段名。 */
+function trailingFieldName(value: string | undefined) {
+  const text = value?.trim();
+  if (!text) return undefined;
+  const tail = text.split(/[。;；]/).map((part) => part.trim()).filter(Boolean).pop();
+  return tail && tail !== text && tail.length <= 24 && hasHanScript(tail) ? tail : undefined;
+}
+
+/**
+ * 取字段的业务名。宁可返回空让调用方整条省略，
+ * 也不要写出「业务字段 1」这种读者无法核对的占位名。
+ */
 function friendlyMemberLabel(
   member: string,
   columns: DataHubTableColumn[],
-  annotation?: UnknownRecord,
-  fallbackIndex = 0
+  annotation?: UnknownRecord
 ) {
   const column = columns.find((candidate) => candidate.key === member);
   const meta = annotationMember(annotation, member);
+  const titles = [
+    asString(meta?.shortTitle),
+    asString(meta?.title),
+    asString(meta?.label),
+    column?.title
+  ];
   const candidate =
-    pickHanLabel([
-      asString(meta?.shortTitle),
-      asString(meta?.title),
-      asString(meta?.label),
-      column?.title
-    ]) || column?.title || asString(meta?.shortTitle) || asString(meta?.title);
+    pickHanLabel(titles) ||
+    titles.map(trailingFieldName).find(Boolean) ||
+    column?.title ||
+    asString(meta?.shortTitle) ||
+    asString(meta?.title);
   const formatted = candidate ? formatDataHubColumnTitle(candidate, member) : "";
   if (formatted && !/[._]/.test(formatted)) return formatted;
   const mapped = formatDataHubColumnTitle(member, member);
-  return mapped && !/[._]/.test(mapped) ? mapped : `业务字段 ${fallbackIndex + 1}`;
+  return mapped && !/[._]/.test(mapped) ? mapped : "";
 }
 
 function stringMembers(value: unknown) {
@@ -327,6 +349,8 @@ function filterDescriptions(
   const member = asString(record.member) || asString(record.dimension);
   if (!member) return [];
   const label = friendlyMemberLabel(member, columns, annotation);
+  // 叫不出业务名的条件写出来也没法核对，整条省略。
+  if (!label) return [];
   const operator = filterOperatorLabels[asString(record.operator)] || "符合";
   const values = Array.isArray(record.values)
     ? record.values.map(asString).filter(Boolean).slice(0, 6)
@@ -363,11 +387,12 @@ function timeDescriptions(
     year: "年"
   };
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item, index) => {
+  return value.flatMap((item) => {
     const record = recordFromJson(item);
     const member = asString(record?.dimension) || asString(item);
     if (!member) return [];
-    const label = friendlyMemberLabel(member, columns, annotation, index);
+    const label = friendlyMemberLabel(member, columns, annotation);
+    if (!label) return [];
     const range = Array.isArray(record?.dateRange)
       ? record.dateRange.map(asString).filter(Boolean).join(" 至 ")
       : asString(record?.dateRange);
@@ -388,19 +413,19 @@ function normalizeBusinessQueryContext(
   const measures = stringMembers(query?.measures);
   const dimensions = stringMembers(query?.dimensions);
   const times = timeDescriptions(query?.timeDimensions, columns, annotation);
-  const measureLabels = measures.map((member, index) =>
-    friendlyMemberLabel(member, columns, annotation, index));
-  const dimensionLabels = dimensions.map((member, index) =>
-    friendlyMemberLabel(member, columns, annotation, measureLabels.length + index));
-  const calculationEntries = measures.map((member, index) => {
+  const measureLabels = measures.map((member) => friendlyMemberLabel(member, columns, annotation));
+  const dimensionLabels = dimensions.map((member) => friendlyMemberLabel(member, columns, annotation));
+  const measurePlans = measures.flatMap((member, index) => {
     const label = measureLabels[index];
-    return `${label}：${aggregationLabel(member, annotationMember(annotation, member))}`;
-  });
-  const synonymEntries = measures.concat(dimensions).flatMap((member, index) => {
-    const terms = businessTerms(annotationMember(annotation, member));
-    return terms.length
-      ? [`${friendlyMemberLabel(member, columns, annotation, index)}：${terms.join("、")}`]
+    return label
+      ? [{ label, aggregation: aggregationLabel(member, annotationMember(annotation, member)) }]
       : [];
+  });
+  const calculationEntries = measurePlans.map((plan) => `${plan.label}：${plan.aggregation}`);
+  const synonymEntries = measures.concat(dimensions).flatMap((member) => {
+    const terms = businessTerms(annotationMember(annotation, member));
+    const label = friendlyMemberLabel(member, columns, annotation);
+    return terms.length && label ? [`${label}：${terms.join("、")}`] : [];
   });
   const cubeNames = new Set(
     measures.concat(dimensions).concat(
@@ -427,11 +452,13 @@ function normalizeBusinessQueryContext(
     const label = extractChineseTableName(column.title) || extractChineseTableName(column.key);
     return label ? [label] : [];
   });
+  const dataTables = uniqueStrings([...assetLabels, ...tableLabels]);
+  const filters = uniqueStrings(filterDescriptions(query?.filters, columns, annotation));
 
   return {
-    dataTables: uniqueStrings([...assetLabels, ...tableLabels]),
+    dataTables,
     fields: uniqueStrings([...measureLabels, ...dimensionLabels, ...columns.map((column) => column.title)]),
-    filters: uniqueStrings(filterDescriptions(query?.filters, columns, annotation)),
+    filters,
     calculations: uniqueStrings(calculationEntries),
     relationships: query
       ? [cubeNames.size > 1
@@ -446,10 +473,21 @@ function normalizeBusinessQueryContext(
         asString(meta?.businessDescription),
         asString(meta?.description)
       ]);
-      return `${measureLabels[index]}：${definition || "采用企业语义模型中已发布的指标口径"}`;
+      return measureLabels[index]
+        ? `${measureLabels[index]}：${definition || "采用企业语义模型中已发布的指标口径"}`
+        : "";
     })),
     synonymMappings: uniqueStrings(synonymEntries),
-    time: uniqueStrings(times)
+    time: uniqueStrings(times),
+    query: query
+      ? {
+          table: dataTables[0],
+          dimensions: uniqueStrings(dimensionLabels),
+          measures: measurePlans,
+          filters,
+          time: uniqueStrings(times)
+        }
+      : undefined
   };
 }
 
@@ -690,7 +728,8 @@ function appendContentBlock(
       (event.replyId === undefined && previous.replyId === undefined));
 
   if (sameModelCall) {
-    previous.content += content;
+    // 同一次模型调用还可能在增量之后补发整段全文，直接拼接会把这段话写成两遍。
+    previous.content = mergeRepeatedAnswerChunk(previous.content, content) ?? previous.content + content;
     return;
   }
 
@@ -822,8 +861,21 @@ function businessDocuments(turn: DataHubAskTurn, supplementalDocuments: unknown[
   });
 }
 
+/** groupLabel 常是整段表注释，取第一个逗号/句号前的部分当表名。 */
+function shortTableName(label: string | undefined) {
+  const text = label?.trim();
+  if (!text) return undefined;
+  const head = text.split(/[，,。;；]/)[0].trim();
+  return head && head.length <= 24 ? head : undefined;
+}
+
+type DataHubBusinessListKey = {
+  [Key in keyof DataHubBusinessQueryContext]-?:
+    DataHubBusinessQueryContext[Key] extends string[] ? Key : never;
+}[keyof DataHubBusinessQueryContext];
+
 function mergeBusinessContexts(contexts: DataHubBusinessQueryContext[]) {
-  const merge = (key: keyof DataHubBusinessQueryContext) =>
+  const merge = (key: DataHubBusinessListKey) =>
     uniqueStrings(contexts.flatMap((context) => context[key]));
   return {
     dataTables: merge("dataTables"),
@@ -835,6 +887,80 @@ function mergeBusinessContexts(contexts: DataHubBusinessQueryContext[]) {
     synonymMappings: merge("synonymMappings"),
     time: merge("time")
   };
+}
+
+/** 业务名和列标题常常对不上（列标题挂着整段表注释），逐级放宽再匹配。 */
+function columnForLabel(columns: DataHubTableColumn[], label: string | undefined) {
+  const name = label?.trim();
+  if (!name) return undefined;
+  return (
+    columns.find((column) => column.title.trim() === name) ??
+    columns.find((column) => trailingFieldName(column.title) === name) ??
+    columns.find((column) => column.title.includes(name))
+  );
+}
+
+function isTimeColumn(column: DataHubTableColumn) {
+  return /time|date|timestamp/i.test(column.type ?? "")
+    || /日期|月份|时间|年份|季度|周次/.test(column.title);
+}
+
+function numericValue(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const text = asString(value).replace(/[,，\s]/g, "");
+  return /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : undefined;
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+}
+
+/** 预览值必须自带单位，否则读者还得回表里猜「6」是六条还是六万元。 */
+function formatMeasureValue(value: number, measure: DataHubBusinessMeasure) {
+  if (measure.aggregation.includes("计数")) return `${formatNumber(value)} 条`;
+  const unit = measure.label.match(/（([^（）]{1,6})）\s*$/)?.[1];
+  if (unit) return `${formatNumber(value)} ${unit}`;
+  // 率/占比在语义层多以小数返回，直接加 % 会把 1.04 写成「1.04%」。
+  if (/率|占比|百分比/.test(measure.label)) {
+    return Math.abs(value) <= 1 ? `${formatNumber(value * 100)}%` : `${formatNumber(value)}%`;
+  }
+  return formatNumber(value);
+}
+
+/** 结果里最值得复述的几行：按数值降序取前三，时间维度不做预览（排名没有意义）。 */
+function resultPreview(
+  table: DataHubTableResult,
+  query: Omit<DataHubBusinessQuery, "preview" | "rowKind">
+): Pick<DataHubBusinessQuery, "preview" | "rowKind"> {
+  const measure = query.measures[0];
+  const dimensionColumn = columnForLabel(table.columns, query.dimensions[0]);
+  const measureColumn = measure ? columnForLabel(table.columns, measure.label) : undefined;
+  if (!measure || !measureColumn || !table.rows.length) {
+    return query.dimensions.length && table.rows.length ? { rowKind: "list" } : {};
+  }
+  if (dimensionColumn && !isTimeColumn(dimensionColumn)) {
+    const preview = table.rows
+      .map((row) => ({
+        label: asString(row[dimensionColumn.key]),
+        value: numericValue(row[measureColumn.key])
+      }))
+      .flatMap((entry) => (entry.label && entry.value != null
+        ? [{ label: entry.label, value: entry.value }]
+        : []))
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 3)
+      .map((entry) => ({ label: entry.label, value: formatMeasureValue(entry.value, measure) }));
+    return preview.length ? { preview, rowKind: "grouped" } : { rowKind: "list" };
+  }
+  const single = !query.dimensions.length && table.totalRows === 1
+    ? numericValue(table.rows[0][measureColumn.key])
+    : undefined;
+  return single == null
+    ? {}
+    : {
+        preview: [{ label: measure.label, value: formatMeasureValue(single, measure) }],
+        rowKind: "single"
+      };
 }
 
 export function buildDataHubBusinessTrace(
@@ -865,6 +991,26 @@ export function buildDataHubBusinessTrace(
   const dataTables = business.dataTables.length
     ? business.dataTables
     : dataSources.map((source) => `${source}中的业务数据`);
+  // 每份结果表一条查询记录；后端没给 Cube Query 时只剩「哪个数据源、多少行」，
+  // 也照样成条，叙事再按缺什么少说什么。
+  const tableQueries = tableResults.map((table, index) => {
+    const query = {
+      // 只有一个数据源时全归它；多个时按结果表顺序对位，对不上就不写。
+      dataSource: dataSources.length === 1 ? dataSources[0] : dataSources[index],
+      table: table.business?.query?.table || shortTableName(table.groupLabel),
+      dimensions: table.business?.query?.dimensions ?? [],
+      measures: table.business?.query?.measures ?? [],
+      filters: table.business?.query?.filters ?? [],
+      time: table.business?.query?.time ?? [],
+      rows: table.totalRows
+    };
+    return { ...query, ...resultPreview(table, query) };
+  });
+  const queries = tableQueries.length
+    ? tableQueries
+    : contexts.flatMap((context) => context.query
+        ? [{ ...context.query, dataSource: dataSources[0] }]
+        : []);
   const fields = business.fields.length
     ? business.fields
     : uniqueStrings(columns.map((column) => column.title));
@@ -947,7 +1093,8 @@ export function buildDataHubBusinessTrace(
         ? `数据截至 ${asString((turn.done as UnknownRecord).dataAsOf)}`
         : undefined
     ]),
-    documents
+    documents,
+    queries
   };
 }
 
@@ -1116,6 +1263,11 @@ export function createDataHubAskTurn(
   if (errorMessage && !turn.error) {
     turn.error = { message: errorMessage };
   }
+
+  // 后端会在增量之外把整段正文再发一遍：结果事件在 replyId 对不上时补发全文，
+  // 编排根智能体每结束一次模型调用也整段公开一次。先把同义块收敛成一份，
+  // 再据此判定正式回答，流式过程中与终态就都只剩一份正文。
+  turn.answerBlocks = dedupeDataHubAnswerBlocks(turn.answerBlocks);
 
   const streamedAnswer = turn.answerBlocks.map((block) => block.content).join("");
   const officialAnswer = resolveDataHubFinalAnswer(

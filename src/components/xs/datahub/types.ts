@@ -26,6 +26,11 @@ export type DataHubExecutionPanelProps = {
    * 也继续展示主智能体线性步骤，而不是切到编排 DAG。
    */
   preferDirectMainExecution?: boolean;
+  /**
+   * 结果区已经展示的正式回答。传入后，主会话执行卡里与它同文的正文块会被隐去，
+   * 展开「执行过程」时不会再读到同一段回答。
+   */
+  answerText?: string;
   drawerOpen?: boolean;
   defaultDrawerOpen?: boolean;
   onDrawerOpenChange?: (open: boolean) => void;

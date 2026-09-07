@@ -60,8 +60,7 @@
   outline-offset: -2px;
 }
 
-.datahub-business-explanation__summary span,
-.datahub-business-explanation__note {
+.datahub-business-explanation__summary span {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -93,14 +92,18 @@
   border-bottom: 1px dashed #dce7f2;
 }
 
+.datahub-business-explanation__body > :last-child {
+  border-bottom: 0;
+}
+
 .datahub-business-explanation__section h3 {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
 }
 
 .datahub-business-explanation__body p,
@@ -112,143 +115,42 @@
   line-height: 1.65;
 }
 
-.datahub-business-explanation__tasks,
-.datahub-business-explanation__steps,
-.datahub-business-explanation__documents ul {
+/* 怎么查 / 查到了什么都是散文：小标签 + 一段正文，没有编号圆圈也没有项目符号。 */
+.datahub-business-explanation__prose,
+.datahub-business-explanation__findings {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  margin-top: 6px;
   padding: 0;
   list-style: none;
 }
 
-.datahub-business-explanation__tasks li {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-}
-
-.datahub-business-explanation__tasks li > span {
-  display: inline-grid;
-  width: 21px;
-  height: 21px;
-  place-items: center;
-  border: 1px solid #c9ddf7;
-  border-radius: 6px;
-  color: #3269aa;
-  background: #f0f7ff;
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-}
-
-.datahub-business-explanation__tasks li > div {
-  display: grid;
-  gap: 2px;
-}
-
-.datahub-business-explanation__tasks strong,
-.datahub-business-explanation__documents strong {
+.datahub-business-explanation__body .datahub-business-explanation__prose > p,
+.datahub-business-explanation__body
+  .datahub-business-explanation__findings > li > p {
+  min-width: 0;
+  margin: 0;
   color: var(--xs-text-2);
-  font-size: var(--xs-fs-caption);
+  font-size: var(--xs-fs-control);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
-.datahub-business-explanation__tasks small,
-.datahub-business-explanation__documents small {
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-}
-
-.datahub-business-explanation__steps {
-  gap: 0;
-}
-
-.datahub-business-explanation__steps li {
-  position: relative;
-  display: grid;
-  grid-template-columns: 23px minmax(0, 1fr);
-  gap: 9px;
-  padding-bottom: 11px;
-}
-
-.datahub-business-explanation__steps li:last-child {
-  padding-bottom: 0;
-}
-
-.datahub-business-explanation__steps li:not(:last-child)::after {
-  position: absolute;
-  top: 22px;
-  bottom: 2px;
-  left: 10px;
-  width: 1px;
-  content: "";
-  background: linear-gradient(180deg, #b9d6f5, #e1ebf6);
-}
-
-.datahub-business-explanation__steps li > span {
-  z-index: 1;
-  display: inline-grid;
-  width: 21px;
-  height: 21px;
-  place-items: center;
-  border: 1px solid #bfd7f2;
-  border-radius: 50%;
-  color: #3672b6;
-  background: #f2f7fd;
-  font-size: 10px;
-  font-weight: var(--xs-fw-bold);
-}
-
-.datahub-business-explanation__steps li[data-status="done"] > span {
-  border-color: #9ed7bf;
-  color: #16805f;
-  background: #eff9f5;
-}
-
-.datahub-business-explanation__steps li[data-status="running"] > span {
-  animation: xs-datahub-ring-pulse 1.7s ease-in-out infinite;
-}
-
-.datahub-business-explanation__steps li[data-status="error"] > span {
-  border-color: #f0aaa6;
-  color: #c53c38;
-  background: #fff3f2;
-}
-
-.datahub-business-explanation__steps li > div,
-.datahub-business-explanation__steps li header {
+.datahub-business-explanation__findings li {
   min-width: 0;
 }
 
-.datahub-business-explanation__steps li header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+/* 进行中的那句沿用运行态文字扫光，不再靠圆圈上的 pulse 表达。 */
+.datahub-business-explanation__body p[data-state="running"] {
+  background: linear-gradient(100deg, #294469 28%, #1768c9 50%, #294469 72%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: xs-datahub-shimmer 2.4s linear infinite;
 }
 
-.datahub-business-explanation__steps li strong {
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-caption);
-}
-
-.datahub-business-explanation__steps li header small {
-  flex: 0 0 auto;
-  color: #16805f;
-  font-size: var(--xs-fs-caption);
-}
-
-.datahub-business-explanation__steps li[data-status="running"] header small {
-  color: #286fc0;
-}
-
-.datahub-business-explanation__steps li[data-status="error"] header small {
-  color: #c53c38;
-}
-
-.datahub-business-explanation__steps li p {
-  margin-top: 2px;
-}
-
-/* 业务口径：定义表式的 label:value 行组，只用 1px 浅分隔，不用胶囊和图标。 */
+/* 口径细则：定义表式的 label:value 行组，只用 1px 浅分隔，不用胶囊和图标。 */
 .datahub-business-explanation__scope-rows {
   display: grid;
   margin: 8px 0 0;
@@ -286,24 +188,10 @@
   overflow-wrap: anywhere;
 }
 
-.datahub-business-explanation__body
-  .datahub-business-explanation__scope-more p {
-  margin-top: 3px;
-  color: var(--xs-text-2);
-  overflow-wrap: anywhere;
-}
-
-.datahub-business-explanation__scope-more {
-  margin-top: 3px;
-}
-
 .datahub-business-explanation__scope-detail {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px solid #edf3fa;
+  padding: 11px 0;
 }
 
-.datahub-business-explanation__scope-more > summary,
 .datahub-business-explanation__scope-detail > summary {
   width: max-content;
   max-width: 100%;
@@ -318,11 +206,7 @@
   margin-top: 2px;
 }
 
-.datahub-business-explanation__documents li {
-  min-width: 0;
-}
-
-.datahub-business-explanation__documents li > button {
+.datahub-business-explanation__findings li > button {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
@@ -334,6 +218,8 @@
   color: var(--xs-text-2);
   background: linear-gradient(135deg, #f8fbff, #fff);
   font: inherit;
+  font-size: var(--xs-fs-control);
+  line-height: 1.7;
   text-align: left;
   cursor: pointer;
   transition:
@@ -342,17 +228,17 @@
     transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
-.datahub-business-explanation__documents li > button:hover {
+.datahub-business-explanation__findings li > button:hover {
   border-color: #aacdf5;
   box-shadow: 0 7px 18px rgba(35, 92, 157, 0.07);
   transform: translateY(-1px);
 }
 
-.datahub-business-explanation__documents li > button:active {
+.datahub-business-explanation__findings li > button:active {
   transform: translateY(0);
 }
 
-.datahub-business-explanation__documents li > button:focus-visible {
+.datahub-business-explanation__findings li > button:focus-visible {
   outline: 3px solid rgba(22, 119, 255, 0.2);
   outline-offset: 2px;
 }
@@ -368,17 +254,9 @@
   background: #edf6ff;
 }
 
-.datahub-business-explanation__documents li > button > span:nth-child(2) {
-  display: grid;
+.datahub-business-explanation__findings li > button > span:nth-child(2) {
   min-width: 0;
-  gap: 2px;
-}
-
-.datahub-business-explanation__documents li > button strong,
-.datahub-business-explanation__documents li > button small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .datahub-business-explanation__document-action {
@@ -540,14 +418,6 @@
 .datahub-source-modal .xs-safe-markdown td {
   min-width: 96px;
   vertical-align: top;
-}
-
-.datahub-business-explanation__body .datahub-business-explanation__note {
-  padding-top: 10px;
-}
-
-.datahub-business-explanation__note p {
-  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

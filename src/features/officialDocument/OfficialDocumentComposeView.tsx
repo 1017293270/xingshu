@@ -1,23 +1,29 @@
 import {
   ArrowsClockwise,
+  ArrowUp,
   AsteriskSimple,
   CaretDown,
   CaretUp,
-  Check,
   CircleNotch,
   Copy,
   DownloadSimple,
+  FileDoc,
   FileText,
-  PaperPlaneTilt,
+  Paperclip,
+  Plus,
   Star,
-  StopCircle,
+  Square,
+  UploadSimple,
   WarningCircle,
   X
 } from "@phosphor-icons/react";
-import { Button, Dropdown, Mentions } from "antd";
-import type { MentionsOptionProps } from "antd/es/mentions";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Button, Dropdown } from "antd";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useLocation, useNavigate } from "react-router";
+import mentionLibraryIcon from "@/assets/writing-mention-icons/library.svg";
+import mentionMaterialIcon from "@/assets/writing-mention-icons/material.svg";
+import mentionTemplateIcon from "@/assets/writing-mention-icons/template.svg";
+import mentionDraftIcon from "@/assets/writing-mention-icons/draft.svg";
 import {
   XsArtifactCard,
   XsChatActionButton,
@@ -25,11 +31,11 @@ import {
   XsChatAssistant,
   XsChatTurn,
   XsChatUserBubble,
-  XsComposerBox,
   XsSidePanel
 } from "@/components/xs/conversation";
 import { XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
+import { XsUploadDialog } from "@/components/xs/XsUploadDialog";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
 import { resolveDataHubFinalAnswer } from "@/services/dataHubAskDataPresenter";
@@ -38,11 +44,14 @@ import {
   downloadOfficialDocumentExport,
   exportOfficialDocumentDraft,
   exportOfficialDocumentTransient,
+  getOfficialDocumentContentProfile,
   getOfficialDocumentDraftContent,
   getOfficialDocumentDraftPreview,
   getOfficialDocumentTransientPreview,
   type OfficialDocumentTransientArtifactInput,
-  updateOfficialDocumentDraftContent
+  updateOfficialDocumentDraftContent,
+  uploadOfficialDocumentContentProfile,
+  uploadOfficialDocumentTemplate
 } from "@/services/officialDocumentService";
 import {
   buildOfficialDocumentPreviewLines,
@@ -67,15 +76,49 @@ import type {
 } from "@/types/officialDocument";
 import { ComposeAnalyzingCard, ComposeElapsed } from "./ComposeAnalyzingCard";
 import { ComposeOutlineCard } from "./ComposeOutlineCard";
-import { formatDate, operationErrorMessage, useUpdateOfficialDocumentWorkspaceCache } from "./officialDocumentMeta";
+import {
+  classifyMaterialFile,
+  composeMaterialPayload,
+  joinContentProfileBlocks,
+  MAX_TEXT_MATERIAL_BYTES,
+  resolveComposeMaterials,
+  TEXT_MATERIAL_EXTENSIONS,
+  type ComposeMaterial
+} from "./composeReferenceMaterials";
+import {
+  ANALYZING_POLL_INTERVAL_MS,
+  formatDate,
+  formatFileSize,
+  operationErrorMessage,
+  templateIsUsable,
+  useUpdateOfficialDocumentWorkspaceCache
+} from "./officialDocumentMeta";
+import { OfficialDocumentComposer } from "./OfficialDocumentComposer";
+import { OfficialDocumentMentionMenu } from "./OfficialDocumentMentionMenu";
+import {
+  filterMentionGroups,
+  findMentionQuery,
+  flattenMentionItems,
+  removeMentionQuery,
+  type MentionQuery,
+  type OfficialDocumentMentionGroup,
+  type OfficialDocumentMentionItem
+} from "./officialDocumentMentions";
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
+import { TemplateGallery } from "./TemplateGallery";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
 import { useWritingChat } from "./useWritingChat";
 
-/** 参考草稿只决定下一轮的 writingContext，会话本身不跟着换，所以 key 固定。 */
+/** 引用只决定下一轮的 writingContext，会话本身不跟着换，所以 key 固定。 */
 const COMPOSE_CHAT_KEY = "compose";
 
 const RETRY_HINT = "请严格按 [[XS_FIXED:slot-id]] 和 [[XS_SECTION:section-id]] 锚点输出完整公文，章节不得新增或遗漏。";
+
+const MENTION_TEMPLATES_ACTION = "action:templates";
+const MENTION_MATERIAL_ACTION = "action:material";
+
+/** DOCX 资料走服务端内容方案抽取，轮询次数够覆盖一次冷启动。 */
+const MATERIAL_POLL_LIMIT = 30;
 
 /** 短到一眼看完的回答不值得再给一个折叠开关。 */
 function isCollapsibleAnswer(lines: OfficialDocumentPreviewLine[]) {
@@ -91,19 +134,34 @@ type GeneratedArtifact = OfficialDocumentTransientArtifactInput & {
   templateName: string;
 };
 
+/** 本轮引用的东西：一份结构模板，或一篇带着模板的参考草稿。 */
+export type ComposeReference =
+  | { kind: "template"; template: OfficialDocumentTemplate }
+  | { kind: "draft"; draft: OfficialDocumentDraft; template: OfficialDocumentTemplate };
+
+function referenceTitle(reference: ComposeReference) {
+  return reference.kind === "draft" ? reference.draft.title : reference.template.name;
+}
+
+function referenceMeta(reference: ComposeReference) {
+  return reference.kind === "draft" ? reference.draft.templateName : "结构模板";
+}
+
+type ReferenceMaterialPayload = Array<{ name: string; content: string }>;
+
 /** 每一轮的产物状态。轮次顺序、问题和 streaming/done/error 一律以 messages 为准。 */
 type ComposeTurnState = {
   requirement: string;
-  reference: { draftTitle: string; templateName: string };
+  reference: ComposeReference;
   version: number;
   plan: OfficialDocumentReferenceWritingPlan;
-  referenceDraft: OfficialDocumentDraft;
-  template: OfficialDocumentTemplate;
   templateNodes: OfficialDocumentStructureNode[];
   /** 这一轮发起的时刻，流式还没吐首字时用来给出真实耗时。 */
   startedAt: number;
   /** 这一轮带的研究材料；重新生成时原样复用，不再重跑问数/问知。 */
   research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
+  /** 这一轮带的参考资料，重新生成时同样原样复用。 */
+  materials?: ReferenceMaterialPayload;
   artifact?: GeneratedArtifact;
   savedDraft?: OfficialDocumentDraft;
   recoveryDraft?: OfficialDocumentDraft;
@@ -125,8 +183,7 @@ type BusyAction = {
 
 type PendingSubmission = {
   requirement: string;
-  draftTitle: string;
-  templateName: string;
+  reference: ComposeReference;
   startedAt: number;
 };
 
@@ -138,12 +195,19 @@ type AnalyzingSubmission = PendingSubmission & {
 /** 大纲确认环：分析完成后停在 confirm 等用户拍板，确认后进入 researching 逐条补资料。 */
 type ComposePlanning = {
   requirement: string;
-  referenceDraft: OfficialDocumentDraft;
-  template: OfficialDocumentTemplate;
+  reference: ComposeReference;
   plan: OfficialDocumentWritingLogicPlan;
   phase: "confirm" | "researching";
   progressText?: string;
   failureCount: number;
+};
+
+type GenerationInput = {
+  requirement: string;
+  reference: ComposeReference;
+  extraInstruction?: string;
+  research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
+  materials?: ReferenceMaterialPayload;
 };
 
 /** 只把有内容的研究结果注入写作上下文；失败项由正文写「[待补充]」。 */
@@ -161,20 +225,14 @@ function embeddableResearchResults(results: OfficialDocumentResearchResult[]) {
   ));
 }
 
-type DraftMentionOption = MentionsOptionProps & {
-  key: string;
-  searchText: string;
-};
-
 const EMPTY_FIXED_FIELDS: OfficialDocumentReferenceFixedField[] = [];
 const EMPTY_DRAFTS: OfficialDocumentDraft[] = [];
 const EMPTY_TEMPLATES: OfficialDocumentTemplate[] = [];
 
-function removeSelectedMention(value: string, optionValue: string) {
-  const mention = `@${optionValue}`;
-  const index = value.lastIndexOf(mention);
-  if (index < 0) return value;
-  return `${value.slice(0, index)}${value.slice(index + mention.length)}`.replace(/ {2,}/g, " ").trimStart();
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -232,12 +290,34 @@ function ComposeAnswerStream({
   );
 }
 
+function ComposeReferenceMeta({ reference }: { reference: ComposeReference }) {
+  return (
+    <>
+      {reference.kind === "draft"
+        ? <FileText size={14} aria-hidden="true" />
+        : <FileDoc size={14} aria-hidden="true" />}
+      @{referenceTitle(reference)} · {referenceMeta(reference)}
+    </>
+  );
+}
+
 export function OfficialDocumentComposeView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const { query, status } = useOfficialDocumentWorkspace();
   const [value, setValue] = useState("");
-  const [selectedDraftId, setSelectedDraftId] = useState("");
+  const [selection, setSelection] = useState<{ kind: "template" | "draft"; id: string } | null>(
+    () => {
+      const requested = (location.state as { useTemplateId?: unknown } | null)?.useTemplateId;
+      return typeof requested === "string" && requested ? { kind: "template", id: requested } : null;
+    }
+  );
+  const [mention, setMention] = useState<MentionQuery | null>(null);
+  const [activeMentionKey, setActiveMentionKey] = useState("");
+  const [materials, setMaterials] = useState<ComposeMaterial[]>([]);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>({});
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission>();
   const [analyzingSubmission, setAnalyzingSubmission] = useState<AnalyzingSubmission>();
@@ -245,12 +325,13 @@ export function OfficialDocumentComposeView() {
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [composerError, setComposerError] = useState("");
   const [viewerTurnId, setViewerTurnId] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const materialInputRef = useRef<HTMLInputElement>(null);
   const finalizedTurnsRef = useRef(new Set<string>());
   /* 「跳过大纲」要能作废一次在途分析：token 不一致的分析结果直接丢弃。 */
   const analyzeTokenRef = useRef(0);
   const drafts = query.data?.drafts ?? EMPTY_DRAFTS;
   const templates = query.data?.templates ?? EMPTY_TEMPLATES;
-  const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId);
   const { messages, busy: writingBusy, send, stop } = useWritingChat(COMPOSE_CHAT_KEY);
   const composerBusy = writingBusy
     || Boolean(pendingSubmission)
@@ -263,6 +344,25 @@ export function OfficialDocumentComposeView() {
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
 
+  /* 只有分析完成的结构才能当参考：草稿也得能找回它自己那一版模板结构。 */
+  const usableTemplates = useMemo(
+    () => templates.filter((template) => templateIsUsable(template.status) && template.currentVersion.analysis),
+    [templates]
+  );
+  const reference = useMemo<ComposeReference | null>(() => {
+    if (!selection) return null;
+    if (selection.kind === "template") {
+      const template = templates.find((item) => item.id === selection.id);
+      return template?.currentVersion.analysis ? { kind: "template", template } : null;
+    }
+    const draft = drafts.find((item) => item.id === selection.id);
+    if (!draft) return null;
+    const template = templates.find((item) => (
+      item.id === draft.templateId && item.currentVersion.id === draft.templateVersionId
+    ));
+    return template?.currentVersion.analysis ? { kind: "draft", draft, template } : null;
+  }, [drafts, selection, templates]);
+
   const scrollSignature = messages
     .map((message) => `${message.id}:${message.status}:${message.ask.assistantContent.length}`)
     .join("|");
@@ -270,10 +370,6 @@ export function OfficialDocumentComposeView() {
     signature: `${scrollSignature}|${pendingSubmission ? "pending" : ""}|${analyzingSubmission ? "analyzing" : ""}|${planning ? `${planning.phase}:${planning.progressText ?? ""}` : ""}`,
     enabled: conversationVisible
   });
-
-  useEffect(() => {
-    if (selectedDraftId && query.data && !selectedDraft) setSelectedDraftId("");
-  }, [query.data, selectedDraft, selectedDraftId]);
 
   const turnStatesRef = useRef(turnStates);
   turnStatesRef.current = turnStates;
@@ -299,31 +395,106 @@ export function OfficialDocumentComposeView() {
     ));
   };
 
-  const mentionOptions = useMemo<DraftMentionOption[]>(() => [
+  const resolvedMaterials = useMemo(() => resolveComposeMaterials(materials), [materials]);
+
+  const mentionGroups = useMemo<OfficialDocumentMentionGroup[]>(() => [
     {
-      key: "draft-picker-heading",
-      value: "draft-picker-heading",
-      disabled: true,
-      searchText: "",
-      label: (
-        <span className="official-document-compose__mention-heading">
-          <strong>选择参考草稿</strong><small>按更新时间排序</small>
-        </span>
-      )
+      key: "actions",
+      title: "添加",
+      items: [
+        {
+          key: MENTION_TEMPLATES_ACTION,
+          label: "模板库",
+          description: "浏览全部结构模板",
+          icon: <img src={mentionLibraryIcon} alt="" aria-hidden="true" />,
+          searchText: "模板库 template library"
+        },
+        {
+          key: MENTION_MATERIAL_ACTION,
+          label: "上传参考资料",
+          description: "文本或 DOCX，作为本轮素材",
+          icon: <img src={mentionMaterialIcon} alt="" aria-hidden="true" />,
+          searchText: "上传参考资料 material upload"
+        }
+      ]
     },
-    ...drafts.map((draft) => ({
-      key: draft.id,
-      value: draft.title,
-      searchText: `${draft.title} ${draft.templateName}`.toLocaleLowerCase(),
-      label: (
-        <span className="official-document-compose__mention-option" data-selected={draft.id === selectedDraftId || undefined}>
-          <span className="official-document-compose__mention-icon"><FileText size={16} aria-hidden="true" /></span>
-          <span><strong>{draft.title}</strong><small>{draft.templateName} · {formatDate(draft.updatedAt)}</small></span>
-          {draft.id === selectedDraftId ? <Check size={15} weight="bold" aria-hidden="true" /> : null}
-        </span>
-      )
-    }))
-  ], [drafts, selectedDraftId]);
+    {
+      key: "templates",
+      title: "模板",
+      items: usableTemplates.map((template) => ({
+        key: `template:${template.id}`,
+        label: template.name,
+        description: [
+          `v${template.currentVersion.versionNo}`,
+          template.currentVersion.fileName,
+          template.currentVersion.analysis?.pageCount ? `${template.currentVersion.analysis.pageCount} 页` : ""
+        ].filter(Boolean).join(" · "),
+        icon: <img src={mentionTemplateIcon} alt="" aria-hidden="true" />,
+        searchText: `${template.name} ${template.currentVersion.fileName}`.toLocaleLowerCase()
+      }))
+    },
+    {
+      key: "drafts",
+      title: "参考草稿",
+      items: drafts.map((draft) => ({
+        key: `draft:${draft.id}`,
+        label: draft.title,
+        description: `${draft.templateName} · ${formatDate(draft.updatedAt)}`,
+        icon: <img src={mentionDraftIcon} alt="" aria-hidden="true" />,
+        searchText: `${draft.title} ${draft.templateName}`.toLocaleLowerCase()
+      }))
+    }
+  ], [drafts, usableTemplates]);
+
+  const visibleMentionGroups = useMemo(
+    () => (mention ? filterMentionGroups(mentionGroups, mention.keyword) : []),
+    [mention, mentionGroups]
+  );
+  const mentionItems = useMemo(() => flattenMentionItems(visibleMentionGroups), [visibleMentionGroups]);
+
+  useEffect(() => {
+    setActiveMentionKey((current) => (
+      mentionItems.some((item) => item.key === current) ? current : mentionItems[0]?.key ?? ""
+    ));
+  }, [mentionItems]);
+
+  const focusInput = () => {
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const syncMention = (next: string) => {
+    const caret = inputRef.current?.selectionStart ?? next.length;
+    setMention(findMentionQuery(next, caret));
+  };
+
+  const openMaterialPicker = () => {
+    materialInputRef.current?.click();
+  };
+
+  const useTemplate = (template: OfficialDocumentTemplate) => {
+    setSelection({ kind: "template", id: template.id });
+    setGalleryOpen(false);
+    setComposerError("");
+    focusInput();
+  };
+
+  const selectMention = (item: OfficialDocumentMentionItem) => {
+    if (mention) setValue((current) => removeMentionQuery(current, mention));
+    setMention(null);
+    if (item.key === MENTION_TEMPLATES_ACTION) {
+      setGalleryOpen(true);
+      return;
+    }
+    if (item.key === MENTION_MATERIAL_ACTION) {
+      openMaterialPicker();
+      return;
+    }
+    const [kind, id] = item.key.split(":");
+    if (kind !== "template" && kind !== "draft") return;
+    setSelection({ kind, id });
+    setComposerError("");
+    focusInput();
+  };
 
   /**
    * 每一轮结束都试着解析成公文结构；解析不了不再弹红错，而是把回答当普通文字留在对话里，
@@ -348,7 +519,7 @@ export function OfficialDocumentComposeView() {
         const research = state.research;
         const generated = parseOfficialDocumentReferenceGeneration({
           markdown: answer,
-          referenceDraftTitle: state.referenceDraft.title,
+          referenceDraftTitle: referenceTitle(state.reference),
           sections: state.plan.sections,
           fixedFields: state.plan.fixedFields,
           templateNodes: state.templateNodes,
@@ -372,9 +543,9 @@ export function OfficialDocumentComposeView() {
               raw: answer,
               parseError: undefined,
               artifact: {
-                templateId: existing.referenceDraft.templateId,
-                templateVersionId: existing.referenceDraft.templateVersionId,
-                templateName: existing.template.name,
+                templateId: existing.reference.template.id,
+                templateVersionId: existing.reference.template.currentVersion.id,
+                templateName: existing.reference.template.name,
                 title: generated.title,
                 fixedValues: generated.fixedValues,
                 blocks: generated.blocks
@@ -389,32 +560,28 @@ export function OfficialDocumentComposeView() {
     // One completed Agent turn becomes a local artifact; persistence is an explicit user action.
   }, [messages, turnStates]);
 
-  const runGeneration = async (
-    requirement: string,
-    referenceDraft: OfficialDocumentDraft,
-    template: OfficialDocumentTemplate,
-    extraInstruction = "",
-    research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] }
-  ) => {
+  const runGeneration = async (input: GenerationInput) => {
+    const { requirement, reference: turnReference, extraInstruction = "", research } = input;
     const startedAt = Date.now();
-    setPendingSubmission({
-      requirement,
-      draftTitle: referenceDraft.title,
-      templateName: referenceDraft.templateName,
-      startedAt
-    });
+    const template = turnReference.template;
+    setPendingSubmission({ requirement, reference: turnReference, startedAt });
     try {
-      const content = await getOfficialDocumentDraftContent(referenceDraft.id);
+      /* 模板引用没有旧正文可读：章节骨架直接由结构节点的标题推出来。 */
+      const content = turnReference.kind === "draft"
+        ? await getOfficialDocumentDraftContent(turnReference.draft.id)
+        : { revision: 0, fixedValues: [], blocks: [] };
       const templateNodes = template.currentVersion.analysis!.structureNodes;
+      const materialPayload = input.materials ?? composeMaterialPayload(resolvedMaterials);
       const planInput = {
         referenceDraft: {
-          id: referenceDraft.id,
-          title: referenceDraft.title,
-          templateName: referenceDraft.templateName
+          id: turnReference.kind === "draft" ? turnReference.draft.id : template.id,
+          title: referenceTitle(turnReference),
+          templateName: template.name
         },
         content,
         templateNodes,
         userRequirement: requirement,
+        ...(materialPayload.length ? { referenceMaterials: materialPayload } : {}),
         /* 走过大纲确认环时章节骨架以用户拍板的方案为准：改过的标题、删掉的节、purpose/keyPoints 都在这里进上下文。 */
         ...(research ? { confirmedPlan: research.plan } : {})
       };
@@ -440,14 +607,13 @@ export function OfficialDocumentComposeView() {
         ...current,
         [turnId]: {
           requirement,
-          reference: { draftTitle: referenceDraft.title, templateName: referenceDraft.templateName },
+          reference: turnReference,
           version: 0,
           plan,
-          referenceDraft,
-          template,
           templateNodes,
           startedAt,
-          research
+          research,
+          ...(materialPayload.length ? { materials: materialPayload } : {})
         }
       }));
       setPendingSubmission(undefined);
@@ -458,10 +624,6 @@ export function OfficialDocumentComposeView() {
     }
   };
 
-  const resolveTemplate = (draft: OfficialDocumentDraft) => templates.find((item) => (
-    item.id === draft.templateId && item.currentVersion.id === draft.templateVersionId
-  ));
-
   /**
    * 提交先走大纲确认环：分析出章节与研究清单让用户拍板，确认后自动补资料再生成。
    * 分析失败或返回空大纲时退回一步到位的老路径，不挡用户。
@@ -469,29 +631,26 @@ export function OfficialDocumentComposeView() {
   const submit = async () => {
     const requirement = value.trim();
     if (composerBusy) return;
-    if (!selectedDraft) {
-      setComposerError("请先输入 @ 并选择一个参考草稿");
+    if (!reference) {
+      setComposerError(selection
+        ? "这份引用绑定的模板结构不可用，请在模板库中检查该版本"
+        : "请先通过 @ 选择模板或参考草稿");
       return;
     }
     if (!requirement) {
       setComposerError("请描述要生成的公文内容");
       return;
     }
-    const template = resolveTemplate(selectedDraft);
-    if (!template?.currentVersion.analysis) {
-      setComposerError("参考草稿绑定的模板结构不可用，请先在结构模板中检查该版本");
-      return;
-    }
 
     setComposerError("");
     setValue("");
-    const referenceDraft = selectedDraft;
-    const structureNodes = template.currentVersion.analysis.structureNodes;
+    setMention(null);
+    const turnReference = reference;
+    const structureNodes = turnReference.template.currentVersion.analysis!.structureNodes;
     const token = ++analyzeTokenRef.current;
     setAnalyzingSubmission({
       requirement,
-      draftTitle: referenceDraft.title,
-      templateName: referenceDraft.templateName,
+      reference: turnReference,
       startedAt: Date.now(),
       templateNodes: structureNodes
     });
@@ -511,13 +670,12 @@ export function OfficialDocumentComposeView() {
       if (analyzeTokenRef.current !== token) return;
       setAnalyzingSubmission(undefined);
       if (!logicPlan.sections.length) {
-        await runGeneration(requirement, referenceDraft, template);
+        await runGeneration({ requirement, reference: turnReference });
         return;
       }
       setPlanning({
         requirement,
-        referenceDraft,
-        template,
+        reference: turnReference,
         plan: logicPlan,
         phase: "confirm",
         failureCount: 0
@@ -525,18 +683,16 @@ export function OfficialDocumentComposeView() {
     } catch {
       if (analyzeTokenRef.current !== token) return;
       setAnalyzingSubmission(undefined);
-      await runGeneration(requirement, referenceDraft, template);
+      await runGeneration({ requirement, reference: turnReference });
     }
   };
 
   const skipAnalyzing = async () => {
     const current = analyzingSubmission;
-    if (!current || !selectedDraft) return;
-    const template = resolveTemplate(selectedDraft);
-    if (!template?.currentVersion.analysis) return;
+    if (!current) return;
     analyzeTokenRef.current += 1;
     setAnalyzingSubmission(undefined);
-    await runGeneration(current.requirement, selectedDraft, template);
+    await runGeneration({ requirement: current.requirement, reference: current.reference });
   };
 
   /** 取消等待：作废在途分析，要求回到输入框，用户可以改完再来一次。 */
@@ -583,9 +739,10 @@ export function OfficialDocumentComposeView() {
     if (!current || current.phase !== "confirm") return;
     if (!current.plan.researchNeeds.length) {
       setPlanning(null);
-      await runGeneration(current.requirement, current.referenceDraft, current.template, "", {
-        plan: current.plan,
-        results: []
+      await runGeneration({
+        requirement: current.requirement,
+        reference: current.reference,
+        research: { plan: current.plan, results: [] }
       });
       return;
     }
@@ -603,9 +760,10 @@ export function OfficialDocumentComposeView() {
       }
     });
     setPlanning(null);
-    await runGeneration(current.requirement, current.referenceDraft, current.template, "", {
-      plan: current.plan,
-      results
+    await runGeneration({
+      requirement: current.requirement,
+      reference: current.reference,
+      research: { plan: current.plan, results }
     });
   };
 
@@ -613,7 +771,7 @@ export function OfficialDocumentComposeView() {
     const current = planning;
     if (!current || current.phase !== "confirm") return;
     setPlanning(null);
-    await runGeneration(current.requirement, current.referenceDraft, current.template);
+    await runGeneration({ requirement: current.requirement, reference: current.reference });
   };
 
   const cancelPlanning = () => {
@@ -623,17 +781,96 @@ export function OfficialDocumentComposeView() {
     setValue((existing) => existing || current.requirement);
   };
 
-  /** 重试、重新生成、停止后继续、重出完整版都是「用同一要求再来一轮」，研究材料原样复用。 */
+  /** 重试、重新生成、停止后继续、重出完整版都是「用同一要求再来一轮」，材料原样复用。 */
   const regenerate = async (turnId: string, extraInstruction = "") => {
     const state = turnStates[turnId];
     if (!state || composerBusy) return;
     setComposerError("");
-    await runGeneration(state.requirement, state.referenceDraft, state.template, extraInstruction, state.research);
+    await runGeneration({
+      requirement: state.requirement,
+      reference: state.reference,
+      extraInstruction,
+      research: state.research,
+      materials: state.materials ?? []
+    });
   };
 
   const cancel = () => {
     if (!writingBusy) return;
     stop();
+  };
+
+  const patchMaterial = (id: string, patch: Partial<ComposeMaterial>) => {
+    setMaterials((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  /** DOCX 资料复用内容方案抽取管线，所以必须先有一份模板结构可以挂靠。 */
+  const extractDocxMaterial = async (template: OfficialDocumentTemplate, file: File) => {
+    let profile = await uploadOfficialDocumentContentProfile(
+      template.id,
+      template.currentVersion.id,
+      file,
+      file.name
+    );
+    for (let attempt = 0; profile.status === "EXTRACTING" && attempt < MATERIAL_POLL_LIMIT; attempt += 1) {
+      await delay(ANALYZING_POLL_INTERVAL_MS);
+      profile = await getOfficialDocumentContentProfile(profile.id);
+    }
+    if (profile.status === "FAILED") {
+      throw new Error(profile.profile.failureMessage || "这份 DOCX 没能解析出正文");
+    }
+    const text = joinContentProfileBlocks(profile.profile.source?.blocks ?? []);
+    if (!text) throw new Error("这份 DOCX 没能解析出正文");
+    return text;
+  };
+
+  const addMaterial = async (file: File) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const base = { id, name: file.name, size: file.size };
+    const kind = classifyMaterialFile(file);
+    if (kind === "unsupported") {
+      setMaterials((current) => [...current, {
+        ...base,
+        status: "failed",
+        message: "暂不支持解析该格式，请转为 DOCX 或文本"
+      }]);
+      return;
+    }
+    if (kind === "text" && file.size > MAX_TEXT_MATERIAL_BYTES) {
+      setMaterials((current) => [...current, {
+        ...base,
+        status: "failed",
+        message: `文本资料不能超过 ${formatFileSize(MAX_TEXT_MATERIAL_BYTES)}`
+      }]);
+      return;
+    }
+    if (kind === "docx" && !reference) {
+      setMaterials((current) => [...current, {
+        ...base,
+        status: "failed",
+        message: "请先 @ 选择模板或参考草稿，再上传 DOCX 资料"
+      }]);
+      return;
+    }
+
+    const template = reference?.template;
+    setMaterials((current) => [...current, { ...base, status: "reading" }]);
+    try {
+      const content = kind === "text" ? await file.text() : await extractDocxMaterial(template!, file);
+      patchMaterial(id, { status: "ready", content });
+    } catch (caught) {
+      patchMaterial(id, { status: "failed", message: operationErrorMessage(caught) });
+    }
+  };
+
+  const handleUploadTemplate = async (file: File) => {
+    const result = await uploadOfficialDocumentTemplate(file);
+    updateWorkspaceCache((current) => ({
+      ...current,
+      templates: [result.template, ...current.templates.filter((item) => item.id !== result.template.id)]
+    }));
+    setUploadOpen(false);
+    setGalleryOpen(true);
   };
 
   const copyAnswer = async (turnId: string, answer: string) => {
@@ -755,6 +992,34 @@ export function OfficialDocumentComposeView() {
     void ensurePreview(turnId);
   };
 
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mention && mentionItems.length) {
+      const index = mentionItems.findIndex((item) => item.key === activeMentionKey);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        const next = (index + step + mentionItems.length) % mentionItems.length;
+        setActiveMentionKey(mentionItems[next].key);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        const active = mentionItems[index] ?? mentionItems[0];
+        event.preventDefault();
+        selectMention(active);
+        return;
+      }
+    }
+    if (event.key === "Escape" && mention) {
+      event.preventDefault();
+      setMention(null);
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
+    }
+  };
+
   const renderArtifact = (turnId: string, state: ComposeTurnState) => {
     if (!state.artifact) return null;
     const previewing = Boolean(state.previewLoading);
@@ -864,7 +1129,7 @@ export function OfficialDocumentComposeView() {
         {cancelled ? <p>已停止生成，写作要求仍保留在这一轮里。</p> : null}
         {streaming && !answer ? (
           <>
-            <p>正在按参考草稿生成完整公文…</p>
+            <p>正在按所选结构生成完整公文…</p>
             <small>
               <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
               正在处理
@@ -926,6 +1191,53 @@ export function OfficialDocumentComposeView() {
     );
   };
 
+  const composerChips = (
+    <>
+      {reference ? (
+        <span className="official-document-compose__chip" data-tone="reference" aria-label="本轮引用">
+          {reference.kind === "draft"
+            ? <FileText size={14} aria-hidden="true" />
+            : <FileDoc size={14} aria-hidden="true" />}
+          <span>@{referenceTitle(reference)}</span>
+          <button
+            type="button"
+            aria-label="移除本轮引用"
+            disabled={composerBusy}
+            onClick={() => {
+              setSelection(null);
+              setComposerError("");
+            }}
+          ><X size={12} aria-hidden="true" /></button>
+        </span>
+      ) : null}
+      {resolvedMaterials.map((material) => (
+        <span
+          key={material.id}
+          className="official-document-compose__chip"
+          data-tone={material.status === "failed" ? "error" : undefined}
+          title={material.message}
+        >
+          <Paperclip size={14} aria-hidden="true" />
+          <span>{material.name}</span>
+          <em>
+            {material.status === "reading"
+              ? "解析中"
+              : material.status === "failed"
+                ? "读取失败"
+                : material.truncated
+                  ? "已截断"
+                  : formatFileSize(material.size)}
+          </em>
+          <button
+            type="button"
+            aria-label={`移除参考资料 ${material.name}`}
+            onClick={() => setMaterials((current) => current.filter((item) => item.id !== material.id))}
+          ><X size={12} aria-hidden="true" /></button>
+        </span>
+      ))}
+    </>
+  );
+
   return (
     <section
       className="official-document-compose"
@@ -948,7 +1260,7 @@ export function OfficialDocumentComposeView() {
           {!conversationVisible ? (
             <header>
               <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
-              <h2>公文写作</h2>
+              <h2>想写一篇什么公文？</h2>
             </header>
           ) : null}
 
@@ -964,12 +1276,7 @@ export function OfficialDocumentComposeView() {
                 return (
                   <XsChatTurn key={message.id}>
                     <XsChatUserBubble
-                      meta={state ? (
-                        <>
-                          <FileText size={14} aria-hidden="true" />
-                          @{state.reference.draftTitle} · {state.reference.templateName}
-                        </>
-                      ) : undefined}
+                      meta={state ? <ComposeReferenceMeta reference={state.reference} /> : undefined}
                     >
                       {message.question}
                     </XsChatUserBubble>
@@ -982,20 +1289,13 @@ export function OfficialDocumentComposeView() {
 
               {analyzingSubmission ? (
                 <XsChatTurn>
-                  <XsChatUserBubble
-                    meta={(
-                      <>
-                        <FileText size={14} aria-hidden="true" />
-                        @{analyzingSubmission.draftTitle} · {analyzingSubmission.templateName}
-                      </>
-                    )}
-                  >
+                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={analyzingSubmission.reference} />}>
                     {analyzingSubmission.requirement}
                   </XsChatUserBubble>
                   <XsChatAssistant>
                     <ComposeAnalyzingCard
                       startedAt={analyzingSubmission.startedAt}
-                      templateName={analyzingSubmission.templateName}
+                      templateName={analyzingSubmission.reference.template.name}
                       templateNodes={analyzingSubmission.templateNodes}
                       onSkip={() => void skipAnalyzing()}
                       onCancel={cancelAnalyzing}
@@ -1006,14 +1306,7 @@ export function OfficialDocumentComposeView() {
 
               {planning ? (
                 <XsChatTurn>
-                  <XsChatUserBubble
-                    meta={(
-                      <>
-                        <FileText size={14} aria-hidden="true" />
-                        @{planning.referenceDraft.title} · {planning.referenceDraft.templateName}
-                      </>
-                    )}
-                  >
+                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={planning.reference} />}>
                     {planning.requirement}
                   </XsChatUserBubble>
                   <XsChatAssistant>
@@ -1034,18 +1327,11 @@ export function OfficialDocumentComposeView() {
 
               {pendingSubmission ? (
                 <XsChatTurn>
-                  <XsChatUserBubble
-                    meta={(
-                      <>
-                        <FileText size={14} aria-hidden="true" />
-                        @{pendingSubmission.draftTitle} · {pendingSubmission.templateName}
-                      </>
-                    )}
-                  >
+                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={pendingSubmission.reference} />}>
                     {pendingSubmission.requirement}
                   </XsChatUserBubble>
                   <XsChatAssistant>
-                    <p>正在读取“{pendingSubmission.draftTitle}”的结构与文风…</p>
+                    <p>正在读取“{referenceTitle(pendingSubmission.reference)}”的结构与文风…</p>
                     <small>
                       <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
                       正在处理
@@ -1057,90 +1343,162 @@ export function OfficialDocumentComposeView() {
             </section>
           ) : null}
 
-          {drafts.length ? (
-            <XsComposerBox
-              className="official-document-compose__box"
+          {templates.length || drafts.length ? (
+            <OfficialDocumentComposer
               mode={conversationVisible ? "chat" : "hero"}
+              label="公文写作输入"
+              value={value}
+              ariaLabel="公文写作要求"
+              placeholder={conversationVisible
+                ? "继续描述，输入 @ 更换模板或参考草稿"
+                : "描述你想写的公文，输入 @ 选择模板或参考草稿"}
+              maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
               busy={composerBusy}
+              disabled={composerBusy}
+              textareaRef={inputRef}
               showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
               onScrollToBottom={conversation.scrollToBottom}
-              chip={selectedDraft ? (
-                <div className="official-document-compose__reference" aria-label="已选择参考草稿">
-                  <FileText size={17} aria-hidden="true" />
-                  <span><strong>@{selectedDraft.title}</strong><small>{selectedDraft.templateName}</small></span>
-                  <button
-                    type="button"
-                    aria-label="移除参考草稿"
-                    disabled={composerBusy}
-                    onClick={() => {
-                      setSelectedDraftId("");
-                      setComposerError("");
-                    }}
-                  ><X size={14} aria-hidden="true" /></button>
-                </div>
+              overlay={mention ? (
+                <OfficialDocumentMentionMenu
+                  groups={visibleMentionGroups}
+                  activeKey={activeMentionKey}
+                  emptyText="没有匹配的模板或草稿"
+                  onHover={setActiveMentionKey}
+                  onSelect={selectMention}
+                />
               ) : null}
-              toolbarLead={<><b>@</b> {conversationVisible ? "更换参考草稿" : "选择参考草稿"}</>}
-              toolbarTail={writingBusy ? (
+              lead={(
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    items: [
+                      { key: "material", label: "上传参考资料" },
+                      { key: "template", label: "上传结构 DOCX" },
+                      { key: "library", label: "模板库" }
+                    ],
+                    onClick: ({ key }) => {
+                      if (key === "material") openMaterialPicker();
+                      if (key === "template") setUploadOpen(true);
+                      if (key === "library") setGalleryOpen(true);
+                    }
+                  }}
+                >
+                  <Button
+                    className="official-document-composer__plus"
+                    type="text"
+                    shape="circle"
+                    aria-label="添加模板或参考资料"
+                    disabled={composerBusy}
+                    icon={<Plus size={16} aria-hidden="true" />}
+                  />
+                </Dropdown>
+              )}
+              chips={composerChips}
+              tail={writingBusy ? (
                 <Button
-                  danger
+                  className="official-document-composer__stop"
                   type="text"
-                  icon={<StopCircle size={18} weight="fill" />}
+                  shape="circle"
+                  aria-label="停止"
+                  title="停止"
+                  icon={<Square size={12} weight="fill" aria-hidden="true" />}
                   onClick={cancel}
-                >停止</Button>
+                />
               ) : (
                 <Button
+                  className="official-document-composer__send"
                   type="primary"
                   shape="circle"
                   aria-label="生成完整公文"
-                  disabled={composerBusy || !selectedDraft || !value.trim()}
-                  icon={<PaperPlaneTilt size={18} weight="fill" />}
+                  disabled={composerBusy || !reference || !value.trim()}
+                  icon={<ArrowUp size={18} weight="bold" />}
                   onClick={() => void submit()}
                 />
               )}
               footnote="生成结果先保留在当前会话，确认后再保存到草稿箱。"
-            >
-              <Mentions
-                className="official-document-compose__input"
-                aria-label="公文写作要求"
-                value={value}
-                autoSize={{ minRows: conversationVisible ? 1 : 2, maxRows: 6 }}
-                maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
-                disabled={composerBusy}
-                placeholder={conversationVisible ? "继续描述，输入 @ 更换参考草稿" : "描述你想写的公文，输入 @ 选择参考草稿"}
-                options={mentionOptions}
-                placement="bottom"
-                popupClassName="official-document-compose-mentions"
-                notFoundContent="没有匹配的草稿"
-                filterOption={(keyword, option) => (
-                  option.key === "draft-picker-heading"
-                    ? !keyword
-                    : String((option as DraftMentionOption).searchText).includes(keyword.toLocaleLowerCase())
-                )}
-                onChange={setValue}
-                onSelect={(option) => {
-                  setSelectedDraftId(String(option.key));
-                  setValue((current) => removeSelectedMention(current, String(option.value)));
-                  setComposerError("");
-                }}
-                onPressEnter={(event) => {
-                  if (event.shiftKey) return;
-                  event.preventDefault();
-                  void submit();
-                }}
-              />
-            </XsComposerBox>
+              onChange={(next) => {
+                setValue(next);
+                syncMention(next);
+              }}
+              onKeyDown={handleComposerKeyDown}
+              onSelectionChange={() => syncMention(inputRef.current?.value ?? "")}
+              onBlur={() => setMention(null)}
+            />
           ) : (
             <div className="official-document-compose__empty">
-              <FileText size={28} aria-hidden="true" />
-              <strong>还没有可参考的草稿</strong>
-              <p>先从一个已发布结构创建草稿，准备好后即可在这里 @ 使用。</p>
-              <Button type="primary" onClick={() => navigate("/writing/templates")}>去结构模板</Button>
+              <FileDoc size={28} aria-hidden="true" />
+              <strong>还没有可用的结构模板</strong>
+              <p>上传一份结构 DOCX，分析完成后就能在这里 @ 它，直接生成公文。</p>
+              <Button type="primary" onClick={() => setUploadOpen(true)}>上传结构 DOCX</Button>
             </div>
           )}
 
           {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
         </div>
       </XsAsyncPanel>
+
+      <input
+        ref={materialInputRef}
+        className="official-document-compose__file"
+        type="file"
+        multiple
+        accept={[...TEXT_MATERIAL_EXTENSIONS, ".docx"].join(",")}
+        data-testid="official-document-material-file"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          for (const file of files) void addMaterial(file);
+        }}
+      />
+
+      {galleryOpen ? (
+        <TemplateGallery
+          overlay
+          label="模板库"
+          templates={templates}
+          actions={(
+            <>
+              <Button icon={<UploadSimple size={16} aria-hidden="true" />} onClick={() => setUploadOpen(true)}>
+                上传结构 DOCX
+              </Button>
+              <Button
+                className="official-document-templates__close"
+                type="text"
+                shape="circle"
+                aria-label="关闭模板库"
+                icon={<X size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setGalleryOpen(false);
+                  focusInput();
+                }}
+              />
+            </>
+          )}
+          empty={(
+            <div className="official-document-compose__empty">
+              <FileDoc size={28} aria-hidden="true" />
+              <strong>还没有可用的结构模板</strong>
+              <p>上传一份结构 DOCX，分析完成后它就会出现在这里。</p>
+            </div>
+          )}
+          onUse={useTemplate}
+          onOpen={(template) => navigate(`/writing/templates/${template.id}`)}
+        />
+      ) : null}
+
+      <XsUploadDialog
+        open={uploadOpen}
+        title="上传结构 DOCX"
+        description="上传后自动做安全检查和结构分析；示例文字只用于识别结构。"
+        accept={[".docx"]}
+        acceptMimeTypes={["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}
+        maxBytes={25 * 1024 * 1024}
+        submitLabel="上传并分析"
+        hint="结构角色与问数槽位可在发布前校准"
+        inputTestId="official-document-template-file"
+        onUpload={handleUploadTemplate}
+        onClose={() => setUploadOpen(false)}
+      />
 
       {viewer ? (
         <XsSidePanel

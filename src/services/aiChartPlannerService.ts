@@ -54,6 +54,14 @@ function dimensionLabel(value: unknown): string {
   return String(value).trim();
 }
 
+/** 名称对齐用：忽略空白、标点和大小写，让「广州思迈特软件有限公司」能匹配回答里的写法。 */
+function normalizeRankingName(value: unknown): string {
+  return dimensionLabel(value)
+    .toLowerCase()
+    .replace(/[\s\u3000]+/g, "")
+    .replace(/[，,。.、；;：:！!？?（）()【】[\]「」『』“”"'`~·\-—–_/\\|]/g, "");
+}
+
 function isNonComparableDimension(value: unknown): boolean {
   const label = dimensionLabel(value);
   return !label || nonComparableDimensionPattern.test(label);
@@ -274,6 +282,207 @@ function extractMarkdownRankingTables(markdown: string): DataHubTableResult[] {
   return tables;
 }
 
+const answerRankingUnits = "%|万元|亿元|份|个|条|家|项|次|笔|元";
+const answerRankingValue = "(\\d[\\d,]*(?:\\.\\d+)?)";
+const answerRankingParenthesizedPattern = new RegExp(
+  `^([^：:（()）]{2,40}?)\\s*[（(]\\s*${answerRankingValue}\\s*(${answerRankingUnits})?\\s*[)）]`
+);
+const answerRankingColonPattern = new RegExp(
+  `^([^：:（()）]{2,40}?)\\s*[：:]\\s*${answerRankingValue}\\s*(?:(${answerRankingUnits})|(?=$|[，,。；;]))`
+);
+const answerRankingSpacedPattern = new RegExp(
+  `^(.{2,40}?)\\s+${answerRankingValue}\\s*(${answerRankingUnits})?\\s*[。．，,；;]*$`
+);
+const answerRankingListItemPattern = /^(?:[-*•·]\s+|\d+[.)、]\s*|[（(]\d+[)）]\s*)(.+)$/;
+const answerRankingBareLineLimit = 60;
+const answerRankingIgnoredNamePattern =
+  /^(?:口径|口径说明|说明|备注|注|注意|数据来源|来源|统计口径|统计范围|统计方式|数据范围|时间范围|样本量|样本数|合计|总计|小计|总数|总量|总额|占比|其他|其它)$/;
+const answerRankingIgnoredNamePrefixPattern =
+  /^(?:以下|如下|上述|其中|共计|共|总共|一共|合计|总计|大约|约|另外|此外|例如|比如|注)/;
+const answerRankingUnitTitles: Record<string, string> = {
+  "%": "占比（%）",
+  份: "数量（份）",
+  个: "数量（个）",
+  条: "数量（条）",
+  家: "数量（家）",
+  项: "数量（项）",
+  次: "数量（次）",
+  笔: "数量（笔）",
+  元: "金额（元）",
+  万元: "金额（万元）",
+  亿元: "金额（亿元）"
+};
+const answerRankingDimensionTitles: Array<[RegExp, string]> = [
+  [/公司|企业|供应商|厂商|集团/, "公司"],
+  [/单位|机构|部门|科室/, "单位"],
+  [/项目|工程/, "项目"],
+  [/地区|区域|城市|省份|社区/, "地区"],
+  [/类型|类别|种类|品类/, "类型"]
+];
+const answerRankingNameKey = "name";
+const answerRankingValueKey = "value";
+const answerRankingTableLabel = "回答中的排名";
+const answerRankingMetricFallbackTitle = "数值";
+const answerRankingReason = "图表按回答中的数值绘制，与正文口径一致。";
+const defaultChartTitle = "AI 生成图表";
+
+type AnswerRankingEntry = {
+  name: string;
+  value: number;
+  unit: string;
+};
+
+function cleanAnswerRankingName(value: string) {
+  return value
+    .replace(/[*`]/g, "")
+    .replace(/^[\s"'「」『』“”（(【[]+|[\s"'「」『』“”）)】\]：:]+$/g, "")
+    .trim();
+}
+
+function isUsableAnswerRankingName(value: string) {
+  return (
+    value.length >= 2
+    && !answerRankingIgnoredNamePattern.test(value)
+    && !answerRankingIgnoredNamePrefixPattern.test(value)
+  );
+}
+
+function parseAnswerRankingEntry(text: string): AnswerRankingEntry | null {
+  const cleaned = text.replace(/[*`]/g, "").trim();
+  const matched =
+    cleaned.match(answerRankingParenthesizedPattern)
+    ?? cleaned.match(answerRankingColonPattern)
+    ?? cleaned.match(answerRankingSpacedPattern);
+  if (!matched) {
+    return null;
+  }
+
+  const name = cleanAnswerRankingName(matched[1] ?? "");
+  const value = toNumber(matched[2] ?? "");
+  if (!isUsableAnswerRankingName(name) || value === null) {
+    return null;
+  }
+
+  return { name, value, unit: matched[3] ?? "" };
+}
+
+function inferAnswerRankingDimensionTitle(label: string, names: string[]) {
+  const context = `${label} ${names.join(" ")}`;
+  return answerRankingDimensionTitles.find(([pattern]) => pattern.test(context))?.[1] ?? "名称";
+}
+
+function buildAnswerRankingTable(
+  entries: AnswerRankingEntry[],
+  itemCount: number,
+  label: string
+): DataHubTableResult | null {
+  // 列表里过半是说明项时，这段文字更像口径描述而不是排名。
+  if (entries.length < 2 || entries.length * 2 < itemCount) {
+    return null;
+  }
+
+  if (new Set(entries.map((entry) => entry.unit)).size > 1) {
+    return null;
+  }
+
+  const names = entries.map((entry) => entry.name);
+  if (new Set(names.map(normalizeRankingName)).size !== names.length) {
+    return null;
+  }
+
+  return {
+    columns: [
+      { key: answerRankingNameKey, title: inferAnswerRankingDimensionTitle(label, names), type: "dimension" },
+      {
+        key: answerRankingValueKey,
+        title: answerRankingUnitTitles[entries[0].unit] ?? answerRankingMetricFallbackTitle,
+        type: "number"
+      }
+    ],
+    rows: entries.map((entry) => ({
+      [answerRankingNameKey]: entry.name,
+      [answerRankingValueKey]: entry.value
+    })),
+    totalRows: entries.length,
+    groupLabel: label || answerRankingTableLabel,
+    source: "answer"
+  };
+}
+
+/** 解析回答正文里的要点式排名（`- **公司（13 份）**：…`、`1. 公司：13 份`、`公司 13 份`）。 */
+export function extractAnswerRankingList(markdown: string): DataHubTableResult[] {
+  const lines = markdown.split(/\r?\n/);
+  const tables: DataHubTableResult[] = [];
+  let contextLabel = "";
+  let blockLabel = "";
+  let block: { indent: number; entries: AnswerRankingEntry[]; itemCount: number } | null = null;
+
+  const flushBlock = () => {
+    if (block) {
+      const table = buildAnswerRankingTable(block.entries, block.itemCount, blockLabel);
+      if (table) {
+        tables.push(table);
+      }
+    }
+    block = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    const indent = rawLine.length - rawLine.replace(/^\s+/, "").length;
+    // 更深缩进的子要点是对上一条的解释，不参与排名。
+    if (block && indent > block.indent) {
+      continue;
+    }
+
+    if (isMarkdownTableRow(line)) {
+      flushBlock();
+      continue;
+    }
+
+    const listItem = line.match(answerRankingListItemPattern);
+    const entry =
+      listItem || line.length <= answerRankingBareLineLimit
+        ? parseAnswerRankingEntry(listItem?.[1] ?? line)
+        : null;
+
+    if (entry) {
+      if (!block) {
+        block = { indent, entries: [], itemCount: 0 };
+        blockLabel = contextLabel;
+      }
+      block.entries.push(entry);
+      block.itemCount += 1;
+      continue;
+    }
+
+    if (listItem) {
+      if (block) {
+        block.itemCount += 1;
+      }
+      continue;
+    }
+
+    flushBlock();
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    const boldTitle = line.match(/^\*\*(.+?)\*\*[：:]?$/);
+    const plainTitle = line.length <= 80 ? line : "";
+    contextLabel = (heading?.[1] ?? boldTitle?.[1] ?? plainTitle).replace(/[：:]\s*$/, "").trim();
+  }
+
+  flushBlock();
+
+  return tables;
+}
+
+function extractAnswerRankings(markdown: string): DataHubTableResult[] {
+  return [...extractMarkdownRankingTables(markdown), ...extractAnswerRankingList(markdown)];
+}
+
 function isHealthyRankingTable(table: DataHubTableResult, index = 0): boolean {
   const summary = summarizeTable(table, index);
   const keys = getPreferredChartKeys(summary);
@@ -291,14 +500,14 @@ function isHealthyRankingTable(table: DataHubTableResult, index = 0): boolean {
 }
 
 export function resolveAiChartTables(request: AiChartPlanRequest): DataHubTableResult[] {
-  const sqlTables = request.tables.filter((table) => table.source !== "answer");
   const alreadyHasAnswerTables = request.tables.some((table) => table.source === "answer");
+  // 正文口径可能是多张结果表合并后的重新排名，所以只要回答里有排名就一并送进规划，
+  // 由一致性门决定最终画哪一张；没有结构化结果表时仍然不靠正文单独起图。
   const shouldUseAnswerRanking = Boolean(request.answer)
     && !alreadyHasAnswerTables
-    && sqlTables.length > 0
-    && !sqlTables.some((table, index) => isHealthyRankingTable(table, table.tableIndex ?? index));
+    && request.tables.some((table) => table.source !== "answer");
   const answerTables = shouldUseAnswerRanking && request.answer
-    ? extractMarkdownRankingTables(request.answer)
+    ? extractAnswerRankings(request.answer)
     : [];
   return [
     ...request.tables,
@@ -309,19 +518,32 @@ export function resolveAiChartTables(request: AiChartPlanRequest): DataHubTableR
   ];
 }
 
+function withAnswerTableRetained(selected: DataHubTableResult[], tables: DataHubTableResult[]) {
+  const answerTable = tables.find((table) => table.source === "answer");
+  if (!answerTable || selected.includes(answerTable) || selected.some((table) => table.source === "answer")) {
+    return selected;
+  }
+
+  // 回答口径是一致性门的判据，超出表数上限时也要留一张给模型和后续对账。
+  return [...selected.slice(0, chartPlanTableLimit - 1), answerTable];
+}
+
 export function createAiChartPlanRequestSummary(request: AiChartPlanRequest): AiChartPlanRequestSummary {
   const tables = resolveAiChartTables(request);
   const selectedTables = tables.length <= chartPlanTableLimit
     ? tables
-    : tables
-        .map((table, index) => ({
-          table,
-          index,
-          chartable: isHealthyRankingTable(table, table.tableIndex ?? index)
-        }))
-        .sort((left, right) => Number(right.chartable) - Number(left.chartable) || left.index - right.index)
-        .slice(0, chartPlanTableLimit)
-        .map(({ table }) => table);
+    : withAnswerTableRetained(
+        tables
+          .map((table, index) => ({
+            table,
+            index,
+            chartable: isHealthyRankingTable(table, table.tableIndex ?? index)
+          }))
+          .sort((left, right) => Number(right.chartable) - Number(left.chartable) || left.index - right.index)
+          .slice(0, chartPlanTableLimit)
+          .map(({ table }) => table),
+        tables
+      );
 
   return {
     question: request.question,
@@ -596,6 +818,153 @@ function resolveChartSelection(plan: AiChartPlanResult, tables: DataHubTableResu
   };
 }
 
+type RankingSelection = {
+  table: DataHubTableResult;
+  rows: Record<string, unknown>[];
+  dimensionKey: string;
+  metricKey: string;
+};
+
+function getRankingSelection(table: DataHubTableResult, index: number): RankingSelection | null {
+  const keys = getPreferredChartKeys(summarizeTable(table, index));
+  if (!keys) {
+    return null;
+  }
+
+  const rows = getComparableChartRows(table, keys.dimensionColumn.key, [keys.metricColumn.key]).filter(
+    (row) => toNumber(row[keys.metricColumn.key]) !== null
+  );
+  if (rows.length < 2) {
+    return null;
+  }
+
+  return { table, rows, dimensionKey: keys.dimensionColumn.key, metricKey: keys.metricColumn.key };
+}
+
+function matchesRankingName(left: unknown, right: unknown) {
+  const leftName = normalizeRankingName(left);
+  const rightName = normalizeRankingName(right);
+  if (!leftName || !rightName) {
+    return false;
+  }
+
+  if (leftName === rightName) {
+    return true;
+  }
+
+  // 单字名称的包含关系太容易误撞，只对两字以上的名称做包含匹配。
+  return (
+    (leftName.length >= 2 && rightName.includes(leftName))
+    || (rightName.length >= 2 && leftName.includes(rightName))
+  );
+}
+
+function isSameRankingValue(left: number, right: number) {
+  return Math.abs(left - right) <= Math.max(Math.abs(left), Math.abs(right), 1) * 1e-9;
+}
+
+/**
+ * 判定候选表能否复现回答里的排名：同名条目数值必须相同，回答的第一名必须出现在表里，
+ * 且两边都不止一行时匹配上的名称不能少于回答条目的一半。
+ */
+function reproducesAnswerRanking(
+  ranking: RankingSelection,
+  candidate: { table: DataHubTableResult; dimensionKey: string; metricKeys: string[] }
+) {
+  const metricKey = candidate.metricKeys[0];
+  if (!metricKey) {
+    return false;
+  }
+
+  const candidateRows = getComparableChartRows(candidate.table, candidate.dimensionKey, candidate.metricKeys);
+  let matched = 0;
+
+  for (const row of ranking.rows) {
+    const hit = candidateRows.find((candidateRow) =>
+      matchesRankingName(row[ranking.dimensionKey], candidateRow[candidate.dimensionKey])
+    );
+    if (!hit) {
+      continue;
+    }
+
+    const answerValue = toNumber(row[ranking.metricKey]);
+    const candidateValue = toNumber(hit[metricKey]);
+    if (answerValue === null || candidateValue === null || !isSameRankingValue(answerValue, candidateValue)) {
+      return false;
+    }
+    matched += 1;
+  }
+
+  const leader = ranking.rows[0]?.[ranking.dimensionKey];
+  if (!candidateRows.some((row) => matchesRankingName(leader, row[candidate.dimensionKey]))) {
+    return false;
+  }
+
+  return !(candidateRows.length >= 2 && ranking.rows.length >= 2 && matched * 2 < ranking.rows.length);
+}
+
+/**
+ * 回答里的排名是最终口径（可能由多张结果表合并重排得到），图表不能和它冲突：
+ * 选中的结果表复现不了这组数值时，改画能复现的结果表，都复现不了就直接画回答里的数值。
+ */
+export function reconcileChartSpecWithAnswer(
+  spec: GeneratedChartSpec,
+  tables: DataHubTableResult[]
+): GeneratedChartSpec {
+  if (!tables.some((table) => table.source === "answer")) {
+    return spec;
+  }
+
+  if (spec.table.source === "answer") {
+    return { ...spec, reason: answerRankingReason, tableTitle: answerRankingTableLabel };
+  }
+
+  const indexed = tables.map((table, index) => ({ table, index: table.tableIndex ?? index }));
+  const rankings = indexed
+    .filter(({ table }) => table.source === "answer")
+    .map(({ table, index }) => getRankingSelection(table, index))
+    .filter((ranking): ranking is RankingSelection => ranking !== null);
+  if (rankings.length === 0) {
+    return spec;
+  }
+
+  const selected = { table: spec.table, dimensionKey: spec.dimensionKey, metricKeys: spec.metricKeys };
+  if (rankings.some((ranking) => reproducesAnswerRanking(ranking, selected))) {
+    return spec;
+  }
+
+  const target = rankings[0];
+  const backing = indexed
+    .filter(({ table, index }) => table.source !== "answer" && index !== spec.tableIndex)
+    .map(({ table, index }) => getRankingSelection(table, index))
+    .find(
+      (candidate): candidate is RankingSelection =>
+        candidate !== null
+        && reproducesAnswerRanking(target, {
+          table: candidate.table,
+          dimensionKey: candidate.dimensionKey,
+          metricKeys: [candidate.metricKey]
+        })
+    );
+  const source = backing ?? target;
+  const chartType = spec.chartType === "line" ? "bar" : spec.chartType;
+
+  return {
+    ...spec,
+    title: spec.title && spec.title !== defaultChartTitle
+      ? spec.title
+      : source.table.groupLabel || answerRankingTableLabel,
+    reason: answerRankingReason,
+    chartType,
+    allowedTypes: Array.from(new Set<AiChartType>([chartType, "bar", "pie"])),
+    table: { ...source.table, rows: source.rows, totalRows: source.rows.length },
+    tableIndex: getTableIndex(source.table, tables),
+    tableTitle: backing ? getTableTitle(source.table, tables) : answerRankingTableLabel,
+    dimensionKey: source.dimensionKey,
+    metricKeys: [source.metricKey]
+  };
+}
+
 export function buildGeneratedChartSpec(
   plan: AiChartPlanResult,
   tables: DataHubTableResult[]
@@ -635,17 +1004,20 @@ export function buildGeneratedChartSpec(
     totalRows: comparableRows.length
   };
 
-  return {
-    title: selection.title || plan.title || "AI 生成图表",
-    reason: plan.reason,
-    chartType: plan.chartType,
-    allowedTypes: Array.from(new Set(allowedTypes)),
-    table: chartTable,
-    tableIndex: getTableIndex(selection.table, tables),
-    tableTitle: getTableTitle(selection.table, tables),
-    dimensionKey: selection.dimensionKey,
-    metricKeys: selection.metricKeys
-  };
+  return reconcileChartSpecWithAnswer(
+    {
+      title: selection.title || plan.title || defaultChartTitle,
+      reason: plan.reason,
+      chartType: plan.chartType,
+      allowedTypes: Array.from(new Set(allowedTypes)),
+      table: chartTable,
+      tableIndex: getTableIndex(selection.table, tables),
+      tableTitle: getTableTitle(selection.table, tables),
+      dimensionKey: selection.dimensionKey,
+      metricKeys: selection.metricKeys
+    },
+    tables
+  );
 }
 
 function metricTitle(table: DataHubTableResult, key: string) {

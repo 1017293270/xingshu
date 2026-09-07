@@ -1528,7 +1528,11 @@ test("mobile navigation reaches every product destination and account route", as
     await expect(drawer).toBeVisible();
     await drawer.getByRole("link", { name: destination.label, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${destination.path.replace("/", "\\/")}$`));
-    await expect(page.getByRole("heading", { name: destination.heading, level: 1 })).toBeVisible();
+    if (destination.path === "/writing") {
+      await expect(page.getByRole("region", { name: "报告智写工作台" })).toBeVisible();
+    } else {
+      await expect(page.getByRole("heading", { name: destination.heading, level: 1 })).toBeVisible();
+    }
     if (destination.readyText) {
       await expect(page.getByText(destination.readyText, { exact: false }).first()).toBeVisible();
     }
@@ -1537,9 +1541,8 @@ test("mobile navigation reaches every product destination and account route", as
     }
     await expect(drawer).toBeHidden();
     if (destination.path === "/writing") {
-      await expect(page.getByRole("navigation", { name: "星数主导航" })).toHaveCount(0);
-      await page.getByRole("link", { name: "返回星数" }).click();
-      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole("button", { name: "打开主导航" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "返回星数", exact: true })).toHaveCount(0);
     }
   }
 

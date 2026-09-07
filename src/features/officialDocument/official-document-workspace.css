@@ -1,202 +1,94 @@
-/* ---------- 公文 Agent 应用壳：左侧导航轨 + 页头 + 单一职责工作区 ---------- */
+/* ---------- 公文 Agent 应用壳：写作台无边框，列表与详情只挂一条细头部 ---------- */
+
+/* 写作模块复用星数侧栏；工作区在主布局剩余高度内滚动。 */
+.xs-shell__main:has(.official-document-app) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 0 0 var(--xs-shell-toggle-gutter);
+  background: var(--xs-surface);
+}
+
+.xs-route-view:has(> .official-document-app) {
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .xs-shell__main:has(.official-document-app) {
+    padding: 0;
+  }
+}
 
 .official-document-app {
+  position: relative;
   display: grid;
-  grid-template-columns: var(--xs-sidebar-expanded-width) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
-  height: 100dvh;
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: var(--xs-bg);
   color: var(--xs-text);
 }
 
-/* 独立工作台，但外壳材质与全局侧栏一致：同宽、同留白、同投影 */
-.official-document-rail {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 10px 12px;
-  border-right: 1px solid var(--xs-border);
+.official-document-app[data-stage="compose"] {
+  grid-template-rows: minmax(0, 1fr);
   background: var(--xs-surface);
-  box-shadow: 8px 0 30px rgba(8, 26, 58, 0.03);
 }
 
-/* 顶部是"你在哪个应用"，与下面的导航分属两层，所以用一条细线划开 */
-.official-document-rail__brand {
-  display: grid;
-  gap: 12px;
-  padding: 0 6px 14px;
-  border-bottom: 1px solid var(--xs-border);
-}
-
-.official-document-rail__brand > img {
-  width: 86px;
-  height: auto;
-  object-fit: contain;
-}
-
-.official-document-rail__app {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-/* 应用名 17 / 副标题 12 / 导航 13：三档各占一级，不再挤在 14 与 13 之间 */
-.official-document-rail__brand h1 {
-  margin: 0;
-  overflow: hidden;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-card);
-  font-weight: var(--xs-fw-medium);
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-rail__app p {
-  margin: 0;
-  overflow: hidden;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  letter-spacing: 0;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-rail__nav {
-  display: grid;
-  flex: 1;
-  align-content: start;
-  gap: 2px;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* 与主侧栏菜单项同一个物件：36px 高、13/500、10px 圆角、选中靠左侧 3px 主色边 */
-.official-document-rail__nav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 0 12px;
-  color: var(--xs-text-2);
-  border-left: 3px solid transparent;
-  border-radius: 10px;
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-text);
-  letter-spacing: 0.01em;
-  text-decoration: none;
-  transition:
-    color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.official-document-rail__nav a svg {
-  flex: none;
-}
-
-.official-document-rail__nav a span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-rail__nav a:hover {
-  color: var(--xs-primary-2);
-  background: var(--xs-surface-soft);
-}
-
-.official-document-rail__nav a[data-active] {
-  color: var(--xs-primary-2);
-  border-left-color: var(--xs-primary);
-  background: var(--xs-info-soft);
-}
-
-.official-document-rail__foot {
-  padding-top: 12px;
-  border-top: 1px solid var(--xs-border);
-}
-
-.official-document-app__exit {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 12px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.official-document-app__exit:hover {
-  color: var(--xs-primary-2);
-}
-
-.official-document-app__main {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
-}
-
+/* 细头部：返回写作台 · 页面标题 · 页面自己的动作，一条 56px 的带子 */
 .official-document-app__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  min-height: 76px;
-  padding: 14px 28px;
+  gap: 16px;
+  height: 56px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--xs-border);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--xs-surface);
+}
+
+.official-document-app__back {
+  display: inline-flex;
+  flex: none;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  margin-left: -10px;
+  border-radius: var(--xs-radius-control);
+  color: var(--xs-interactive-text);
+  font-size: var(--xs-fs-control);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.official-document-app__back:hover {
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
 }
 
 .official-document-app__context {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.official-document-app__eyebrow {
   display: flex;
-  align-items: center;
-  gap: 7px;
-  /* 间距归 eyebrow 所有：列表页没有 eyebrow 时标题就正好居中 */
-  margin: 0 0 4px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-medium);
-  letter-spacing: var(--xs-ls-caps);
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+  /* 标题与右侧动作之间的空白全部归它，标题才紧挨着返回链接 */
+  margin-inline-end: auto;
+  padding-left: 16px;
+  border-left: 1px solid var(--xs-border);
 }
 
-.official-document-app__eyebrow i {
-  color: #c4d3e6;
-  font-style: normal;
-}
-
-.official-document-app__library {
-  color: var(--xs-interactive-text);
-  font-weight: var(--xs-fw-medium);
-  text-decoration: none;
-}
-
-.official-document-app__library:hover {
-  color: var(--xs-primary-2);
-}
-
-/* 常驻顶栏里的阶段名走分区字号，比一级页面标题低一档，但仍在同一套比例尺内 */
 .official-document-app__context-title {
   overflow: hidden;
   margin: 0;
   color: var(--xs-text);
-  font-size: var(--xs-fs-control-lg);
+  font-size: var(--xs-fs-control);
   font-weight: var(--xs-fw-medium);
-  line-height: 1.25;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -209,14 +101,12 @@
   gap: 6px;
   margin: -2px -5px;
   padding: 2px 5px;
-  border-radius: 8px;
+  border-radius: var(--xs-radius-small);
   color: inherit;
   text-decoration: none;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out),
-    transform 90ms var(--xs-motion-ease-out);
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .official-document-app__context-link span {
@@ -228,24 +118,15 @@
 .official-document-app__context-link svg {
   flex: 0 0 auto;
   opacity: 0.58;
-  transition:
-    opacity var(--xs-motion-fast) var(--xs-motion-ease-out),
-    transform var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .official-document-app__context-link:hover {
   color: var(--xs-primary-2);
-  background: #edf5ff;
-  box-shadow: inset 0 0 0 1px #d7e8fb;
+  background: var(--xs-info-soft);
 }
 
 .official-document-app__context-link:hover svg {
   opacity: 1;
-  transform: translate(1px, -1px);
-}
-
-.official-document-app__context-link:active {
-  transform: scale(0.99);
 }
 
 .official-document-app__context-link:focus-visible {
@@ -253,42 +134,18 @@
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .official-document-app__context-link,
-  .official-document-app__context-link svg {
-    transition: none;
-  }
-
-  .official-document-app__context-link:hover svg,
-  .official-document-app__context-link:active {
-    transform: none;
-  }
-}
-
 .official-document-app__context small {
   overflow: hidden;
-  color: #7185a1;
+  color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.official-document-app__bar[data-stage="draft"] .official-document-app__context-title {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-card);
-  font-weight: var(--xs-fw-bold);
-}
-
-.official-document-app__bar[data-stage="draft"] .official-document-app__context small {
-  color: #526d8d;
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
-}
-
 .official-document-app__actions {
   display: flex;
+  flex: none;
   align-items: center;
-  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -328,7 +185,6 @@
   padding: 0 28px;
   background: #fff;
 }
-
 .official-document-compose,
 .official-document-compose > .xs-async-panel,
 .official-document-compose > .xs-async-panel > .xs-async-panel__content {
@@ -337,10 +193,19 @@
   min-height: 0;
 }
 
+/* 模板面板盖在这上面，所以定位上下文归写作区自己 */
+.official-document-compose {
+  position: relative;
+}
+
+/* 文件选择器只做触发器，动作入口在工具条的 + 号和 @ 浮层里 */
+.official-document-compose__file {
+  display: none;
+}
+
 /* 浏览全文时整块工作区左右分栏，对话让出右侧给公文本身，
    而不是把 PDF 压成对话流里的一个小方框。 */
 .official-document-compose[data-viewer] {
-  position: relative;
   display: flex;
   align-items: stretch;
   gap: 16px;
@@ -365,12 +230,13 @@
   align-content: stretch;
 }
 
+/* 首屏只有标题和输入盒两件东西，居中之后 @ 浮层才有地方在正上方展开 */
 .official-document-compose__content {
   display: grid;
   width: min(920px, 100%);
-  min-height: calc(100dvh - 76px);
+  min-height: 100%;
   margin: auto;
-  align-content: start;
+  align-content: center;
   gap: 36px;
   padding: clamp(58px, 8vh, 82px) 0 88px;
 }
@@ -398,7 +264,7 @@
   grid-template-rows: minmax(0, 1fr) auto;
   align-content: stretch;
   gap: 16px;
-  padding: 28px 0 16px;
+  padding: 52px 0 16px;
 }
 /* 与首页问候语、制表入口同一套排版（基准见 src/features/home/home.css 的 .home-page__hero h1）：
    同字族、同字号、同字重、同字距、同行高、同墨色。三个入口 hero 必须是同一件东西。 */
@@ -409,161 +275,6 @@
   font-weight: var(--xs-fw-medium);
   letter-spacing: 0;
   line-height: 1.3;
-}
-
-.official-document-compose__content[data-conversation] .official-document-compose__reference {
-  margin: 8px 12px 0;
-  padding: 4px 6px 4px 8px;
-}
-
-.official-document-compose__reference {
-  display: flex;
-  width: fit-content;
-  max-width: calc(100% - 32px);
-  align-items: center;
-  gap: 9px;
-  margin: 10px 14px 0;
-  padding: 6px 7px 6px 9px;
-  color: var(--xs-text-2);
-  border: 1px solid #e2e2e2;
-  border-radius: 10px;
-  background: #f7f7f7;
-}
-
-.official-document-compose__reference > span {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.official-document-compose__reference strong,
-.official-document-compose__reference small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-compose__reference strong {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-medium);
-}
-
-.official-document-compose__reference small {
-  color: #777;
-  font-size: var(--xs-fs-caption);
-}
-
-.official-document-compose__reference button {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  padding: 0;
-  place-items: center;
-  color: #7890ad;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.official-document-compose__reference button:hover:not(:disabled) {
-  color: var(--xs-text);
-  background: #e9e9e9;
-}
-
-.official-document-compose__mention-option {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 18px;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 2px 0;
-}
-
-.official-document-compose__mention-icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  color: #555;
-  border-radius: 9px;
-  background: #f0f0f0;
-}
-
-.official-document-compose__mention-option > span {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.official-document-compose__mention-option strong,
-.official-document-compose__mention-option small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.official-document-compose__mention-option strong {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-label);
-  font-weight: 500;
-}
-
-.official-document-compose__mention-option small {
-  color: #777;
-  font-size: var(--xs-fs-caption);
-}
-
-.official-document-compose-mentions {
-  width: min(360px, calc(100vw - 32px)) !important;
-  max-width: min(360px, calc(100vw - 32px));
-  padding: 7px !important;
-  border: 1px solid #dedede !important;
-  border-radius: 16px !important;
-  background: #fff !important;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14) !important;
-}
-
-.official-document-compose-mentions .ant-mentions-dropdown-menu-item {
-  margin: 1px 0;
-  padding: 7px 8px;
-  border-radius: 11px;
-}
-
-.official-document-compose-mentions .ant-mentions-dropdown-menu-item:hover,
-.official-document-compose-mentions .ant-mentions-dropdown-menu-item-active {
-  background: #f2f2f2 !important;
-}
-
-.official-document-compose-mentions .ant-mentions-dropdown-menu-item-disabled {
-  padding: 6px 8px 4px;
-  background: transparent !important;
-  cursor: default;
-  opacity: 1;
-}
-
-.official-document-compose__mention-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #777;
-}
-
-.official-document-compose__mention-heading strong {
-  color: #555;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.official-document-compose__mention-heading small {
-  font-size: 11px;
-}
-
-.official-document-compose__mention-option[data-selected] {
-  color: var(--xs-primary-2);
 }
 
 .official-document-compose__empty {
@@ -846,47 +557,8 @@
 }
 
 @media (max-width: 1000px) {
-  .official-document-app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .official-document-rail {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 10px 12px;
-    padding: 10px 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--xs-border);
-  }
-
-  /* 顶栏形态：logo 与应用标识并排，分隔线交给顶栏自己的下边框 */
-  .official-document-rail__brand {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 0;
-    border-bottom: 0;
-  }
-
-  .official-document-rail__brand > img {
-    width: 124px;
-  }
-
-  .official-document-rail__nav {
-    display: flex;
-    grid-column: 1 / -1;
-    overflow-x: auto;
-  }
-
-  .official-document-rail__foot {
-    padding-top: 0;
-    border-top: 0;
-  }
-
   .official-document-app__bar {
-    padding: 12px 16px;
+    padding: 0 14px;
   }
 
   .official-document-app__workspace[data-stage="library"],
@@ -915,32 +587,6 @@
      公文跟着不缩，两页切换标题才不会跳。图标同理跟着字号走，不再写死 34px。 */
   .official-document-compose__content > header {
     gap: 8px;
-  }
-
-  .official-document-compose__box {
-    border-radius: 20px;
-  }
-
-  .official-document-compose__input textarea {
-    min-height: 60px;
-    padding: 16px 18px 5px;
-    font-size: 15px;
-  }
-
-  .official-document-compose__toolbar {
-    min-height: 54px;
-    padding: 6px 12px 10px 18px;
-  }
-
-  .official-document-compose__toolbar > span {
-    line-height: 1.55;
-  }
-
-  .official-document-compose__progress {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding-left: 8px;
   }
 
   .official-document-compose__content[data-conversation] {
@@ -976,18 +622,9 @@
 }
 
 @media (max-width: 760px) {
-  .official-document-rail__app p {
+  /* 细头部在窄屏保住高度，让出的是标题：返回入口和动作按钮都不能被挤走 */
+  .official-document-app__context {
     display: none;
-  }
-
-  .official-document-app__bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .official-document-app__actions {
-    justify-content: flex-start;
   }
 
   .official-document-list__columns {
@@ -1009,7 +646,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .official-document-rail__nav a,
   .official-document-row > button,
   .official-document-row__caret {
     transition: none;
@@ -1111,35 +747,7 @@
   font-size: var(--xs-fs-caption);
 }
 
-/* ---------- 公文写作对共享输入盒的少量特化 ---------- */
 
-/* “@ 选择参考草稿”提示里的那枚 @ 圆钮 */
-.official-document-compose__box .xs-composer__lead b {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  margin-right: 6px;
-  place-items: center;
-  color: #4b5563;
-  border: 0;
-  border-radius: 50%;
-  background: #fff;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-/* 会话态把整句提示压成一枚 @ 圆钮，把那一条带让给单行输入 */
-.official-document-compose__content[data-conversation] .xs-composer__lead {
-  width: 30px;
-  overflow: hidden;
-  font-size: 0;
-  white-space: nowrap;
-}
-
-.official-document-compose__content[data-conversation] .xs-composer__lead b {
-  margin: 0;
-  font-size: 17px;
-}
 
 /* 公文预览侧栏里的 Word 引擎渲染结果与兜底排版 */
 .xs-side-panel__body iframe {

@@ -87,11 +87,11 @@ describe("AppRoutes", () => {
     expect(resolveRouteFallbackVariant("/document-lookup")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/ask-agent")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/dashboard-view")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing/templates")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing/drafts")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing/templates/template-demo-work-report")).toBe("fullscreen");
-    expect(resolveRouteFallbackVariant("/writing/drafts/draft-demo-1")).toBe("fullscreen");
+    expect(resolveRouteFallbackVariant("/writing")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing/templates")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing/drafts")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing/templates/template-demo-work-report")).toBe("workspace");
+    expect(resolveRouteFallbackVariant("/writing/drafts/draft-demo-1")).toBe("workspace");
     expect(resolveRouteFallbackVariant("/table/ask-table-demo")).toBe("workspace");
   });
 
@@ -103,7 +103,7 @@ describe("AppRoutes", () => {
     ["/ask-agent", "从一个跨数据与知识的任务开始", "空白智能编排工作区"],
     ["/history", "历史对话", "历史对话列表"],
     ["/table", "想做一张什么表？", "最近制表记录"],
-    ["/writing", "报告智写", "报告智写工作台"],
+    ["/writing", "公文写作暂不可用", "报告智写工作台"],
     ["/dashboard", "我的看板", "我的看板空状态"],
     ["/dashboard/square", "看板广场", "看板广场空状态"],
     ["/dashboard-editor", "看板编辑器", "看板编辑器工作区"],
@@ -189,40 +189,35 @@ describe("AppRoutes", () => {
     });
   });
 
-  it("opens official document writing as a fullscreen agent workspace", async () => {
-    renderRoute("/writing");
+  it("keeps the shared sidebar when opening official document writing from navigation", async () => {
+    const user = userEvent.setup();
+    renderRoute("/dashboard");
+    const navigation = await screen.findByRole("navigation", { name: "星数主导航" });
+    await user.click(within(navigation).getByRole("menuitem", { name: "报告智写" }));
 
     expect(
-      await screen.findByRole("heading", { name: "报告智写" }, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+      await screen.findByLabelText("公文写作", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回星数" })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("报告智写工作台")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "星数主导航" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "打开主导航" })).not.toBeInTheDocument();
-
-    const agentNavigation = screen.getByRole("navigation", { name: "报告智写导航" });
-    expect(within(agentNavigation).getByRole("link", { name: /公文写作/ })).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
-    expect(await screen.findByLabelText("公文写作")).toBeInTheDocument();
-    expect(screen.queryByLabelText("报告模板库")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "星数主导航" })).toBe(navigation);
+    expect(within(navigation).getByRole("menuitem", { name: "报告智写" })).toHaveClass("ant-menu-item-selected");
+    expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开主导航" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "报告智写" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("报告草稿箱")).not.toBeInTheDocument();
   });
 
-  it("opens the draft box as a separate page inside the official document app", async () => {
+  it("opens the draft box as a separate page with a slim header back to writing", async () => {
     renderRoute("/writing/drafts");
 
     expect(
       await screen.findByLabelText("报告草稿箱", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("报告模板库")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("结构模板库")).not.toBeInTheDocument();
 
-    const agentNavigation = screen.getByRole("navigation", { name: "报告智写导航" });
-    expect(within(agentNavigation).getByRole("link", { name: /草稿箱/ })).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
+    expect(screen.getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    expect(screen.getByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
   });
 
   it("keeps the shared sidebar on routed pages", async () => {
