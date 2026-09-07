@@ -1,5 +1,6 @@
 import { Check, Question } from "@phosphor-icons/react";
 import { Button } from "antd";
+import { clarificationAnswerOf } from "@/services/dataHubClarification";
 import type { DataHubClarification } from "@/types/dataHub";
 
 export type XsClarifyCardProps = {
@@ -21,6 +22,10 @@ export type XsClarifyCardProps = {
 export function XsClarifyCard({ clarification, onExpand, fresh }: XsClarifyCardProps) {
   const selectedAnswer = clarification.selectedAnswer?.trim() ?? "";
 
+  const selectedLabel = clarification.interactionId
+    ? clarification.options.find((option) => clarificationAnswerOf(option) === selectedAnswer)?.label
+    : undefined;
+
   if (selectedAnswer) {
     return (
       <section
@@ -31,7 +36,7 @@ export function XsClarifyCard({ clarification, onExpand, fresh }: XsClarifyCardP
       >
         <Check size={15} weight="bold" aria-hidden="true" />
         <small>已选择</small>
-        <p>{selectedAnswer}</p>
+        <p>{selectedLabel ?? selectedAnswer}</p>
       </section>
     );
   }

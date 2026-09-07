@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type XsSafeMarkdownProps = {
   content: string;
   className?: string;
+  resolveImage?: (src: string, signal: AbortSignal) => Promise<{ url: string; revoke?: () => void } | null>;
+  references?: Record<string, { label: string; onClick: () => void }>;
 };
 
 type SafeImageUrlOptions = {
@@ -67,9 +69,32 @@ export function getSafeImageUrl(src: string | undefined, options: SafeImageUrlOp
   }
 }
 
-function XsSafeMarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+function XsSafeMarkdownImage({ src, alt, title, resolveImage }: {
+  src?: string; alt?: string; title?: string; resolveImage?: XsSafeMarkdownProps["resolveImage"];
+}) {
   const [failed, setFailed] = useState(false);
-  const safeUrl = getSafeImageUrl(src, {
+  const [retry, setRetry] = useState(0);
+  const [resolution, setResolution] = useState<{ src?: string; resolver: XsSafeMarkdownProps["resolveImage"]; status: "ready" | "error"; url?: string }>();
+  useEffect(() => {
+    setFailed(false);
+    setResolution(undefined);
+    if (!resolveImage || !src) return;
+    const controller = new AbortController();
+    let release: (() => void) | undefined;
+    resolveImage(src, controller.signal).then((result) => {
+      if (controller.signal.aborted) { result?.revoke?.(); return; }
+      release = result?.revoke;
+      setResolution({ src, resolver: resolveImage, status: "ready", url: result?.url });
+    }).catch(() => {
+      if (!controller.signal.aborted) setResolution({ src, resolver: resolveImage, status: "error" });
+    });
+    return () => { controller.abort(); release?.(); };
+  }, [src, resolveImage, retry]);
+  const resolved = resolution && resolution.src === src && resolution.resolver === resolveImage ? resolution : undefined;
+  if (resolveImage && src && !resolved) return <span className="xs-safe-markdown__image-blocked" role="status">图片读取中…</span>;
+  if (resolved?.status === "error") return <button className="xs-safe-markdown__image-fallback" type="button" onClick={() => setRetry(value => value + 1)}>图片读取失败，点击重试</button>;
+  // blob URL 只接受调用方受保护制品服务的解析结果，不接受 Markdown 中的任意 blob。
+  const safeUrl = resolved?.url || getSafeImageUrl(src, {
     publicOrigin: import.meta.env.VITE_RAG_IMAGE_ORIGIN
   });
   const accessibleAlt = alt?.trim() || "回答中的图片";
@@ -115,20 +140,28 @@ function XsSafeMarkdownImage({ src, alt, title }: { src?: string; alt?: string; 
   );
 }
 
-export function XsSafeMarkdown({ content, className = "" }: XsSafeMarkdownProps) {
+export function XsSafeMarkdown({ content, className = "", references, resolveImage }: XsSafeMarkdownProps) {
   return (
     <div className={`xs-safe-markdown${className ? ` ${className}` : ""}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         skipHtml
         components={{
+          code: ({ children, node: _node, ...props }) => {
+            const id = typeof children === "string" ? children : "";
+            const reference = /^e\d+$/i.test(id) ? references?.[id] : undefined;
+            return reference && !props.className && !id.includes("\n")
+              ? <button type="button" className="analysis-citation-reference" aria-label={reference.label}
+                  title={reference.label} onClick={reference.onClick}>{children}</button>
+              : <code {...props}>{children}</code>;
+          },
           a: ({ children, node: _node, ...props }) => (
             <a {...props} target="_blank" rel="noopener noreferrer">
               {children}
             </a>
           ),
           img: ({ node: _node, src, alt, title }) => (
-            <XsSafeMarkdownImage src={src} alt={alt} title={title} />
+            <XsSafeMarkdownImage src={src} alt={alt} title={title} resolveImage={resolveImage} />
           )
         }}
       >

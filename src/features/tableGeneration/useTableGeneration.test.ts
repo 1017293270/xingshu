@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildTableAgentTrace } from "./agentTrace";
 import { getTableGenerationProgress } from "./tableGenerationProgress";
 import { useTableGeneration } from "./useTableGeneration";
 import { createDataHubAskTurn } from "@/services/dataHubAskDataPresenter";
@@ -203,5 +204,94 @@ describe("useTableGeneration", () => {
       expect.any(Object)
     );
     expect(result.current.didRestore).toBe(false);
+  });
+});
+
+it("projects successful child activities while keeping the root running and cancellable", () => {
+  let handlers: DataHubAskDataStreamHandlers | undefined;
+  const controller = new AbortController();
+  streamMocks.streamAgentMessage.mockImplementation((_input, value) => { handlers = value; return controller; });
+  const { result, unmount } = renderHook(() => useTableGeneration());
+  act(() => { result.current.generate("按合同年度聚合"); });
+  const root = result.current.sessionId!;
+  act(() => {
+    handlers?.onEvent({ type: "subagent_exposed", sessionId: root, content: { sessionId: "child", agentId: "datasource-selection", label: "数据源选择" } });
+    for (const [activityId, label] of [["sources", "读取可用数据源"], ["metadata", "读取语义模型"], ["query", "查询数据"]]) {
+      for (const status of ["running", "success"]) {
+        handlers?.onEvent({ type: "activity", sessionId: "child", parentSessionId: root,
+          content: { activityId, kind: "tool", label, status, summary: status === "success" ? `${label}成功` : undefined } });
+      }
+    }
+    handlers?.onEvent({ type: "done", sessionId: "child", parentSessionId: root, finished: true });
+  });
+  expect(result.current.status).toBe("streaming");
+  expect(getTableGenerationProgress(result.current.turn)).toContain("查询数据");
+  const trace = buildTableAgentTrace(result.current.turn);
+  expect(trace.steps.map((step) => step.label)).toEqual(["读取可用数据源", "读取语义模型", "查询数据"]);
+  expect(trace.steps.every((step) => step.status === "done")).toBe(true);
+  expect(trace.steps[0].detail).toContain("数据源选择");
+  act(() => { result.current.stop(); });
+  expect(controller.signal.aborted).toBe(true);
+  expect(result.current.status).toBe("cancelled");
+  unmount();
+  streamMocks.streamAgentMessage.mockReset();
+});
+
+describe("automatic table launch", () => {
+  afterEach(() => {
+    streamMocks.streamAgentMessage.mockReset();
+    streamMocks.loadDataHubHistoryReplay.mockReset();
+    sessionStorage.clear();
+  });
+
+  it("sends exactly once under root StrictMode and still supports an explicit retry", async () => {
+    const calls: Array<{ handlers: DataHubAskDataStreamHandlers; controller: AbortController }> = [];
+    streamMocks.streamAgentMessage.mockImplementation((_input, handlers) => {
+      const controller = new AbortController();
+      calls.push({ handlers, controller });
+      return controller;
+    });
+    const { result, unmount } = renderHook(() => useTableGeneration({
+      sessionId: "ask-table-strict-regression", launchPrompt: "按合同年度聚合"
+    }), { reactStrictMode: true });
+    await act(async () => { await Promise.resolve(); });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].controller.signal.aborted).toBe(false);
+    act(() => {
+      calls[0].handlers.onEvent({ type: "text", content: "当前公开进度" });
+      calls[0].handlers.onDone?.();
+    });
+    expect(result.current.status).toBe("done");
+    expect(result.current.turn.assistantContent).toBe("当前公开进度");
+    act(() => { result.current.generate("按合同年度聚合"); });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].controller.signal.aborted).toBe(false);
+    unmount();
+    expect(calls[1].controller.signal.aborted).toBe(true);
+  });
+
+  it("does not send a delayed request after unmount", async () => {
+    streamMocks.streamAgentMessage.mockImplementation(() => new AbortController());
+    const { unmount } = renderHook(() => useTableGeneration({
+      sessionId: "ask-table-unmounted", launchPrompt: "按合同年度聚合"
+    }), { reactStrictMode: true });
+    unmount();
+    await act(async () => { await Promise.resolve(); });
+    expect(streamMocks.streamAgentMessage).not.toHaveBeenCalled();
+    expect(streamMocks.loadDataHubHistoryReplay).not.toHaveBeenCalled();
+  });
+
+  it("launches only the current session when navigation changes before the microtask", async () => {
+    streamMocks.streamAgentMessage.mockImplementation(() => new AbortController());
+    const { rerender, unmount } = renderHook((options) => useTableGeneration(options), {
+      initialProps: { sessionId: "ask-table-old", launchPrompt: "旧需求" }, reactStrictMode: true
+    });
+    rerender({ sessionId: "ask-table-new", launchPrompt: "新需求" });
+    await act(async () => { await Promise.resolve(); });
+    expect(streamMocks.streamAgentMessage).toHaveBeenCalledOnce();
+    expect(streamMocks.streamAgentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "ask-table-new", content: "新需求" }), expect.anything()
+    );
+    unmount();
   });
 });

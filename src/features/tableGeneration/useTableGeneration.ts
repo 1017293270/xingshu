@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { respondToAgentInteraction, streamAgentMessage } from "@/services/agentService";
+import { projectDataHubExecutionEvents } from "@/services/dataHubExecutionProjector";
+import type { TableExecutionTurn } from "./agentTrace";
 import { createDataHubAskTurn } from "@/services/dataHubAskDataPresenter";
 import { createDataHubClientId } from "@/services/dataHubAskDataService";
 import { ASK_TABLE_CHAT_MODE, createAskTableSessionId } from "@/services/dataHubAskTable";
 import { loadDataHubHistoryReplay } from "@/services/historyService";
-import type { DataHubAskDataStatus, DataHubAskTurn, DataHubStreamEvent } from "@/types/dataHub";
+import type { DataHubAskDataStatus, DataHubStreamEvent } from "@/types/dataHub";
 
 export type TableSessionLaunchState = {
   prompt?: string;
@@ -92,11 +94,20 @@ type UseTableGenerationOptions = {
   launchPrompt?: string;
 };
 
-function projectTurn(sessionId: string | null, live: TableLiveTurn): DataHubAskTurn {
-  return createDataHubAskTurn(live.question, live.events, live.status, live.errorMessage, {
-    sessionId,
-    chatId: live.chatId
-  });
+function projectTurn(sessionId: string | null, live: TableLiveTurn): TableExecutionTurn {
+  return {
+    ...createDataHubAskTurn(live.question, live.events, live.status, live.errorMessage, {
+      sessionId,
+      chatId: live.chatId
+    }),
+    execution: projectDataHubExecutionEvents(live.events, {
+      mainSessionId: sessionId ?? undefined,
+      globalSessionId: sessionId ?? undefined,
+      chatId: live.chatId,
+      fallbackAgentName: "问表智能体",
+      terminalStatus: live.status === "done" || live.status === "error" || live.status === "cancelled" ? live.status : undefined
+    })
+  };
 }
 
 function errorText(data: { message?: string } | string | undefined, fallback: string) {
@@ -124,7 +135,7 @@ export function useTableGeneration(options: UseTableGenerationOptions = {}) {
     () => turns.map((item) => projectTurn(sessionId, item)),
     [sessionId, turns]
   );
-  const turn = useMemo(() => {
+  const turn = useMemo<TableExecutionTurn>(() => {
     const latest = turns.at(-1);
     if (latest) {
       return projectTurn(sessionId, latest);
@@ -393,16 +404,23 @@ export function useTableGeneration(options: UseTableGenerationOptions = {}) {
       return;
     }
 
-    const queuedPrompt = peekTableSessionLaunch(bootSessionId);
-    const launchPrompt = queuedPrompt || options.launchPrompt?.trim() || "";
-    if (queuedPrompt || (launchPrompt && !wasTableSessionLaunched(bootSessionId))) {
-      markTableSessionLaunched(bootSessionId);
-      queueTableSessionLaunch(bootSessionId, launchPrompt);
-      generateRef.current(launchPrompt, bootSessionId);
-      return;
-    }
+    let active = true;
+    // StrictMode replays effects before this microtask. Only the surviving
+    // mount may send a chat request or consume the queued launch prompt.
+    queueMicrotask(() => {
+      if (!active) return;
+      const queuedPrompt = peekTableSessionLaunch(bootSessionId);
+      const launchPrompt = queuedPrompt || options.launchPrompt?.trim() || "";
+      if (queuedPrompt || (launchPrompt && !wasTableSessionLaunched(bootSessionId))) {
+        markTableSessionLaunched(bootSessionId);
+        queueTableSessionLaunch(bootSessionId, launchPrompt);
+        generateRef.current(launchPrompt, bootSessionId);
+        return;
+      }
 
-    void restoreRef.current(bootSessionId);
+      void restoreRef.current(bootSessionId);
+    });
+    return () => { active = false; };
   }, [options.launchPrompt, options.sessionId]);
 
   return {

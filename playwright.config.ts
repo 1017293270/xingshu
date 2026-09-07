@@ -29,6 +29,12 @@ export default defineConfig({
     command: "npm run dev -- --port 4173 --strictPort",
     env: {
       VITE_DASHBOARD_EDITOR_URL: "http://127.0.0.1:5174/workbenches",
+      VITE_DATAHUB_API_BASE_URL: "",
+      VITE_OFFICIAL_DOCUMENT_API_BASE_URL: "/api/official-document",
+      VITE_OFFICIAL_DOCUMENT_API_MODE: "gateway",
+      VITE_OFFICIAL_DOCUMENT_PROXY_TARGET: "http://127.0.0.1:65535",
+      VITE_RAG_IMAGE_PROXY_TARGET: "http://127.0.0.1:65535",
+      VITE_RAG_IMAGE_ORIGIN: "",
       VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:65535",
       VITE_DATAHUB_APP_URL: "http://127.0.0.1:65535",
       VITE_DATAHUB_KB_MANAGE_PATH: "/knowledge",

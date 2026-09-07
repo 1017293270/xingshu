@@ -25,6 +25,7 @@ import {
   formatDataHubColumnTitle
 } from "@/services/dataHubFormat";
 import { XsSafeMarkdown } from "../XsSafeMarkdown";
+import { cleanDataHubThinkingText, splitDataHubThinkingEnvelope } from "@/services/dataHubThinkingEnvelope";
 import {
   activityProgressLine,
   asNumber,
@@ -385,7 +386,9 @@ function renderThinkingBlock(
   }
 ) {
   const final = isFinalThinking(block);
-  const text = textContent(block.content)?.trim();
+  const rawText = textContent(block.content)?.trim();
+  const text = cleanDataHubThinkingText(rawText ?? "").trim();
+  if (rawText && !text) return null;
   if (!text) {
     return (
       <div className="xs-datahub-agent-card__thinking xs-datahub-agent-card__thinking--bare">
@@ -447,6 +450,13 @@ function defaultBlockContent(
   }
   if (block.type === "citation_document" || block.type === "document_url") {
     return renderCitation(block, onCitationOpen);
+  }
+  if (text && (block.type === "text" || block.type === "content")) {
+    const parsed = splitDataHubThinkingEnvelope(text);
+    return <>
+      {parsed.thinking ? renderThinkingBlock({ ...block, content: parsed.thinking, isThinking: true }, thinkingOptions) : null}
+      {parsed.answer.trim() ? <XsSafeMarkdown content={parsed.answer} /> : null}
+    </>;
   }
   if (text) {
     return <XsSafeMarkdown content={text} />;

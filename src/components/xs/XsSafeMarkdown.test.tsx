@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { getSafeImageUrl, XsSafeMarkdown } from "./XsSafeMarkdown";
 
 const minioContractImage =
@@ -105,4 +105,74 @@ describe("XsSafeMarkdown", () => {
     expect(fallback).toHaveAttribute("target", "_blank");
     expect(fallback).toHaveAttribute("rel", "noopener noreferrer");
   });
+});
+
+
+it("makes only explicitly mapped inline evidence references actionable", () => {
+  const open = vi.fn();
+  const { container } = render(<XsSafeMarkdown content={"见证据 `e4`；变量 `e1`。\n\n```\ne4\n```"}
+    references={{ e4: { label: "查看 e4 原文片段", onClick: open } }} />);
+  fireEvent.click(screen.getByRole("button", { name: "查看 e4 原文片段" }));
+  expect(open).toHaveBeenCalledOnce();
+  expect(container.querySelector("pre code")).toHaveTextContent("e4");
+  expect(container.querySelectorAll("code")).toHaveLength(2);
+});
+
+
+it("resolves protected images without loading the wrong root URL and revokes late artifacts", async () => {
+  let finish!: (value: { url: string; revoke: () => void }) => void;
+  let signal!: AbortSignal;
+  const release = vi.fn();
+  const resolveImage = vi.fn((_src: string, nextSignal: AbortSignal) => {
+    signal = nextSignal;
+    return new Promise<{ url: string; revoke: () => void }>(resolve => { finish = resolve; });
+  });
+  const { unmount } = render(<XsSafeMarkdown content="![合同图](images/scan.png)" resolveImage={resolveImage} />);
+  expect(screen.getByRole("status")).toHaveTextContent("图片读取中");
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  unmount();
+  expect(signal.aborted).toBe(true);
+  await act(async () => finish({ url: "blob:trusted", revoke: release }));
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it("retries protected image errors and cleans up the previous image when src changes", async () => {
+  const release = vi.fn();
+  const resolveImage = vi.fn()
+    .mockRejectedValueOnce(new Error("temporary"))
+    .mockResolvedValueOnce({ url: "blob:trusted-first", revoke: release })
+    .mockResolvedValueOnce({ url: "blob:trusted-next" });
+  const { rerender } = render(<XsSafeMarkdown content="![合同图](images/first.png)" resolveImage={resolveImage} />);
+  fireEvent.click(await screen.findByRole("button", { name: "图片读取失败，点击重试" }));
+  const first = await screen.findByRole("img", { name: "合同图" });
+  expect(first).toHaveAttribute("src", "blob:trusted-first");
+  fireEvent.error(first);
+  expect(screen.getByRole("link", { name: "图片加载失败，点击打开原图" })).toBeInTheDocument();
+  rerender(<XsSafeMarkdown content="![合同图](images/next.png)" resolveImage={resolveImage} />);
+  expect(await screen.findByRole("img", { name: "合同图" })).toHaveAttribute("src", "blob:trusted-next");
+  expect(release).toHaveBeenCalledOnce();
+  expect(getSafeImageUrl("blob:untrusted")).toBeNull();
+});
+
+
+it("never displays a prior document blob when the same relative src gets a new resolver", async () => {
+  const release = vi.fn();
+  const first = vi.fn().mockResolvedValue({ url: "blob:first-document", revoke: release });
+  let finish!: (value: { url: string }) => void;
+  const second = vi.fn(() => new Promise<{ url: string }>(resolve => { finish = resolve; }));
+  const { rerender } = render(<XsSafeMarkdown content="![图](images/page.png)" resolveImage={first} />);
+  expect(await screen.findByRole("img")).toHaveAttribute("src", "blob:first-document");
+  rerender(<XsSafeMarkdown content="![图](images/page.png)" resolveImage={second} />);
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(release).toHaveBeenCalledOnce();
+  await act(async () => finish({ url: "blob:second-document" }));
+  expect(screen.getByRole("img")).toHaveAttribute("src", "blob:second-document");
+});
+
+
+it("does not resolve an empty image src", () => {
+  const resolveImage = vi.fn();
+  render(<XsSafeMarkdown content="![空图]()" resolveImage={resolveImage} />);
+  expect(resolveImage).not.toHaveBeenCalled();
+  expect(screen.getByText("[图片链接不可用]")).toBeInTheDocument();
 });

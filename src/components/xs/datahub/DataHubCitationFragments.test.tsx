@@ -67,6 +67,7 @@ describe("DataHubCitationFragments", () => {
     loadChunks.mockResolvedValue(chunks());
     renderModal();
 
+    expect(screen.getByText("合同价款按季度结算，乙方开具增值税专用发票后十五个工作日内付款。").closest("blockquote")).not.toBeNull();
     expect(screen.getByText("采购合同szsz-2024-cg0007.pdf")).toBeInTheDocument();
     expect(screen.getByText("合同库 · 第二章 结算方式 · 第12页")).toBeInTheDocument();
     expect(screen.getByText("读取切块中…")).toBeInTheDocument();
@@ -125,12 +126,14 @@ describe("DataHubCitationFragments", () => {
 
   it("没有引用片段时给灰字提示，打开原文走 onOpen，原文不可用时禁用", async () => {
     loadChunks.mockResolvedValue(chunks());
-    const { onOpen } = renderModal({ citation: citation({ fragments: [] }) });
+    const { onOpen, onClose } = renderModal({ citation: citation({ fragments: [] }) });
 
     await waitFor(() => expect(screen.getByText("本次回答未附带原文片段")).toBeInTheDocument());
     expect(screen.queryByText("回答引用")).not.toBeInTheDocument();
 
     await userEvent.setup().click(screen.getByRole("button", { name: /打开原文/ }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onOpen.mock.invocationCallOrder[0]);
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onOpen.mock.calls[0][0].docId).toBe("9001");
   });

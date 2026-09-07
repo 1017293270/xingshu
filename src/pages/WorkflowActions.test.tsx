@@ -28,6 +28,16 @@ function renderPage(page: ReactElement) {
   );
 }
 
+function openResultTables(count = 1, rows = 1) {
+  const query = screen.getByRole("region", { name: "查询过程" });
+  const queryToggle = within(query).getByRole("button", { name: /查询过程/ });
+  if (queryToggle.getAttribute("aria-expanded") === "false") fireEvent.click(queryToggle);
+  const toggle = within(query).getByRole("button", { name: `展开结果表，共 ${count} 张表、${rows} 行` });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(toggle);
+  return within(within(query).getByRole("region", { name: "查询结果表" }));
+}
+
 function LocationProbe() {
   const location = useLocation();
   return <output aria-label="当前测试路由">{`${location.pathname}${location.search}`}</output>;
@@ -129,43 +139,28 @@ describe("workflow page actions", () => {
     vi.restoreAllMocks();
   });
 
-  it("运行中的任务动态给出统一头部，最新执行动作跟着事件走", () => {
+  it("运行阶段先显示思考占位，真实执行事件到达后显示查询，结果等待完成", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("帮我分析本月经营数据");
-
-    const view = renderPage(<AnalysisPage mode="ask" />);
-    const detail = () => view.container.querySelector(".analysis-live__detail")?.textContent;
-
-    expect(view.container.querySelector(".analysis-live__status")).toHaveTextContent("正在问数");
-    // 事件还没到就不占位，避免第一秒闪一句假动作
-    expect(detail()).toBeUndefined();
-
+    renderPage(<AnalysisPage mode="ask" />);
+    expect(screen.queryByLabelText("任务动态")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("思考过程")).toBeInTheDocument();
+    expect(screen.queryByLabelText("查询过程")).not.toBeInTheDocument();
+    act(() => store.appendAskDataEvent(runId, {
+      type: "activity", data: { activityId: "tool:execute", kind: "tool", action: "execute_query", label: "执行数据查询", status: "running" }
+    }));
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "running");
+    expect(screen.queryByRole("region", { name: "分析结果" })).not.toBeInTheDocument();
     act(() => {
-      useUiStore.getState().appendAskDataEvent(runId, {
-        type: "activity",
-        data: {
-          activityId: "tool:execute",
-          kind: "tool",
-          action: "execute_query",
-          label: "执行数据查询",
-          status: "running"
-        }
-      });
+      store.appendAskDataEvent(runId, { type: "text", data: "已查到本月收入。" });
+      store.appendAskDataEvent(runId, { type: "done", data: { summary: "已查到本月收入。" } });
+      store.completeAskDataRun(runId);
     });
-
-    expect(detail()).toBe("执行数据查询");
-
-    act(() => {
-      useUiStore.getState().appendAskDataEvent(runId, {
-        type: "table",
-        data: { columns: ["月份"], rows: [["7月"]], totalRows: 1 }
-      });
-    });
-
-    expect(detail()).toBe("查询结果");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
+    expect(screen.getByRole("region", { name: "分析结果" })).toHaveTextContent("已查到本月收入。");
   });
 
-  it("renders the data-hub ask-data process and expands its result-table summary on demand", async () => {
+  it("nests execution and the collapsed result table inside query", async () => {
     const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("目前咨询数最多的社区是哪个社区");
@@ -221,33 +216,29 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.getByText("目前咨询数最多的社区为演示账号，累计咨询记录 716 条。")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "问数结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "问数结果" })).not.toBeInTheDocument();
     expect(screen.queryByText("过程细节")).not.toBeInTheDocument();
     expect(screen.queryByText("已匹配事件域业务 Skill")).not.toBeInTheDocument();
 
-    /* 过程区与编排模式同构：执行过程面板默认收起，点开后是主智能体执行卡 */
-    const executionPanel = screen.getByText("问数执行过程").closest(".xs-datahub-execution");
+    /* 查询过程收纳执行细节，逐层展开后才展示主智能体执行卡。 */
+    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    const executionPanel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(executionPanel).not.toBeNull();
     await user.click(
-      within(executionPanel as HTMLElement).getByRole("button", { name: /问数执行过程/ })
+      within(executionPanel as HTMLElement).getByRole("button", { name: /执行细节/ })
     );
     expect(
       await within(executionPanel as HTMLElement).findByLabelText("主智能体执行过程")
     ).toBeInTheDocument();
 
-    const tableToggle = screen.getByRole("button", { name: /展开结果表汇总/ });
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("columnheader", { name: "项目名称" })).not.toBeInTheDocument();
-    await user.click(tableToggle);
-    expect(tableToggle).toHaveAttribute("aria-expanded", "true");
-    const projectHeader = screen.getByRole("columnheader", { name: "项目名称" });
-    expect(projectHeader).toBeVisible();
-    expect(screen.getByRole("cell", { name: "演示账号" })).toBeVisible();
-    await user.click(tableToggle);
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("columnheader", { name: "项目名称" })).not.toBeInTheDocument();
+    const result = screen.getByRole("region", { name: "分析结果" });
+    expect(within(result).queryByRole("table")).not.toBeInTheDocument();
+    const tables = openResultTables();
+    expect(tables.getByRole("columnheader", { name: "项目名称" })).toBeVisible();
+    expect(tables.getByRole("cell", { name: "演示账号" })).toBeVisible();
+    expect(within(result).queryByRole("button", { name: /展开结果表汇总/ })).not.toBeInTheDocument();
   });
 
   it("renders knowledge Markdown and deduplicated citations without ask-data actions", async () => {
@@ -315,7 +306,8 @@ describe("workflow page actions", () => {
 
     const { container } = renderPage(<AnalysisPage mode="rag" />);
 
-    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.queryByLabelText("任务动态")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.getAllByText("部门审核", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(container.querySelector('img[src="x"]')).not.toBeInTheDocument();
@@ -349,8 +341,7 @@ describe("workflow page actions", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("renders native ask-data activity, answer and a collapsed table summary instead of an empty orchestration canvas", async () => {
-    const user = userEvent.setup();
+  it("renders native ask-data activity and the final table without an empty orchestration canvas", async () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("本月收入是多少？", null, "ask");
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
@@ -432,11 +423,12 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.queryByLabelText("任务动态")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.getByText("128 万元")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
-    expect(screen.getByRole("columnheader", { name: "月份" })).toBeVisible();
-    expect(screen.getByRole("cell", { name: "7月" })).toBeVisible();
+    const tables = openResultTables();
+    expect(tables.getByRole("columnheader", { name: "月份" })).toBeVisible();
+    expect(tables.getByRole("cell", { name: "7月" })).toBeVisible();
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(screen.queryByText("本次问数未返回可展示的结构化结果。")).not.toBeInTheDocument();
     expect(screen.queryByText("本次响应未返回独立的路由或任务拆解事件。")).not.toBeInTheDocument();
@@ -513,7 +505,8 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="rag" />);
 
-    expect(screen.getByLabelText("任务动态")).toBeInTheDocument();
+    expect(screen.queryByLabelText("任务动态")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.getByText("单笔差旅费超过 5000 元需复核", { exact: false })).toBeInTheDocument();
     // 引用 chips 默认收合，点开后能看到引用文档
     await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
@@ -521,7 +514,7 @@ describe("workflow page actions", () => {
     expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
   });
 
-  it("问知轮次与编排同构：思考块、问知执行过程面板、问知结果标题", async () => {
+  it("问知轮次先展示思考与查询，结果保留真实引用且没有多余标题", async () => {
     const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("差旅费报销标准是什么？", null, "rag");
@@ -591,23 +584,24 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="rag" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问知已完成");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     const thinking = screen.getByLabelText("思考过程");
-    expect(thinking).toHaveTextContent("已思考");
-    await user.click(within(thinking).getByRole("button", { name: /已思考/ }));
+    expect(thinking).toHaveTextContent("已完成");
+    await user.click(within(thinking).getByRole("button", { name: /思考过程/ }));
     expect(within(thinking).getByLabelText("模型思考")).toHaveTextContent("先检索报销制度");
-    expect(screen.getByRole("heading", { name: "问知结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "问知结果" })).not.toBeInTheDocument();
 
     /* 结果形态不变：引用原文与引用 chips 仍在结果区 */
-    expect(screen.getByText("根据《差旅报销制度》")).toBeInTheDocument();
+    expect(screen.getByLabelText("引用原文")).toHaveTextContent("差旅报销制度");
     await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
     expect(screen.getAllByText("差旅报销制度").length).toBeGreaterThan(0);
 
     /* 过程区：与编排同款的执行过程面板，展开是主智能体执行卡 */
-    const panel = screen.getByText("问知执行过程").closest(".xs-datahub-execution");
+    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    const panel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(panel).not.toBeNull();
     await user.click(
-      within(panel as HTMLElement).getByRole("button", { name: /问知执行过程/ })
+      within(panel as HTMLElement).getByRole("button", { name: /执行细节/ })
     );
     const mainCards = await within(panel as HTMLElement).findByLabelText("主智能体执行过程");
     expect(
@@ -616,7 +610,7 @@ describe("workflow page actions", () => {
     expect(within(mainCards).getByText("引用文档")).toBeInTheDocument();
   });
 
-  it("找文档轮次与编排同构：找文档执行过程面板、文档结果标题、文档列表", async () => {
+  it("找文档查询收纳执行细节，结果直接展示可打开文档", async () => {
     const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("帮我找到最新版员工手册", null, "document_lookup");
@@ -671,8 +665,8 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="document_lookup" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("找文档已完成");
-    expect(screen.getByRole("heading", { name: "文档结果" })).toBeInTheDocument();
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
+    expect(screen.queryByRole("heading", { name: "文档结果" })).not.toBeInTheDocument();
 
     /* 结果形态不变：文档列表仍在结果区 */
     const documentList = screen.getByLabelText("匹配文档");
@@ -686,10 +680,11 @@ describe("workflow page actions", () => {
     );
     await user.click(screen.getByRole("button", { name: "关闭原文预览" }));
 
-    const panel = screen.getByText("找文档执行过程").closest(".xs-datahub-execution");
+    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    const panel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(panel).not.toBeNull();
     await user.click(
-      within(panel as HTMLElement).getByRole("button", { name: /找文档执行过程/ })
+      within(panel as HTMLElement).getByRole("button", { name: /执行细节/ })
     );
     const mainCards = await within(panel as HTMLElement).findByLabelText("主智能体执行过程");
     expect(
@@ -697,7 +692,7 @@ describe("workflow page actions", () => {
     ).toBeInTheDocument();
   });
 
-  it("没有思考内容时不渲染空的思考块", () => {
+  it("没有模型思考时不保留空阶段或编造推理", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("本月销售额是多少");
     store.appendAskDataEvent(runId, {
@@ -709,8 +704,9 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    expect(screen.getByText("本月销售额 128 万元。")).toBeInTheDocument();
   });
 
   it("shows the favorite-question action when the feature is enabled", () => {
@@ -810,9 +806,12 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="agent" />);
 
+    const queryToggle = screen.getByRole("button", { name: /查询过程/ });
+    if (queryToggle.getAttribute("aria-expanded") === "false") await user.click(queryToggle);
     expect(screen.getByText("智能编排执行")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收起分析过程" })).not.toBeInTheDocument();
     /* 思考正文只有折叠的思考块渲染，编排卡里仍然只留标签 */
+    await user.click(screen.getByRole("button", { name: /思考过程/ }));
     expect(screen.getByLabelText("思考过程")).toHaveTextContent("正在拆解跨来源任务。");
     expect(screen.queryByText("Agent 正在思考")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "智能体执行卡" })).not.toBeInTheDocument();
@@ -881,7 +880,8 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("智能编排已完成");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
+    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -945,7 +945,8 @@ describe("workflow page actions", () => {
     renderPage(<AnalysisPage mode="agent" />);
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("已停止生成");
+    expect(screen.getByLabelText("思考过程")).toHaveTextContent("已停止");
+    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -961,7 +962,7 @@ describe("workflow page actions", () => {
     ).toBeVisible();
   });
 
-  it("keeps a replayed root error consistent across the heading and execution panel", () => {
+  it("replays an error before querying without fabricating a query stage", () => {
     useUiStore.getState().restoreAskDataHistory({
       sessionId: "history-error-session",
       question: "回放一次失败的编排",
@@ -988,13 +989,9 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("智能编排失败");
-    const panel = screen
-      .getByText("智能编排执行")
-      .closest(".xs-datahub-execution");
-    expect(panel).not.toBeNull();
-    expect(panel).toHaveAttribute("data-status", "error");
-    expect(within(panel as HTMLElement).queryAllByLabelText("运行中")).toHaveLength(0);
+    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("查询过程")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "分析结果" })).toHaveTextContent("历史编排失败");
   });
 
   it("favorites the structured ask result emitted by a child agent", async () => {
@@ -1530,7 +1527,7 @@ describe("workflow page actions", () => {
     ).toBeDisabled();
   });
 
-  it("shows compact Chinese task dynamics instead of english process details", () => {
+  it("shows a completed query phase without exposing internal process details", () => {
     const runId = useUiStore.getState().startAskDataRun("分析最近 30 天客户增长趋势");
     const store = useUiStore.getState();
 
@@ -1559,15 +1556,14 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("问数已完成");
+    expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
     expect(screen.queryByText("datasourceId=1000002")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取数据源 Skill")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "data-hub 问数步骤" })).not.toBeInTheDocument();
     expect(screen.getByText("客户增长保持稳定。")).toBeInTheDocument();
   });
 
-  it("shows a completed table summary immediately without waiting for process playback", async () => {
-    const user = userEvent.setup();
+  it("shows the real conclusion immediately and lets users expand its query result table", async () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询咨询数最多的社区");
 
@@ -1603,11 +1599,8 @@ describe("workflow page actions", () => {
 
     expect(screen.queryByRole("heading", { name: "问数完成" })).not.toBeInTheDocument();
     expect(container.querySelector(".analysis-result-stage")).toHaveAttribute("data-state", "ready");
-    const tableToggle = screen.getByRole("button", { name: /展开结果表汇总/ });
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("button", { name: "下载表格" })).not.toBeInTheDocument();
-    await user.click(tableToggle);
-    expect(screen.getByRole("cell", { name: "演示账号" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "分析结果" })).toHaveTextContent("演示账号咨询数最多，共 720 条。");
+    expect(openResultTables().getByRole("cell", { name: "演示账号" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "生成大屏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
@@ -1620,12 +1613,13 @@ describe("workflow page actions", () => {
     renderPage(<AnalysisPage mode="ask" />);
 
     expect(screen.queryByRole("button", { name: "收起分析过程" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /思考过程/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
   });
 
   it("downloads ask-data result tables as csv", async () => {
     const user = userEvent.setup();
+    const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
     const createObjectURL = vi.fn<(object: Blob | MediaSource) => string>(() => "blob:xingshu-csv");
     const revokeObjectURL = vi.fn();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -1657,7 +1651,10 @@ describe("workflow page actions", () => {
 
     renderPage(<AnalysisPage mode="ask" />);
 
-    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
+    expect(within(screen.getByRole("region", { name: "分析结果" })).queryByRole("button", { name: "下载表格" })).not.toBeInTheDocument();
+    expect(openResultTables().getByRole("button", { name: "下载表格" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "复制表格" }));
+    expect(clipboard).toHaveBeenCalledWith(expect.stringContaining("六角井社区,262"));
     await user.click(screen.getByRole("button", { name: "下载表格" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
@@ -1687,10 +1684,9 @@ describe("workflow page actions", () => {
     useUiStore.getState().completeAskDataRun(runId);
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "综合结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
-    await user.click(screen.getByRole("button", { name: "下载表格" }));
+    await user.click(openResultTables().getByRole("button", { name: "下载表格" }));
 
     const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
     await expect(blob.text()).resolves.toContain("合同编号,合同金额");
@@ -1702,23 +1698,25 @@ describe("workflow page actions", () => {
     Object.defineProperty(window.URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
   });
 
-  it("does not export when agent orchestration has multiple ask-data children", async () => {
-    const user = userEvent.setup();
+  it("preserves every independent child table and download in query results", async () => {
     const runId = useUiStore.getState().startAskDataRun("同时查询两份合同", null, "agent");
     appendAgentAskChildTable(runId, 2);
     useUiStore.getState().completeAskDataRun(runId);
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "综合结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
-    expect(screen.getByText("2 张结果表 · 共 2 行")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /展开结果表汇总/ }));
-    expect(screen.getAllByRole("button", { name: "下载表格" })).toHaveLength(2);
+    const result = screen.getByRole("region", { name: "分析结果" });
+    expect(within(result).getByRole("table")).toHaveTextContent("szsz-2023-cg00001");
+    const tables = openResultTables(2, 2);
+    expect(tables.getAllByRole("table")).toHaveLength(2);
+    expect(tables.getByRole("cell", { name: "szsz-2023-cg00001" })).toBeVisible();
+    expect(tables.getAllByRole("button", { name: "下载表格" })).toHaveLength(2);
+    expect(tables.getByRole("cell", { name: "szsz-2023-cg00002" })).toBeVisible();
   });
 
-  it("shows 综合结果 with query-child tables labeled by the sub-question", async () => {
-    const user = userEvent.setup();
+  it("preserves query-child data in query results when the root only supplied an introduction", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun(
       "查询眉山天府新区照明采购合同的设备清单",
@@ -1788,20 +1786,22 @@ describe("workflow page actions", () => {
     store.completeAskDataRun(runId);
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "综合结果" })).not.toBeInTheDocument();
     const result = screen.getByRole("region", { name: "分析结果" });
     expect(
       within(result).getByText("我来帮您查询眉山天府新区城市照明采购合同的相关设备清单。")
     ).toBeInTheDocument();
     expect(within(result).queryByText("数据与制度来源均已完成。")).not.toBeInTheDocument();
-    await user.click(within(result).getByRole("button", { name: /展开结果表汇总/ }));
-    expect(within(result).getByRole("columnheader", { name: "设备名称" })).toBeInTheDocument();
-    expect(within(result).getByText("远程控制终端")).toBeInTheDocument();
-    expect(within(result).getByRole("button", { name: "下载表格" })).toBeInTheDocument();
+    expect(within(result).queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "false");
+    const tables = openResultTables();
+    expect(tables.getByRole("columnheader", { name: "设备名称" })).toBeInTheDocument();
+    expect(tables.getByText("远程控制终端")).toBeInTheDocument();
+    expect(tables.getByRole("button", { name: "下载表格" })).toBeInTheDocument();
     expect(screen.queryByText("本次响应没有独立的路由、ReAct 或工具调用事件。")).not.toBeInTheDocument();
   });
 
-  it("lifts a completed child narrative into 综合结果 when there is no table", () => {
+  it("lifts a completed child narrative into the answer without a redundant title", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("核对设备清单口径", null, "agent");
     const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
@@ -1855,7 +1855,7 @@ describe("workflow page actions", () => {
     store.completeAskDataRun(runId);
     renderPage(<AnalysisPage mode="agent" />);
 
-    expect(screen.getByRole("heading", { name: "综合结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "综合结果" })).not.toBeInTheDocument();
     expect(screen.getByText("根据合同约定，设备清单以附件为准，共计 12 项。")).toBeInTheDocument();
   });
 
@@ -1917,7 +1917,7 @@ describe("workflow page actions", () => {
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
     expect(abort).toHaveBeenCalledOnce();
-    expect(screen.getByLabelText("任务动态")).toHaveTextContent("已停止生成");
+    expect(screen.queryByLabelText("思考过程")).not.toBeInTheDocument();
     expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
       "已停止本次问数生成"
     );

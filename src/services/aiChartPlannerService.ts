@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts";
+import { xingshuTokens } from "@/theme/xingshuTokens";
 import type {
   AiChartColumnSummary,
   AiChartPlanRequest,
@@ -44,6 +45,12 @@ function toNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+/** 明确的一行单数值直接由正文回答，不显示无意义的结果表。 */
+export function isDataHubScalarResult(table: DataHubTableResult): boolean {
+  return table.totalRows === 1 && table.rows.length === 1 && table.columns.length === 1
+    && toNumber(table.rows[0][table.columns[0].key]) !== null;
 }
 
 function dimensionLabel(value: unknown): string {
@@ -123,7 +130,7 @@ function inferColumnType(
     return "dimension";
   }
 
-  if (/date|time|日期|时间|月份|季度|年份|year|month|day/.test(title)) {
+  if (/date|time|日期|时间|月份|季度|年份|年度|year|month|day/.test(title)) {
     return "time";
   }
 
@@ -631,8 +638,9 @@ function createLocalChartPlan(
     return null;
   }
 
-  const chartType: AiChartType = keys.timeColumn ? "line" : "bar";
-  const allowedTypes: AiChartType[] = keys.timeColumn ? ["line", "bar"] : ["bar", "pie"];
+  const ranking = /排名|排行|前\s*\d|top\s*\d|最多|最少|降序|升序/i.test(summary.question);
+  const chartType: AiChartType = keys.timeColumn && !ranking ? "line" : "bar";
+  const allowedTypes: AiChartType[] = keys.timeColumn && !ranking ? ["line", "bar"] : ["bar", "pie"];
 
   return {
     chartable: true,
@@ -741,7 +749,12 @@ export async function planAiChart(
 
   try {
     const plan = await (options.dataHubPlanner ?? requestDataHubAiChartPlan)(summary);
-    return normalizeAiPlan(plan);
+    const normalized = normalizeAiPlan(plan);
+    // 问题明确要求排名时，时间字段也是分类维度，不能连成时间趋势。
+    if (normalized.chartable && /排名|排行|前\s*\d|top\s*\d|最多|最少|降序|升序/i.test(request.question)) {
+      return { ...normalized, chartType: "bar", allowedTypes: ["bar", "pie"] };
+    }
+    return normalized;
   } catch (error) {
     if (isRecoverableAiPlanError(error)) {
       const fallbackPlan = createLocalChartPlan(
@@ -865,7 +878,7 @@ function isSameRankingValue(left: number, right: number) {
 
 /**
  * 判定候选表能否复现回答里的排名：同名条目数值必须相同，回答的第一名必须出现在表里，
- * 且两边都不止一行时匹配上的名称不能少于回答条目的一半。
+ * 且每个回答条目都必须在候选表里出现，不能用部分排名冒充最终排名。
  */
 function reproducesAnswerRanking(
   ranking: RankingSelection,
@@ -900,7 +913,7 @@ function reproducesAnswerRanking(
     return false;
   }
 
-  return !(candidateRows.length >= 2 && ranking.rows.length >= 2 && matched * 2 < ranking.rows.length);
+  return matched === ranking.rows.length && candidateRows.length === ranking.rows.length;
 }
 
 /**
@@ -1025,13 +1038,74 @@ function metricTitle(table: DataHubTableResult, key: string) {
   return formatDataHubColumnTitle(column?.title || key, column?.key || key);
 }
 
-export function buildGeneratedChartOption(spec: GeneratedChartSpec, chartType = spec.chartType): EChartsOption {
-  const categories = spec.table.rows.map((row) => String(row[spec.dimensionKey] ?? "-"));
+export function buildGeneratedChartOption(
+  spec: GeneratedChartSpec,
+  chartType = spec.chartType,
+  barView?: { rowOffset?: number; metricKey?: string; compact?: boolean }
+): EChartsOption {
+  const dimension = spec.table.columns.find((column) => column.key === spec.dimensionKey);
+  const rows = chartType === "line" && dimension && inferColumnType(dimension, spec.table.rows) === "time"
+    ? [...spec.table.rows].sort((left, right) => String(left[spec.dimensionKey] ?? "").localeCompare(
+      String(right[spec.dimensionKey] ?? ""), "zh-CN", { numeric: true }))
+    : spec.table.rows;
+  const categories = rows.map((row) => String(row[spec.dimensionKey] ?? "-"));
   const metrics = spec.metricKeys.map((key) => ({
     key,
     name: metricTitle(spec.table, key),
-    values: spec.table.rows.map((row) => toNumber(row[key]))
+    values: rows.map((row) => toNumber(row[key]))
   }));
+
+  if (chartType === "bar" && barView) {
+    const compact = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumSignificantDigits: 4 });
+    const precise = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 20 });
+    const palette = [xingshuTokens.colorPrimary, xingshuTokens.colorSuccess];
+    // 颜色以原指标顺序为准，不能因只看第二个指标就变成第一个指标的颜色。
+    const selected = metrics.map((metric, index) => ({ ...metric, color: palette[index % palette.length] }))
+      .filter((metric) => !barView.metricKey || metric.key === barView.metricKey);
+    const formatCompact = (value: unknown) => {
+      const number = toNumber(value);
+      return number === null ? "" : compact.format(number);
+    };
+    return {
+      title: { show: false },
+      grid: { left: barView.compact ? 12 : 240, right: barView.compact ? 64 : 96, top: 48, bottom: 32 },
+      legend: { top: 0, type: "scroll", textStyle: { color: xingshuTokens.colorTextSecondary } },
+      tooltip: {
+        trigger: "axis", renderMode: "richText", confine: true,
+        axisPointer: { type: "shadow" },
+        formatter: (params: unknown) => {
+          const item = Array.isArray(params) ? params[0] : params;
+          const index = isRecord(item) && typeof item.dataIndex === "number" ? item.dataIndex : -1;
+          if (index < 0 || index >= rows.length) return "";
+          return [categories[index], ...selected.map((metric) => {
+            const value = metric.values[index];
+            return `${metric.name}：${value === null ? "—" : precise.format(value)}`;
+          })].join("\n");
+        }
+      },
+      xAxis: {
+        type: "value", splitNumber: barView.compact ? 2 : 5,
+        axisLabel: { formatter: formatCompact, color: xingshuTokens.colorTextTertiary },
+        splitLine: { lineStyle: { color: xingshuTokens.colorBorder } }
+      },
+      yAxis: {
+        type: "category", inverse: true,
+        data: categories.map((name, index) => `${(barView.rowOffset ?? 0) + index + 1}. ${name}`),
+        axisLabel: { interval: 0, width: barView.compact ? 200 : 216, overflow: "truncate", color: xingshuTokens.colorTextSecondary,
+          inside: Boolean(barView.compact), align: barView.compact ? "left" : "right",
+          verticalAlign: barView.compact ? "bottom" : "middle", padding: barView.compact ? [0, 0, 24, 0] : 0,
+          fontSize: barView.compact ? 11 : 12, margin: barView.compact ? 0 : 8,
+          formatter: (value: string) => value.replace(/\s+/g, " ") },
+        axisTick: { show: false }, axisLine: { show: false }
+      },
+      series: selected.map((metric) => ({
+        id: metric.key, name: metric.name, type: "bar", data: metric.values, barMaxWidth: 14,
+        itemStyle: { color: metric.color, borderRadius: [0, 3, 3, 0] },
+        label: { show: true, position: "right", color: xingshuTokens.colorTextSecondary,
+          formatter: (params: { value: unknown }) => formatCompact(params.value) }
+      }))
+    };
+  }
 
   if (chartType === "pie") {
     const metric = metrics[0];

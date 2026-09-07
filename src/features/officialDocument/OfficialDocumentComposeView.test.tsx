@@ -1270,4 +1270,24 @@ describe("OfficialDocumentComposeView", () => {
       { name: "参考材料.docx", content: "上季度隐患整改率 96%。\n\n季度\t隐患\nQ1\t18" }
     ]);
   });
+  it("shows a factual review for invented fifteen-minute sign-in without blocking the generated draft", async () => {
+    chat.state.autoSettle = false;
+    const user = userEvent.setup();
+    renderView();
+    await pickReference(user);
+    await submitRequirement(user, "仅使用这些测试事实：2026年9月10日上午10点在测试会议室召开系统验收会；参会人员测试小组。约300字。");
+    await waitFor(() => expect(send).toHaveBeenCalledOnce());
+    act(() => chat.settle(chat.lastTurnId(), [
+      "[[XS_FIXED:title-slot]]", "关于召开系统验收会的通知",
+      "[[XS_SECTION:reference-section-1]]", "# 一、会议安排",
+      "会议定于2026年9月10日上午10:00召开，请参会人员提前十五分钟到场签到。"
+    ].join("\n")));
+    const review = await screen.findByRole("region", { name: "事实校对" });
+    expect(review).toHaveTextContent("十五分钟、签到");
+    expect(review).toHaveTextContent("原文已保留");
+    expect(await screen.findByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
+    expect(mocks.createDraft).not.toHaveBeenCalled();
+    expect(mocks.exportTransient).not.toHaveBeenCalled();
+  });
+
 });

@@ -85,7 +85,10 @@ export function useDashboardLibrary() {
   const rollbackMutation = useMutation({
     mutationFn: ({ record, version }: { record: DashboardRecord; version: DashboardVersion }) =>
       rollbackDashboard(record, version),
-    onSuccess: () => void refreshList(),
+    onSuccess: (_record, { record }) => {
+      void queryClient.invalidateQueries({ queryKey: sessionQueryKey(sessionScope, "analytics-dashboard-runtime", record.id) });
+      void refreshList();
+    },
     onError: (error) => setOperationError(error instanceof Error ? error.message : "回滚版本失败")
   });
 

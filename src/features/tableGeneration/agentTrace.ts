@@ -1,7 +1,11 @@
+import { groupDataHubModelActivities } from "@/components/xs/datahub/DataHubModelActivity";
+import { asNumber, asString } from "@/components/xs/datahub/display";
 import { getDataHubActionLabel } from "@/services/dataHubAskDataPresenter";
-import type { DataHubAskDataStatus, DataHubAskTurn, DataHubToolResultData } from "@/types/dataHub";
+import type { DataHubAskDataStatus, DataHubAskTurn, DataHubExecutionProjection, DataHubToolResultData } from "@/types/dataHub";
 
-export type TableAgentTraceStepStatus = "done" | "running" | "error";
+export type TableExecutionTurn = DataHubAskTurn & { execution?: DataHubExecutionProjection };
+
+export type TableAgentTraceStepStatus = "done" | "running" | "error" | "cancelled" | "warning";
 
 export type TableAgentTraceStep = {
   id: string;
@@ -68,7 +72,7 @@ function describeDecompose(turn: DataHubAskTurn) {
  * 把一轮问表的流式事件整理成可读的推演轨迹。
  * 只呈现事件里真实存在的信息，缺什么就不显示什么，不做补全推断。
  */
-export function buildTableAgentTrace(turn: DataHubAskTurn): TableAgentTrace {
+export function buildTableAgentTrace(turn: TableExecutionTurn): TableAgentTrace {
   const steps: TableAgentTraceStep[] = [];
   const datasourceName = turn.dataSources.at(-1)?.datasourceName ?? "";
   const sql = firstSql(turn.toolResults);
@@ -83,7 +87,28 @@ export function buildTableAgentTrace(turn: DataHubAskTurn): TableAgentTrace {
     });
   }
 
-  if (turn.reactSteps.length > 0) {
+  // 共用问数的会话/活动投影，保留子任务归属及同一 activity 的最新状态。
+  const activities: TableAgentTraceStep[] = turn.execution
+    ? [turn.execution.mainSession, ...turn.execution.subagentSessions].flatMap((session) =>
+        session.cards.flatMap((card) => groupDataHubModelActivities(card.blocks).flatMap((item) => {
+          if (item.kind !== "model-activity") return [];
+          const { activity } = item;
+          return [{
+            id: `${session.sessionId ?? "root"}:${card.id}:${activity.id}`,
+            label: activity.label,
+            detail: [session.parentSessionId ? session.label || session.agentName : "", asString(activity.record.summary)].filter(Boolean).join(" · "),
+            status: activity.status === "success" ? "done" as const
+              : activity.status === "failed" ? "error" as const
+                : activity.status === "warning" ? "warning" as const
+                : activity.status === "cancelled" ? "cancelled" as const : "running" as const,
+            durationMs: asNumber(activity.record.durationMs)
+          }];
+        })))
+    : [];
+
+  if (activities.length > 0) {
+    steps.push(...activities);
+  } else if (turn.reactSteps.length > 0) {
     let sqlAttached = false;
     turn.reactSteps.forEach((step, index) => {
       const isLast = index === turn.reactSteps.length - 1;

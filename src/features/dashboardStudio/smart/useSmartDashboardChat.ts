@@ -358,13 +358,15 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
    * 取齐执行数据：选中的资产缺一份就报错；板上已绑定但列表里看不到的（别人共享后又收回的）
    * 静默跳过，模型若引用到它引擎会给出中文拒绝理由。
    */
-  const ensureData = useCallback(async (ids: string[], required: Set<string>) => {
+  const ensureData = useCallback(async (ids: string[], required: Set<string>, signal: AbortSignal) => {
     let list = assetsRef.current;
     for (const id of ids) {
+      signal.throwIfAborted();
       if (dataRef.current[id]) continue;
       let asset = list.find((item) => item.id === id);
       if (!asset) {
         list = await refreshAssets();
+        signal.throwIfAborted();
         asset = list.find((item) => item.id === id);
       }
       if (!asset) {
@@ -372,6 +374,7 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
         continue;
       }
       const execution = await previewAsset(asset.id);
+      signal.throwIfAborted();
       if (execution.status !== "SUCCESS") {
         throw new Error(execution.errorMessage || `「${asset.name}」的查询预览未成功`);
       }
@@ -389,6 +392,9 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
     const trimmed = brief.trim();
     if (!trimmed || controllerRef.current) return undefined;
 
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const isActive = () => !controller.signal.aborted && controllerRef.current === controller;
     const schema = getSchema();
     const hasContent = schema.widgets.some((widget) => !widget.style.locked);
     const kind: SmartDashboardTurnKind = options.mode ?? (hasContent ? "edit" : "generate");
@@ -403,14 +409,18 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
       const required = new Set(selectedAssetIds);
       const ids = [...new Set([...selectedAssetIds, ...boundAssetIds(schema)])];
       if (kind === "generate" && ids.length === 0) {
+        controllerRef.current = null;
         settleError(turnId, "先在上方选择至少一份收藏问数，我才知道用什么数据设计。");
         return;
       }
 
       let data: DashboardDesignAssetData;
       try {
-        data = await ensureData(ids, required);
+        data = await ensureData(ids, required, controller.signal);
+        if (!isActive()) return;
       } catch (error) {
+        if (!isActive()) return;
+        controllerRef.current = null;
         settleError(turnId, errorMessage(error, "读取收藏问数失败"));
         return;
       }
@@ -425,6 +435,7 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
       let candidate: SmartDashboardCandidate | undefined;
       let failure = "";
       const finish = () => {
+        if (!isActive()) return;
         controllerRef.current = null;
         flushNarrative();
         if (candidate) {
@@ -450,8 +461,9 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
         patchTurn(turnId, { status: "error", error: failure || "模型没有返回可用的修改方案" });
       };
 
-      controllerRef.current = streamDashboardDesign(kind === "edit" ? "edit" : "generate", request, {
+      const streamController = streamDashboardDesign(kind === "edit" ? "edit" : "generate", request, {
         onEvent: (event) => {
+          if (!isActive()) return;
           if (event.type === "message") {
             queueNarrative(turnId, event.delta);
           } else if (event.type === "spec") {
@@ -480,6 +492,8 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
           finish();
         }
       });
+      controller.signal.addEventListener("abort", () => streamController.abort(), { once: true });
+      if (controller.signal.aborted) streamController.abort();
     })();
 
     return turnId;

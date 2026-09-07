@@ -154,3 +154,17 @@ export function boardTitle(brief: string, asset?: DashboardTitleAsset, fallback 
   if (topic) return clip(`${topic}总览`, MAX_WIDGET_TITLE);
   return clip(fallback || subject, MAX_WIDGET_TITLE);
 }
+
+/** 保留正式名称；系统输出键仅作为标识，列表用实际字段说明各张结果表。 */
+export function dashboardOutputLabel(output: {
+  outputKey: string;
+  label?: string;
+  columns?: { key: string; label?: string; title?: string }[];
+}, index = 0) {
+  const label = output.label?.trim();
+  if (label && label !== output.outputKey && !/^output[_-]?\d+$/i.test(label)) return label;
+  const number = /^output[_-]?(\d+)$/i.exec(output.outputKey)?.[1];
+  const prefix = `结果表 ${number ? Number(number) : index + 1}`;
+  const fields = output.columns?.slice(0, 2).map((column) => column.label || column.title || column.key).filter(Boolean);
+  return fields?.length ? `${prefix} · ${fields.join("、")}` : prefix;
+}

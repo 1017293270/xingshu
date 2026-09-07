@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react";
 import { ArrowsClockwise, CircleNotch, Copy } from "@phosphor-icons/react";
 import { XsClarifyCard } from "@/components/xs/conversation";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
 import { TableArtifactGroup } from "@/features/tableGeneration/TableArtifactGroup";
-import { buildTableAgentTrace } from "@/features/tableGeneration/agentTrace";
+import { buildTableAgentTrace, type TableExecutionTurn } from "@/features/tableGeneration/agentTrace";
 import { clarificationKey, hasPendingClarification } from "@/services/dataHubClarification";
 import { formatDataHubTableTitle } from "@/services/dataHubFormat";
 import type { DataHubAskTurn } from "@/types/dataHub";
@@ -14,7 +15,7 @@ export type TableTurnStatus = {
 };
 
 type TableTurnBodyProps = {
-  turn: DataHubAskTurn;
+  turn: TableExecutionTurn;
   /** 流式过程中的当前动作，交给执行过程当最后一条占位。 */
   progress: string;
   /** 正在结果台里浏览的那张表，格式见 tableViewerKey。 */
@@ -69,9 +70,16 @@ export function TableTurnBody({
 }: TableTurnBodyProps) {
   const trace = buildTableAgentTrace(turn);
   const hasTables = turn.tableResults.length > 0;
-  const answer = turn.answerBlocks[0]?.content.trim() ?? "";
+  const answer = turn.answerBlocks.map((block) => block.content).join("\n\n").trim();
   const isStreaming = turn.status === "streaming";
   const isDone = turn.status === "done";
+  const [longRunning, setLongRunning] = useState(false);
+  useEffect(() => {
+    setLongRunning(false);
+    if (!isStreaming) return;
+    const timer = window.setTimeout(() => setLongRunning(true), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [isStreaming, turnKey]);
   const isError = turn.status === "error";
   const isCancelled = turn.status === "cancelled";
   const canExport = hasTables && (isDone || isCancelled);
@@ -109,7 +117,10 @@ export function TableTurnBody({
         </>
       ) : null}
 
-      {answer && (isDone || isCancelled) ? <XsSafeMarkdown content={answer} /> : null}
+      {longRunning && isStreaming ? (
+        <p role="status">生成时间较长，结果表尚未生成完成。你可以继续等待，或停止后调整需求重试。</p>
+      ) : null}
+      {answer && !isError ? <XsSafeMarkdown content={answer} /> : null}
 
       {turn.clarifications.map((clarification, index) => {
         const key = clarificationKey(turnKey, clarification, index);

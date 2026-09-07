@@ -333,6 +333,8 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
+        factSourceRule: "事实只可来自用户明确提供且未撤回的信息、sourceBlocks、referenceMaterials及status为SUCCESS的researchResults。用户要求仅使用指定事实或禁止研究时优先遵守。模板、fixedFields.preview、templateOutline和styleSamples只提供格式与文风，不是本轮事实。不得新增日期、时间、数量、地点、人员、职责或执行要求。",
+        missingFactRule: "不能为了凑字数、套用通知惯例或补齐章节而编造安排；尤其不得自行增加提前签到、提前十五分钟到场、提交材料、缴费等要求。未给出的必要事实标为【待确认：具体事项】或省略，不以肯定口吻写入正文。正常措辞调整不得改变事实或增加义务。",
         allowResearch: researchResults.length > 0
       }
     }
@@ -1124,4 +1126,77 @@ export function stripOfficialDocumentAnchors(value: string) {
     .join("\n")
     .replace(ANCHOR_PATTERN, "");
   return stripTrailingAnchorFragment(withoutAnchors).replace(/^\n+/, "");
+}
+
+export type OfficialDocumentFactReviewIssue = { sentence: string; additions: string[] };
+
+/** 有界校对只提示可核对的数值/日期/执行要求，不断言造假，也不删除或阻断成稿。 */
+export function reviewOfficialDocumentDraftFacts(
+  markdown: string,
+  writingContext: Record<string, unknown>,
+  previousUserFacts: string[] = []
+): OfficialDocumentFactReviewIssue[] {
+  const records = (value: unknown): Record<string, unknown>[] => Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
+  const requirements = records(writingContext.sourceBlocks).map((block) => String(block.text ?? ""));
+  const onlySpecifiedFacts = /[仅只](?:使用|依据|根据)(?:这些|以下|如下)(?:测试)?事实/.test(requirements.join("\n"));
+  const source = (onlySpecifiedFacts ? requirements : [
+    ...previousUserFacts,
+    ...requirements,
+    ...records(writingContext.referenceMaterials).map((material) => String(material.content ?? "")),
+    ...records(writingContext.researchResults).filter((result) => result.status === "SUCCESS")
+      .map((result) => JSON.stringify({ summary: result.summary, table: result.table, citations: result.citations }))
+  ]).join("\n");
+  const number = "[\\d零〇一二两三四五六七八九十百千]+";
+  const normalizedNumber = (value: string) => {
+    if (/^\d+$/.test(value)) return String(Number(value));
+    const digits = "零一二三四五六七八九";
+    const normalized = value.replace(/〇/g, "零").replace(/两/g, "二");
+    if (!/[十百千]/.test(normalized)) return normalized.split("").map((char) => digits.indexOf(char)).join("");
+    let total = 0;
+    let current = 0;
+    for (const char of normalized) {
+      const unit = ({ 十: 10, 百: 100, 千: 1000 } as Record<string, number>)[char];
+      if (unit) { total += (current || 1) * unit; current = 0; }
+      else current = digits.indexOf(char);
+    }
+    return String(total + current);
+  };
+  const tokens = (text: string) => {
+    const found = new Map<string, string>();
+    const patterns = [
+      new RegExp(`(${number})年(${number})月(${number})[日号]`, "g"),
+      new RegExp(`(上午|下午|晚上|中午|凌晨)?\\s*(${number})(?:[点时](?:(${number})分?)?|[：:](\\d{2}))`, "g"),
+      new RegExp(`(?<![第\\d零〇一二两三四五六七八九十百千])(${number})\\s*(分钟|小时|天|年|月|日|人|名|份|项|次|个|元|万元|%|％)`, "g")
+    ];
+    patterns.forEach((pattern, index) => {
+      for (const match of text.matchAll(pattern)) {
+        let hour = index === 1 ? Number(normalizedNumber(match[2])) : 0;
+        if (index === 1 && /下午|晚上|中午/.test(match[1] ?? "") && hour < 12) hour += 12;
+        if (index === 1 && match[1] === "凌晨" && hour === 12) hour = 0;
+        const key = index === 0 ? `date:${match.slice(1).map(normalizedNumber).join("-")}`
+          : index === 1 ? `time:${hour}:${normalizedNumber(match[3] || match[4] || "0")}`
+            : `quantity:${normalizedNumber(match[1])}:${match[2]}`;
+        found.set(key, match[0]);
+      }
+    });
+    return found;
+  };
+  const known = tokens(source);
+  const actions = /签到|签退|提交|报送|携带|缴纳|请假|不得缺席|提前熟悉|验收准备/g;
+  const canonicalAction = (value: string) => value === "报送" ? "提交" : value;
+  const knownActions = new Set([...source.matchAll(actions)].map((match) => canonicalAction(match[0])));
+  // ponytail: 仅做显式日期/数值与常见义务核对；复杂语义交由用户校对，不冒充事实验证器。
+  return stripOfficialDocumentAnchors(markdown).split(/(?<=[。！？；;])|\n+/)
+    .map((sentence) => {
+      const additions = [...tokens(sentence)].filter(([key]) => !known.has(key)).map(([, raw]) => raw);
+      if (/请|须|需|应|必须|务必|不得|提前|做好/.test(sentence)) {
+        for (const match of sentence.matchAll(actions)) {
+          if (!knownActions.has(canonicalAction(match[0]))) additions.push(match[0]);
+        }
+      }
+      return { sentence: sentence.trim(), additions: [...new Set(additions)] };
+    })
+    .filter((issue) => issue.sentence && issue.additions.length)
+    .slice(0, 12);
 }

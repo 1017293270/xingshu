@@ -298,11 +298,14 @@ export type DataHubDoneData = {
 };
 
 /**
- * 一项候选答案。原生卡（带 interactionId）只有 label，提交的就是 label；
+ * 一项候选答案。原生卡（带 interactionId）显示 label，提交 value；旧卡缺少 value 时提交 label；
  * 历史 XML 卡没有 interactionId，必须带 reply，提交的是 reply。
  */
 export type DataHubClarificationOption = {
   label: string;
+  /** 原生 ask_user 的提交值；旧的 label-only 选项使用 label。 */
+  value?: string;
+  /** 历史 XML 澄清的提交原文，原生选项不携带此字段。 */
   reply?: string;
 };
 
@@ -346,6 +349,8 @@ export type DataHubCitationDocument = {
   sourceAvailable: boolean;
   markdownAvailable?: boolean;
   fragments: string[];
+  /** Server-confirmed evidence ids, scoped to this cited document. */
+  evidenceFragments?: Array<{ evidenceId: string; text: string }>;
 };
 
 export type DataHubBusinessMeasure = {
@@ -402,6 +407,8 @@ export type DataHubBusinessDocument = {
   chapter?: string;
   pageNumber?: string;
   fragments: string[];
+  /** Server-confirmed evidence ids, scoped to this cited document. */
+  evidenceFragments?: Array<{ evidenceId: string; text: string }>;
 };
 
 export type DataHubBusinessTrace = {

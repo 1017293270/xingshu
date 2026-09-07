@@ -558,7 +558,7 @@ export function sessionActivitySummary(session: DataHubExecutionSession): string
     return session.error?.message || "执行失败，请查看详情";
   }
   if (session.status === "done") {
-    if (session.done?.summary) {
+    if (session.done?.summary && !/^(?:子任务|任务)(?:已)?完成[。！!]?$/u.test(session.done.summary.trim())) {
       return session.done.summary;
     }
     for (let cardIndex = session.cards.length - 1; cardIndex >= 0; cardIndex -= 1) {
@@ -572,7 +572,13 @@ export function sessionActivitySummary(session: DataHubExecutionSession): string
       }
     }
     const block = latestExecutionBlock(session);
-    return block ? executionBlockSummary(block) : "子任务已完成";
+    const knowledgeNames = session.citationDocuments.flatMap((document) => {
+      const record = asRecord(document);
+      const name = asString(record?.kbName);
+      return name ? [name] : [];
+    });
+    if (knowledgeNames.length) return `已查询${Array.from(new Set(knowledgeNames)).join("、")}知识库`;
+    return block && block.type !== "done" ? executionBlockSummary(block) : "已完成查询";
   }
   const block = latestExecutionBlock(session);
   if (block) {

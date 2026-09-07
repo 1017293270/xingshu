@@ -84,6 +84,7 @@ import {
   dashboardComponentDefinitions,
   getDashboardComponentDefinition
 } from "../core/dashboardComponentRegistry";
+import { dashboardOutputLabel } from "../core/dashboardDesignTitles";
 import { inferDashboardBindingColumns } from "../core/dashboardWidgetData";
 import {
   applyDashboardStudioPreset,
@@ -785,10 +786,10 @@ async function removeDashboardQueryChart(widgetId: string) {
     tone: "danger"
   });
   if (!confirmed) return;
-  await applySchemaChange(removeQueryAssetChart(plainSchema(), widgetId));
+  const nextSchema = removeQueryAssetChart(plainSchema(), widgetId);
   if (selectedWidgetId.value === widgetId) selectedWidgetId.value = "";
   // 移除后剩下的组件会留一个洞，这里顺手收口，但绝不动配色。
-  await autoComposeAfterChange();
+  await autoComposeAfterChange({ schema: nextSchema });
 }
 
 function availablePosition(widgetId: string, desired: DashboardWidgetPosition) {
@@ -1398,8 +1399,9 @@ function formatModuleUpdatedAt(value?: string) {
 }
 
 function queryOutputLabel(outputKey: string) {
-  return selectedAsset.value?.stableVersion?.outputs.find((output) => output.outputKey === outputKey)?.label
-    || outputKey;
+  const definition = selectedAsset.value?.stableVersion?.outputs.find((output) => output.outputKey === outputKey);
+  const output = assetPreview.value?.outputs.find((item) => item.outputKey === outputKey);
+  return dashboardOutputLabel({ ...definition, ...output, label: definition?.label, outputKey });
 }
 
 function isNumericQueryOutputColumn(type?: string) {
@@ -1473,11 +1475,10 @@ async function addSelectedAsset() {
     const wasEmptyBoard = schema.widgets.length === 0;
     const result = appendQueryAssetChart(plainSchema(), asset, clone(toRaw(preview)), outputKey,
       clone(toRaw(selectedAssetParameters)));
-    await applySchemaChange(result.schema);
+    await autoComposeAfterChange({ schema: result.schema, allowTheme: wasEmptyBoard });
     selectedWidgetId.value = result.widgetId;
     markWidgetSettling(result.widgetId);
-    // 添加即成型：first-fit 堆叠出来的方块阵在这里被构图器收走，空板首添还顺带套一次默认主题。
-    await autoComposeAfterChange({ allowTheme: wasEmptyBoard });
+
     paletteTab.value = "assets";
     activePropertyTab.value = "data";
     activeDrawer.value = "property";
@@ -1706,16 +1707,15 @@ function canAutoApplyBoardTheme(source: DashboardSchema) {
 
 /**
  * 添加/移除组件后的自动收口：先按构图规则重排，空板首添时顺带套一次默认主题。
- * 独立走一次 applySchemaChange，撤销一步即可退回自动排版之前的样子。
+ * 与添加/移除合并进一次历史，撤销一步即可回到本次操作之前。
  */
-async function autoComposeAfterChange(options: { allowTheme?: boolean } = {}) {
-  if (schema.widgets.length === 0) return;
-  const source = plainSchema();
+async function autoComposeAfterChange(options: { schema: DashboardSchema; allowTheme?: boolean }) {
+  const source = options.schema;
   const themed = options.allowTheme && canAutoApplyBoardTheme(source)
     ? applyDashboardBoardTheme(source, DEFAULT_DASHBOARD_BOARD_THEME_ID, { includeLocked: false })
     : source;
-  const composed = composeDashboardLayout(themed);
-  if (historySignature(source) === historySignature(composed)) return;
+  const composed = themed.widgets.length > 0 ? composeDashboardLayout(themed) : themed;
+  if (historySignature(plainSchema()) === historySignature(composed)) return;
   const keepSelection = selectedWidgetId.value;
   await applySchemaChange(composed);
   if (keepSelection && schema.widgets.some((widget) => widget.id === keepSelection)) {
@@ -2515,7 +2515,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
               <div v-if="selectedBinding?.sourceRef" class="property-source-card">
                 <span>来源</span><strong>{{ selectedModuleAsset?.name ?? selectedBinding.label }}</strong>
                 <span>固定版本</span><strong>{{ selectedBinding.sourceRef.queryVersionId.slice(0, 8) }}</strong>
-                <span>输出</span><strong>{{ selectedBinding.sourceRef.outputKey }}</strong>
+                <span>输出</span><strong>{{ dashboardOutputLabel({ outputKey: selectedBinding.sourceRef.outputKey, columns: selectedBinding.table.columns }) }}</strong>
                 <span>最近更新</span><strong>{{ formatModuleUpdatedAt(selectedBinding.lastUpdatedAt) }}</strong>
                 <span>刷新状态</span><strong :data-status="selectedBinding.status">{{ selectedBinding.error ?? selectedBinding.status ?? '等待刷新' }}</strong>
               </div>
@@ -2627,9 +2627,9 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
               <span>输出</span><strong>{{ candidate.outputs.length }} 个</strong>
               <span>字段</span><strong>{{ candidate.outputs.reduce((total, output) => total + output.columns.length, 0) }} 个</strong>
             </div>
-            <label v-if="candidate.outputs.length > 0" class="designer-modal__field"><span>升级使用的输出</span><select :value="ensureCandidateOutputKey(candidate)" @change="updateCandidateOutput(candidate, $event)"><option v-for="output in candidate.outputs" :key="output.outputKey" :value="output.outputKey">{{ output.label || output.outputKey }} · {{ output.columns.length }} 字段</option></select></label>
+            <label v-if="candidate.outputs.length > 0" class="designer-modal__field"><span>升级使用的输出</span><select :value="ensureCandidateOutputKey(candidate)" @change="updateCandidateOutput(candidate, $event)"><option v-for="output in candidate.outputs" :key="output.outputKey" :value="output.outputKey">{{ dashboardOutputLabel(output) }} · {{ output.columns.length }} 字段</option></select></label>
             <details v-if="candidate.sqlPreview"><summary>只读脱敏 SQL</summary><pre>{{ candidate.sqlPreview }}</pre></details>
-            <details><summary>输出字段差异</summary><ul><li v-for="output in candidate.outputs" :key="output.outputKey"><strong>{{ output.outputKey }}</strong>：{{ output.columns.map(column => column.label).join('、') }}</li></ul></details>
+            <details><summary>输出字段差异</summary><ul><li v-for="output in candidate.outputs" :key="output.outputKey"><strong>{{ dashboardOutputLabel(output) }}</strong>：{{ output.columns.map(column => column.label).join('、') }}</li></ul></details>
             <div v-if="candidate.schemaHash !== versionAsset?.stableVersion?.schemaHash && usedModuleColumns.length > 0" class="version-column-mapping">
               <strong>确认组件字段映射</strong>
               <label v-for="sourceColumn in usedModuleColumns" :key="sourceColumn.columnId">

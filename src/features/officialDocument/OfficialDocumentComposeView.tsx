@@ -59,6 +59,7 @@ import {
   mapResearchResultsToReferenceSections,
   MAX_REFERENCE_REQUIREMENT_CHARS,
   parseOfficialDocumentReferenceGeneration,
+  reviewOfficialDocumentDraftFacts,
   stripOfficialDocumentAnchors,
   type OfficialDocumentPreviewLine,
   type OfficialDocumentReferenceFixedField,
@@ -166,6 +167,7 @@ type ComposeTurnState = {
   savedDraft?: OfficialDocumentDraft;
   recoveryDraft?: OfficialDocumentDraft;
   parseError?: string;
+  factReview?: ReturnType<typeof reviewOfficialDocumentDraftFacts>;
   /** 这一轮的原始成稿文本，Word 引擎渲染失败时用它兜底出结构化预览。 */
   raw?: string;
   status?: ArtifactStatus;
@@ -514,6 +516,10 @@ export function OfficialDocumentComposeView() {
         false,
         { keepRicherStreamedAnswer: true }
       );
+      const factReview = reviewOfficialDocumentDraftFacts(answer, state.plan.writingContext,
+        Object.values(turnStates)
+          .filter((previous) => previous.startedAt < state.startedAt && previous.reference.template.id === state.reference.template.id)
+          .map((previous) => previous.requirement));
       try {
         /* 研究拿到的表格与图表跟着正文一起进这一轮成稿；章节锚点与大纲 id 已恒等，映射只是防御。 */
         const research = state.research;
@@ -542,6 +548,7 @@ export function OfficialDocumentComposeView() {
               version,
               raw: answer,
               parseError: undefined,
+              factReview,
               artifact: {
                 templateId: existing.reference.template.id,
                 templateVersionId: existing.reference.template.currentVersion.id,
@@ -554,7 +561,7 @@ export function OfficialDocumentComposeView() {
           };
         });
       } catch (caught) {
-        patchTurn(message.id, { raw: answer, parseError: operationErrorMessage(caught), expanded: true });
+        patchTurn(message.id, { raw: answer, factReview, parseError: operationErrorMessage(caught), expanded: true });
       }
     }
     // One completed Agent turn becomes a local artifact; persistence is an explicit user action.
@@ -1153,6 +1160,18 @@ export function OfficialDocumentComposeView() {
             <WarningCircle size={14} aria-hidden="true" />
             这一版没能解析成公文结构：{state.parseError}
           </p>
+        ) : null}
+
+        {state?.factReview?.length ? (
+          <section aria-label="事实校对" className="official-document-compose__parse-note">
+            <div>
+              <strong>以下内容需核对来源</strong>
+              <p>未在已提供的需求与资料中匹配到这些时间、数量或执行要求；原文已保留，请确认后采用。</p>
+              <ul>{state.factReview.map((issue, index) => (
+                <li key={index}>核对“{issue.additions.join("、")}”：{issue.sentence}</li>
+              ))}</ul>
+            </div>
+          </section>
         ) : null}
 
         {state?.artifact ? renderArtifact(message.id, state) : null}

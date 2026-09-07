@@ -1,7 +1,7 @@
 import { CaretDown, FileText, Plus } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { DataHubCitationDocument } from "@/types/dataHub";
-import { citationDisplayTitle, citationLocationText } from "./citationLabels";
+import { citationDisplayTitle, citationIdentity, citationKnowledgeBaseLabel, citationLocationText } from "./citationLabels";
 import { DataHubCitationFragments } from "./DataHubCitationFragments";
 
 type DataHubCitationChipsProps = {
@@ -14,7 +14,7 @@ type DataHubCitationChipsProps = {
 function groupByKnowledgeBase(citations: DataHubCitationDocument[]) {
   const groups = new Map<string, DataHubCitationDocument[]>();
   citations.forEach((citation) => {
-    const key = citation.kbName || "企业知识库";
+    const key = citation.kbId || citation.kbName || "";
     groups.set(key, [...(groups.get(key) ?? []), citation]);
   });
   return Array.from(groups);
@@ -52,9 +52,9 @@ export function DataHubCitationChips({
       </button>
       {collapsed
         ? null
-        : groupByKnowledgeBase(citations).map(([kbName, items]) => (
-            <section className="knowledge-citations__group" key={kbName}>
-              <strong>{kbName}</strong>
+        : groupByKnowledgeBase(citations).map(([kbId, items]) => (
+            <section className="knowledge-citations__group" key={kbId}>
+              <strong>{citationKnowledgeBaseLabel(items[0])}</strong>
               <div className="knowledge-citations__chips">
                 {items.map((citation) => {
                   const title = citationDisplayTitle(citation);
@@ -62,7 +62,7 @@ export function DataHubCitationChips({
                   return (
                     <span
                       className="knowledge-citation-chip-group"
-                      key={`${citation.docId}::${citation.docKey ?? ""}`}
+                      key={citationIdentity(citation)}
                     >
                       <button
                         type="button"

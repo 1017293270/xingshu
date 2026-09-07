@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataHubBusinessExplanation } from "./DataHubBusinessExplanation";
 import type { DataHubBusinessTrace } from "@/types/dataHub";
 
@@ -20,307 +20,124 @@ const emptyTrace: DataHubBusinessTrace = {
   documents: []
 };
 
-/** 「怎么查」是散文段落，逐段取文本用于断言。 */
-function howLines() {
-  const region = screen.getByRole("region", { name: "怎么查" });
-  return Array.from(region.querySelectorAll("p")).map((node) => node.textContent ?? "");
-}
-
-function foundLines() {
-  return within(screen.getByRole("region", { name: "查到了什么" }))
-    .getAllByRole("listitem")
-    .map((item) => item.textContent ?? "");
-}
+afterEach(() => vi.useRealTimers());
 
 describe("DataHubBusinessExplanation", () => {
-  it("keeps a running query open and grows 怎么查 as facts arrive", () => {
+  it("uses the table dropdown without duplicating data cards or losing document sources", () => {
+    render(<DataHubBusinessExplanation kind="AGENT" intent="合同数据与依据" status="done"
+      resultTables={<section aria-label="查询结果表">结果表入口</section>}
+      trace={{ ...emptyTrace,
+        queries: [{ table: "合同统计表", dataSource: "合同系统", dimensions: ["供应商"],
+          measures: [{ label: "合同数量", aggregation: "计数" }], filters: [], time: [], rows: 3,
+          preview: [{ label: "供应商 A", value: "12 份" }] }],
+        documents: [{ kbName: "合同库", docName: "采购合同.pdf", fragments: ["合同条款。"] }]
+      }} />);
+    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
+    const results = screen.getByRole("region", { name: "查询结果" });
+    expect(within(results).getByRole("region", { name: "查询结果表" })).toHaveTextContent("结果表入口");
+    expect(within(results).getByRole("button", { name: "查看来源片段：采购合同.pdf" })).toBeVisible();
+    expect(results).not.toHaveTextContent("供应商 A");
+    expect(results).not.toHaveTextContent("等待查询结果");
+  });
+
+  it("ticks query time and nests execution details inside the sticky collapse", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
     const { rerender } = render(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="查询合同付款情况"
-        status="running"
-        trace={{ ...emptyTrace, steps: ["正在理解问题"] }}
-      />
+      <DataHubBusinessExplanation kind="ASK_DATA" intent="合同数量" status="running" startedAt={10_000}>
+        <details><summary>执行过程</summary>查询详情</details>
+      </DataHubBusinessExplanation>
     );
+    act(() => vi.advanceTimersByTime(3000));
+    const toggle = screen.getByRole("button", { name: "查询过程 （3秒）" });
+    expect(screen.getByText("执行过程").closest(".datahub-business-explanation__body")).not.toBeNull();
+    rerender(<DataHubBusinessExplanation kind="ASK_DATA" intent="合同数量" status="done" durationMs={3000} />);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAccessibleName("查询过程 （已完成，3秒）");
+    expect(toggle).toHaveTextContent("已完成 · 3秒");
+    fireEvent.click(toggle);
+    rerender(<DataHubBusinessExplanation kind="ASK_DATA" intent="合同数量" status="running" startedAt={13_000} />);
+    rerender(<DataHubBusinessExplanation kind="ASK_DATA" intent="合同数量" status="done" durationMs={1000} />);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
 
+
+  it("separates knowledge sources and document results without repeating the question", async () => {
+    const user = userEvent.setup();
+    const name = "采购合同szsz-2024-cg0007丽江市古城区城市运行管理服务平台系统建设项目采购合同.pdf";
+    const libraries = ["Alpha MinerU纯解析验收20260826b", "Alpha MinerU加权调度验收20260825"];
+    render(<DataHubBusinessExplanation kind="ASK_KNOWLEDGE" intent="这个合同的付款条件是怎么样的" status="done"
+      trace={{ ...emptyTrace, documents: libraries.map((kbName) => ({ kbName, docName: name,
+        pageNumber: "15", chapter: "第五章", fragments: ["合同约定的付款条件。"] })) }} />);
+    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    const conditions = screen.getByRole("region", { name: "查询条件" });
+    expect(within(conditions).getAllByRole("listitem").map((item) => item.textContent)).toEqual(libraries);
+    expect(screen.queryByText(/怎么查|查到了什么|相关的文档|并核对来源|这个合同的付款条件/)).not.toBeInTheDocument();
+    const result = screen.getByRole("region", { name: "查询结果" });
+    expect(within(result).getByRole("heading", { name: "查询结果" })).toBeInTheDocument();
+    const documents = within(result).getAllByRole("button", { name: `查看来源片段：${name}` });
+    expect(documents).toHaveLength(2);
+    expect(documents[0]).toHaveTextContent(libraries[0]);
+    expect(documents[0]).not.toHaveTextContent(libraries[1]);
+    expect(documents[1]).toHaveTextContent(libraries[1]);
+    expect(within(documents[0]).getByTitle(name)).toHaveTextContent(name);
+    expect(documents[0]).toHaveTextContent("第 15 页");
+    expect(screen.queryByText("合同约定的付款条件。")).not.toBeInTheDocument();
+    await user.click(documents[0]);
+    expect(await screen.findByRole("dialog")).toHaveTextContent("合同约定的付款条件。");
+  });
+
+  it("renders query fields and result values at distinct visual levels", async () => {
+    const user = userEvent.setup();
+    render(<DataHubBusinessExplanation kind="ASK_DATA" intent="合同统计" status="done" trace={{ ...emptyTrace,
+      queries: [{ dataSource: "合同系统", table: "合同表", filters: ["金额小于60"], dimensions: ["供应商"],
+        measures: [{ label: "合同数量", aggregation: "计数" }], time: ["2026年上半年"], rows: 3,
+        preview: [{ label: "供应商 A", value: "12 份" }, { label: "供应商 B", value: "8 份" }] }] }} />);
+    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    const conditions = screen.getByRole("region", { name: "查询条件" });
+    const steps = within(conditions).getByRole("list", { name: "查询步骤" });
+    expect(steps).toHaveTextContent("限定查询范围");
+    expect(steps).toHaveTextContent("只保留金额小于60的记录");
+    expect(steps).toHaveTextContent("将“供应商”相同的记录归为一组");
+    const details = within(conditions).getByText("查看查询细节").closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(within(conditions).getByText("合同数量：计数")).not.toBeVisible();
+    await user.click(within(conditions).getByText("查看查询细节"));
+    expect(details).toHaveAttribute("open");
+    for (const text of ["合同系统", "合同表", "金额小于60", "供应商", "合同数量：计数", "2026年上半年"]) {
+      expect(within(conditions).getByText(text)).toBeInTheDocument();
+    }
+    const result = screen.getByRole("region", { name: "查询结果" });
+    expect(result).toHaveTextContent("3 行");
+    expect(result).toHaveTextContent("供应商 A12 份");
+    expect(result).toHaveTextContent("供应商 B8 份");
+    expect(result).not.toHaveTextContent("金额小于60");
+  });
+
+  it("adds only real facts as a running query receives data", () => {
+    const { rerender } = render(<DataHubBusinessExplanation kind="ASK_KNOWLEDGE" intent="付款条件" status="running" trace={emptyTrace} />);
     expect(screen.getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "true");
-    expect(howLines()).toEqual(["正在搜索数据源，查找与“查询合同付款情况”相关的数据……"]);
-
-    rerender(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="查询合同付款情况"
-        status="running"
-        trace={{ ...emptyTrace, dataSources: ["合同数据系统"] }}
-      />
-    );
-
-    expect(howLines()).toEqual(["正在搜索数据源“合同数据系统”，查找相关的数据表……"]);
-    expect(foundLines()).toEqual(["正在等待结果……"]);
-    expect(screen.queryByText(/核对结果后作答/)).not.toBeInTheDocument();
+    expect(screen.getByText("等待查询结果")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "查询条件" })).not.toBeInTheDocument();
+    rerender(<DataHubBusinessExplanation kind="ASK_KNOWLEDGE" intent="付款条件" status="running" trace={{ ...emptyTrace,
+      documents: [{ kbName: "合同库", docName: "采购合同.pdf", fragments: [] }] }} />);
+    expect(screen.getByRole("region", { name: "查询条件" })).toHaveTextContent("合同库");
+    expect(screen.getByRole("region", { name: "查询结果" })).toHaveTextContent("采购合同.pdf");
+    expect(screen.queryByText(/已复核|全文检索|混合检索/)).not.toBeInTheDocument();
   });
 
-  it("tells how the numbers were produced and which rows came back", async () => {
+  it("keeps unavailable information honest and real definitions collapsed", async () => {
     const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="善治数字科技签了多少合同"
-        status="done"
-        durationMs={7400}
-        trace={{
-          ...emptyTrace,
-          dataSources: ["合同数据系统"],
-          dataTables: ["合同主数据清单"],
-          filters: ["合同甲方单位名称等于“善治数字科技（成都）有限公司”"],
-          calculations: ["记录数：计数"],
-          queries: [{
-            dataSource: "合同数据系统",
-            table: "合同主数据清单",
-            dimensions: ["合同乙方单位名称"],
-            measures: [{ label: "记录数", aggregation: "计数" }],
-            filters: ["合同甲方单位名称等于“善治数字科技（成都）有限公司”"],
-            time: [],
-            rows: 10,
-            rowKind: "grouped",
-            preview: [
-              { label: "广州思迈特软件有限公司", value: "6 条" },
-              { label: "杭州海康威视科技有限公司", value: "5 条" },
-              { label: "云南蚁象网络科技有限公司", value: "3 条" }
-            ]
-          }]
-        }}
-      />
-    );
-
+    render(<DataHubBusinessExplanation kind="AGENT" intent="合同信息" status="done" trace={{ ...emptyTrace,
+      steps: ["已理解问题", "已汇总并复核最终结果"], filters: ["本次未返回可复核的筛选条件"],
+      metricDefinitions: ["合同金额：已签署合同的含税总额，单位万元"],
+      synonymMappings: ["本次未返回可复核的同义词映射"] }} />);
     await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(howLines()).toEqual([
-      "搜索数据源“合同数据系统”，查找合同相关的数据表；找到后只看甲方单位为“善治数字科技（成都）有限公司”的合同，按乙方单位统计合同数量。"
-    ]);
-    expect(foundLines()).toEqual([
-      "在数据源“合同数据系统”找到数据表“合同主数据清单”，筛出合同甲方单位名称为“善治数字科技（成都）有限公司”的合同记录，按“合同乙方单位名称”计数，共 10 家乙方单位；最多的是广州思迈特软件有限公司（6 条）、杭州海康威视科技有限公司（5 条）、云南蚁象网络科技有限公司（3 条）。"
-    ]);
-    // 两段是散文，不再有编号圆圈和方头括号。
-    expect(screen.getByRole("region", { name: "怎么查" }).querySelector("ol")).toBeNull();
-    expect(screen.getByRole("region", { name: "怎么查" }).textContent).not.toMatch(/[「」]/);
-  });
-
-  it("drops the boilerplate the backend fills in when it has nothing to report", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="有多少份合同"
-        status="done"
-        durationMs={7400}
-        trace={{
-          ...emptyTrace,
-          steps: ["已理解问题", "已获得 1 份结构化结果，共 13 行", "已汇总并复核最终结果"],
-          dataSources: ["合同数据系统"],
-          filters: ["本次未设置额外筛选条件"],
-          calculations: ["本次结果采用企业语义模型已发布的计算规则"],
-          relationships: ["单一业务主题，本次没有跨主题关联"],
-          metricDefinitions: ["记录数：采用企业语义模型中已发布的指标口径"],
-          synonymMappings: ["本次未返回可复核的同义词映射"],
-          queries: [{
-            dataSource: "合同数据系统",
-            dimensions: [],
-            measures: [{ label: "记录数", aggregation: "计数" }],
-            filters: [],
-            time: [],
-            rows: 13
-          }]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(howLines()).toEqual([
-      "搜索数据源“合同数据系统”，查找相关的数据表；找到后统计记录数量。"
-    ]);
-    expect(foundLines()).toEqual([
-      "在数据源“合同数据系统”里对记录计数，得到 13 行结果。"
-    ]);
-    expect(screen.queryByText("口径细则")).not.toBeInTheDocument();
-    expect(screen.queryByText(/已汇总并复核最终结果/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/本次未/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/单一业务主题/)).not.toBeInTheDocument();
-    // 折叠头只留状态和用时，不再数步数。
-    expect(screen.getByRole("button", { name: /查询过程/ })).toHaveTextContent("已完成 · 用时 7 秒");
-    expect(screen.queryByText(/3 步/)).not.toBeInTheDocument();
-  });
-
-  it("keeps 口径细则 collapsed for the definitions the backend really returned", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="合同金额口径"
-        status="done"
-        trace={{
-          ...emptyTrace,
-          dataSources: ["合同数据系统"],
-          metricDefinitions: ["合同金额：已签署合同的含税总额，单位万元"],
-          synonymMappings: ["合同金额：合同额、签约额"],
-          relationships: ["多个业务主题按已发布语义模型关系关联"]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
+    expect(screen.getByText("未返回查询结果")).toBeInTheDocument();
+    expect(screen.queryByText(/已理解问题|已汇总并复核|未返回可复核/)).not.toBeInTheDocument();
     const detail = screen.getByText("口径细则").closest("details");
-    expect(detail).not.toBeNull();
     expect(detail).not.toHaveAttribute("open");
-    expect(within(detail as HTMLElement).getByText("指标定义", { selector: "dt" })).toBeInTheDocument();
-    expect(within(detail as HTMLElement).getByText("合同金额：合同额、签约额")).toBeInTheDocument();
-  });
-
-  it("gives every source document its own line and opens the fragment dialog", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="ASK_KNOWLEDGE"
-        intent="差旅费超过多少需要复核"
-        status="done"
-        trace={{
-          ...emptyTrace,
-          documents: [{
-            kbName: "制度库",
-            docName: "财务报销制度.pdf",
-            pageNumber: "12",
-            fragments: ["单笔超过 5000 元需复核。", "复核由财务共享中心执行。"]
-          }]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(howLines()).toEqual([
-      "在知识库“制度库”中检索与“差旅费超过多少需要复核”相关的文档，并核对来源。"
-    ]);
-    expect(foundLines()).toEqual([
-      "在知识库“制度库”找到文档《财务报销制度.pdf》（第 12 页），引用了 2 段原文。查看片段"
-    ]);
-    // 片段原文留在弹窗里，列表上只给一句结论。
-    expect(screen.queryByText(/单笔超过 5000 元需复核/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "查看来源片段：财务报销制度.pdf" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/单笔超过 5000 元需复核/)).toBeInTheDocument();
-  });
-
-  it("renders every sub-agent task and both material kinds for an orchestration", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="AGENT"
-        intent="分析合同并核对制度"
-        status="done"
-        trace={{
-          ...emptyTrace,
-          tasks: [
-            { id: "task-1", agentName: "问数智能体", question: "统计各区域合同金额" },
-            { id: "task-2", agentName: "问知智能体", question: "查找区域考核制度" }
-          ],
-          dataSources: ["经营分析库"],
-          queries: [{
-            dataSource: "经营分析库",
-            table: "合同主数据清单",
-            dimensions: ["区域"],
-            measures: [{ label: "合同金额", aggregation: "求和" }],
-            filters: [],
-            time: [],
-            rows: 3
-          }],
-          documents: [{
-            kbName: "制度库",
-            docName: "区域考核办法.pdf",
-            chapter: "第三章 审批流程",
-            fragments: ["完成率低于 85% 需提交改进方案。"]
-          }]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(howLines()).toEqual([
-      "先由问数智能体搜索数据源“经营分析库”，查找合同相关的数据表；找到后按区域汇总合同金额，"
-        + "再由问知智能体在知识库“制度库”中检索与“分析合同并核对制度”相关的文档，并核对来源。"
-    ]);
-    expect(foundLines()).toEqual([
-      "在数据源“经营分析库”找到数据表“合同主数据清单”，按“区域”对“合同金额”求和，得到 3 行结果。",
-      "在知识库“制度库”找到文档《区域考核办法.pdf》（第三章 审批流程），引用了 1 段原文。查看片段"
-    ]);
-  });
-
-  it("falls back to the plain strings when the backend returned no query structure", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="ASK_DATA"
-        intent="查询永安镇合同"
-        status="done"
-        trace={{
-          ...emptyTrace,
-          dataSources: ["经营分析库"],
-          dataTables: ["经营分析库中的业务数据"],
-          filters: [
-            "合同主数据清单，记录合同编号、名称。合同乙方单位名称包含“永安镇”",
-            "合同主数据清单，记录合同编号、名称。合同甲方单位名称包含“善治”"
-          ],
-          calculations: ["记录数：计数"],
-          time: ["签订日期：2026-01-01 至 2026-06-30（按月）"]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    // 「xx中的业务数据」是占位表名，不当真实表名写进句子；重复的表注释前缀也剥掉。
-    expect(howLines()).toEqual([
-      "搜索数据源“经营分析库”，查找相关的数据表；找到后只看合同乙方单位含有“永安镇”、合同甲方单位含有“善治”的记录，统计记录数量，时间范围签订日期：2026-01-01 至 2026-06-30（按月）。"
-    ]);
-    expect(screen.queryByRole("region", { name: "查到了什么" })).not.toBeInTheDocument();
-  });
-
-  it("names the returned columns when the row count is all the backend gave", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation
-        kind="AGENT"
-        intent="各区域经营表现"
-        status="done"
-        trace={{
-          ...emptyTrace,
-          fields: ["区域", "季度销售额（万元）", "完成率"],
-          queries: [{ dimensions: [], measures: [], filters: [], time: [], rows: 3 }]
-        }}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(foundLines()).toEqual([
-      "查到 3 行结果，包含“区域、季度销售额（万元）、完成率”。"
-    ]);
-  });
-
-  it("says plainly that nothing was queried instead of inventing steps", async () => {
-    const user = userEvent.setup();
-    render(
-      <DataHubBusinessExplanation kind="AGENT" intent="今天怎么样" status="done" trace={emptyTrace} />
-    );
-
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
-
-    expect(howLines()).toEqual(["理解问题后直接作答，本次没有查询数据或文档。"]);
-    expect(screen.queryByRole("region", { name: "查到了什么" })).not.toBeInTheDocument();
-    expect(screen.queryByText("口径细则")).not.toBeInTheDocument();
+    expect(detail).toHaveTextContent("合同金额：已签署合同的含税总额，单位万元");
   });
 
   it("shows only the source file name until its Markdown detail dialog is opened", async () => {

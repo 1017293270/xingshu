@@ -1,9 +1,20 @@
 import { getDataHubActionLabel } from "@/services/dataHubAskDataPresenter";
-import type { DataHubAskTurn } from "@/types/dataHub";
+import { buildTableAgentTrace, type TableExecutionTurn } from "./agentTrace";
 
-export function getTableGenerationProgress(turn: DataHubAskTurn) {
+export function getTableGenerationProgress(turn: TableExecutionTurn) {
   if (turn.tableResults.length > 0) {
     return `已生成 ${turn.tableResults.length} 张结果表`;
+  }
+
+  if (turn.execution) {
+    const steps = buildTableAgentTrace(turn).steps;
+    const active = [...steps].reverse().find((step) => step.status === "running");
+    if (active) return `当前步骤：${active.label}`;
+    const latest = steps.at(-1);
+    if (latest) return latest.status === "error" ? `执行失败：${latest.label}`
+      : latest.status === "warning" ? `正在修正：${latest.label}`
+        : latest.status === "cancelled" ? `已停止：${latest.label}`
+        : `已完成：${latest.label}，等待结果表`;
   }
 
   const lastStep = [...turn.reactSteps].reverse().find((step) => step.action);
@@ -26,5 +37,5 @@ export function getTableGenerationProgress(turn: DataHubAskTurn) {
     return "正在理解制表需求";
   }
 
-  return "正在连接问表，生成结果表";
+  return turn.execution?.eventCount ? "正在生成结果表，等待执行进度" : "正在连接问表，生成结果表";
 }

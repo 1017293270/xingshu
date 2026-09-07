@@ -1,3 +1,4 @@
+import { splitDataHubThinkingEnvelope } from "./dataHubThinkingEnvelope";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import type { DataHubContentBlock, DataHubStreamEvent } from "@/types/dataHub";
 
@@ -31,7 +32,7 @@ const FULLWIDTH_PUNCTUATION: Record<string, string> = {
  * 强调符号被重写、中英文标点混用，所以按原文严格比较会漏判，必须先抹平这些无语义差异。
  */
 export function normalizeDataHubAnswerText(text: string): string {
-  return text
+  return splitDataHubThinkingEnvelope(text).answer
     .replace(/\[\[[^\]]*\]\]/g, "")
     .replace(/[*_`>#]/g, "")
     .replace(/[，。！？；：（）、「」“”‘’]/g, (char) => FULLWIDTH_PUNCTUATION[char] ?? char)
@@ -44,6 +45,8 @@ export function normalizeDataHubAnswerText(text: string): string {
  * 增量块之间是无缝拼接的，重发的整段却会在段落之间补回换行，留着空白就会判成两段不同文本。
  */
 function answerFingerprint(text: string): string {
+  // 代码中的下划线、运算符和空白都有语义；代码块（含未闭合的流式片段）只做原文比较。
+  if (/`|(?:^|\n)(?: {4}|\t| {0,3}~{3})/.test(text)) return `\u0000code:${text.trim()}`;
   return normalizeDataHubAnswerText(text).replace(/\s+/g, "");
 }
 
@@ -119,13 +122,25 @@ export function dataHubRootAnsweredAfterChildren(
 ): boolean {
   let lastRootIndex = -1;
   let lastChildIndex = -1;
+  const textByReply = new Map<string, string>();
 
   events.forEach((event, index) => {
-    if (event.isThinking || (event.type !== "text" && event.type !== "content")) {
+    if (event.isThinking || !["text", "content", "done"].includes(event.type)) {
       return;
     }
-    if (!isComparable(answerFingerprint(readEventText(event)))) {
-      return;
+    let text = readEventText(event);
+    if (event.type === "done") {
+      const payload = getDataHubEventPayload(event);
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+      const done = payload as Record<string, unknown>;
+      if (done.failed === true || typeof done.summary !== "string") return;
+      text = splitDataHubThinkingEnvelope(done.summary).answer.trim();
+      if (!text || /^(?:查询|任务|分析|执行|编排|均|全部|已|本次|所有|子任务|智能体|数据)*完成[。.!！\s]*$/.test(text)) return;
+    } else {
+      const key = `${event.sessionId ?? (event.parentSessionId ? "child" : "root")}::${event.replyId ?? ""}::${event.modelCallIndex ?? ""}`;
+      text = (textByReply.get(key) ?? "") + text;
+      textByReply.set(key, text);
+      if (!isComparable(answerFingerprint(text))) return;
     }
     if (event.parentSessionId) {
       lastChildIndex = index;

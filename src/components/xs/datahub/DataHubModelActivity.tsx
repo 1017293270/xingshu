@@ -4,6 +4,7 @@ import type {
   DataHubExecutionBlock,
 } from "@/types/dataHub";
 import { XsSafeMarkdown } from "../XsSafeMarkdown";
+import { splitDataHubThinkingEnvelope } from "@/services/dataHubThinkingEnvelope";
 import {
   activityProgressLine,
   asNumber,
@@ -116,7 +117,7 @@ function isNarrativeBlock(block: DataHubExecutionBlock) {
     !block.isThinking &&
     (block.type === "text" || block.type === "content") &&
     typeof block.content === "string" &&
-    block.content.trim().length > 0
+    splitDataHubThinkingEnvelope(block.content).answer.trim().length > 0
   );
 }
 
@@ -365,7 +366,7 @@ export function DataHubModelActivityCard({
           <XsSafeMarkdown
             key={block.eventId ?? `${activity.id}-narrative-${index}`}
             className="xs-datahub-agent-card__activity-narrative"
-            content={String(block.content)}
+            content={splitDataHubThinkingEnvelope(String(block.content)).answer}
           />
         ))}
 

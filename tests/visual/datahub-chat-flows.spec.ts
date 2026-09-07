@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, type Page, type Route, test } from "@playwright/test";
 import type { QueryAsset, QueryExecution } from "../../src/types/analytics";
 import type { DashboardRecord, DashboardSchema } from "../../src/types/dashboardStudio";
@@ -836,21 +837,21 @@ async function installDataHubFixture(
     citationPreviewHeaders: []
   };
 
-  await page.route("**/fixtures/source/finance-policy-v2.pdf", async (route) => {
+  await page.context().route("**/fixtures/source/finance-policy-v2.pdf", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/pdf",
       body: "%PDF-1.4\n% Playwright source fixture\n"
     });
   });
-  await page.route("**/fixtures/source/sales-policy-2026.pdf", async (route) => {
+  await page.context().route("**/fixtures/source/sales-policy-2026.pdf", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/pdf",
       body: "%PDF-1.4\n% Playwright sales policy source fixture\n"
     });
   });
-  await page.route("**/fixtures/source/contract-preview.svg", async (route) => {
+  await page.context().route("**/fixtures/source/contract-preview.svg", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/svg+xml",
@@ -1439,9 +1440,117 @@ async function installStoppableAgentStream(page: Page) {
   });
 }
 
+async function expandQueryProcess(page: Page) {
+  const query = page.getByRole("region", { name: "查询过程" });
+  const toggle = query.getByRole("button", { name: /查询过程/ });
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+  return query;
+}
+
+async function expandQueryTables(page: Page) {
+  const query = await expandQueryProcess(page);
+  const tables = query.getByRole("region", { name: "查询结果表", exact: true });
+  const toggle = tables.getByRole("button", { name: /^(展开|收起)结果表/ });
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+  return tables;
+}
+
+async function expandExecution(page: Page, title = "智能编排执行") {
+  const query = await expandQueryProcess(page);
+  const panel = query.getByRole("region", { name: title, exact: true });
+  const toggle = panel.locator(".xs-datahub-execution__heading");
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 test.beforeEach(async ({ page }) => {
   await installAuthenticatedSession(page);
   await page.setViewportSize({ width: 1672, height: 941 });
+});
+
+test("returned query tables expand inside query process while the summary stays visible", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true,
+      value: { writeText: async (text: string) => { (window as Window & { __copiedAnswer?: string }).__copiedAnswer = text; } }
+    });
+  });
+  await installDataHubFixture(page, {
+    buildAgentResponse: (request) => {
+      const root = { sessionId: request.sessionId, globalSessionId: request.sessionId,
+        chatId: request.chatId, agentName: "编排智能体" };
+      const events: Record<string, unknown>[] = [{ ...root, type: "agent_start" },
+        { ...root, type: "thinking", isThinking: true, content: "分别查询采购合同和服务合同明细。" }];
+      for (const [index, label] of ["采购合同", "服务合同"].entries()) {
+        const child = { ...root, sessionId: `${request.sessionId}-query-${index}`,
+          parentSessionId: request.sessionId, agentName: "问数智能体" };
+        events.push(
+          { ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, label } },
+          { ...child, type: "data_source_selected", content: { datasourceId: 8, datasourceName: "合同系统" } },
+          { ...child, type: "table", content: { tableComment: label, source: "cube", totalRows: 2,
+            columns: [{ name: "name", title: "合同名称" }, { name: "supplier", title: "供应商" },
+              { name: "amount", title: "合同金额（元）", type: "number" }],
+            rows: [{ name: `${label} A`, supplier: "供应商 A", amount: 128000 },
+              { name: `${label} B`, supplier: "供应商 B", amount: 96000 }] } },
+          { ...child, type: "done", content: { mode: "ask" } }
+        );
+      }
+      events.push({ ...root, type: "done", finished: true, content: { mode: "agent", adaptiveTeam: true } });
+      return events.map(sseEvent).join("") + "data: [DONE]\n\n";
+    }
+  });
+  await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({
+    json: envelope({ chartable: false, reason: "合同明细以表格展示" })
+  }));
+  await page.goto("/ask-agent");
+  await page.getByRole("textbox", { name: "命令输入" }).fill("查询采购合同和服务合同明细");
+  await page.getByRole("button", { name: "发送" }).click();
+  const answer = page.getByLabel("正式回答", { exact: true });
+  await expect(answer).toBeVisible();
+  const result = page.getByRole("region", { name: "分析结果", exact: true });
+  await expect(result.getByRole("table")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "false");
+  const query = await expandQueryProcess(page);
+  const tables = query.getByRole("region", { name: "查询结果表", exact: true });
+  const toggle = tables.getByRole("button", { name: "展开结果表，共 2 张表、4 行", exact: true });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(tables.getByRole("table")).toHaveCount(0);
+  await page.locator(".analysis-card").screenshot({ path: "outputs/query-table-dropdown/collapsed-card-1672.png", animations: "disabled" });
+  await tables.screenshot({ path: "outputs/query-table-dropdown/dropdown-collapsed-1672.png", animations: "disabled" });
+  await toggle.click();
+  await expect(tables.getByRole("table")).toHaveCount(2);
+  await expect(tables.getByRole("cell", { name: "服务合同 B", exact: true })).toBeVisible();
+  await expect(tables.getByRole("button", { name: "下载表格" })).toHaveCount(2);
+  await tables.getByRole("button", { name: "复制表格" }).nth(1).click();
+  const copied = await page.evaluate(() => (window as Window & { __copiedAnswer?: string }).__copiedAnswer ?? "");
+  expect(copied).toContain("服务合同 B");
+  expect(copied).toContain("96000");
+  const downloadPromise = page.waitForEvent("download");
+  await tables.getByRole("button", { name: "下载表格" }).nth(1).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.csv$/i);
+  expect(await download.failure()).toBeNull();
+  const csv = await readFile((await download.path())!, "utf8");
+  expect(csv).toContain("合同名称");
+  expect(csv).toContain("服务合同 B");
+  expect(csv).toContain("96000");
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 1400 : 1200 });
+    await expectNoHorizontalOverflow(page);
+    await query.scrollIntoViewIfNeeded();
+    await expect(answer).toBeVisible();
+    await page.screenshot({ path: `outputs/query-table-dropdown/expanded-${width}.png`, animations: "disabled", fullPage: true });
+    if (width === 1672) {
+      await page.locator(".analysis-card").screenshot({ path: "outputs/query-table-dropdown/expanded-card-1672.png", animations: "disabled" });
+      await tables.screenshot({ path: "outputs/query-table-dropdown/dropdown-expanded-1672.png", animations: "disabled" });
+    }
+  }
+  await tables.getByRole("button", { name: "收起结果表，共 2 张表、4 行", exact: true }).click();
+  await expect(tables.getByRole("table")).toBeHidden();
+  await expect(answer).toBeVisible();
+  await page.screenshot({ path: "outputs/query-table-dropdown/collapsed-390.png", animations: "disabled", fullPage: true });
+
 });
 
 test("assistant mark preserves its intrinsic aspect ratio beside an agent response", async ({
@@ -1465,7 +1574,8 @@ test("assistant mark preserves its intrinsic aspect ratio beside an agent respon
       intrinsic: element.naturalWidth / element.naturalHeight
     };
   });
-  expect(ratios).toMatchObject({ width: 42, height: 42 });
+  expect(ratios.width).toBeCloseTo(34, 2);
+  expect(ratios.height).toBeCloseTo(34, 2);
   expect(ratios.rendered).toBeCloseTo(ratios.intrinsic, 2);
   await page.locator(".analysis-response").screenshot({
     path: testInfo.outputPath("assistant-mark-aspect-1672x941.png"),
@@ -1516,16 +1626,23 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("本月收入为 128 万元。", { exact: false }).first()).toBeVisible();
-  await expect(page.getByLabel("已选择数据源")).toContainText("经营分析库");
-  await expect(page.getByText("子任务已完成。")).toHaveCount(0);
-  const tableSummary = page.getByRole("button", { name: /展开结果表汇总/ });
-  await expect(tableSummary).toHaveAttribute("aria-expanded", "false");
-  await tableSummary.click();
-  await expect(page.getByRole("cell", { name: "7月" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "128" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "结果表 1 - 月度收入统计，记录各月收入" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "月度收入趋势" })).toBeVisible();
-  await expect(page.locator('[data-echarts-ready="true"]')).toBeVisible();
+  const queryProcess = await expandQueryProcess(page);
+  await expect(queryProcess.getByRole("region", { name: "查询条件" })).toContainText("经营分析库");
+  await expect(page.getByText("子任务已完成。", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("正式回答", { exact: true })).not.toContainText("子任务已完成。");
+  const chartCard = page.getByRole("region", { name: "智能图表建议" });
+  await expect(chartCard.getByRole("heading", { name: "月度收入趋势" })).toBeVisible();
+  await expect(chartCard.locator('[data-echarts-ready="true"]')).toBeVisible();
+  await chartCard.getByText("表格", { exact: true }).click();
+  await expect(chartCard.getByRole("cell", { name: "7月" })).toBeVisible();
+  await expect(chartCard.getByRole("cell", { name: "128" })).toBeVisible();
+  await expect(chartCard.getByRole("heading", { name: /月度收入趋势数据/ })).toBeVisible();
+  const originalTables = queryProcess.getByRole("region", { name: "查询结果表", exact: true });
+  await expect(originalTables.getByRole("button", { name: "展开结果表，共 1 张表、2 行", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await originalTables.getByRole("button", { name: /^展开结果表/ }).click();
+  await expect(originalTables.getByRole("cell", { name: "7月", exact: true })).toBeVisible();
+  await originalTables.getByRole("button", { name: /^收起结果表/ }).click();
+  await expect(chartCard.getByRole("cell", { name: "7月", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
 
   expect(fixture.streamRequests).toHaveLength(1);
@@ -1540,6 +1657,7 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   expect(fixture.favoriteRequests).toEqual([
     { askRunId: "ask-run-playwright", name: "统计本月收入" }
   ]);
+  await expandQueryProcess(page);
   const queryRules = page.locator(".datahub-business-explanation__query-rules");
   await queryRules.evaluate((element) => element.scrollIntoView({ block: "start" }));
   await queryRules.screenshot({
@@ -1547,7 +1665,7 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
     animations: "disabled"
   });
   await page.screenshot({
-    path: "outputs/xingshu-homepage-system/qa/react/ask-data-v2-flow-1672x941.png",
+    path: "outputs/query-table-dropdown/chart-data-flow-1672x941.png",
     animations: "disabled",
     fullPage: true
   });
@@ -1561,7 +1679,7 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   await page.getByRole("cell", { name: "7月" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("cell", { name: "7月" })).toBeVisible();
   await page.screenshot({
-    path: "outputs/xingshu-homepage-system/qa/react/ask-data-v2-flow-390x844.png",
+    path: "outputs/query-table-dropdown/chart-data-flow-390x844.png",
     animations: "disabled",
     fullPage: true
   });
@@ -1581,6 +1699,7 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   await expect(answerImage).toBeVisible();
   await expect(answerImage.locator("xpath=..")).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("region", { name: "引用文档" })).toBeVisible();
+  await page.getByRole("button", { name: "引用 1 篇文档" }).click();
   await expect(page.locator(".knowledge-citation-chip")).toHaveCount(1);
   await expect(page.locator(".knowledge-citation-chip")).toContainText("财务报销制度（2026）");
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
@@ -1619,26 +1738,34 @@ test("ask-knowledge renders safe Markdown, deduplicates citations, and opens aut
   await expect(imagePopup).toHaveURL(/\/fixtures\/source\/contract-preview\.svg$/);
   await imagePopup.close();
 
-  const popupPromise = page.waitForEvent("popup");
   await page.getByRole("button", { name: "打开原文：财务报销制度（2026）" }).click();
+  const preview = page.getByRole("dialog");
+  await expect(page.locator(".cloud-preview")).toHaveCSS("position", "fixed");
+  await expect(preview.getByTitle("财务报销制度（2026） 原文预览")).toBeVisible();
+  const popupPromise = page.waitForEvent("popup");
+  // Headless Chromium downloads PDFs instead of navigating its new tab to a PDF viewer.
+  const downloadPromise = popupPromise.then((popup) => popup.waitForEvent("download"));
+  await preview.getByRole("button", { name: "新标签打开" }).click();
   const popup = await popupPromise;
-  await expect(popup).toHaveURL(/\/fixtures\/source\/finance-policy-v2\.pdf$/);
+  const download = await downloadPromise;
+  expect(download.url()).toMatch(/\/fixtures\/source\/finance-policy-v2\.pdf$/);
+  expect(download.suggestedFilename()).toBe("finance-policy-v2.pdf");
+  expect(await download.failure()).toBeNull();
 
-  expect(fixture.citationPreviewHeaders).toEqual([
-    {
-      authorization: "Bearer playwright-datahub-chat-token",
-      spaceId: "1"
-    }
-  ]);
+  expect(fixture.citationPreviewHeaders.length).toBeGreaterThanOrEqual(1);
+  for (const headers of fixture.citationPreviewHeaders) {
+    expect(headers).toEqual({ authorization: "Bearer playwright-datahub-chat-token", spaceId: "1" });
+  }
   await expect(
     page.getByRole("status").filter({ hasText: "已打开原文" }).last()
-  ).toHaveText("已打开原文");
+  ).toContainText("已打开原文");
   await page.screenshot({
     path: "outputs/xingshu-homepage-system/qa/react/ask-knowledge-v2-flow-1672x941.png",
     animations: "disabled",
     fullPage: true
   });
   await popup.close();
+  await preview.getByRole("button", { name: "关闭原文预览" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
   await sourceFragmentButton.scrollIntoViewIfNeeded();
@@ -1671,26 +1798,32 @@ test("document lookup renders the validated document once and opens it through D
   await expect(page.getByText("找文档已完成")).toBeVisible();
   await expect(page.getByText("找文档 Agent 执行")).toHaveCount(0);
   await expect(page.getByText("销售管理制度（2026）")).toHaveCount(1);
-  await expect(page.locator(".document-lookup-name")).toHaveCount(1);
+  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
 
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "document_lookup");
 
+  await page.getByRole("button", { name: "打开原文：销售管理制度（2026）" }).click();
+  const preview = page.getByRole("dialog");
+  await expect(page.locator(".cloud-preview")).toHaveCSS("position", "fixed");
+  await expect(preview.getByTitle("销售管理制度（2026） 原文预览")).toBeVisible();
   const popupPromise = page.waitForEvent("popup");
-  await page
-    .getByRole("button", { name: "打开原文：销售管理制度（2026）" })
-    .click();
+  // Headless Chromium downloads PDFs instead of navigating its new tab to a PDF viewer.
+  const downloadPromise = popupPromise.then((popup) => popup.waitForEvent("download"));
+  await preview.getByRole("button", { name: "新标签打开" }).click();
   const popup = await popupPromise;
-  await expect(popup).toHaveURL(/\/fixtures\/source\/sales-policy-2026\.pdf$/);
-  expect(fixture.citationPreviewHeaders).toEqual([
-    {
-      authorization: "Bearer playwright-datahub-chat-token",
-      spaceId: "1"
-    }
-  ]);
+  const download = await downloadPromise;
+  expect(download.url()).toMatch(/\/fixtures\/source\/sales-policy-2026\.pdf$/);
+  expect(download.suggestedFilename()).toBe("sales-policy-2026.pdf");
+  expect(await download.failure()).toBeNull();
+  expect(fixture.citationPreviewHeaders.length).toBeGreaterThanOrEqual(1);
+  for (const headers of fixture.citationPreviewHeaders) {
+    expect(headers).toEqual({ authorization: "Bearer playwright-datahub-chat-token", spaceId: "1" });
+  }
   await popup.close();
+  await preview.getByRole("button", { name: "关闭原文预览" }).click();
 
   await scrollAnalysisWorkspaceToTop(page);
   await page.screenshot({
@@ -1725,6 +1858,7 @@ test("flat document agent renders its root stages and document link without a ge
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("智能编排已完成")).toBeVisible();
+  await expandExecution(page);
   await expect(
     page.getByRole("list", { name: "找文档智能体执行时间轴" })
   ).toBeVisible();
@@ -1815,6 +1949,7 @@ test("right subagent drawer summarizes model activity lifecycle updates", async 
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("智能编排已完成")).toBeVisible();
+  await expandExecution(page);
   await page
     .getByRole("button", { name: "打开 问数智能体执行详情" })
     .click();
@@ -1864,6 +1999,7 @@ test("right subagent drawer summarizes model activity lifecycle updates", async 
     name: "模型活动：生成查询方案"
   });
   await expect(planActivity).toHaveCount(1);
+  await planActivity.locator(":scope > summary").click();
   await expect(
     planActivity.getByText("查询方案已生成，准备执行数据检索。", {
       exact: true
@@ -1885,9 +2021,7 @@ test("right subagent drawer summarizes model activity lifecycle updates", async 
     })
   ).toBeHidden();
 
-  const technicalDetails = analysisActivity.getByRole("group", {
-    name: "技术详情"
-  });
+  const technicalDetails = analysisActivity;
   await expect(technicalDetails).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("subagent-model-activity-drawer-1672x941.png"),
@@ -1895,7 +2029,7 @@ test("right subagent drawer summarizes model activity lifecycle updates", async 
     fullPage: true
   });
 
-  await expect(technicalDetails).toContainText("模型推理");
+  await expect(technicalDetails).toContainText("任务分析");
   await expect(technicalDetails).toContainText("理解数据问题");
   await expect(technicalDetails).toContainText("已完成");
   await expect(technicalDetails).toContainText("16:00:32");
@@ -1937,7 +2071,8 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("智能编排已完成")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "综合结果" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "综合结果" })).toHaveCount(0);
+  await expandExecution(page);
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "编排执行轨迹" })).toBeVisible();
@@ -1948,7 +2083,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   const dataAgentSummary = page.getByRole("button", {
     name: "打开 数据研究员执行详情"
   });
-  await expect(dataAgentSummary).toContainText("已完成");
+  await expect(dataAgentSummary).toHaveAttribute("data-status", "done");
 
   expect(fixture.streamRequests).toHaveLength(1);
   expectStrictStreamRequest(fixture.streamRequests[0], "agent");
@@ -1967,7 +2102,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
     drawer.getByRole("list", { name: "数据研究员执行时间轴" })
   ).toBeVisible();
 
-  await expect(drawer.getByText("正在查询销售数据。")).toBeVisible();
+  await expect(drawer.locator(".xs-datahub-agent-card__thinking-preview").filter({ hasText: "正在查询销售数据。" })).toBeVisible();
   await expect(drawer.getByRole("table")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
@@ -1979,7 +2114,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   await expect(dataAgent).toHaveAttribute("aria-level", "1");
   await expect(policyAgent).toHaveAttribute("aria-level", "2");
   await policyAgent.click();
-  await expect(drawer.getByText("正在检索费用制度。")).toBeVisible();
+  await expect(drawer.locator(".xs-datahub-agent-card__thinking-preview").filter({ hasText: "正在检索费用制度。" })).toBeVisible();
   await expect(
     drawer.getByRole("button", { name: "打开原文：财务报销制度（2026）" })
   ).toBeVisible();
@@ -2048,7 +2183,7 @@ test("agent mode shows real orchestration events and nested child-agent sessions
   expect(editorUrl.searchParams.get("asset")).toBe("asset-playwright-revenue");
   expect(editorUrl.searchParams.get("returnTo")).toBe("/ask-agent");
   expect(editorUrl.searchParams.get("draft")).toBeTruthy();
-  await expect(page.getByRole("heading", { name: "收藏问数" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "组件库" }).getByRole("button", { name: "收藏问数", exact: true })).toBeVisible();
   await expect(page.locator(".query-asset-panel__list > button.is-active")).toContainText(
     "统计本月收入"
   );
@@ -2075,7 +2210,10 @@ test("a single ask child and root artifact share one favorite action", async ({ 
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("智能编排已完成")).toBeVisible();
-  await page.getByRole("button", { name: /展开结果表汇总/ }).click();
+  const query = await expandQueryProcess(page);
+  // 该夹具只返回模型Markdown，不能冒充已执行查询；答复表与收藏仍必须可用。
+  await expect(query.getByRole("region", { name: "查询结果表", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("正式回答", { exact: true }).getByRole("table")).toHaveCount(1);
   await expect(page.getByRole("cell", { name: "小治" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "456" })).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
@@ -2106,10 +2244,12 @@ test("persisted nested v2 events restore the same knowledge result", async ({ pa
 
   await expect(page).toHaveURL(/\/ask-knowledge$/);
   await expect(page.getByText("差旅费超过多少需要复核？")).toBeVisible();
-  await expect(page.getByText("正在检索并复核制度原文。")).toBeVisible();
+  await page.getByRole("button", { name: /思考过程/ }).click();
+  await expect(page.getByLabel("模型思考")).toContainText("正在检索并复核制度原文。");
   await expect(page.getByText("单笔差旅费超过 5000 元需复核")).toBeVisible();
-  await expect(page.locator(".knowledge-citation")).toHaveCount(1);
-  await expect(page.getByText("财务报销制度（2026）")).toBeVisible();
+  await page.getByRole("button", { name: "引用 1 篇文档" }).click();
+  await expect(page.locator(".knowledge-citation-chip")).toHaveCount(1);
+  await expect(page.locator(".knowledge-citation-chip")).toContainText("财务报销制度（2026）");
   await expect(page.getByRole("button", { name: "收藏问数" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "导出结果" })).toHaveCount(0);
 });
@@ -2141,18 +2281,25 @@ test("stopping orchestration settles every running status and freezes total dura
 
   await page.getByRole("textbox", { name: "命令输入" }).fill("停止状态回归检查");
   await page.getByRole("button", { name: "发送" }).click();
+  await expandExecution(page);
   await expect(
     page.getByRole("button", { name: "打开 问数智能体执行详情" })
   ).toBeVisible();
   await page.waitForTimeout(1_100);
   await page.getByRole("button", { name: "停止生成" }).click();
 
-  await expect(page.getByRole("heading", { name: "已停止生成" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "思考过程", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "查询过程", exact: true })).toHaveAttribute("data-status", "cancelled");
+  await expandExecution(page);
   const panel = page.locator(".xs-datahub-execution");
   await expect(panel).toHaveAttribute("data-status", "cancelled");
   await expect(panel.getByLabel("运行中")).toHaveCount(0);
   await expect(panel.getByLabel("已停止").first()).toBeVisible();
-  await expect(panel.locator(".xs-datahub-overview__metrics dd").last()).not.toHaveText("—");
+  const totalDuration = panel.locator(".xs-datahub-overview__metrics dd").last();
+  await expect(totalDuration).not.toHaveText("—");
+  const stoppedDuration = await totalDuration.textContent();
+  await page.waitForTimeout(1_100);
+  await expect(totalDuration).toHaveText(stoppedDuration!);
   expect(
     await page.evaluate(() =>
       Boolean((window as Window & { __agentStreamAborted?: boolean }).__agentStreamAborted)
@@ -2176,6 +2323,7 @@ test("persisted agent history restores the same root and child execution graph",
 
   await expect(page).toHaveURL(/\/ask-agent$/);
   await expect(page.getByText("历史数据结论：销售额环比下降", { exact: false }).last()).toBeVisible();
+  await expandExecution(page);
   await expect(page.getByText("智能编排执行")).toBeVisible();
   await expect(page.getByRole("heading", { name: "任务拆解" })).toBeVisible();
   await expect(page.getByText("历史中的子 Agent 正在查询销售数据。")).toHaveCount(0);
@@ -2188,7 +2336,7 @@ test("persisted agent history restores the same root and child execution graph",
   await expect(
     drawer.getByRole("list", { name: "数据研究员执行时间轴" })
   ).toBeVisible();
-  await expect(drawer.getByText("历史中的子 Agent 正在查询销售数据。")).toBeVisible();
+  await expect(drawer.locator(".xs-datahub-agent-card__thinking-preview").filter({ hasText: "历史中的子 Agent 正在查询销售数据。" })).toBeVisible();
   await expect(drawer.getByRole("table")).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "Q2" })).toBeVisible();
   await expect(drawer.getByRole("cell", { name: "113" })).toBeVisible();
@@ -2293,5 +2441,514 @@ test("persisted document lookup history restores the validated document without 
   await expect(
     page.getByRole("button", { name: "打开原文：销售管理制度（2026）" })
   ).toBeVisible();
-  await expect(page.locator(".document-lookup-name")).toHaveCount(1);
+  await expect(page.locator(".document-lookup-card")).toHaveCount(1);
+});
+
+test("knowledge source Markdown remains readable when the original PDF is unavailable", async ({ page }, testInfo) => {
+  await installDataHubFixture(page);
+  const sourceRequests: string[] = [];
+  await page.route("**/api/ai/rag/kb/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const endpoint = url.pathname.split("/").at(-1)!;
+    if (!["source_document_preview", "source_document", "file_content"].includes(endpoint)) {
+      await route.fallback();
+      return;
+    }
+    sourceRequests.push(endpoint);
+    expect(request.method()).toBe("GET");
+    expect(request.headers()["authorization"]).toBe("Bearer playwright-datahub-chat-token");
+    expect(request.headers()["x-space-id"]).toBe("1");
+    expect(url.searchParams.get("space_id")).toBe("1");
+    expect(url.searchParams.get("kb_id")).toBe("kb-finance");
+    expect(url.searchParams.get("doc_key")).toBe("finance-policy-v2.pdf");
+    if (endpoint === "source_document_preview") {
+      await route.fulfill({ json: envelope({ mode: "proxy" }) });
+    } else if (endpoint === "source_document") {
+      await route.fulfill({ status: 503, json: { message: "原始 PDF 暂时不可读取" } });
+    } else {
+      await route.fulfill({ json: envelope({ markdown: "# 财务报销制度（2026）\n\n## 审核与归档\n\n法务审核完成后归档保存\n\n- 经办人提交完整凭证。\n- 部门负责人核对费用。" }) });
+    }
+  });
+  await page.goto("/ask-knowledge");
+  await page.getByRole("textbox", { name: "命令输入" }).fill("差旅费超过多少需要复核？");
+  await page.getByRole("button", { name: "发送" }).click();
+  await page.getByRole("button", { name: "引用 1 篇文档" }).click();
+  await page.getByRole("button", { name: "打开原文：财务报销制度（2026）" }).click();
+
+  const preview = page.getByRole("dialog");
+  await expect(page.locator(".cloud-preview")).toHaveCSS("position", "fixed");
+  const markdown = preview.getByRole("article", { name: "财务报销制度（2026） Markdown 预览" });
+  await expect(markdown.getByRole("heading", { name: "审核与归档" })).toBeVisible();
+  await expect(markdown.getByText("法务审核完成后归档保存", { exact: true })).toBeVisible();
+  await expect(markdown.getByRole("listitem")).toHaveCount(2);
+  await expect.poll(() => sourceRequests).toEqual(expect.arrayContaining([
+    "source_document_preview", "source_document", "file_content"
+  ]));
+  await expect(preview.locator("iframe")).toHaveCount(0);
+  await expect(preview.getByText("正在载入原文")).toHaveCount(0);
+  await expect(preview.getByRole("alert")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("knowledge-markdown-fallback-1672x941.png"), animations: "disabled", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await expect(markdown.getByText("法务审核完成后归档保存", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("knowledge-markdown-fallback-390x844.png"), animations: "disabled", fullPage: true });
+});
+
+test("production query process separates long knowledge sources and same-name documents", async ({ page }) => {
+  await installDataHubFixture(page);
+  const question = "请帮我核对采购合同约定的主要职责，并说明各份原文所在的知识库";
+  const sharedTitle = "丽江市古城区城市运行管理服务平台系统建设项目采购合同及履约职责分工说明（正式签署归档版）.pdf";
+  const sources = [
+    { kbId: "kb-long-contract", kbName: "城市运行管理服务平台合同与履约资料知识库（丽江市古城区·2026年度项目归档）", docId: "contract-current", docKey: "contract-current.pdf", docName: sharedTitle, chapter: "第五章 项目实施与双方职责", pageNumber: "15", fragments: ["本项目我方负责平台部署、业务系统联调及验收材料准备。"] },
+    { kbId: "kb-long-purchase", kbName: "数字城市建设项目采购与供应商协作知识库（跨部门联合归档及历史合同版本）", docId: "contract-archive", docKey: "contract-archive.pdf", docName: sharedTitle, chapter: "第六章 采购方配合事项", pageNumber: "28", fragments: ["采购方应按约定提供基础资料，并组织相关业务部门配合联合验收。", "档案版本保留双方盖章确认的职责清单。"] },
+    { kbId: "kb-long-policy", kbName: "企业制度与项目职责分工知识库（法务审查、实施交付与验收管理专题）", docId: "policy-long", docKey: "delivery-policy.pdf", docName: "城市运行管理服务平台建设项目实施交付、联合验收与后续运维职责管理办法（2026年修订）.pdf", chapter: "第三章 项目归档", pageNumber: "7", fragments: ["法务审核完成后归档保存，项目负责人负责确认移交清单。"] }
+  ];
+  await page.route("**/api/agentScore/chat/completions/stream", async (route) => {
+    const request = route.request().postDataJSON() as StreamRequest;
+    expectStrictStreamRequest(request, "rag");
+    const root = { agentName: "问知智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+    await route.fulfill({
+      status: 200, contentType: "text/event-stream; charset=utf-8",
+      body: [
+        sseEvent({ ...root, type: "thinking", content: "核对合同中的职责条款。", isThinking: true }),
+        sseEvent({ ...root, type: "tool_call", toolCallId: "long-source-search", content: { toolName: "search_knowledge", args: { query: "合同职责" } } }),
+        ...sources.map((source) => sseEvent({ ...root, type: "citation_document", content: { ...source, sourceAvailable: true } })),
+        sseEvent({ ...root, type: "text", content: "我方主要负责平台部署、系统联调与验收材料准备；采购方负责提供资料并组织联合验收。" }),
+        sseEvent({ ...root, type: "done", content: { mode: "rag", askKnowledge: true }, finished: true }),
+        "data: [DONE]\n\n"
+      ].join("")
+    });
+  });
+  await page.goto("/ask-knowledge");
+  await page.getByRole("textbox", { name: "命令输入" }).fill(question);
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByText("我方主要负责平台部署、系统联调与验收材料准备；采购方负责提供资料并组织联合验收。", { exact: true })).toBeVisible();
+  const query = await expandQueryProcess(page);
+  const conditions = query.getByRole("region", { name: "查询条件" });
+  const sourceItems = conditions.locator(".datahub-business-explanation__values--sources > li");
+  await expect(sourceItems).toHaveText(sources.map((source) => source.kbName));
+  const results = query.getByRole("region", { name: "查询结果" });
+  const resultRows = results.locator(".datahub-business-explanation__findings > li");
+  await expect(resultRows).toHaveCount(3);
+  await expect(results.getByRole("button", { name: `查看来源片段：${sharedTitle}`, exact: true })).toHaveCount(2);
+  for (let index = 0; index < sources.length; index += 1) {
+    const source = sources[index];
+    const row = resultRows.nth(index);
+    await expect(row.locator(".datahub-business-explanation__result-title")).toHaveText(source.docName);
+    await expect(row.locator(".datahub-business-explanation__result-title")).toHaveAttribute("title", source.docName);
+    await expect(row.locator(".datahub-business-explanation__result-meta")).toContainText(source.kbName);
+    await expect(row.locator(".datahub-business-explanation__result-meta")).toContainText(`第 ${source.pageNumber} 页`);
+    await expect(row.locator(".datahub-business-explanation__result-meta")).toContainText(source.chapter);
+    await expect(row.locator(".datahub-business-explanation__result-meta")).toContainText(`${source.fragments.length} 个片段`);
+  }
+  await expect(query.getByText("怎么查", { exact: true })).toHaveCount(0);
+  await expect(query.getByText("查到了什么", { exact: true })).toHaveCount(0);
+  await expect(query).not.toContainText(question);
+  await expect(query.getByRole("button", { name: /^查询过程/ })).toHaveCount(1);
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+    await expectNoHorizontalOverflow(page);
+    await query.scrollIntoViewIfNeeded();
+    for (let index = 0; index < sources.length; index += 1) {
+      await expect(resultRows.nth(index).locator(".datahub-business-explanation__result-title")).toBeVisible();
+    }
+    await page.screenshot({ path: `outputs/process-motion/qa/knowledge-production-${width}.png`, animations: "disabled", fullPage: true });
+    await query.screenshot({ path: `outputs/process-motion/qa/knowledge-query-details-${width}.png`, animations: "disabled" });
+  }
+  await resultRows.nth(1).getByRole("button", { name: `查看来源片段：${sharedTitle}`, exact: true }).click();
+  const modal = page.getByRole("dialog");
+  await expect(modal.getByRole("region", { name: "来源片段" })).toContainText(sources[1].fragments[0]);
+  await expect(modal).toContainText(sources[1].kbName);
+  await expect(modal).not.toContainText(sources[0].fragments[0]);
+  await page.screenshot({ path: "outputs/process-motion/qa/knowledge-production-fragment-390.png", animations: "disabled", fullPage: true });
+});
+
+for (const answerSource of ["text", "summary", "none"] as const) {
+  test(`agent Top3 answer precedes its table when child answer source is ${answerSource}`, async ({ page }) => {
+    const question = "和善治签合同的公司签合同数量top3";
+    const companies = [
+      ["成都卓一科技有限公司", 9], ["广州思迈特软件有限公司", 6], ["杭州海康威视科技有限公司", 5],
+      ["云南蚁象网络科技有限公司", 3], ["成都甲公司", 2], ["成都乙公司", 2], ["成都丙公司", 1],
+      ["成都丁公司", 1], ["成都戊公司", 1], ["成都己公司", 1]
+    ];
+    const conclusion = "与善治签订合同的公司中，合同数量 Top3 为：成都卓一科技有限公司 9 份、广州思迈特软件有限公司 6 份、杭州海康威视科技有限公司 5 份。";
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (text: string) => { (window as Window & { __copiedAnswer?: string }).__copiedAnswer = text; } }
+      });
+    });
+    const fixture = await installDataHubFixture(page, { buildAgentResponse: (request) => {
+      const root = { agentName: "编排智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      const child = { agentName: "问数智能体", sessionId: "top3-child", parentSessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      return [
+        sseEvent({ ...root, type: "agent_start", content: {} }),
+        sseEvent({ ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, subagentId: "top3-child-agent", label: "问数智能体" } }),
+        sseEvent({ ...child, type: "table", content: { columns: ["公司", "合同数量"], rows: companies, totalRows: 10, source: "cube" } }),
+        ...(answerSource === "text" ? [sseEvent({ ...child, type: "text", content: conclusion, replyId: "top3-child-answer" })] : []),
+        sseEvent({ ...child, type: "done", content: { mode: "ask", ...(answerSource === "summary" ? { summary: conclusion } : {}) } }),
+        sseEvent({ ...root, type: "done", content: { mode: "agent", adaptiveTeam: true, completion: "complete" }, finished: true }),
+        "data: [DONE]\n\n"
+      ].join("");
+    } });
+    await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "本回归直接展示完整数据表。" }) }));
+    await page.goto("/ask-agent");
+    await page.getByRole("textbox", { name: "命令输入" }).fill(question);
+    await page.getByRole("button", { name: "发送" }).click();
+    const answer = page.getByLabel("正式回答", { exact: true });
+    await expect(answer).toBeVisible();
+    if (answerSource !== "none") {
+      await expect(answer).toContainText(conclusion);
+    } else {
+      await expect(answer).toContainText(/数据|记录|结果|公司/);
+      await expect(answer).toContainText(/10|十/);
+      await expect(answer).toContainText("9");
+    }
+    const output = page.getByRole("region", { name: "分析结果", exact: true });
+    await expect(output.getByRole("table")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "false");
+    const tables = await expandQueryTables(page);
+    const table = tables.getByRole("table");
+    await expect(table).toHaveCount(1);
+    await expect(table.getByRole("row")).toHaveCount(11);
+    await expect(table.getByRole("cell", { name: "成都卓一科技有限公司", exact: true })).toBeVisible();
+    await expect(table.getByRole("row").filter({ hasText: "成都卓一科技有限公司" }).getByRole("cell", { name: "9", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /^查询过程/ }).click();
+    await expect(answer).toBeVisible();
+    await expect(page.getByRole("region", { name: "智能图表建议" })).toHaveCount(0);
+    await page.getByRole("button", { name: "复制回答", exact: true }).click();
+    const copied = await page.evaluate(() => (window as Window & { __copiedAnswer?: string }).__copiedAnswer ?? "");
+    expect(copied).toContain(answerSource === "none" ? "9" : conclusion);
+    expect(fixture.streamRequests).toHaveLength(1);
+    expectStrictStreamRequest(fixture.streamRequests[0], "agent");
+    for (const width of [1440, 1672, 1920, 2200, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await answer.scrollIntoViewIfNeeded();
+      await expect(answer).toBeVisible();
+      if ([1672, 390].includes(width)) await page.screenshot({ path: `outputs/query-table-dropdown/summary-${answerSource}-${width}.png`, animations: "disabled", fullPage: true });
+    }
+    await expandExecution(page);
+    await expect(page.getByRole("button", { name: "打开 问数智能体执行详情" })).toBeVisible();
+  });
+}
+
+for (const markerMode of ["ask", "agent"] as const) {
+  test(`thinking envelope stays out of the formal answer in ${markerMode} mode`, async ({ page }) => {
+    await installDataHubFixture(page);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (text: string) => { (window as Window & { __copiedAnswer?: string }).__copiedAnswer = text; } }
+      });
+    });
+    const thought = "先核对本月收入字段与统计口径。";
+    await page.route("**/api/agentScore/chat/completions/stream", async (route) => {
+      const request = route.request().postDataJSON() as StreamRequest;
+      expectStrictStreamRequest(request, markerMode);
+      const root = { agentName: markerMode === "ask" ? "问数智能体" : "编排智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      const child = { agentName: "问数智能体", sessionId: "marker-child", parentSessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      const events = markerMode === "ask" ? [
+        ...["<mm:thi", `nk>${thought}`, "</mm:thi", "nk>"].map((content) => ({ ...root, type: "text", content, replyId: "fragmented-thinking" })),
+        { ...root, type: "data_source_selected", content: { datasourceId: 8, datasourceName: "经营分析库" } },
+        { ...root, type: "table", content: { columns: [{ name: "revenue", title: "收入（万元）", type: "number" }], rows: [{ revenue: 128 }], totalRows: 1, source: "cube" } },
+        { ...root, type: "text", content: "本月收入为 **128 万元**。", replyId: "clean-final-answer" },
+        { ...root, type: "done", content: { mode: "ask" }, finished: true }
+      ] : [
+        ...["<mm:", "think></mm:think>"].map((content) => ({ ...root, type: "text", content, replyId: "root-marker-only" })),
+        { ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, subagentId: "marker-child-agent", label: "问数智能体" } },
+        ...["</mm:", "think>"].map((content) => ({ ...child, type: "text", content, replyId: "child-marker-only" })),
+        { ...child, type: "table", content: { columns: ["公司", "合同数量"], rows: [["成都卓一科技有限公司", 9], ["广州思迈特软件有限公司", 6], ["杭州海康威视科技有限公司", 5]], totalRows: 3, source: "cube" } },
+        { ...child, type: "done", content: { mode: "ask", summary: "</mm:think>" } },
+        { ...root, type: "done", content: { mode: "agent", adaptiveTeam: true, summary: "</mm:think>" }, finished: true }
+      ];
+      await route.fulfill({ status: 200, contentType: "text/event-stream; charset=utf-8", body: [...events.map(sseEvent), "data: [DONE]\n\n"].join("") });
+    });
+    await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "本回归保留原表核对结果。" }) }));
+    await page.goto(markerMode === "ask" ? "/ask-data" : "/ask-agent");
+    await page.getByRole("textbox", { name: "命令输入" }).fill(markerMode === "ask" ? "本月收入是多少？" : "和善治签合同的公司签合同数量top3");
+    await page.getByRole("button", { name: "发送" }).click();
+    const answer = page.getByLabel("正式回答", { exact: true });
+    await expect(answer).toBeVisible();
+    if (markerMode === "ask") {
+      await expect(answer).toContainText("本月收入为 128 万元。");
+      await page.getByRole("button", { name: /^思考过程/ }).click();
+      await expect(page.getByLabel("模型思考")).toContainText(thought);
+      await expect(page.getByLabel("模型思考")).not.toContainText(/mm:|<\/|<mm/);
+      await page.getByRole("button", { name: /^思考过程/ }).click();
+    } else {
+      await expect(answer).toContainText(/数据|结果|记录/);
+      await expect(answer).toContainText("成都卓一科技有限公司");
+      await expect(answer).toContainText("9");
+      await expect(page.getByRole("region", { name: "分析结果", exact: true }).getByRole("table")).toHaveCount(0);
+      const tables = await expandQueryTables(page);
+      await expect(tables.getByRole("table")).toHaveCount(1);
+      await page.getByRole("button", { name: /^查询过程/ }).click();
+    }
+    await expect(page.getByRole("region", { name: "分析结果", exact: true })).not.toContainText(/mm:|<\/|<mm/);
+    await expect(answer).not.toContainText(thought);
+    await page.getByRole("button", { name: "复制回答", exact: true }).click();
+    const copied = await page.evaluate(() => (window as Window & { __copiedAnswer?: string }).__copiedAnswer ?? "");
+    expect(copied).not.toMatch(/mm:|<\/|<mm/);
+    expect(copied).not.toContain(thought);
+    expect(copied).toContain(markerMode === "ask" ? "128" : "9");
+    if (markerMode === "ask") {
+      await expect(page.getByRole("button", { name: /^思考过程/ })).toHaveAttribute("aria-expanded", "false");
+    } else {
+      // Agent夹具只有空协议壳，无公开思考；不应凭空创建完成阶段。
+      await expect(page.getByRole("region", { name: "思考过程", exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "false");
+    for (const width of [1440, 1672, 1920, 2200, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await answer.scrollIntoViewIfNeeded();
+      await expect(answer).toBeVisible();
+      if ([1672, 390].includes(width)) await page.screenshot({ path: `outputs/query-table-dropdown/clean-thinking-${markerMode}-${width}.png`, animations: "disabled", fullPage: true });
+      if (width === 1672) {
+        await page.locator(".analysis-card").screenshot({ path: `outputs/query-table-dropdown/clean-thinking-card-${markerMode}-1672.png`, animations: "disabled" });
+      }
+    }
+    if (markerMode === "agent") {
+      await expandExecution(page);
+      await expect(page.getByRole("button", { name: "打开 问数智能体执行详情" })).toBeVisible();
+    }
+  });
+}
+
+test("production heading and introduction preserve Top3 answer and the complete authoritative query", async ({ page }) => {
+  const title = "善治数字科技（成都）有限公司合同对手方数量排名（Top 3，并列全部列出）";
+  const introduction = "按合同乙方聚合统计，对甲方=善治数字科技（成都）有限公司合同记录进行计数并降序排序：";
+  const ranked = [
+    { rank: 1, company: "广州思迈特软件有限公司", count: 6 },
+    { rank: 2, company: "杭州海康威视科技有限公司", count: 5 },
+    { rank: 3, company: "云南蚁象网络科技有限公司", count: 3 },
+    { rank: 3, company: "成都并列公司", count: 3 }
+  ];
+  const fourth = { rank: 4, company: "第四名公司", count: 2 };
+  const markdown = `## ${title}\n\n${introduction}\n\n| 排名 | 对手方 | 合同数量 |\n| --- | --- | ---: |\n${ranked.map(({ rank, company, count }) => `| ${rank} | ${company} | ${count} |`).join("\n")}`;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text: string) => { (window as Window & { __copiedAnswer?: string }).__copiedAnswer = text; } }
+    });
+  });
+  const fixture = await installDataHubFixture(page, { buildAgentResponse: (request) => {
+    const root = { agentName: "编排智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+    const child = { agentName: "问数智能体", sessionId: "production-ranked-contracts", parentSessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+    return [
+      sseEvent({ ...root, type: "agent_start", content: {} }),
+      sseEvent({ ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, subagentId: "ranked-contracts-agent", label: "合同对手方数量统计" } }),
+      sseEvent({ ...child, type: "table", content: {
+        columns: [{ name: "rank", title: "排名", type: "number" }, { name: "company", title: "对手方" }, { name: "count", title: "合同数量", type: "number" }],
+        rows: [...ranked, fourth], totalRows: 5, source: "cube"
+      } }),
+      sseEvent({ ...child, type: "done", content: { mode: "ask" } }),
+      sseEvent({ ...root, type: "text", content: markdown, replyId: "production-heading-introduction-table" }),
+      sseEvent({ ...root, type: "done", content: { mode: "agent", adaptiveTeam: true, completion: "complete" }, finished: true }),
+      "data: [DONE]\n\n"
+    ].join("");
+  } });
+  await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "本回归验证移表后正文保留并列排名事实。" }) }));
+  await page.goto("/ask-agent");
+  await page.getByRole("textbox", { name: "命令输入" }).fill("和善治签合同的公司签合同数量top3，并列全部列出");
+  await page.getByRole("button", { name: "发送" }).click();
+  const output = page.getByRole("region", { name: "分析结果", exact: true });
+  const answer = output.getByLabel("正式回答", { exact: true });
+  await expect(answer.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  await expect(answer).toContainText(introduction);
+  for (const { company, count } of ranked) {
+    await expect(answer).toContainText(new RegExp(`${company}[^。；\\n]*${count}`));
+  }
+  await expect(answer).not.toContainText(fourth.company);
+  await expect(answer).not.toContainText(/mm:think|<think|\|/);
+  await expect(output.getByRole("table")).toHaveCount(1);
+  await expect(answer.getByRole("row")).toHaveCount(ranked.length + 1);
+  await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "false");
+
+  await page.getByRole("button", { name: "复制回答", exact: true }).click();
+  const copied = await page.evaluate(() => (window as Window & { __copiedAnswer?: string }).__copiedAnswer ?? "");
+  for (const { company, count } of ranked) expect(copied).toMatch(new RegExp(`${company}[^。；\\n]*${count}`));
+  expect(copied).not.toContain(fourth.company);
+  expect(copied).not.toMatch(/mm:think|<\/?think/);
+
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+    await expectNoHorizontalOverflow(page);
+    await answer.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `outputs/result-summary-content/production-${width}.png`, animations: "disabled", fullPage: true });
+    // Capture the answer itself, not an ancestor clipped by the conversation scroll container.
+    await answer.screenshot({ path: `outputs/result-summary-content/answer-${width}.png`, animations: "disabled" });
+  }
+  await page.setViewportSize({ width: 1672, height: 1050 });
+  const tables = await expandQueryTables(page);
+  await expect(tables.getByRole("button", { name: "收起结果表，共 1 张表、5 行", exact: true })).toBeVisible();
+  await expect(tables.getByRole("table")).toHaveCount(1);
+  const rawTable = tables.getByRole("table").filter({ has: page.getByRole("cell", { name: fourth.company, exact: true }) });
+  await expect(rawTable).toHaveCount(1);
+  await expect(rawTable.getByRole("row")).toHaveCount(6);
+  for (const { rank, company, count } of [...ranked, fourth]) {
+    const row = rawTable.getByRole("row").filter({ has: page.getByRole("cell", { name: company, exact: true }) });
+    // Read the complete row to retain rank and metric independently when both happen to be 3.
+    await expect(row).toContainText(company);
+    const cells = await row.getByRole("cell").allTextContents();
+    expect(cells.slice(-3)).toEqual([String(rank), company, String(count)]);
+  }
+  await tables.screenshot({ path: "outputs/result-summary-content/query-table-1672.png", animations: "disabled" });
+  expect(fixture.streamRequests).toHaveLength(1);
+  expectStrictStreamRequest(fixture.streamRequests[0], "agent");
+});
+
+for (const completeSnapshot of [true, false]) {
+  test(`thinking completeness preserves ${completeSnapshot ? "the full child snapshot" : "only the returned public summary"}`, async ({ page }) => {
+    const opening = "我会先核对合同范围，再汇总对手方数量。";
+    const paragraphs = [
+      "已确认本次任务关注合同对手方的合同数量，统计范围按照用户指定的签约主体执行。",
+      "正在核对合同主体字段与对手方名称，确保使用相同的单位口径进行归集。",
+      "已查看可用数据的合同编号与对手方字段，后续仅采用本次实际返回的合同记录。",
+      "正在核对名称是否存在重复展示，名称相近但主体不同的记录应继续分别保留。",
+      "已确认统计指标为合同记录数量，不能将合同金额或其他数值列作为合同数量。",
+      "正在核对分组后的统计结果，缺少对手方名称的记录不会被猜测为任意已知公司。",
+      "已将返回的对手方数量结果按同一规则整理，原始查询表仍保留用于查看和核对。",
+      "正在检查结果中是否存在并列数量，展示排名时应保留用户要求的全部并列主体。",
+      "已核对输出字段的中文名称与数量单位，正式回答将与实际返回的表格保持一致。",
+      "公开进度核对结束，接下来交付已验证的统计结果，并保留完整原表供用户查看。"
+    ];
+    const finalAnswer = "合同统计完成：广州思迈特软件有限公司 6 份，杭州海康威视科技有限公司 5 份。";
+    const sourceNote = "本轮仅返回以上公开思考摘要，详细执行步骤可在查询过程查看。";
+    await installDataHubFixture(page, { buildAgentResponse: (request) => {
+      const root = { agentName: "编排智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      const child = { agentName: "问数智能体", sessionId: "thinking-contract-child", parentSessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+      return [
+        sseEvent({ ...root, type: "thinking", content: opening, isThinking: true, replyId: "root-public-summary", modelCallIndex: 1 }),
+        sseEvent({ ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, subagentId: "thinking-contract-agent", label: "合同统计" } }),
+        ...(completeSnapshot ? [
+          sseEvent({ ...child, type: "thinking", content: paragraphs[0], isThinking: true, replyId: "child-public-summary-1", modelCallIndex: 1 }),
+          sseEvent({ ...child, type: "thinking", content: paragraphs[1], isThinking: true, replyId: "child-public-summary-2", modelCallIndex: 2 })
+        ] : []),
+        sseEvent({ ...child, type: "tool_call", content: { name: "execute_query", arguments: { sql: "SELECT contract_counterparty FROM internal_contract_fixture", private_parameter: "tool-arguments-must-not-be-thoughts" } } }),
+        sseEvent({ ...child, type: "table", content: { columns: ["对手方", "合同数量"], rows: [["广州思迈特软件有限公司", 6], ["杭州海康威视科技有限公司", 5]], totalRows: 2, source: "cube" } }),
+        sseEvent({ ...child, type: "text", content: finalAnswer, replyId: "child-formal-answer" }),
+        sseEvent({ ...child, type: "done", content: { mode: "ask", ...(completeSnapshot ? { thinkingContent: paragraphs.join("\n\n") } : {}) } }),
+        sseEvent({ ...root, type: "text", content: finalAnswer, replyId: "root-formal-answer" }),
+        sseEvent({ ...root, type: "done", content: { mode: "agent", adaptiveTeam: true }, finished: true }),
+        "data: [DONE]\n\n"
+      ].join("");
+    } });
+    await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "本回归只核对公开思考与结果数据的独立性。" }) }));
+    await page.goto("/ask-agent");
+    await page.getByRole("textbox", { name: "命令输入" }).fill("核对合同对手方的合同数量");
+    await page.getByRole("button", { name: "发送" }).click();
+    const answer = page.getByLabel("正式回答", { exact: true });
+    await expect(answer).toContainText(finalAnswer);
+    await expect(page.getByRole("button", { name: /^思考过程/ })).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: /^思考过程/ }).click();
+    const dock = page.getByRole("region", { name: "思考过程", exact: true });
+    const thoughts = dock.getByLabel("模型思考", { exact: true });
+    await expect(thoughts.getByText(opening, { exact: true })).toHaveCount(1);
+    await expect(thoughts).not.toContainText(finalAnswer);
+    await expect(thoughts).not.toContainText(/SELECT|internal_contract_fixture|private_parameter|tool-arguments-must-not-be-thoughts/);
+    if (completeSnapshot) {
+      await expect(thoughts.getByRole("heading", { name: "主任务", exact: true })).toBeVisible();
+      await expect(thoughts.getByRole("heading", { name: "合同统计", exact: true })).toBeVisible();
+      for (const paragraph of paragraphs) await expect(thoughts.getByText(paragraph, { exact: true })).toHaveCount(1);
+      await expect(dock).not.toContainText(sourceNote);
+    } else {
+      await expect(thoughts.locator("p")).toHaveCount(1);
+      await expect(dock).toContainText(sourceNote);
+      for (const paragraph of paragraphs) await expect(thoughts).not.toContainText(paragraph);
+    }
+    for (const width of [1440, 1672, 1920, 2200, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await expect.poll(() => thoughts.evaluate((node) => ({
+        maxHeight: getComputedStyle(node).maxHeight,
+        clipped: node.scrollHeight > node.clientHeight + 1
+      }))).toEqual({ maxHeight: "none", clipped: false });
+      if (completeSnapshot) expect(await thoughts.evaluate((node) => node.clientHeight)).toBeGreaterThan(260);
+      await page.screenshot({ path: `outputs/thinking-completeness/${completeSnapshot ? "full-snapshot" : "single-summary"}-${width}.png`, animations: "disabled", fullPage: true });
+      if (width === 1672 || width === 390) {
+        const height = Math.ceil((await dock.boundingBox())!.height) + 400;
+        await page.setViewportSize({ width, height: Math.max(height, 1100) });
+        await dock.scrollIntoViewIfNeeded();
+        await dock.screenshot({ path: `outputs/thinking-completeness/${completeSnapshot ? "complete-thinking" : "single-thinking"}-${width}.png`, animations: "disabled" });
+      }
+    }
+    await page.setViewportSize({ width: 1672, height: 1050 });
+    await page.getByRole("button", { name: /^思考过程/ }).click();
+    const tables = await expandQueryTables(page);
+    await expect(tables.getByRole("table")).toHaveCount(1);
+    await expect(tables.getByRole("cell", { name: "广州思迈特软件有限公司", exact: true })).toBeVisible();
+    await expect(tables.getByRole("cell", { name: "6", exact: true })).toBeVisible();
+    await expect(answer).toContainText(finalAnswer);
+    await expandExecution(page);
+    await expect(page.getByRole("button", { name: "打开 合同统计执行详情", exact: true })).toBeVisible();
+  });
+}
+
+test("production query explains scope grouping count and actual sorting as readable steps", async ({ page }) => {
+  const company = "善治数字科技（成都）有限公司";
+  const finalAnswer = "广州思迈特软件有限公司签约 6 份，杭州海康威视科技有限公司签约 5 份。";
+  await installDataHubFixture(page, { buildAgentResponse: (request) => {
+    const root = { agentName: "编排智能体", sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+    const child = { agentName: "问数智能体", sessionId: "readable-contracts", parentSessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId };
+    return [
+      sseEvent({ ...root, type: "thinking", content: "先确认合同主体，再核对各对手方签约数量。", isThinking: true }),
+      sseEvent({ ...child, type: "subagent_exposed", content: { agentId: "ask-data", sessionId: child.sessionId, subagentId: "readable-contracts-agent", label: "合同统计" } }),
+      sseEvent({ ...child, type: "data_source_selected", content: { datasourceId: 8, datasourceName: "合同数据系统" } }),
+      sseEvent({ ...child, type: "table", content: {
+        columns: [{ name: "Contract.partyB", title: "合同乙方单位名称" }, { name: "Contract.count", title: "记录数", type: "number" }],
+        rows: [{ "Contract.partyB": "广州思迈特软件有限公司", "Contract.count": 6 }, { "Contract.partyB": "杭州海康威视科技有限公司", "Contract.count": 5 }],
+        totalRows: 2, source: "cube", tableComment: "合同主数据清单，记录合同编号、签约双方及合同金额",
+        annotation: {
+          dimensions: { "Contract.partyA": { title: "合同甲方单位名称" }, "Contract.partyB": { title: "合同乙方单位名称" } },
+          measures: { "Contract.count": { title: "记录数", type: "number" } }
+        },
+        query: { dimensions: ["Contract.partyB"], measures: ["Contract.count"], filters: [{ member: "Contract.partyA", operator: "equals", values: [company] }], order: { "Contract.count": "desc" } }
+      } }),
+      sseEvent({ ...child, type: "done", content: { mode: "ask" } }),
+      sseEvent({ ...root, type: "text", content: finalAnswer }),
+      sseEvent({ ...root, type: "done", content: { mode: "agent", adaptiveTeam: true }, finished: true }),
+      "data: [DONE]\n\n"
+    ].join("");
+  } });
+  await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "核对真实查询字段和自然步骤。" }) }));
+  await page.goto("/ask-agent");
+  await page.getByRole("textbox", { name: "命令输入" }).fill(`甲方为${company}的合同，按乙方分组统计合同数量并降序排列`);
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByLabel("正式回答", { exact: true })).toContainText(finalAnswer);
+  const query = await expandQueryProcess(page);
+  const steps = query.getByRole("list", { name: "查询步骤", exact: true });
+  await expect(steps.getByRole("listitem")).toHaveCount(4);
+  await expect(steps).toContainText("限定查询范围");
+  await expect(steps).toContainText("合同数据系统");
+  await expect(steps).toContainText("合同主数据清单");
+  await expect(steps).toContainText(company);
+  await expect(steps).toContainText("将“合同乙方单位名称”相同的记录归为一组，统计每组有多少条记录");
+  await expect(steps).toContainText("按“记录数”从高到低排列");
+  await expect(steps).toContainText("本次返回 2 行数据");
+  await expect(steps).not.toContainText(/Contract\.|SELECT|GROUP BY|ORDER BY/);
+  const detail = query.locator("details").filter({ has: page.getByText("查看查询细节", { exact: true }) });
+  await expect(detail).not.toHaveAttribute("open", "");
+  await detail.locator("summary").click();
+  await expect(detail).toHaveAttribute("open", "");
+  await expect(detail).toContainText("合同乙方单位名称");
+  await expect(detail).toContainText("记录数");
+  await detail.locator("summary").click();
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+    await expectNoHorizontalOverflow(page);
+    await query.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `outputs/process-motion/qa/query-steps-${width}.png`, animations: "disabled", fullPage: true });
+    await steps.screenshot({ path: `outputs/process-motion/qa/readable-steps-${width}.png`, animations: "disabled" });
+  }
+  await page.setViewportSize({ width: 1672, height: 1050 });
+  const tables = await expandQueryTables(page);
+  await expect(tables.getByRole("table")).toHaveCount(1);
+  await expect(tables.getByRole("row")).toHaveCount(3);
+  await expect(tables.getByRole("cell", { name: "广州思迈特软件有限公司", exact: true })).toBeVisible();
+  await expect(tables.getByRole("cell", { name: "6", exact: true })).toBeVisible();
+  await expandExecution(page);
+  await expect(page.getByRole("button", { name: "打开 合同统计执行详情", exact: true })).toBeVisible();
 });

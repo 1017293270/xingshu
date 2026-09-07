@@ -1,3 +1,4 @@
+import { splitDataHubThinkingEnvelope, cleanDataHubThinkingText, cleanDataHubAnswerBlocks } from "./dataHubThinkingEnvelope";
 import type {
   DataHubAskDataStatus,
   AskArtifactRef,
@@ -130,14 +131,16 @@ function readError(value: unknown): { code?: number; message: string } | undefin
   return undefined;
 }
 
-function normalizeColumns(columns: unknown, rows: unknown): DataHubTableColumn[] {
+function normalizeColumns(columns: unknown, rows: unknown, annotation?: UnknownRecord): DataHubTableColumn[] {
   const parsedColumns = parseJsonMaybe(columns);
   const parsedRows = parseJsonMaybe(rows);
 
   if (Array.isArray(parsedColumns) && parsedColumns.length > 0) {
     return parsedColumns.map((column, index) => {
       if (typeof column === "string") {
-        return { key: column, title: formatDataHubColumnTitle(column, column) };
+        const meta = annotationMember(annotation, column);
+        const title = asString(meta?.shortTitle).trim() || asString(meta?.fieldComment).trim() || column;
+        return { key: column, title: formatDataHubColumnTitle(title, column) };
       }
 
       if (isRecord(column)) {
@@ -147,7 +150,10 @@ function normalizeColumns(columns: unknown, rows: unknown): DataHubTableColumn[]
           asString(column.field) ||
           asString(column.title) ||
           `col_${index + 1}`;
+        const meta = annotationMember(annotation, key);
         const rawTitle =
+          asString(column.shortTitle).trim() || asString(meta?.shortTitle).trim() ||
+          asString(column.fieldComment).trim() || asString(meta?.fieldComment).trim() ||
           pickHanLabel([
             asString(column.comment),
             asString(column.alias),
@@ -449,7 +455,8 @@ function normalizeBusinessQueryContext(
     return label ? [label] : [];
   });
   const tableLabels = columns.flatMap((column) => {
-    const label = extractChineseTableName(column.title) || extractChineseTableName(column.key);
+    const label = extractChineseTableName(asString(annotationMember(annotation, column.key)?.title))
+      || extractChineseTableName(column.title) || extractChineseTableName(column.key);
     return label ? [label] : [];
   });
   const dataTables = uniqueStrings([...assetLabels, ...tableLabels]);
@@ -459,7 +466,18 @@ function normalizeBusinessQueryContext(
     dataTables,
     fields: uniqueStrings([...measureLabels, ...dimensionLabels, ...columns.map((column) => column.title)]),
     filters,
-    calculations: uniqueStrings(calculationEntries),
+    calculations: uniqueStrings([
+      ...calculationEntries,
+      ...(Array.isArray(query?.order) ? query.order : Object.entries(recordFromJson(query?.order) ?? {}))
+        .flatMap((entry) => {
+          if (!Array.isArray(entry)) return [];
+          const label = friendlyMemberLabel(asString(entry[0]), columns, annotation);
+          const direction = asString(entry[1]).toLowerCase();
+          return label && (direction === "asc" || direction === "desc")
+            ? [`按${label}${direction === "asc" ? "升序" : "降序"}排列`]
+            : [];
+        })
+    ]),
     relationships: query
       ? [cubeNames.size > 1
           ? "多个业务主题按已发布语义模型关系关联"
@@ -554,7 +572,8 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
     parsedCandidate.rows ?? parsedCandidate.records ?? parsedCandidate.values ?? parsedCandidate.data ?? [];
   const columns = normalizeColumns(
     parsedCandidate.columns ?? columnsFromAnnotation(parsedCandidate.annotation),
-    rawRows
+    rawRows,
+    recordFromJson(parsedCandidate.annotation)
   );
   const rows = normalizeRows(rawRows, columns);
   const annotatedTableComment = tableCommentFromAnnotation(parsedCandidate.annotation);
@@ -606,9 +625,9 @@ function isOrchestrationStatusSummary(summary: string) {
 }
 
 /**
- * DataHub 正式回答规则，与平台 ChatService.AssistantReply
- * 以及 `finalAnswerAfterStream(summary, streamed, hasError)` 保持一致：
- * 终态 summary 优先，没有才用主会话流式文本；出错则不展示半成品。
+ * DataHub 回答显示：正常完成时与平台的终态摘要优先规则一致；
+ * 失败时正文仅供回看，调用方仍须保持错误/未完成状态，不能作为完整产物。
+ * 正常终态 summary 优先；出错只保留已经收到的公开文本，不能采纳失败终态摘要。
  * Agent 编排的 done.summary 经常只是「均已完成」这类收束状态，不能盖掉流式综合结论。
  */
 export function resolveDataHubFinalAnswer(
@@ -617,12 +636,9 @@ export function resolveDataHubFinalAnswer(
   hasTerminalError: boolean,
   options: { keepRicherStreamedAnswer?: boolean } = {}
 ): string {
-  if (hasTerminalError) {
-    return "";
-  }
-
-  const finalSummary = String(summary ?? "").trim();
-  const streamedText = String(streamedContent ?? "").trim();
+  const finalSummary = splitDataHubThinkingEnvelope(String(summary ?? "")).answer.trim();
+  const streamedText = splitDataHubThinkingEnvelope(String(streamedContent ?? "")).answer.trim();
+  if (hasTerminalError) return streamedText;
   if (options.keepRicherStreamedAnswer && streamedText && isOrchestrationStatusSummary(finalSummary)) {
     return streamedText;
   }
@@ -755,6 +771,16 @@ function normalizeDataSource(data: unknown): DataHubDataSourceSelected | undefin
   return { datasourceId, datasourceName };
 }
 
+export function normalizeDataHubCitationEvidence(data: unknown): DataHubCitationDocument["evidenceFragments"] {
+  if (!Array.isArray(data)) return undefined;
+  const evidence = data.flatMap((item) => {
+    if (!isRecord(item) || typeof item.evidenceId !== "string" || !/^e\d+$/.test(item.evidenceId)
+      || typeof item.text !== "string" || !item.text.trim()) return [];
+    return [{ evidenceId: item.evidenceId, text: formatDataHubCitationFragment(item.text) }];
+  });
+  return evidence.length ? evidence : undefined;
+}
+
 function normalizeCitationDocument(data: unknown): DataHubCitationDocument | undefined {
   const record = unwrapEventData(data);
   if (!isRecord(record)) {
@@ -764,7 +790,7 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
   const docId = asString(record.docId).trim();
   const docKey = asString(record.docKey).trim();
   const kbId = asString(record.kbId).trim();
-  // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能整条丢引用。
+  // docKey 可为空；数字 docId 可直接打开，旧字符串标识仍需 docKey 回退。
   if (!docId || !kbId) {
     return undefined;
   }
@@ -787,9 +813,10 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
       asString(record.page).trim() ||
       asString(record.page_idx).trim() ||
       undefined,
-    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey),
+    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey || /^\d+$/.test(docId)),
     markdownAvailable:
       typeof record.markdownAvailable === "boolean" ? record.markdownAvailable : undefined,
+    evidenceFragments: normalizeDataHubCitationEvidence(record.evidenceFragments),
     fragments: Array.isArray(record.fragments)
       ? record.fragments.map(asString).map(formatDataHubCitationFragment).filter(Boolean).slice(0, 3)
       : []
@@ -841,13 +868,13 @@ function businessDocuments(turn: DataHubAskTurn, supplementalDocuments: unknown[
       asString(record.title) ||
       asString(record.docKey) ||
       "未命名文档";
-    const kbName = asString(record.kbName) || "企业知识库";
+    const kbName = asString(record.kbName);
     const fragments = uniqueStrings([
       ...(Array.isArray(record.fragments) ? record.fragments.map(asString) : []),
       asString(record.snippet),
       asString(record.excerpt)
     ]).slice(0, 3);
-    const identity = `${kbName}::${docName}`;
+    const identity = `${asString(record.kbId) || kbName}::${asString(record.docId) || docName}`;
     if (seen.has(identity)) return [];
     seen.add(identity);
     const location = inferredLocation(record, fragments);
@@ -993,10 +1020,10 @@ export function buildDataHubBusinessTrace(
     : dataSources.map((source) => `${source}中的业务数据`);
   // 每份结果表一条查询记录；后端没给 Cube Query 时只剩「哪个数据源、多少行」，
   // 也照样成条，叙事再按缺什么少说什么。
-  const tableQueries = tableResults.map((table, index) => {
+  const tableQueries = tableResults.map((table) => {
     const query = {
-      // 只有一个数据源时全归它；多个时按结果表顺序对位，对不上就不写。
-      dataSource: dataSources.length === 1 ? dataSources[0] : dataSources[index],
+      // 多个数据源的返回顺序不能证明表的归属。
+      dataSource: table.business?.query?.dataSource || (dataSources.length === 1 ? dataSources[0] : undefined),
       table: table.business?.query?.table || shortTableName(table.groupLabel),
       dimensions: table.business?.query?.dimensions ?? [],
       measures: table.business?.query?.measures ?? [],
@@ -1009,7 +1036,7 @@ export function buildDataHubBusinessTrace(
   const queries = tableQueries.length
     ? tableQueries
     : contexts.flatMap((context) => context.query
-        ? [{ ...context.query, dataSource: dataSources[0] }]
+        ? [{ ...context.query, dataSource: context.query.dataSource || (dataSources.length === 1 ? dataSources[0] : undefined) }]
         : []);
   const fields = business.fields.length
     ? business.fields
@@ -1074,13 +1101,13 @@ export function buildDataHubBusinessTrace(
     fields,
     filters: business.filters.length
       ? business.filters
-      : hasDataQuery ? ["本次未设置额外筛选条件"] : [],
+      : hasDataQuery ? ["本次未返回可复核的筛选条件"] : [],
     calculations: business.calculations.length
       ? business.calculations
-      : hasDataQuery ? ["本次结果采用企业语义模型已发布的计算规则"] : [],
+      : hasDataQuery ? ["本次未返回可复核的计算规则"] : [],
     relationships: business.relationships.length
       ? business.relationships
-      : hasDataQuery ? ["单一业务主题，本次没有跨主题关联"] : [],
+      : hasDataQuery ? ["本次未返回可复核的关联关系"] : [],
     metricDefinitions: business.metricDefinitions.length
       ? business.metricDefinitions
       : numericFields.map((field) => `${field}：采用企业语义模型中已发布的指标口径`),
@@ -1106,8 +1133,13 @@ function appendCitationDocument(
     return;
   }
 
-  const identity = `${citation.docId}::${citation.docKey ?? ""}`;
-  if (citations.some((item) => `${item.docId}::${item.docKey ?? ""}` === identity)) {
+  const identity = `${citation.kbId}::${citation.docId}::${citation.docKey ?? ""}`;
+  const existing = citations.find((item) => `${item.kbId}::${item.docId}::${item.docKey ?? ""}` === identity);
+  if (existing) {
+    existing.fragments = Array.from(new Set([...existing.fragments, ...citation.fragments]));
+    const evidence = [...(existing.evidenceFragments ?? []), ...(citation.evidenceFragments ?? [])];
+    if (evidence.length) existing.evidenceFragments = Array.from(new Map(evidence.map(item =>
+      [JSON.stringify([item.evidenceId, item.text]), item])).values());
     return;
   }
 
@@ -1255,10 +1287,13 @@ export function createDataHubAskTurn(
     appendCitationDocument(turn.citationDocuments, normalizeCitationDocument(citation));
   }
 
-  if (turn.thinkingBlocks.length === 0 && turn.done?.thinkingContent) {
+  if (turn.done?.thinkingContent) {
     turn.thinkingBlocks.push({ content: turn.done.thinkingContent });
   }
-  turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("");
+  turn.thinkingBlocks = dedupeDataHubAnswerBlocks(turn.thinkingBlocks.map((block) => ({
+    ...block, content: cleanDataHubThinkingText(block.content)
+  })).filter((block) => block.content.trim()));
+  turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("\n\n");
 
   if (errorMessage && !turn.error) {
     turn.error = { message: errorMessage };
@@ -1267,13 +1302,21 @@ export function createDataHubAskTurn(
   // 后端会在增量之外把整段正文再发一遍：结果事件在 replyId 对不上时补发全文，
   // 编排根智能体每结束一次模型调用也整段公开一次。先把同义块收敛成一份，
   // 再据此判定正式回答，流式过程中与终态就都只剩一份正文。
-  turn.answerBlocks = dedupeDataHubAnswerBlocks(turn.answerBlocks);
+  const envelope = cleanDataHubAnswerBlocks(turn.answerBlocks);
+  turn.answerBlocks = dedupeDataHubAnswerBlocks(envelope.blocks);
 
   const streamedAnswer = turn.answerBlocks.map((block) => block.content).join("");
+  const summaryThinking = splitDataHubThinkingEnvelope(String(turn.done?.summary ?? "")).thinking;
+  const protocolThinking = Array.from(new Set([envelope.thinking, summaryThinking]
+    .map(cleanDataHubThinkingText).filter(Boolean))).join("\n");
+  if (protocolThinking && !turn.thinkingContent.includes(protocolThinking)) {
+    turn.thinkingBlocks.push({ content: protocolThinking });
+    turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("\n");
+  }
   const officialAnswer = resolveDataHubFinalAnswer(
     turn.done?.summary,
     streamedAnswer,
-    Boolean(turn.error),
+    Boolean(turn.error || turn.done?.failed),
     {
       keepRicherStreamedAnswer:
         turn.done?.mode === "agent" || turn.done?.adaptiveTeam === true

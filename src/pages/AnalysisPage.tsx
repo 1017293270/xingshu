@@ -1,4 +1,4 @@
-import { Button, Dropdown, Segmented, Tag } from "antd";
+import { Button, Dropdown, Modal, Segmented } from "antd";
 import type { MenuProps } from "antd";
 import {
   ArrowDown,
@@ -14,6 +14,7 @@ import {
   MapPin,
   PresentationChart,
   Star,
+  Table,
   TrendUp
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -25,6 +26,7 @@ import type {
 import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSessionQueryScope } from "@/app/sessionQuery";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { XsChartCard } from "@/components/xs/XsChartCard";
 import { xsEnterStep } from "@/components/xs/motion";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
@@ -35,10 +37,8 @@ import {
   DataHubCitationChips,
   DataHubExecutionPanel,
   DataHubProcessDock,
-  DataHubResultTable,
-  latestExecutionActionLabel
+  DataHubResultTable
 } from "@/components/xs/datahub";
-import { useNow } from "@/components/xs/datahub/useNow";
 import { useClarifyDock, XsClarifyCard, XsClarifyPanel } from "@/components/xs/conversation";
 import { clarifyAllModesEnabled, queryAssetFeatureEnabled } from "@/config/features";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
@@ -51,12 +51,14 @@ import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
   canAutoGenerateAiChart,
+  isDataHubScalarResult,
   planAiChart,
   resolveAiChartTables
 } from "@/services/aiChartPlannerService";
 import {
   buildDataHubBusinessTrace,
-  createDataHubAskTurn
+  createDataHubAskTurn,
+  normalizeDataHubCitationEvidence
 } from "@/services/dataHubAskDataPresenter";
 import {
   getDataHubChildDocumentResults,
@@ -68,7 +70,6 @@ import {
 import {
   getDataHubAskTableResults,
   getDataHubChildAnswerBlocks,
-  getDataHubSingleQueryTableResults,
   getDataHubQueryAssetTargets,
   type DataHubQueryAssetTarget
 } from "@/services/dataHubQueryAssetTargetService";
@@ -76,11 +77,16 @@ import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializat
 import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
+import { buildDataHubResultSummary } from "@/services/dataHubResultSummary";
 import {
   dataHubRootAnsweredAfterChildren,
   dedupeDataHubAnswerBlocks
 } from "@/services/dataHubAnswerDedupe";
-import { AnalysisCitationPreview } from "./AnalysisCitationPreview";
+import { AnalysisCitationPreview, citationPreviewId } from "./AnalysisCitationPreview";
+import { citationKnowledgeBaseLabel, citationDisplayTitle, citationLocationText } from "@/components/xs/datahub/citationLabels";
+import { formatDataHubCitationFragment, formatDataHubColumnTitle } from "@/services/dataHubFormat";
+import { getDataHubResponsePhases } from "@/services/dataHubResponsePhases";
+import { getDataHubThinkingSections } from "@/services/dataHubThinkingSections";
 import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
 import type {
@@ -160,7 +166,6 @@ const analysisModeMeta: Record<
   {
     title: string;
     taskName: string;
-    resultTitle: string;
     emptyTitle: string;
     emptyDescription: string;
     emptyAria: string;
@@ -170,7 +175,6 @@ const analysisModeMeta: Record<
   ask: {
     title: "智能问数",
     taskName: "问数",
-    resultTitle: "问数结果",
     emptyTitle: "从一个经营数据问题开始",
     emptyDescription: "",
     emptyAria: "空白问数工作区",
@@ -179,7 +183,6 @@ const analysisModeMeta: Record<
   rag: {
     title: "知识问答",
     taskName: "问知",
-    resultTitle: "问知结果",
     emptyTitle: "从一个企业知识问题开始",
     emptyDescription: "",
     emptyAria: "空白问知工作区",
@@ -188,7 +191,6 @@ const analysisModeMeta: Record<
   document_lookup: {
     title: "查找文档",
     taskName: "找文档",
-    resultTitle: "文档结果",
     emptyTitle: "从一份企业文档开始",
     emptyDescription: "",
     emptyAria: "空白找文档工作区",
@@ -197,7 +199,6 @@ const analysisModeMeta: Record<
   agent: {
     title: "智能编排",
     taskName: "智能编排",
-    resultTitle: "综合结果",
     emptyTitle: "从一个跨数据与知识的任务开始",
     emptyDescription: "",
     emptyAria: "空白智能编排工作区",
@@ -212,36 +213,9 @@ const analysisRouteByMode: Record<DataHubChatMode, string> = {
   document_lookup: "/document-lookup"
 };
 
-function formatDurationZh(ms?: number) {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) {
-    return "";
-  }
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 1) {
-    return "用时不到 1 秒";
-  }
-  if (seconds < 60) {
-    return `用时 ${seconds} 秒`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest > 0 ? `用时 ${minutes} 分 ${rest} 秒` : `用时 ${minutes} 分`;
-}
-
-function stripMarkdownTables(markdown: string) {
-  return markdown
-    .replace(/(^|\n)(?:[ \t]*\|.*\|[ \t]*\n)+/g, "$1")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 function citationSourceLabel(citation: DataHubCitationDocument) {
-  const name = citation.docName || citation.fileName || citation.docKey || citation.docId;
-  const blob = [name, ...citation.fragments].join(" ");
-  const chapter = citation.chapter || blob.match(/第[\d一二三四五六七八九十百千]+章[^，。\s]*/)?.[0];
-  const page = citation.pageNumber || blob.match(/第?\s*\d+\s*页/)?.[0];
-  const location = [chapter, page].filter(Boolean).join(" ");
-  return location ? `根据《${name}》${location}` : `根据《${name}》`;
+  const location = citationLocationText(citation);
+  return `根据《${citationDisplayTitle(citation)}》${location ? ` ${location}` : ""}`;
 }
 
 function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHubDocumentLookupResult[] {
@@ -253,59 +227,6 @@ function citationsAsLookupResults(citations: DataHubCitationDocument[]): DataHub
     title: citation.docName || citation.fileName || citation.docKey || citation.docId,
     sourceAvailable: citation.sourceAvailable
   }));
-}
-
-/**
- * 任务动态：问数 / 问知 / 找文档 / 智能编排共用的轮次头部。
- * 运行中是脉冲 + 状态 + 走秒 + 一行最新执行动作，结束后收成一行摘要，
- * 历史轮次不留动效。
- */
-function AnalysisTaskDynamics({
-  durationMs,
-  status,
-  detail,
-  running = false,
-  startedAt
-}: {
-  durationMs?: number;
-  status: string;
-  detail?: string;
-  running?: boolean;
-  startedAt?: number;
-}) {
-  const now = useNow(1000, running);
-  const duration = formatDurationZh(durationMs);
-
-  if (!running) {
-    return (
-      <p className="analysis-task-dynamics" aria-label="任务动态">
-        <span>任务动态</span>
-        {duration ? <span>{duration}</span> : null}
-        <span>{status}</span>
-      </p>
-    );
-  }
-
-  const elapsed = startedAt ? formatDurationZh(Math.max(0, now - startedAt)) : "";
-
-  return (
-    <div className="analysis-live" role="group" aria-label="任务动态">
-      <p className="analysis-live__head">
-        <span className="xs-status-bar__pulse analysis-live__pulse" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <span className="analysis-live__status">{status}</span>
-        {elapsed ? <span className="analysis-live__timer">{elapsed}</span> : null}
-      </p>
-      {detail ? (
-        <p className="analysis-live__detail" key={detail}>
-          {detail}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function DataHubQueryAssetActions({
@@ -449,7 +370,7 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
   const docId = identityText(record.docId);
   const docKey = identityText(record.docKey);
   const kbId = identityText(record.kbId);
-  // PRD A-6 后 docKey 仅展示、可为空：缺 docKey 只影响原文打开，不能整条丢引用。
+  // 原文按知识库和文档 ID 打开，docKey 仅作显示与旧接口兼容。
   if (!docId || !kbId) {
     return undefined;
   }
@@ -471,11 +392,12 @@ function normalizeExecutionDocument(content: unknown): DataHubCitationDocument |
       identityText(record.page) ||
       identityText(record.page_idx) ||
       undefined,
-    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey),
+    sourceAvailable: record.sourceAvailable !== false && Boolean(docKey || /^\d+$/.test(docId)),
     markdownAvailable:
       typeof record.markdownAvailable === "boolean"
         ? record.markdownAvailable
         : undefined,
+    evidenceFragments: normalizeDataHubCitationEvidence(record.evidenceFragments),
     fragments: Array.isArray(record.fragments)
       ? record.fragments
           .filter((fragment): fragment is string => typeof fragment === "string")
@@ -597,19 +519,33 @@ function scrollElementToBottom(
 
 function DataHubAnswer({
   blocks,
-  hideMarkdownTables = false,
-  streaming = false
+  streaming = false,
+  incomplete = false,
+  citations = [],
+  onOpenCitation
 }: {
   blocks: DataHubContentBlock[];
-  hideMarkdownTables?: boolean;
   streaming?: boolean;
+  incomplete?: boolean;
+  citations?: DataHubCitationDocument[];
+  onOpenCitation?: (citation: DataHubCitationDocument) => void;
 }) {
-  const rendered = blocks
-    .map((block) => ({
-      ...block,
-      content: hideMarkdownTables ? stripMarkdownTables(block.content) : block.content
-    }))
-    .filter((block) => block.content.trim());
+  const [referenceId, setReferenceId] = useState<string>();
+  const evidenceMatches = (id: string) => Array.from(new Map(citations.flatMap(citation =>
+    (citation.evidenceFragments ?? []).filter(evidence => evidence.evidenceId === id)
+      .map(evidence => [JSON.stringify([citation.kbId, citation.docId, evidence.text]), { citation, evidence }] as const)
+  )).values());
+  const matched = referenceId ? evidenceMatches(referenceId) : [];
+  const exact = matched.length === 1 ? matched[0] : undefined;
+  const references = citations.length && onOpenCitation ? Object.fromEntries(blocks.flatMap((block) =>
+    block.content.split("\n").filter((line) => /(?:见证据|原文引用|证据编号)/.test(line))
+      .flatMap((line) => [...line.matchAll(/`(e\d+)`/gi)].map((match) => [match[1], {
+        label: evidenceMatches(match[1]).length === 1 ? `${match[1]}：查看引用原文片段`
+          : `${match[1]}：查看本轮引用文档（暂未提供准确位置）`,
+        onClick: () => setReferenceId(match[1])
+      }]))
+  )) : undefined;
+  const rendered = blocks.filter((block) => block.content.trim());
 
   if (rendered.length === 0) {
     return null;
@@ -618,16 +554,26 @@ function DataHubAnswer({
   return (
     <div
       className={`datahub-answer${streaming ? " datahub-answer--streaming" : ""}`}
-      aria-label="正式回答"
+      aria-label={incomplete ? "未完成回答" : "正式回答"}
     >
+      {incomplete ? <p>以下为已收到的部分回答，生成未完成。</p> : null}
       {rendered.map((block, index) => (
         <article
           className="datahub-answer__block"
           key={`${block.replyId || "reply"}-${block.modelCallIndex ?? "legacy"}-${index}`}
         >
-          <XsSafeMarkdown content={block.content} />
+          <XsSafeMarkdown content={block.content} references={references} />
         </article>
       ))}
+      <Modal open={Boolean(referenceId)} title={`引用 ${referenceId ?? ""}`} footer={null}
+        onCancel={() => setReferenceId(undefined)} destroyOnHidden>
+        {exact ? <section aria-label={`${referenceId} 引用原文片段`}>
+          <p>来源：《{citationDisplayTitle(exact.citation)}》 · {citationKnowledgeBaseLabel(exact.citation)}</p>
+          <blockquote><XsSafeMarkdown content={exact.evidence.text} /></blockquote>
+        </section> : <p>该引用暂未提供准确位置，可查看本轮引用文档核对原文。</p>}
+        {onOpenCitation ? <DataHubCitationChips citations={exact ? [exact.citation] : citations} defaultCollapsed={false}
+          onOpen={(citation) => { setReferenceId(undefined); onOpenCitation(citation); }} /> : null}
+      </Modal>
     </div>
   );
 }
@@ -646,22 +592,22 @@ function AnalysisResultTables({
   const totalRows = tables.reduce((total, table) => total + table.totalRows, 0);
 
   return (
-    <section className="analysis-result-tables" data-expanded={expanded || undefined} aria-label="结果表汇总">
+    <section className="analysis-result-tables" data-expanded={expanded || undefined} aria-label="查询结果表">
       <button
         type="button"
         className="analysis-result-tables__toggle"
         aria-controls={bodyId}
         aria-expanded={expanded}
-        aria-label={`${expanded ? "收起" : "展开"}结果表汇总，共 ${tables.length} 张表、${totalRows} 行`}
+        aria-label={`${expanded ? "收起" : "展开"}结果表，共 ${tables.length} 张表、${totalRows} 行`}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span className="analysis-result-tables__icon"><Database size={18} weight="duotone" aria-hidden="true" /></span>
+        <span className="analysis-result-tables__icon"><Table size={18} aria-hidden="true" /></span>
         <span className="analysis-result-tables__copy">
-          <strong>结果表汇总</strong>
-          <small>{tables.length} 张结果表 · 共 {totalRows} 行</small>
+          <strong>结果表 <span className="analysis-result-tables__count">{tables.length} 张</span></strong>
+          <small>共 {totalRows} 行数据</small>
         </span>
         <span className="analysis-result-tables__action">
-          {expanded ? "收起" : "展开查看"}
+          {expanded ? "收起" : "查看数据"}
           <CaretDown size={16} aria-hidden="true" />
         </span>
       </button>
@@ -714,25 +660,25 @@ function highlightQueryKeywords(text: string, query: string) {
 function DataHubCitationQuotes({
   citations,
   onOpen,
-  onCopyFragment,
-  query
+  onCopyFragment
 }: {
   citations: DataHubCitationDocument[];
   onOpen: (citation: DataHubCitationDocument) => void;
   onCopyFragment?: (text: string) => void;
-  query: string;
 }) {
   if (!citations.some((citation) => citation.fragments.length > 0)) {
     return null;
   }
 
   return (
-    <section className="knowledge-citations" aria-label="引用原文">
+    <details className="knowledge-citations" aria-label="引用原文">
+      <summary>引用原文（{citations.reduce((count, citation) => count + citation.fragments.length, 0)} 个片段）</summary>
       <div className="knowledge-citations__quotes">
         {citations.flatMap((citation) =>
           citation.fragments.map((fragment, index) => (
-            <blockquote key={`${citation.docId}-${index}`}>
-              <p>{highlightQueryKeywords(fragment, query)}</p>
+            <blockquote key={`${citationPreviewId(citation)}-${index}`}>
+              <XsSafeMarkdown content={formatDataHubCitationFragment(fragment)} />
+              <cite>{citationSourceLabel(citation)} · {citationKnowledgeBaseLabel(citation)}</cite>
               <span className="knowledge-citations__quote-actions">
                 <button
                   type="button"
@@ -746,7 +692,7 @@ function DataHubCitationQuotes({
                   type="button"
                   className="analysis-icon-button"
                   aria-label={`查看原文片段：${citation.docName || citation.fileName || citation.docKey || citation.docId}`}
-                  disabled={!citation.sourceAvailable}
+                  disabled={citation.sourceAvailable === false}
                   onClick={() => onOpen(citation)}
                 >
                   <ArrowSquareOut size={15} aria-hidden="true" />
@@ -756,7 +702,7 @@ function DataHubCitationQuotes({
           ))
         )}
       </div>
-    </section>
+    </details>
   );
 }
 
@@ -773,19 +719,19 @@ function DataHubDocumentLookupList({
     return null;
   }
 
-  const groups = groupByKnowledgeBase(documents.slice(0, 5), (document) => document.kbName || "企业知识库");
+  const groups = groupByKnowledgeBase(documents.slice(0, 5), (document) => String(document.kbId));
   return (
     <section className="document-lookup-results" aria-label="匹配文档">
-      <div className="document-lookup-results__head"><div><span>安全复核结果</span><h3>找到 {documents.length} 份文档</h3></div></div>
-      {groups.map(([kbName, items]) => (
-        <section className="document-lookup-results__group" key={kbName}>
-          <h4>{kbName}</h4>
+      <p className="document-lookup-results__count">找到 {documents.length} 份文档</p>
+      {groups.map(([kbId, items]) => (
+        <section className="document-lookup-results__group" key={kbId}>
+          <h4>{citationKnowledgeBaseLabel({ kbId, kbName: items[0].kbName })}</h4>
           <div className="document-lookup-results__list">
             {items.map((document) => (
               <button
                 type="button"
                 className="document-lookup-card"
-                key={`${String(document.docId)}::${document.docKey ?? ""}`}
+                key={`${String(document.kbId)}::${String(document.docId)}::${document.docKey ?? ""}`}
                 aria-label={`${document.sourceAvailable === false ? "原文不可用" : "打开原文"}：${document.title}`}
                 disabled={document.sourceAvailable === false}
                 onClick={() => onOpen(document)}
@@ -863,13 +809,33 @@ function AiChartSuccessCard({
   state: Extract<AiChartUiState, { status: "success" }>;
   onTypeChange: (type: AiChartType) => void;
 }) {
-  const option = useMemo(
-    () => buildGeneratedChartOption(state.spec, state.activeType),
-    [state.activeType, state.spec]
-  );
+  const [showTable, setShowTable] = useState(false);
+  const compactChart = useMediaQuery("(max-width: 900px)");
+  const [page, setPage] = useState(1);
+  const [selectedMetric, setSelectedMetric] = useState("");
+  const { totalRows, comparisonBar, pageCount, currentPage, rowOffset, metricKey, repeatedNames, option } = useMemo(() => {
+    const totalRows = state.spec.table.rows.length;
+    const categoryNames = state.spec.table.rows.map((row) => String(row[state.spec.dimensionKey] ?? ""));
+    const comparisonBar = state.activeType === "bar" && (totalRows > 8 || categoryNames.some((name) => name.length > 12));
+    const pageCount = Math.max(1, Math.ceil(totalRows / 8));
+    const currentPage = Math.min(page, pageCount);
+    const rowOffset = (currentPage - 1) * 8;
+    const metricKey = state.spec.metricKeys.includes(selectedMetric) ? selectedMetric : undefined;
+    return {
+      totalRows, comparisonBar, pageCount, currentPage, rowOffset, metricKey,
+      repeatedNames: new Set(categoryNames).size < totalRows,
+      option: {
+        ...buildGeneratedChartOption(comparisonBar ? {
+          ...state.spec,
+          table: { ...state.spec.table, rows: state.spec.table.rows.slice(rowOffset, rowOffset + 8) }
+        } : state.spec, state.activeType, comparisonBar ? { rowOffset, metricKey, compact: compactChart } : undefined),
+        title: { show: false }
+      }
+    };
+  }, [state.activeType, state.spec, page, selectedMetric, compactChart]);
   const chartTable = useMemo(() => {
-    const selectedKeys = new Set([state.spec.dimensionKey, ...state.spec.metricKeys]);
-    const columns = state.spec.table.columns.filter((column) => selectedKeys.has(column.key));
+    const selectedKeys = [state.spec.dimensionKey, ...state.spec.metricKeys];
+    const columns = selectedKeys.flatMap((key) => state.spec.table.columns.filter((column) => column.key === key));
     const rows = state.spec.table.rows.map((row) =>
       Object.fromEntries(columns.map((column) => [column.key, row[column.key]]))
     );
@@ -883,25 +849,78 @@ function AiChartSuccessCard({
     };
   }, [state.spec]);
 
+  const viewControl = (
+    <Segmented
+      size="small"
+      aria-label="结果展示方式"
+      value={showTable ? "table" : state.activeType}
+      options={[
+        ...state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type })),
+        { label: "表格", value: "table" }
+      ]}
+      onChange={(value) => {
+        setShowTable(value === "table");
+        if (value !== "table") onTypeChange(value as AiChartType);
+      }}
+    />
+  );
+
   return (
     <section className="ai-chart-card ai-chart-card--success" role="region" aria-label="智能图表建议">
+      {showTable ? (
+        <>
+          <div className="ai-chart-card__view-control">{viewControl}</div>
+          <DataHubResultTable table={chartTable} />
+        </>
+      ) : (
       <XsChartCard
         contained={false}
         title={state.spec.title}
-        summary={state.spec.reason}
+        summary={comparisonBar
+          ? `共 ${totalRows} 条记录，当前显示第 ${rowOffset + 1}–${Math.min(rowOffset + 8, totalRows)} 条${repeatedNames ? "；同名记录未合并。" : "。"}`
+          : ""}
         option={option}
         table={chartTable}
-        chartClassName="chart-large ai-chart-card__chart"
-        action={
-          <Segmented
-            size="small"
-            value={state.activeType}
-            options={state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type }))}
-            onChange={(value) => onTypeChange(value as AiChartType)}
-          />
-        }
-        beforeChart={<span className="ai-chart-card__source">来源：{state.spec.tableTitle}</span>}
+        showDataTable={false}
+        chartClassName={`chart-large ai-chart-card__chart${comparisonBar ? " ai-chart-card__chart--comparison" : ""}`}
+        action={viewControl}
+        beforeChart={(
+          <>
+            <span className="ai-chart-card__source">来源：{state.spec.tableTitle}</span>
+            {comparisonBar && state.spec.metricKeys.length > 1 ? (
+              <div className="ai-chart-card__metric-control">
+                <span>查看指标</span>
+                <Segmented
+                  size="small"
+                  aria-label="图表指标"
+                  value={metricKey ?? ""}
+                  options={[
+                    { label: "全部对比", value: "" },
+                    ...state.spec.metricKeys.map((key) => ({
+                      label: formatDataHubColumnTitle(state.spec.table.columns.find((column) => column.key === key)?.title || key, key),
+                      value: key
+                    }))
+                  ]}
+                  onChange={(value) => setSelectedMetric(String(value))}
+                />
+              </div>
+            ) : null}
+          </>
+        )}
+        afterChart={comparisonBar ? (
+          <div className="ai-chart-card__comparison-footer">
+            <span>万、亿为数值缩写；完整名称和数值可在图中或表格查看。</span>
+            {pageCount > 1 ? (
+              <div className="ai-chart-card__pager" role="group" aria-label="切换图表记录">
+                <Button size="small" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一组</Button>
+                <span>{currentPage} / {pageCount}</span>
+                <Button size="small" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>下一组</Button>
+              </div>
+            ) : null}
+          </div>
+        ) : undefined}
       />
+      )}
     </section>
   );
 }
@@ -1395,8 +1414,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         turn.error,
         { sessionId: turn.sessionId, chatId: turn.chatId }
       );
+      if (turnAsk.error || turnAsk.done?.failed) continue;
       const tables = isAskMode || isAgentMode
-        ? getDataHubSingleQueryTableResults(
+        ? getDataHubAskTableResults(
             projectDataHubExecutionEvents(turn.events, {
               mainSessionId: turn.sessionId || undefined,
               globalSessionId: turn.sessionId || undefined,
@@ -1542,7 +1562,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       return `正在${taskName}`;
     }
     if (askDataStatus === "done") {
-      return `${taskName}已完成`;
+      return awaitingClarification ? "等待你补充信息" : `${taskName}已完成`;
     }
     if (askDataStatus === "error") {
       return `${taskName}失败：${askDataError || "未知错误"}`;
@@ -1615,7 +1635,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     const pool = group?.length ? group : [citation];
     const seen = new Set<string>();
     const citations = pool.filter((item) => {
-      const key = `${item.docId}::${item.docKey ?? ""}`;
+      const key = citationPreviewId(item);
       if (seen.has(key)) {
         return false;
       }
@@ -1630,6 +1650,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       docId: String(document.docId),
       docKey: document.docKey,
       kbId: String(document.kbId),
+      kbName: document.kbName,
       docName: document.title,
       sourceAvailable: document.sourceAvailable !== false,
       fragments: []
@@ -1691,10 +1712,22 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const childDocumentResults = isAgentMode
                 ? getDataHubChildDocumentResults(executionProjection)
                 : [];
-              // 四种模式共用同一份事件投影，任务动态那行的「最新执行动作」也就统一从主会话取。
-              const latestActionLabel = latestExecutionActionLabel(
-                executionProjection.mainSession
-              );
+              const visibleCitations = isAgentMode
+                ? Array.from([
+                    ...turnAsk.citationDocuments,
+                    ...executionProjection.subagentSessions.flatMap((session) => session.citationDocuments)
+                      .map(normalizeExecutionDocument)
+                      .filter((citation): citation is DataHubCitationDocument => Boolean(citation))
+                  ].reduce((documents, citation) => {
+                    const key = citationPreviewId(citation);
+                    const previous = documents.get(key);
+                    documents.set(key, previous ? { ...previous, ...citation,
+                      fragments: Array.from(new Set([...previous.fragments, ...citation.fragments])),
+                      evidenceFragments: [...(previous.evidenceFragments ?? []), ...(citation.evidenceFragments ?? [])]
+                    } : citation);
+                    return documents;
+                  }, new Map<string, DataHubCitationDocument>()).values())
+                : turnAsk.citationDocuments;
               const askTables = isAskMode || isAgentMode
                 ? getDataHubAskTableResults(executionProjection, isAskMode)
                 : [];
@@ -1702,18 +1735,26 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               // 编排根在子结论之后给出的回答就是对它们的综合改写，两者并列等于同一结论说两遍。
               // 根只在派活前说过开场白（或干脆没说）时，子结论仍要顶上来，否则结果区只剩一句「我来帮您查…」。
               const childAnswerBlocks =
-                isAgentMode && !dataHubRootAnsweredAfterChildren(turn.events)
+                (isAskMode || isAgentMode) && displayStatus !== "error" && displayStatus !== "cancelled"
+                  && !dataHubRootAnsweredAfterChildren(turn.events)
                   ? dedupeDataHubAnswerBlocks(getDataHubChildAnswerBlocks(executionProjection))
                   : [];
-              const visibleAnswerBlocks = dedupeDataHubAnswerBlocks([
-                ...turnAsk.answerBlocks,
-                ...childAnswerBlocks
-              ]);
+              const modelAnswerBlocks = dedupeDataHubAnswerBlocks(
+                childAnswerBlocks.length ? childAnswerBlocks : turnAsk.answerBlocks
+              ).filter((block) => block.content.trim());
+              // Markdown 表可能是说明或查询结果的复述，不能作为新的查询产物计数。
+              // 保留正文及其表格结构；只有执行事件中的结构化结果进入查询过程。
+              const narrativeBlocks = modelAnswerBlocks;
+              const summaryTables = !narrativeBlocks.length ? visibleTables : [];
+              const resultSummary = supportsTables && displayStatus === "done"
+                ? buildDataHubResultSummary(turn.question, summaryTables)
+                : "";
+              const visibleAnswerBlocks = resultSummary ? [...narrativeBlocks, { content: resultSummary }] : narrativeBlocks;
               const hasRenderableResult = Boolean(
                 (supportsClarification && turnAsk.clarifications.length) ||
                 (!isDocumentLookupMode && visibleAnswerBlocks.length) ||
                   (supportsTables && visibleTables.length) ||
-                  (supportsCitations && turnAsk.citationDocuments.length) ||
+                  (supportsCitations && visibleCitations.length) ||
                   (isDocumentLookupMode && documentLookupResults.length) ||
                   (isAgentMode && childDocumentResults.length)
               );
@@ -1721,20 +1762,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 hasRenderableResult || ["done", "error", "cancelled"].includes(displayStatus);
               const isLatestTurn = turn.id === lastVisibleTurn?.id;
               const isHistoryLoadingTurn = isLoadingHistory && isLatestTurn;
-              const taskStatus =
-                isHistoryLoadingTurn
-                  ? "正在加载历史对话"
-                  : displayStatus === "streaming"
-                    ? `正在${taskName}`
-                    : displayStatus === "error"
-                      ? `${taskName}失败`
-                      : displayStatus === "cancelled"
-                        ? "已停止生成"
-                        : `${taskName}已完成`;
-              const durationMs =
-                turn.startedAt && turn.endedAt
-                  ? turn.endedAt - turn.startedAt
-                  : turnAsk.done?.totalDurationMs;
+              const phases = getDataHubResponsePhases(turn.events, displayStatus, turn.startedAt, turn.endedAt);
+              const thinkingSections = getDataHubThinkingSections(executionProjection, turnAsk);
+              const hasChildThinking = thinkingSections.some((section) => !section.main);
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const queryAssetTargets =
                 isAskMode || isAgentMode
@@ -1772,7 +1802,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   ? "loading"
                   : "empty";
               // 复制的必须与看到的是同一份：直接取渲染用的块，别再拼一次原始文本。
-              const answerText = stripMarkdownTables(
+              const answerText = (
                 (visibleAnswerBlocks.length > 0
                   ? visibleAnswerBlocks.map((block) => block.content)
                   : [turnAsk.assistantContent || turnAsk.done?.summary || ""]
@@ -1780,6 +1810,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   .filter(Boolean)
                   .join("\n\n")
               );
+              const nonScalarTables = supportsTables ? visibleTables.filter((table) => !isDataHubScalarResult(table)) : [];
+              const queryTables = nonScalarTables;
               const businessKind = isAgentMode
                 ? "AGENT"
                 : isDocumentLookupMode
@@ -1819,18 +1851,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 }
               );
               const answerPreamble = buildDataHubAnswerPreamble(businessKind, businessTrace, answerText);
-              const traceStatus =
-                displayStatus === "streaming" || displayStatus === "idle"
-                  ? ("running" as const)
-                  : displayStatus === "done"
-                    ? ("done" as const)
-                    : displayStatus;
 
               return (
                 <div
                   className={`analysis-turn${!isLatestTurn && displayStatus !== "streaming" ? " analysis-turn--virtualized" : ""}`}
                   data-status={displayStatus}
-                  data-result-ready={isResultReady}
+                  data-result-ready={isResultReady && phases.showResult}
                   key={turn.id}
                 >
                   <section className="analysis-question" aria-label="用户提问">
@@ -1848,7 +1874,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                         >
                           <CopySimple size={16} aria-hidden="true" />
                         </button>
-                        {queryAssetFeatureEnabled && (isAskMode || isAgentMode) && isResultReady ? (
+                        {queryAssetFeatureEnabled && (isAskMode || isAgentMode) && displayStatus === "done" ? (
                           <DataHubQueryAssetActions
                             items={queryAssetActionItems}
                             onFavorite={(target) =>
@@ -1875,41 +1901,41 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   <section className="analysis-response" aria-label="星数分析结果">
                     <img className="analysis-response__mark" src={assistantMark} alt="" width={160} height={160} />
                     <article className="xs-card analysis-card">
-                      <AnalysisTaskDynamics
-                        durationMs={durationMs}
-                        status={taskStatus}
-                        detail={latestActionLabel}
-                        running={displayStatus === "streaming"}
-                        startedAt={turn.startedAt}
-                      />
                       {isLatestTurn && (askDataStatusText || workflowStatus) ? (
                         <div className="sr-only" role="status">
-                          {[askDataStatusText, workflowStatus].filter(Boolean).join("，")}
+                          {[displayStatus === "error" ? `${taskName}失败` : askDataStatusText, workflowStatus].filter(Boolean).join("，")}
                         </div>
                       ) : null}
 
                       {!isHistoryLoadingTurn ? (
                         <DataHubProcessDock
                           thinkingContent={turnAsk.thinkingContent}
+                          sections={thinkingSections}
                           decompose={turnAsk.decompose}
-                          status={traceStatus}
-                          startedAt={turn.startedAt}
-                          durationMs={durationMs}
+                          status={hasChildThinking && displayStatus === "streaming" && !phases.showResult ? "running" : phases.thinkingStatus}
+                          startedAt={hasChildThinking ? undefined : turn.startedAt}
+                          durationMs={hasChildThinking ? undefined : phases.thinkingDurationMs}
+                          sourceNote={!hasChildThinking && thinkingSections.length === 1 && turnAsk.thinkingBlocks.length === 1
+                            && executionProjection.subagentSessions.length > 0 && displayStatus === "done"
+                            ? "本轮仅返回以上公开思考摘要，详细执行步骤可在查询过程查看。" : undefined}
+                          showPlaceholder
                         />
                       ) : null}
-                      {!isHistoryLoadingTurn ? (
+                      {!isHistoryLoadingTurn && (phases.showQuery || queryTables.length > 0) ? (
                         <DataHubBusinessExplanation
                           kind={businessKind}
                           intent={turn.question}
                           trace={businessTrace}
-                          status={traceStatus}
-                          durationMs={durationMs}
-                        />
-                      ) : null}
-                      {!isHistoryLoadingTurn ? (
+                          status={phases.queryStatus}
+                          startedAt={phases.queryStartedAt}
+                          durationMs={phases.queryDurationMs}
+                          resultTables={queryTables.length > 0 ? (
+                            <AnalysisResultTables tables={queryTables} onStatus={setWorkflowStatus} />
+                          ) : undefined}
+                        >
                         <DataHubExecutionPanel
                           projection={executionProjection}
-                          title={isAgentMode ? "智能编排执行" : `${taskName}执行过程`}
+                          title={isAgentMode ? "智能编排执行" : "执行细节"}
                           className="analysis-orchestration-panel"
                           defaultExpanded={false}
                           // 单智能体模式的过程就是主智能体那条线性步骤，
@@ -1927,61 +1953,26 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                             handleOpenCitation(citation);
                           }}
                         />
+                        </DataHubBusinessExplanation>
                       ) : null}
 
+                      {(phases.showResult || isHistoryLoadingTurn) ? (
                       <section className="analysis-output" aria-label="分析结果">
-                        {hasRenderableResult ||
-                        displayStatus === "done" ||
-                        displayStatus === "error" ||
-                        displayStatus === "cancelled" ? (
-                          <div className="section-title-row">
-                            <h2>{modeMeta.resultTitle}</h2>
-                          </div>
-                        ) : null}
                         <div className="analysis-result-stage" data-state={resultStageState}>
-                          {supportsTables && isResultReady && turnAsk.dataSources.length > 0 ? (
-                            <div className="datahub-data-sources" aria-label="已选择数据源">
-                              <span>已选择数据源</span>
-                              <div>
-                                {turnAsk.dataSources.map((dataSource) => (
-                                  <Tag color="blue" key={String(dataSource.datasourceId)}>
-                                    {dataSource.datasourceName}
-                                  </Tag>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                          {isKnowledgeMode && isResultReady && turnAsk.citationDocuments[0] ? (
-                            <p className="knowledge-source-line">
-                              {citationSourceLabel(turnAsk.citationDocuments[0])}
-                            </p>
-                          ) : null}
-                          {isKnowledgeMode && isResultReady && turnAsk.citationDocuments.length > 0 ? (
-                            <DataHubCitationQuotes
-                              citations={turnAsk.citationDocuments}
-                              query={turn.question}
-                              onOpen={(citation) =>
-                                handleOpenCitation(citation, turnAsk.citationDocuments)
-                              }
-                              onCopyFragment={async (text) => {
-                                const copied = await copyText(text);
-                                setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
-                              }}
-                            />
-                          ) : null}
                           {!isDocumentLookupMode &&
                           isResultReady &&
                           visibleAnswerBlocks.length > 0 ? (
                             <div className="analysis-answer-block">
-                              {isKnowledgeMode ? <p className="knowledge-summary-label">总结</p> : null}
+                              <DataHubAnswer
+                                blocks={visibleAnswerBlocks}
+                                citations={supportsCitations ? visibleCitations : []}
+                                onOpenCitation={(citation) => handleOpenCitation(citation, visibleCitations)}
+                                streaming={displayStatus === "streaming"}
+                                incomplete={displayStatus === "error" || displayStatus === "cancelled"}
+                              />
                               {answerPreamble ? (
                                 <p className="analysis-answer-preamble">{answerPreamble}</p>
                               ) : null}
-                              <DataHubAnswer
-                                blocks={visibleAnswerBlocks}
-                                hideMarkdownTables={visibleTables.length > 0}
-                                streaming={displayStatus === "streaming"}
-                              />
                               {answerText ? (
                                 <button
                                   type="button"
@@ -1996,6 +1987,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 </button>
                               ) : null}
                             </div>
+                          ) : null}
+                          {supportsCitations && isResultReady && visibleCitations.length > 0 ? (
+                            <DataHubCitationQuotes
+                              citations={visibleCitations}
+                              onOpen={(citation) =>
+                                handleOpenCitation(citation, visibleCitations)
+                              }
+                              onCopyFragment={async (text) => {
+                                const copied = await copyText(text);
+                                setWorkflowStatus(copied ? "已复制原文" : "复制原文失败，请稍后重试");
+                              }}
+                            />
                           ) : null}
                           {supportsClarification && turnAsk.clarifications.length > 0 ? (
                             <div className="analysis-clarify-stack">
@@ -2031,16 +2034,13 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
                             />
                           ) : null}
-                          {supportsTables && isResultReady && visibleTables.length > 0 ? (
-                            <AnalysisResultTables tables={visibleTables} onStatus={setWorkflowStatus} />
-                          ) : null}
                           {supportsCitations &&
                           isResultReady &&
-                          turnAsk.citationDocuments.length > 0 ? (
+                          visibleCitations.length > 0 ? (
                             <DataHubCitationChips
-                              citations={turnAsk.citationDocuments}
+                              citations={visibleCitations}
                               onOpen={(citation) =>
-                                handleOpenCitation(citation, turnAsk.citationDocuments)
+                                handleOpenCitation(citation, visibleCitations)
                               }
                             />
                           ) : null}
@@ -2064,7 +2064,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               title={isHistoryLoadingTurn ? "正在加载历史对话" : undefined}
                               description={isHistoryLoadingTurn ? "历史内容加载完成后会在当前页面直接显示。" : undefined}
                             />
-                          ) : hasRenderableResult || displayStatus === "error" ? null : (
+                          ) : visibleAnswerBlocks.length || queryTables.length || aiChartState.status === "success" ||
+                            visibleCitations.length || documentLookupResults.length || childDocumentResults.length ||
+                            turnAsk.clarifications.length || displayStatus === "error" ? null : (
                             <div className="datahub-empty-state" role="status">
                               {isDocumentLookupMode
                                 ? turnAsk.done?.failed
@@ -2084,6 +2086,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           ) : null}
                         </div>
                       </section>
+                      ) : null}
                     </article>
                   </section>
                 </div>

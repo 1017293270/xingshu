@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { getDashboardRuntime, getDashboardRuntimeInitialData } from "@/services/dashboardAnalyticsService";
 import { GearSix, MagicWand } from "@phosphor-icons/react";
 import { Button, Dropdown, Modal, Select, type MenuProps } from "antd";
 import { useEffect, useState } from "react";
@@ -38,6 +41,7 @@ function formatDateTime(value?: string) {
 export function DashboardPage() {
   const navigate = useNavigate();
   const library = useDashboardLibrary();
+  const sessionScope = useSessionQueryScope();
   const userId = useDataHubAuthStore((state) => state.user?.userId);
   const dashboardOnboardingOpen = useUiStore((state) => state.dashboardOnboardingOpen);
   const setDashboardOnboardingOpen = useUiStore((state) => state.setDashboardOnboardingOpen);
@@ -46,6 +50,17 @@ export function DashboardPage() {
 
   const { dashboardsQuery, records } = library;
   const current = resolveCurrentDashboard(records, currentId, userId);
+  const runtimeQuery = useQuery({
+    queryKey: sessionQueryKey(sessionScope, "analytics-dashboard-runtime", current?.id ?? null),
+    enabled: current?.status === "published",
+    initialData: () => getDashboardRuntimeInitialData(current?.id ?? null),
+    retry: false,
+    queryFn: async () => {
+      const record = await getDashboardRuntime(current!.id);
+      if (!record) throw new Error("未找到运行态大屏");
+      return record;
+    }
+  });
   const versions = [...(current?.versions ?? [])].sort((left, right) => right.version - left.version);
   const shareLink = current ? library.shareLinks[current.id] : undefined;
 
@@ -203,11 +218,23 @@ export function DashboardPage() {
             ) : null}
           </p>
           <section
-            className="dashboard-current__stage xs-page-enter"
+            className={`dashboard-current__stage xs-page-enter${current.status === "published" && runtimeQuery.isLoading ? " dashboard-current__stage--loading" : ""}`}
             style={xsEnterStep(2)}
             aria-label={`当前看板：${current.schema.title}`}
           >
-            <DashboardRuntimeIsland record={current} fullscreen={false} />
+            {current.status !== "published" ? (
+              <DashboardRuntimeIsland record={current} fullscreen={false} />
+            ) : runtimeQuery.isLoading ? (
+              <div className="dashboard-runtime-island__state" role="status" aria-label="正在加载看板数据">正在加载看板数据…</div>
+            ) : runtimeQuery.isError || !runtimeQuery.data ? (
+              <XsEmptyState
+                tone="error"
+                title="看板数据暂不可用"
+                description={runtimeQuery.error instanceof Error ? runtimeQuery.error.message : "未找到运行态大屏"}
+                actionLabel="重试"
+                onAction={() => void runtimeQuery.refetch()}
+              />
+            ) : <DashboardRuntimeIsland record={runtimeQuery.data} fullscreen={false} />}
           </section>
         </>
       )}

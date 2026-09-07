@@ -287,3 +287,66 @@ describe("dataHubQueryAssetTargetService", () => {
     ]);
   });
 });
+
+describe("completed data child answers", () => {
+  function childResult(summary?: string) {
+    return projectDataHubExecutionEvents([
+      { type: "agent_start", sessionId: "root" },
+      { type: "subagent_exposed", sessionId: "child", parentSessionId: "root", content: { sessionId: "child", agentId: "ask-data" } },
+      { type: "table", sessionId: "child", parentSessionId: "root", content: { columns: ["数量"], rows: [[12]] } },
+      { type: "text", sessionId: "child", parentSessionId: "root", content: "共12份" },
+      { type: "done", sessionId: "child", parentSessionId: "root", content: summary ? { summary } : {} }
+    ], { mainSessionId: "root" });
+  }
+
+  it("retains short nonempty text alongside a returned table", () => {
+    expect(getDataHubChildAnswerBlocks(childResult()).map((block) => block.content)).toEqual(["共12份"]);
+  });
+
+  it("prefers terminal summary over a streamed draft even when the child has a table", () => {
+    expect(getDataHubChildAnswerBlocks(childResult("复核后共13份")).map((block) => block.content)).toEqual(["复核后共13份"]);
+  });
+
+  it.each(["error", "cancelled", "running"] as const)("does not lift %s child text or summary", (status) => {
+    const projection = childResult("共13份");
+    projection.subagentSessions[0].status = status;
+    projection.subagentSessions[0].finished = status !== "running";
+    expect(getDataHubChildAnswerBlocks(projection)).toEqual([]);
+  });
+
+  it("does not lift a failed done payload", () => {
+    const projection = childResult("部分草稿");
+    projection.subagentSessions[0].done = { failed: true, summary: "部分草稿" };
+    expect(getDataHubChildAnswerBlocks(projection)).toEqual([]);
+  });
+});
+
+it("strips child summary protocol markers and drops marker-only child answers", () => {
+  const projection = projectDataHubExecutionEvents([
+    { type: "subagent_exposed", sessionId: "child", parentSessionId: "root", content: { sessionId: "child" } },
+    { type: "text", sessionId: "child", parentSessionId: "root", content: "</mm:think>" },
+    { type: "done", sessionId: "child", parentSessionId: "root", content: { summary: "</mm:think>" } }
+  ], { mainSessionId: "root" });
+  expect(getDataHubChildAnswerBlocks(projection)).toEqual([]);
+  projection.subagentSessions[0].done = { summary: "<mm:think>内部推理</mm:think>正式结果" };
+  expect(getDataHubChildAnswerBlocks(projection)).toEqual([{ content: "正式结果" }]);
+});
+
+it("cleans fragmented child thinking before returning streamed blocks", () => {
+  const projection = projectDataHubExecutionEvents([
+    { type: "subagent_exposed", sessionId: "child", parentSessionId: "root", content: { sessionId: "child" } },
+    ...["<mm:thi", "nk>内部推理</mm:", "think>合同共12份"].map((content) => ({ type: "text", sessionId: "child", parentSessionId: "root", replyId: "reply", content })),
+    { type: "done", sessionId: "child", parentSessionId: "root", content: {} }
+  ], { mainSessionId: "root" });
+  expect(getDataHubChildAnswerBlocks(projection)).toEqual([expect.objectContaining({ content: "合同共12份", replyId: "reply" })]);
+});
+
+it("cleans separate child model-call envelopes without retaining the raw block", () => {
+  const projection = projectDataHubExecutionEvents([
+    { type: "subagent_exposed", sessionId: "child", parentSessionId: "root", content: { sessionId: "child" } },
+    { type: "text", sessionId: "child", parentSessionId: "root", replyId: "first", content: "先查询。" },
+    { type: "text", sessionId: "child", parentSessionId: "root", replyId: "second", content: "</mm:think>正式答案" },
+    { type: "done", sessionId: "child", parentSessionId: "root", content: {} }
+  ], { mainSessionId: "root" });
+  expect(getDataHubChildAnswerBlocks(projection).map((block) => block.content).join("")).toBe("先查询。正式答案");
+});

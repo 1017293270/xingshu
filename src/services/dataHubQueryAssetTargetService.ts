@@ -1,5 +1,6 @@
+import { cleanDataHubAnswerBlocks } from "./dataHubThinkingEnvelope";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
-import { normalizeDataHubTableResult } from "@/services/dataHubAskDataPresenter";
+import { normalizeDataHubTableResult, resolveDataHubFinalAnswer } from "@/services/dataHubAskDataPresenter";
 import { dedupeDataHubAnswerBlocks } from "@/services/dataHubAnswerDedupe";
 import type {
   AskArtifactRef,
@@ -182,28 +183,33 @@ export function getDataHubChildAnswerBlocks(
   const blocks: DataHubContentBlock[] = [];
 
   for (const session of projection.subagentSessions) {
-    if (session.tableResults.length > 0) {
+    if (session.status !== "done" || session.error || session.done?.failed === true) {
       continue;
     }
-    if (session.status !== "done" && !session.finished) {
-      continue;
-    }
-
+    const sessionBlocks: DataHubContentBlock[] = [];
     for (const card of session.cards) {
       for (const block of card.blocks) {
         if (block.isThinking || (block.type !== "text" && block.type !== "content")) {
           continue;
         }
         const content = readExecutionBlockText(block.content);
-        if (content.length < 8) {
+        if (!content.trim()) {
           continue;
         }
-        blocks.push({
+        sessionBlocks.push({
           content,
           replyId: block.replyId,
           modelCallIndex: block.modelCallIndex
         });
       }
+    }
+    const streamedBlocks = dedupeDataHubAnswerBlocks(cleanDataHubAnswerBlocks(sessionBlocks).blocks);
+    const streamedText = streamedBlocks.map((block) => block.content).join("");
+    const answer = resolveDataHubFinalAnswer(session.done?.summary, streamedText, false, {
+      keepRicherStreamedAnswer: session.done?.mode === "agent" || session.done?.adaptiveTeam === true
+    });
+    if (answer) {
+      blocks.push(...(answer === streamedText ? streamedBlocks : [{ content: answer }]));
     }
   }
 

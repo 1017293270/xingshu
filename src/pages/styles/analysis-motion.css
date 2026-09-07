@@ -10,6 +10,9 @@
 }
 
 .analysis-task-dynamics,
+.analysis-card > .datahub-process-dock,
+.analysis-card > .datahub-business-explanation,
+.analysis-card > .analysis-output,
 .analysis-card__status-copy,
 .reasoning-block:not([hidden]),
 .analysis-result-stage > *,
@@ -414,6 +417,13 @@
   background: #f2f7ff;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
+}
+
+.xs-safe-markdown button.xs-safe-markdown__image-fallback {
+  border: 1px solid var(--xs-border);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .xs-safe-markdown code {

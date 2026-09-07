@@ -1,13 +1,16 @@
 import { ArrowSquareOut, CaretLeft, CaretRight, DownloadSimple, FileText, X } from "@phosphor-icons/react";
 import { Button, Spin } from "antd";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { XsIconTile } from "@/components/xs/XsIconTile";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
+import { loadDataHubKnowledgeImage } from "@/services/dataHubKnowledgeService";
 import type { DataHubKnowledgeDocument } from "@/types/dataHub";
+import "./styles/cloud.css";
 
 type CloudDocumentPreviewProps = {
   open: boolean;
+  knowledgeBaseId?: string;
   previewDocument: DataHubKnowledgeDocument | null;
   documents: DataHubKnowledgeDocument[];
   markdown?: string;
@@ -61,6 +64,7 @@ export function isInlinePdfPreview(contentType?: string) {
 
 export function CloudDocumentPreview({
   open,
+  knowledgeBaseId,
   previewDocument,
   documents,
   markdown,
@@ -79,6 +83,11 @@ export function CloudDocumentPreview({
   const onSelectRef = useRef(onSelect);
   onCloseRef.current = onClose;
   onSelectRef.current = onSelect;
+  const resolveImage = useCallback((src: string, signal: AbortSignal) => (
+    knowledgeBaseId && previewDocument
+      ? loadDataHubKnowledgeImage(knowledgeBaseId, previewDocument, src, signal)
+      : Promise.resolve(null)
+  ), [knowledgeBaseId, previewDocument]);
 
   const openable = documents.filter(canBrowseKnowledgeDocument);
   const currentIndex = previewDocument
@@ -291,7 +300,7 @@ export function CloudDocumentPreview({
               />
             ) : markdown ? (
               <article className="cloud-preview__markdown" aria-label={`${previewDocument.title} Markdown 预览`}>
-                <XsSafeMarkdown content={markdown} />
+                <XsSafeMarkdown key={`${knowledgeBaseId}:${previewDocument.id}`} content={markdown} resolveImage={resolveImage} />
               </article>
             ) : (
               <div className="cloud-preview__state">

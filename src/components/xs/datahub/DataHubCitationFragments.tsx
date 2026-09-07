@@ -8,7 +8,7 @@ import {
   type DataHubKnowledgeChunk
 } from "@/services/dataHubKnowledgeService";
 import type { DataHubCitationDocument } from "@/types/dataHub";
-import { citationDisplayTitle, citationLocationText } from "./citationLabels";
+import { citationDisplayTitle, citationKnowledgeBaseLabel, citationLocationText } from "./citationLabels";
 
 export type DataHubCitationFragmentsProps = {
   open: boolean;
@@ -133,7 +133,7 @@ export function DataHubCitationFragments({
 
   const title = citation ? citationDisplayTitle(citation) : "";
   const location = citation
-    ? [citation.kbName, citationLocationText(citation)].filter(Boolean).join(" · ")
+    ? [citationKnowledgeBaseLabel(citation), citationLocationText(citation)].filter(Boolean).join(" · ")
     : "";
   const countText = keyword.trim()
     ? `${visibleChunks.length} / ${chunks.length} 个片段`
@@ -160,9 +160,10 @@ export function DataHubCitationFragments({
         <div className="knowledge-citation-fragments__footer">
           <Button
             icon={<ArrowSquareOut size={15} aria-hidden="true" />}
-            disabled={!citation?.sourceAvailable}
+            disabled={!citation?.sourceAvailable || !onOpen}
             onClick={() => {
               if (citation) {
+                onClose();
                 onOpen?.(citation);
               }
             }}

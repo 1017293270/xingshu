@@ -29,6 +29,33 @@ describe("normalizeDataHubClarification", () => {
     expect(normalizeDataHubClarification(legacyCard)).toEqual(legacyCard);
   });
 
+  it("accepts native label/value options and submits the backend value", () => {
+    const normalized = normalizeDataHubClarification({
+      ...nativeCard,
+      options: [{ label: "客户区域", value: "customer-region" }]
+    });
+    expect(normalized).toEqual({ ...nativeCard, options: [{ label: "客户区域", value: "customer-region" }] });
+    expect(clarificationAnswerOf(normalized!.options[0])).toBe("customer-region");
+  });
+
+  it("accepts label-equal values and the 500-character value boundary without changing display labels", () => {
+    const options = [{ label: "客户区域", value: "客户区域" }, { label: "详细口径", value: "值".repeat(500) }];
+    const normalized = normalizeDataHubClarification({ ...nativeCard, options });
+    expect(normalized?.options).toEqual(options);
+    expect(clarificationAnswerOf(normalized!.options[0])).toBe("客户区域");
+    expect(clarificationAnswerOf(normalized!.options[1])).toHaveLength(500);
+  });
+
+  it.each([null, 123, true, {}, [], "", "   ", "值".repeat(501)])("rejects invalid native value %#", (value) => {
+    expect(normalizeDataHubClarification({ ...nativeCard, options: [{ label: "客户区域", value }] })).toBeNull();
+  });
+
+  it("keeps native and legacy option key boundaries separate", () => {
+    expect(normalizeDataHubClarification({ ...nativeCard, options: [{ label: "客户区域", value: "region", internal: true }] })).toBeNull();
+    expect(normalizeDataHubClarification({ ...nativeCard, options: [{ label: "客户区域", value: "region", reply: "legacy" }] })).toBeNull();
+    expect(normalizeDataHubClarification({ ...legacyCard, options: [{ label: "客户区域", reply: "按客户区域", value: "region" }] })).toBeNull();
+  });
+
   it("unwraps the event envelope and the nested JSON string DataHub sometimes sends", () => {
     expect(normalizeDataHubClarification({ type: "clarification", data: nativeCard })).toEqual(nativeCard);
     expect(normalizeDataHubClarification(JSON.stringify(nativeCard))).toEqual(nativeCard);

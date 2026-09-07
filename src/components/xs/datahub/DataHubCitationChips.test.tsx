@@ -111,6 +111,20 @@ describe("DataHubCitationChips", () => {
     await waitFor(() => expect(screen.getByText("暂无切块制品")).toBeInTheDocument());
   });
 
+  it("同名文档按知识库 ID 独立分组，缺少名称时不虚构企业知识库", () => {
+    const { container } = render(
+      <DataHubCitationChips defaultCollapsed={false} onOpen={vi.fn()} citations={[
+        citation({ kbId: "7", kbName: "同名库" }),
+        citation({ kbId: "8", kbName: "同名库" }),
+        citation({ kbId: "9", kbName: undefined })
+      ]} />
+    );
+    expect(container.querySelectorAll(".knowledge-citations__group")).toHaveLength(3);
+    expect(screen.getAllByText("同名库")).toHaveLength(2);
+    expect(screen.getByText("来源知识库")).toBeInTheDocument();
+    expect(screen.queryByText("企业知识库")).not.toBeInTheDocument();
+  });
+
   it("citationLocationText 单独缺章或缺页都能出徽标，全缺为空", () => {
     expect(citationLocationText(citation({ pageNumber: "3" }))).toBe("第3页");
     expect(citationLocationText(citation({ chapter: "采购管理" }))).toBe("采购管理");

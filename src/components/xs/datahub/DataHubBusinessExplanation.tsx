@@ -1,14 +1,12 @@
 import {
-  CaretDown,
   CaretRight,
   CheckCircle,
   FileText,
-  ListChecks,
-  MagnifyingGlass,
+  Database,
   Quotes
 } from "@phosphor-icons/react";
 import { Modal } from "antd";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import {
   buildBusinessNarrative,
@@ -18,6 +16,7 @@ import {
 } from "@/components/xs/datahub/businessNarrative";
 import { formatDataHubCitationFragment } from "@/services/dataHubFormat";
 import type { DataHubBusinessDocument, DataHubBusinessTrace } from "@/types/dataHub";
+import { useNow } from "./useNow";
 import "../../../pages/styles/datahub-execution.css";
 
 export type DataHubBusinessExplanationProps = {
@@ -30,8 +29,12 @@ export type DataHubBusinessExplanationProps = {
   knowledgeBases?: string[];
   filters?: string[];
   dataAsOf?: string;
-  /** 结束后折叠头展示「用时X秒」。 */
+  /** 结束后折叠头展示本阶段实际耗时。 */
   durationMs?: number;
+  startedAt?: number;
+  /** 数据结果以完整表格下拉展示，替代重复的表格摘要卡；文档来源仍保留。 */
+  resultTables?: ReactNode;
+  children?: ReactNode;
 };
 
 function unique(values: Array<string | undefined>) {
@@ -87,9 +90,14 @@ export function DataHubBusinessExplanation({
   knowledgeBases = [],
   filters = [],
   dataAsOf,
-  durationMs
+  durationMs,
+  startedAt,
+  resultTables,
+  children
 }: DataHubBusinessExplanationProps) {
   const bodyId = useId();
+  const now = useNow(1000, status === "running" && startedAt != null);
+  const elapsedMs = status === "running" && startedAt != null ? Math.max(0, now - startedAt) : durationMs;
   const [expanded, setExpanded] = useState(status === "running");
   const [selectedDocument, setSelectedDocument] = useState<DataHubBusinessDocument>();
   /* running 自动展开、结束自动收成一行；用户点过折叠头后交还控制权（有粘性）。 */
@@ -116,14 +124,17 @@ export function DataHubBusinessExplanation({
     dataAsOf
   });
   const stateLabel = status === "running"
-    ? "执行中"
+    ? ""
     : status === "done"
       ? "已完成"
       : status === "cancelled"
         ? "已停止"
         : "失败";
-  const { how, found } = buildBusinessNarrative({ trace: content, kind, status, question: intent });
+  const { process, found, statusMessage } = buildBusinessNarrative({ trace: content, kind, status, question: intent });
+  const findings = resultTables ? found.filter((item) => item.document) : found;
   const detailRows = scopeDetailRows(content);
+  const stateText = [stateLabel, elapsedMs != null ? `${Math.max(0, Math.round(elapsedMs / 1000))}秒` : ""]
+    .filter(Boolean);
 
   return (
     <section className="datahub-business-explanation" aria-label="查询过程" data-status={status}>
@@ -131,6 +142,7 @@ export function DataHubBusinessExplanation({
         <button
           type="button"
           className="datahub-business-explanation__summary"
+          aria-label={`查询过程 （${stateText.join("，") || "进行中"}）`}
           aria-controls={bodyId}
           aria-expanded={expanded}
           onClick={() => {
@@ -138,14 +150,9 @@ export function DataHubBusinessExplanation({
             setExpanded((value) => !value);
           }}
         >
-          <span><ListChecks size={16} />查询过程</span>
-          <small>
-            {stateLabel}
-            {status !== "running" && durationMs != null
-              ? ` · 用时 ${Math.max(1, Math.round(durationMs / 1000))} 秒`
-              : ""}
-          </small>
-          <CaretDown size={15} aria-hidden="true" />
+          <CaretRight size={12} aria-hidden="true" />
+          <span className="datahub-phase-title">查询过程</span>
+          <small>{stateText.join(" · ") || "进行中"}</small>
         </button>
       </header>
       <div
@@ -155,58 +162,97 @@ export function DataHubBusinessExplanation({
       >
         <div className="xs-datahub-collapse__inner">
           {bodyMountedRef.current ? <div className="datahub-business-explanation__body">
-            {/* __query-rules 是视觉 QA 用来定位口径区块的老类名，保留给 tests/visual。 */}
-            {how.length ? (
-              <section
-                className="datahub-business-explanation__section datahub-business-explanation__query-rules"
-                aria-label="怎么查"
-              >
-                <h3><MagnifyingGlass size={16} weight="duotone" aria-hidden="true" />怎么查</h3>
-                <div className="datahub-business-explanation__prose">
-                  {how.map((sentence, index) => (
-                    <p
-                      key={`${index}-${sentence}`}
-                      data-state={status === "running" && index === how.length - 1
-                        ? "running"
-                        : undefined}
-                    >
-                      {sentence}
-                    </p>
-                  ))}
-                </div>
+            {process.length > 0 ? (
+              <section className="datahub-business-explanation__query-rules" aria-label="查询条件">
+                {process.map((group) => {
+                  const fields = <dl className="datahub-business-explanation__fields">
+                      {group.rows.map((row) => (
+                        <div className="datahub-business-explanation__field" key={row.label}>
+                          <dt>{row.label}</dt>
+                          <dd>
+                            <ul className={`datahub-business-explanation__values${["知识库", "数据源", "数据表"].includes(row.label) ? " datahub-business-explanation__values--sources" : ""}`}>
+                              {row.values.map((value) => <li key={value} title={value}>{value}</li>)}
+                            </ul>
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>;
+                  return (
+                    <div className="datahub-business-explanation__query-group" key={group.key}>
+                      {group.title && process.length > 1 ? <p className="datahub-business-explanation__query-title">{group.title}</p> : null}
+                      {group.steps?.length ? <>
+                        <ol className="datahub-business-explanation__steps" aria-label="查询步骤">
+                          {group.steps.map((step, index) => (
+                            <li key={`${index}-${step.title}`}>
+                              <span className="datahub-business-explanation__step-index" aria-hidden="true">{index + 1}</span>
+                              <div>
+                                <h4>{step.title}</h4>
+                                <p>{step.description}</p>
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                        <details className="datahub-business-explanation__query-details">
+                          <summary><CaretRight size={12} aria-hidden="true" />查看查询细节</summary>
+                          {fields}
+                        </details>
+                      </> : fields}
+                    </div>
+                  );
+                })}
               </section>
             ) : null}
 
-            {found.length ? (
-              <section className="datahub-business-explanation__section" aria-label="查到了什么">
-                <h3><CheckCircle size={16} weight="duotone" aria-hidden="true" />查到了什么</h3>
+            <section className="datahub-business-explanation__results" aria-label="查询结果">
+              {(!resultTables || findings.length > 0) ? <header className="datahub-business-explanation__results-head">
+                <h3><CheckCircle size={16} aria-hidden="true" />查询结果</h3>
+                {findings.length > 0 ? <span>{findings.length} {findings.every((item) => item.document) ? "份文档" : "项结果"}</span> : null}
+              </header> : null}
+              {resultTables}
+              {findings.length > 0 ? (
                 <ul className="datahub-business-explanation__findings">
-                  {found.map((finding) => (
-                    <li key={finding.key}>
-                      {finding.document ? (
-                        <button
-                          type="button"
-                          aria-label={`查看来源片段：${finding.document.docName}`}
-                          onClick={() => setSelectedDocument(finding.document)}
-                        >
-                          <span className="datahub-business-explanation__document-icon" aria-hidden="true">
-                            <FileText size={18} weight="duotone" />
-                          </span>
-                          <span>{finding.text}</span>
-                          <span className="datahub-business-explanation__document-action">
-                            查看片段<CaretRight size={14} aria-hidden="true" />
-                          </span>
-                        </button>
-                      ) : (
-                        <p data-state={status === "running" ? "running" : undefined}>
-                          {finding.text}
-                        </p>
-                      )}
-                    </li>
-                  ))}
+                  {findings.map((finding, findingIndex) => {
+                    const content = (
+                      <>
+                        <span className="datahub-business-explanation__result-icon" aria-hidden="true">
+                          {finding.document ? <FileText size={20} /> : <Database size={20} />}
+                        </span>
+                        <span className="datahub-business-explanation__result-copy">
+                          <span className="datahub-business-explanation__result-title" title={finding.title}>{finding.title}</span>
+                          {finding.metadata.length > 0 ? (
+                            <span className="datahub-business-explanation__result-meta" id={`${bodyId}-source-${findingIndex}`}>
+                              {finding.metadata.map((item, index) => <span key={`${index}-${item}`} title={item}>{item}</span>)}
+                            </span>
+                          ) : null}
+                          {finding.preview?.length ? (
+                            <span className="datahub-business-explanation__preview">
+                              {finding.preview.map((item, index) => (
+                                <span key={`${index}-${item.label}`}>
+                                  <span>{item.label}</span><span>{item.value}</span>
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                        </span>
+                      </>
+                    );
+                    return (
+                      <li key={finding.key}>
+                        {finding.document ? (
+                          <button type="button" className="datahub-business-explanation__result"
+                            aria-label={`查看来源片段：${finding.document.docName}`}
+                            aria-describedby={finding.metadata.length ? `${bodyId}-source-${findingIndex}` : undefined}
+                            onClick={() => setSelectedDocument(finding.document)}>
+                            {content}
+                            <span className="datahub-business-explanation__document-action">查看引用<CaretRight size={14} aria-hidden="true" /></span>
+                          </button>
+                        ) : <div className="datahub-business-explanation__result">{content}</div>}
+                      </li>
+                    );
+                  })}
                 </ul>
-              </section>
-            ) : null}
+              ) : !resultTables ? <p className="datahub-business-explanation__empty" role="status">{statusMessage}</p> : null}
+            </section>
 
             {detailRows.length ? (
               <details className="datahub-business-explanation__scope-detail">
@@ -221,6 +267,7 @@ export function DataHubBusinessExplanation({
                 </dl>
               </details>
             ) : null}
+            {children}
           </div> : null}
         </div>
       </div>

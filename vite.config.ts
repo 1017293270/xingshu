@@ -145,6 +145,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     server: {
+      watch: { ignored: ["**/outputs/**", "**/.codex-tmp/**"] },
       proxy: {
         // Official-document must be registered before /api so Vite can strip
         // browser Origin before the request reaches the Java CORS filter.

@@ -1,3 +1,5 @@
+import { projectDataHubExecutionEvents } from "@/services/dataHubExecutionProjector";
+import { getTableGenerationProgress } from "./tableGenerationProgress";
 import { describe, expect, it } from "vitest";
 import {
   buildTableAgentTrace,
@@ -152,4 +154,13 @@ describe("formatTraceDuration", () => {
     expect(formatTraceDuration(0)).toBe("");
     expect(formatTraceDuration(undefined)).toBe("");
   });
+});
+
+it("does not present a recoverable activity warning as a failed run", () => {
+  const projection = projectDataHubExecutionEvents([{ type: "activity", content: {
+    activityId: "confirm", kind: "tool", label: "校验回答", status: "warning", summary: "回答校验未通过，正在修正"
+  } }]);
+  const turn = { ...createTurn({ status: "streaming" }), execution: projection };
+  expect(buildTableAgentTrace(turn).steps[0]).toMatchObject({ status: "warning", detail: "回答校验未通过，正在修正" });
+  expect(getTableGenerationProgress(turn)).toBe("正在修正：校验回答");
 });

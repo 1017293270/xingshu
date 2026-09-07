@@ -7,6 +7,7 @@ import {
   CURRENT_DASHBOARD_STORAGE_KEY,
   resolveCurrentDashboard
 } from "@/features/dashboard/currentDashboard";
+import * as dashboardAnalytics from "@/services/dashboardAnalyticsService";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
@@ -18,6 +19,7 @@ vi.mock("@/features/dashboardStudio/DashboardRuntimeIsland", () => ({
   DashboardRuntimeIsland: ({ record, fullscreen }: { record: DashboardRecord; fullscreen?: boolean }) => (
     <div data-testid="dashboard-runtime" data-fullscreen={String(Boolean(fullscreen))}>
       {record.schema.title} 运行态
+      <span data-testid="runtime-rows">{Object.values(record.publishedSchema?.dataBindings ?? {}).reduce((count, binding) => count + binding.table.rows.length, 0)}</span>
     </div>
   )
 }));
@@ -104,6 +106,31 @@ describe("DashboardPage", () => {
     expect(screen.getAllByRole("button", { name: "看板广场" })).toHaveLength(2);
     expect(screen.queryByTestId("dashboard-runtime")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "当前看板设置" })).not.toBeInTheDocument();
+  });
+
+  it("loads hydrated runtime data instead of rendering the empty list snapshot", async () => {
+    const listed = createStoredDashboard("经营驾驶舱", "hydrated", { published: true });
+    const runtime = structuredClone(listed);
+    runtime.publishedSchema!.dataBindings = {
+      revenue: { id: "revenue", label: "收入", mode: "snapshot", status: "success", table: {
+        columns: [{ key: "revenue", title: "收入", type: "number" }], rows: [{ revenue: 128 }], totalRows: 1
+      } }
+    };
+    vi.spyOn(dashboardAnalytics, "getDashboardRuntimeInitialData").mockReturnValue(undefined);
+    const load = vi.spyOn(dashboardAnalytics, "getDashboardRuntime").mockResolvedValue(runtime);
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("runtime-rows")).toHaveTextContent("1"));
+    expect(load).toHaveBeenCalledWith(listed.id);
+  });
+
+  it("does not present the list snapshot as a live dashboard when runtime loading fails", async () => {
+    createStoredDashboard("经营驾驶舱", "unavailable", { published: true });
+    vi.spyOn(dashboardAnalytics, "getDashboardRuntimeInitialData").mockReturnValue(undefined);
+    vi.spyOn(dashboardAnalytics, "getDashboardRuntime").mockRejectedValue(new Error("数据权限已撤回"));
+    renderPage();
+    expect(await screen.findByText("数据权限已撤回")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-runtime")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
   it("opens the dashboard square from the header toolbar", async () => {

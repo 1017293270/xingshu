@@ -11,6 +11,7 @@ import type {
 } from "./officialDocumentFullDraft";
 import {
   buildOfficialDocumentReferenceWritingPlan,
+  reviewOfficialDocumentDraftFacts,
   buildOfficialDocumentPreviewLines,
   mapResearchResultsToReferenceSections,
   MAX_REFERENCE_MATERIALS_CHARS,
@@ -1064,4 +1065,53 @@ describe("buildOfficialDocumentPreviewLines", () => {
   it("returns nothing for an empty stream", () => {
     expect(buildOfficialDocumentPreviewLines("", fixedFields)).toEqual([]);
   });
+});
+
+it("flags the exact unsupported early sign-in instruction without rejecting or rewriting the draft", () => {
+  const requirement = "仅使用这些测试事实：测试部门于2026年9月10日上午10点在测试会议室召开系统验收会；议程是功能、流式输出、结果展示三项检查；参会人员为测试小组；落款测试部门，日期2026年9月7日。约300字。";
+  const plan = buildOfficialDocumentReferenceWritingPlan({
+    referenceDraft: { id: "template", title: "会议通知", templateName: "通知" },
+    content: referenceContent([]), templateNodes, userRequirement: requirement
+  });
+  const answer = "会议定于2026年9月10日上午10:00召开，请参会人员提前十五分钟到场签到。";
+  const issues = reviewOfficialDocumentDraftFacts(answer, plan.writingContext);
+  expect(issues).toHaveLength(1);
+  expect(issues[0].additions).toEqual(expect.arrayContaining(["十五分钟", "签到"]));
+  expect(issues[0].sentence).toBe(answer);
+  expect(issues[0].additions).not.toContain("10:00");
+  expect(plan.writingContext.outputRules).toMatchObject({
+    factSourceRule: expect.stringContaining("不得新增日期、时间、数量"),
+    missingFactRule: expect.stringContaining("提前签到")
+  });
+});
+
+it("accepts supplied facts and number formatting while ignoring template style examples as evidence", () => {
+  const context = {
+    sourceBlocks: [{ text: "2026年9月10日上午10点开会，提前15分钟签到。" }],
+    referenceMaterials: [{ content: "请携带2份材料。" }],
+    researchResults: [{ status: "SUCCESS", summary: "共有30人。" }, { status: "FAILED", summary: "9人缴纳100元。" }],
+    styleSamples: ["请缴纳100元。"]
+  };
+  expect(reviewOfficialDocumentDraftFacts("会议2026年9月10日上午10:00开始，请提前十五分钟签到，携带两份材料，共30人。", context)).toEqual([]);
+  expect(reviewOfficialDocumentDraftFacts("请缴纳100元。", context)[0].additions).toEqual(expect.arrayContaining(["100元", "缴纳"]));
+});
+
+it("checks date changes and leaves section ordinals and spacing-only number changes alone", () => {
+  const context = { sourceBlocks: [{ text: "2026年9月10日开会，请提前15分钟签到。" }] };
+  expect(reviewOfficialDocumentDraftFacts("第一项：功能检查。请提前十五 分钟签到。", context)).toEqual([]);
+  expect(reviewOfficialDocumentDraftFacts("会议于2026年9月11日举行。", context)[0].additions).toContain("2026年9月11日");
+});
+
+it("does not use unrelated earlier facts when the user explicitly limits the facts", () => {
+  expect(reviewOfficialDocumentDraftFacts("请提前十五分钟签到。", {
+    sourceBlocks: [{ text: "仅使用这些测试事实：上午10点开会。" }],
+    referenceMaterials: [{ content: "以前要求提前15分钟签到。" }]
+  }, ["以前要求提前15分钟签到。"]).at(0)?.additions).toContain("十五分钟");
+});
+
+it("distinguishes morning from afternoon while accepting the equivalent 24-hour clock", () => {
+  const context = { sourceBlocks: [{ text: "上午10点开会。" }] };
+  expect(reviewOfficialDocumentDraftFacts("会议上午10:00开始。", context)).toEqual([]);
+  expect(reviewOfficialDocumentDraftFacts("会议下午10:00开始。", context)[0].additions).toContain("下午10:00");
+  expect(reviewOfficialDocumentDraftFacts("会议22:00开始。", { sourceBlocks: [{ text: "晚上十点开会。" }] })).toEqual([]);
 });

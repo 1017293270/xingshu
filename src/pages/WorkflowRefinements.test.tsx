@@ -157,7 +157,7 @@ describe("workflow refinements", () => {
     expect(screen.getByRole("button", { name: /继续制表/ })).toBeDisabled();
     expect(screen.getByRole("region", { name: "继续制表" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent("正在生成结果表");
-    expect(await screen.findByText("已定位数据源：经营分析库")).toBeInTheDocument();
+    expect(await screen.findByText("经营分析库", { exact: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "停止生成" })).toBeEnabled();
 
     fireEvent.keyDown(screen.getByRole("textbox", { name: "继续追问" }), { key: "Enter", code: "Enter" });

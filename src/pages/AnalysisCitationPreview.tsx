@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { citationDisplayTitle } from "@/components/xs/datahub";
+import { citationDisplayTitle, citationIdentity } from "@/components/xs/datahub/citationLabels";
 import {
   loadDataHubCitationDocument,
   loadDataHubKnowledgeMarkdown
@@ -8,7 +8,7 @@ import type { DataHubCitationDocument, DataHubKnowledgeDocument } from "@/types/
 import { CloudDocumentPreview } from "./CloudDocumentPreview";
 
 export function citationPreviewId(citation: DataHubCitationDocument) {
-  return `${citation.docId}::${citation.docKey ?? ""}`;
+  return citationIdentity(citation);
 }
 
 function toKnowledgeDocument(citation: DataHubCitationDocument): DataHubKnowledgeDocument {
@@ -73,43 +73,41 @@ export function AnalysisCitationPreview({
     setSourceType("");
 
     const citation = active;
-    void (async () => {
-      try {
-        const access = await loadDataHubCitationDocument(citation);
-        if (cancelled) {
-          access.revoke?.();
-          return;
-        }
-        if (access.contentType === "application/pdf") {
-          sourceRevokeRef.current = access.revoke;
-          setSourceUrl(access.url);
-          setSourceType(access.contentType);
-          setLoading(false);
-          return;
-        }
+    let hasContent = false;
+    // 已解析内容和原文独立读取，避免大文件下载阻塞可读内容。
+    const sourceRequest = loadDataHubCitationDocument(citation).then((access) => {
+      if (cancelled) {
         access.revoke?.();
-      } catch {
-        // PDF 原文不可用时再回退到已解析 Markdown，与云盘知识浏览一致。
+        return;
       }
-
-      try {
-        const { markdown: content } = await loadDataHubKnowledgeMarkdown(
-          citation.kbId,
-          toKnowledgeDocument(citation)
-        );
-        if (cancelled) {
-          return;
-        }
+      if (access.contentType === "application/pdf") {
+        hasContent = true;
+        sourceRevokeRef.current = access.revoke;
+        setSourceUrl(access.url);
+        setSourceType(access.contentType);
+        setLoading(false);
+      } else {
+        access.revoke?.();
+      }
+    });
+    const markdownRequest = loadDataHubKnowledgeMarkdown(
+      citation.kbId,
+      toKnowledgeDocument(citation)
+    ).then(({ markdown: content }) => {
+      if (!cancelled && content.trim()) {
+        hasContent = true;
         setMarkdown(content);
         setLoading(false);
-      } catch (loadError: unknown) {
-        if (cancelled) {
-          return;
-        }
-        setLoading(false);
-        setError(loadError instanceof Error ? loadError.message : "原文读取失败，请稍后重试");
       }
-    })();
+    });
+    void Promise.allSettled([sourceRequest, markdownRequest]).then((results) => {
+      if (cancelled || hasContent) {
+        return;
+      }
+      setLoading(false);
+      const failure = results[1].status === "rejected" ? results[1].reason : undefined;
+      setError(failure instanceof Error ? failure.message : "原文读取失败，请稍后重试");
+    });
 
     return () => {
       cancelled = true;
@@ -124,6 +122,7 @@ export function AnalysisCitationPreview({
   return (
     <CloudDocumentPreview
       open={open}
+      knowledgeBaseId={active?.kbId}
       previewDocument={activeDocument}
       documents={documents}
       markdown={markdown || undefined}

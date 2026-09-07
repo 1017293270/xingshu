@@ -29,7 +29,7 @@ describe("buildDataHubAnswerPreamble", () => {
         trace({ dataSources: ["合同库"], dataTables: ["合同明细表"] }),
         "2025 年合同总额为 1.2 亿元。"
       )
-    ).toBe("根据合同库 数据源的 合同明细表，为你查询到以下结果：");
+    ).toBe("查询依据：根据合同库 数据源的 合同明细表。");
   });
 
   it("超过三项收敛为等N项", () => {
@@ -39,7 +39,7 @@ describe("buildDataHubAnswerPreamble", () => {
         trace({ dataSources: ["A"], dataTables: ["表1", "表2", "表3", "表4"] }),
         "结果如下。"
       )
-    ).toBe("根据A 数据源的 表1、表2、表3 等 4 项，为你查询到以下结果：");
+    ).toBe("查询依据：根据A 数据源的 表1、表2、表3 等 4 项。");
   });
 
   it("素材为空不出句", () => {
@@ -57,7 +57,7 @@ describe("buildDataHubAnswerPreamble", () => {
         trace({ dataSources: ["CRM"], dataTables: ["CRM中的业务数据"] }),
         "结果"
       )
-    ).toBe("根据CRM 数据源，为你查询到以下结果：");
+    ).toBe("查询依据：根据CRM 数据源。");
   });
 
   it("答案已自带根据或依据开头时不重复", () => {
@@ -96,6 +96,20 @@ describe("buildDataHubAnswerPreamble", () => {
         }),
         "综合结论如下。"
       )
-    ).toBe("根据合同库 数据源与制度库 知识库，为你查询到以下结果：");
+    ).toBe("查询依据：根据合同库 数据源与制度库 知识库。");
   });
 });
+
+ it("uses verified query operations even when the answer starts with 根据", () => {
+    const result = buildDataHubAnswerPreamble("ASK_DATA", trace({
+      dataSources: ["合同系统"], dataTables: ["合同表"],
+      calculations: ["按合同数量降序排列"],
+      queries: [{ table: "合同表", dimensions: ["公司"],
+        measures: [{ label: "合同名称", aggregation: "去重计数" }],
+        filters: ["合同金额小于“60”"], time: [] }]
+    }), "根据查询结果，卓一排名第一。");
+    expect(result).toContain("筛选合同金额小于“60”");
+    expect(result).toContain("按公司分组");
+    expect(result).toContain("对合同名称去重计数");
+    expect(result).toContain("按合同数量降序排列");
+ });

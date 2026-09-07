@@ -130,6 +130,21 @@ async function readErrorMessage(response: Response) {
   }
 }
 
+async function loadSourcePreviewTicket(citation: DataHubCitationDocument, spaceId: number) {
+  const docId = sourceDocumentId(citation);
+  const isPdf = [citation.fileName, citation.docName, citation.docKey].some((name) => /\.pdf$/i.test(name ?? ""));
+  if (!docId || !/^\d+$/.test(citation.kbId) || !isPdf) return null;
+  const result = await requestDataHub<{ ticket?: string }>("/api/ai/rag/kb/source_document_ticket", {
+    method: "POST",
+    spaceId,
+    body: JSON.stringify({ kb_id: citation.kbId, doc_id: docId })
+  });
+  if (!result?.ticket?.trim()) return null;
+  // 短期、单文档凭证支持浏览器原生 PDF 流式阅读；登录 Token 不进入 URL。
+  const params = new URLSearchParams({ ticket: result.ticket });
+  return { url: joinDataHubUrl(`/api/ai/rag/kb/source_document_direct?${params}`), contentType: "application/pdf" };
+}
+
 export async function loadDataHubCitationDocument(
   citation: DataHubCitationDocument
 ): Promise<DataHubSourceDocumentAccess> {
@@ -145,8 +160,14 @@ export async function loadDataHubCitationDocument(
   ).catch(() => ({ mode: "proxy" as const }));
 
   if (preview.mode === "direct" && typeof preview.url === "string" && preview.url.trim()) {
-    return { url: normalizePreviewUrl(preview.url.trim()) };
+    const url = normalizePreviewUrl(preview.url.trim());
+    const isPdf = [new URL(url).pathname, citation.fileName, citation.docName, citation.docKey]
+      .some((name) => /\.pdf$/i.test(name ?? ""));
+    return { url, contentType: isPdf ? "application/pdf" : undefined };
   }
+
+  const ticket = await loadSourcePreviewTicket(citation, spaceId).catch(() => null);
+  if (ticket) return ticket;
 
   return loadDataHubSourceDocumentBlob(spaceId, citation, session.token);
 }
@@ -165,7 +186,7 @@ async function loadDataHubSourceDocumentBlob(
 
   const response = await fetch(
     joinDataHubUrl(`/api/ai/rag/kb/source_document?${params.toString()}`),
-    { headers }
+    { headers, signal: AbortSignal.timeout(120_000) }
   );
 
   if (!response.ok) {
@@ -214,6 +235,8 @@ export async function loadDataHubKnowledgeSource(
   const citation = knowledgeDocumentCitation(kbId, document);
   const { session, spaceId } = requireSourceIdentity(citation);
 
+  const ticket = await loadSourcePreviewTicket(citation, spaceId).catch(() => null);
+  if (ticket) return ticket;
   return loadDataHubSourceDocumentBlob(spaceId, citation, session.token);
 }
 
@@ -263,6 +286,64 @@ export async function loadDataHubKnowledgeMarkdown(
   }
 
   return { markdown };
+}
+
+/** MinerU 的相对图片属于当前文档制品，不能相对 SPA 根路径解析。 */
+export async function loadDataHubKnowledgeImage(
+  kbId: string,
+  document: DataHubKnowledgeDocument,
+  src: string,
+  signal: AbortSignal
+): Promise<DataHubSourceDocumentAccess | null> {
+  const value = src.trim();
+  const gateway = new URL(joinDataHubUrl("/api/ai/rag/kb/document-artifact"), window.location.origin);
+  const imageUrl = new URL(value, window.location.origin);
+  const protectedArtifact = [window.location.origin, gateway.origin].includes(imageUrl.origin)
+    && ["/api/ai/rag/kb/document-artifact", gateway.pathname].includes(imageUrl.pathname);
+  let path: string;
+  if (protectedArtifact) {
+    // Runtime 已按实际解析目录重写地址，只使用路径；身份仍绑定当前预览文档。
+    const params = imageUrl.searchParams;
+    if ((params.has("kb_id") && params.get("kb_id") !== kbId)
+      || (params.has("doc_id") && params.get("doc_id") !== document.docId)
+      || (params.has("doc_key") && document.docKey && params.get("doc_key") !== document.docKey)) {
+      throw new DataHubServiceError("图片不属于当前文档");
+    }
+    path = params.get("artifact_path") || "";
+  } else {
+    // 外部图片沿用 Markdown 的安全 URL 处理，绝不向外部地址发送空间凭据。
+    if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(value)) return null;
+    try {
+      path = decodeURIComponent(value.split(/[?#]/, 1)[0]).replace(/^\.\//, "").replace(/^\//, "");
+    } catch {
+      throw new DataHubServiceError("图片路径无效");
+    }
+    if (!/(?:^|\/)images\//.test(path)) return null;
+  }
+  if (!path || path.includes("\\") || path.includes("\0") || path.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw new DataHubServiceError("图片路径无效");
+  }
+
+  const citation = knowledgeDocumentCitation(kbId, document);
+  const { session, spaceId } = requireSourceIdentity(citation);
+  const params = sourceDocumentParams(spaceId, citation);
+  params.set("artifact_path", path);
+  const headers = new Headers({ "X-Space-Id": String(spaceId) });
+  if (session.token) headers.set("Authorization", `Bearer ${session.token}`);
+  const response = await fetch(joinDataHubUrl(`/api/ai/rag/kb/document-artifact?${params}`), {
+    headers,
+    signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+  });
+  if (!response.ok) {
+    if (response.status === 401) expireDataHubSession(session.token);
+    throw new DataHubServiceError(await readErrorMessage(response), { status: response.status });
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  signal.throwIfAborted();
+  const blob = makeSafeSourceBlob(bytes, response.headers.get("Content-Type") || "");
+  if (!blob.type.startsWith("image/")) throw new DataHubServiceError("返回内容不是可显示的图片");
+  const url = URL.createObjectURL(blob);
+  return { url, contentType: blob.type, revoke: () => URL.revokeObjectURL(url) };
 }
 
 export type DataHubKnowledgeChunk = {

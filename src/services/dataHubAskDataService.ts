@@ -120,6 +120,7 @@ function streamDataHubAgentEndpoint(
   let isDone = false;
   let isAborted = false;
   let hasTransportError = false;
+  let receivedEvents = 0;
 
   xhr.open("POST", joinDataHubUrl(path));
   xhr.setRequestHeader("Content-Type", "application/json");
@@ -142,6 +143,7 @@ function streamDataHubAgentEndpoint(
   function drain(flush = false) {
     const parsed = parseDataHubSseBlocks(eventBuffer);
     eventBuffer = parsed.rest;
+    receivedEvents += parsed.events.length;
     parsed.events.forEach((event) => handlers.onEvent(event));
 
     if (parsed.isDone && !isDone) {
@@ -153,6 +155,7 @@ function streamDataHubAgentEndpoint(
       try {
         const flushed = parseDataHubSseBlocks(`${eventBuffer}\n\n`);
         eventBuffer = flushed.rest;
+        receivedEvents += flushed.events.length;
         flushed.events.forEach((event) => handlers.onEvent(event));
         if (flushed.isDone && !isDone) {
           isDone = true;
@@ -165,6 +168,7 @@ function streamDataHubAgentEndpoint(
   }
 
   xhr.onprogress = () => {
+    if (isAborted || isDone || hasTransportError || xhr.status < 200 || xhr.status >= 300) return;
     const nextText = xhr.responseText.substring(lastProcessed);
     lastProcessed = xhr.responseText.length;
     eventBuffer += nextText;
@@ -172,7 +176,7 @@ function streamDataHubAgentEndpoint(
   };
 
   xhr.onerror = () => {
-    if (!isAborted) {
+    if (!isAborted && !isDone && !hasTransportError) {
       hasTransportError = true;
       handlers.onError?.(new Error("DataHub 流式连接失败"));
     }
@@ -183,14 +187,13 @@ function streamDataHubAgentEndpoint(
   };
 
   xhr.onloadend = () => {
-    if (isAborted || hasTransportError) {
+    if (isAborted || hasTransportError || isDone) {
       return;
     }
 
     const finalText = xhr.responseText.substring(lastProcessed);
     lastProcessed = xhr.responseText.length;
     eventBuffer += finalText;
-    drain(true);
 
     if (xhr.status === 401) {
       expireDataHubSession(session.token);
@@ -224,9 +227,12 @@ function streamDataHubAgentEndpoint(
       return;
     }
 
+    drain(true);
     if (!isDone) {
-      isDone = true;
-      handlers.onDone?.();
+      hasTransportError = true;
+      handlers.onError?.(new Error(receivedEvents
+        ? "回答未完成，连接已结束，请重试"
+        : "DataHub 未返回可用的事件流，请重试"));
     }
   };
 

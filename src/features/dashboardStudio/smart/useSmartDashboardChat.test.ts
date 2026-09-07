@@ -201,6 +201,27 @@ describe("useSmartDashboardChat", () => {
     expect(result.current.turns[0]?.candidate?.changes.length).toBeGreaterThan(0);
   });
 
+  it.each(["stop", "unmount"] as const)("does not send a model request when %s occurs during asset preview", async (action) => {
+    let resolvePreview!: (value: typeof data[string]["execution"]) => void;
+    const previewAsset = vi.fn(() => new Promise<typeof data[string]["execution"]>((resolve) => { resolvePreview = resolve; }));
+    const schema = createBlankDashboard({ title: "空板" });
+    const listAssets = vi.fn(async () => assets);
+    const { result, unmount } = renderHook(() => useSmartDashboardChat({
+      getSchema: () => schema, applySchema: vi.fn(), listAssets,
+      previewAsset, initialAssetIds: ["asset-total"]
+    }));
+    await waitFor(() => expect(result.current.assets.length).toBeGreaterThan(0));
+    act(() => { result.current.send("营收总览"); });
+    await waitFor(() => expect(previewAsset).toHaveBeenCalledOnce());
+    if (action === "stop") {
+      act(() => result.current.stop());
+      expect(result.current.busy).toBe(false);
+      expect(result.current.turns[0]?.status).toBe("cancelled");
+    } else unmount();
+    await act(async () => { resolvePreview(data["asset-total"]!.execution); });
+    expect(streamMock).not.toHaveBeenCalled();
+  });
+
   it("marks a streaming turn cancelled when stopped", async () => {
     streamMock.mockImplementation(() => new AbortController());
     const { result } = setup();

@@ -244,6 +244,7 @@ export function CloudKnowledgeDetailPage() {
       </XsAsyncPanel>
       <CloudDocumentPreview
         open={Boolean(previewDocument)}
+        knowledgeBaseId={kbId}
         previewDocument={previewDocument}
         documents={documents}
         markdown={previewMarkdown}

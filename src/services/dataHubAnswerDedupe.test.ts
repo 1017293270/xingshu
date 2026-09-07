@@ -104,6 +104,16 @@ describe("dataHubRootAnsweredAfterChildren", () => {
   it("reports no root answer when only the children spoke", () => {
     expect(dataHubRootAnsweredAfterChildren([childText])).toBe(false);
   });
+
+  it("includes terminal summaries while excluding completion-only status", () => {
+    const childSummary: DataHubStreamEvent = { ...childText, type: "done", content: { summary: "合同共6份。" } };
+    const events: DataHubStreamEvent[] = [
+      { type: "text", content: "我来帮您查询合同数量。" }, childSummary
+    ];
+    expect(dataHubRootAnsweredAfterChildren([...events, { type: "done", content: { summary: "全部任务均已完成。" } }])).toBe(false);
+    expect(dataHubRootAnsweredAfterChildren([...events, { type: "done", content: { summary: "已完成合同6份。", text: "状态说明" } }])).toBe(true);
+    expect(dataHubRootAnsweredAfterChildren([...events, { type: "done", content: { summary: "合同共6份。", failed: true } }])).toBe(false);
+  });
 });
 
 describe("dedupeDataHubAnswerBlocks", () => {
@@ -168,4 +178,26 @@ describe("dedupeDataHubAnswerBlocks", () => {
       { content: "已完成" }
     ]);
   });
+});
+
+it("does not treat split closing markers as a root answer after children", () => {
+  expect(dataHubRootAnsweredAfterChildren([
+    { type: "text", parentSessionId: "root", content: "已经完成真实查询结论" },
+    { type: "text", replyId: "reply", content: "</" },
+    { type: "text", replyId: "reply", content: "mm:think>" }
+  ])).toBe(false);
+});
+
+it.each([
+  ['```sql\nSELECT customer_id FROM orders;\n```', '```sql\nSELECT customerid FROM orders;\n```'],
+  ['使用 `customer_id` 查询合同记录。', '使用 `customerid` 查询合同记录。'],
+  ['~~~python\nprint(a > b)\n~~~', '~~~python\nprint(a  b)\n~~~'],
+  ['    SELECT customer_id FROM orders;', '    SELECT customerid FROM orders;'],
+  ['```python\nprint("a b")\n```', '```python\nprint("ab")\n```']
+])("preserves semantically distinct code: %s", (first, second) => {
+  const blocks = [{ content: first }, { content: second }];
+  expect(dedupeDataHubAnswerBlocks(blocks)).toEqual(blocks);
+  expect(dataHubAnswerCovers(first, second)).toBe(false);
+  expect(mergeRepeatedAnswerChunk(first, second)).toBeUndefined();
+  expect(dedupeDataHubAnswerBlocks([{ content: first }, { content: first }])).toHaveLength(1);
 });

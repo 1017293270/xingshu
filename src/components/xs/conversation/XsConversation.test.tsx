@@ -263,6 +263,29 @@ describe("XsClarifyPanel", () => {
 });
 
 describe("XsClarifyCard", () => {
+  it("shows a selected native option label instead of its internal value", () => {
+    render(<XsClarifyCard clarification={{ ...nativeCard,
+      options: [{ label: "客户所属区域", value: "customer-region" }], selectedAnswer: "customer-region"
+    }} />);
+    expect(screen.getByLabelText("已确认的选择")).toHaveTextContent("客户所属区域");
+    expect(screen.getByLabelText("已确认的选择")).not.toHaveTextContent("customer-region");
+  });
+
+  it("keeps unmatched free text visible instead of replacing it with an option label", () => {
+    render(<XsClarifyCard clarification={{ ...nativeCard, allowFreeText: true,
+      options: [{ label: "客户所属区域", value: "customer-region" }], selectedAnswer: " 按自定义片区统计 "
+    }} />);
+    expect(screen.getByLabelText("已确认的选择")).toHaveTextContent("按自定义片区统计");
+    expect(screen.getByLabelText("已确认的选择")).not.toHaveTextContent("客户所属区域");
+  });
+
+  it("keeps the submitted legacy XML reply rather than its shorter label", () => {
+    render(<XsClarifyCard clarification={{ question: "采用哪个口径？", allowFreeText: false,
+      options: [{ label: "客户区域", reply: "按客户所属区域统计" }], selectedAnswer: "按客户所属区域统计"
+    }} />);
+    expect(screen.getByLabelText("已确认的选择")).toHaveTextContent("按客户所属区域统计");
+  });
+
   it("leaves one line of history once the backend records an answer", () => {
     render(<XsClarifyCard clarification={{ ...nativeCard, selectedAnswer: "客户区域" }} />);
 

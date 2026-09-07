@@ -726,7 +726,7 @@ for (const viewport of detailViewports) {
     ]);
     await expect(table.locator("tbody tr")).toHaveCount(24);
     await expect(card.locator(".vue-echart, canvas")).toHaveCount(0);
-    await expect(page.getByText("已加入 1 个组件", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /已加入 1$/ })).toBeVisible();
 
     const overflow = await page.evaluate(() => {
       const root = document.documentElement;

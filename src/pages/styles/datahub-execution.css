@@ -17,28 +17,32 @@
 }
 
 .datahub-business-explanation {
-  margin-top: 14px;
-  border: 1px solid var(--xs-border);
-  border-radius: 12px;
-  background: #fbfdff;
+  margin-top: 0;
+  border: 0;
+  background: transparent;
 }
 
 .datahub-business-explanation__header {
   display: flex;
 }
 
-.datahub-business-explanation__summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.datahub-business-explanation__summary,
+.datahub-process-dock__summary {
+  display: inline-flex;
   align-items: center;
-  width: 100%;
-  gap: 8px;
-  padding: 11px 13px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  gap: 6px;
+  padding: 4px 0;
   border: 0;
   border-radius: 12px;
-  color: var(--xs-text-2);
+  color: var(--xs-text-3);
   background: transparent;
   font: inherit;
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-regular);
+  line-height: 22px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -48,11 +52,6 @@
 
 .datahub-business-explanation__summary:hover {
   color: var(--xs-primary-2);
-  background: #f5f9ff;
-}
-
-.datahub-business-explanation__summary:active {
-  background: #edf5ff;
 }
 
 .datahub-business-explanation__summary:focus-visible {
@@ -60,14 +59,25 @@
   outline-offset: -2px;
 }
 
-.datahub-business-explanation__summary span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.datahub-business-explanation__summary small,
+.datahub-process-dock__summary small {
+  margin-left: 4px;
+  color: var(--xs-table-muted);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
-.datahub-business-explanation__summary small {
-  color: var(--xs-text-3);
+/* 仅正在运行的阶段扫过文字，沿用执行面板已有的 shimmer 节拍。 */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  :is(.datahub-process-dock, .datahub-business-explanation)[data-status="running"] .datahub-phase-title {
+    background-image: linear-gradient(110deg, var(--xs-text-3) 30%, var(--xs-text) 50%, var(--xs-text-3) 70%);
+    background-size: 220% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: xs-datahub-shimmer 2.4s linear infinite;
+  }
 }
 
 .datahub-business-explanation__summary > svg {
@@ -76,196 +86,401 @@
 }
 
 .datahub-business-explanation__summary[aria-expanded="true"] > svg {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
 
 .datahub-business-explanation__body {
   display: grid;
-  gap: 0;
-  padding: 0 13px 13px;
-  border-top: 1px solid #e7eef7;
-}
-
-.datahub-business-explanation__section {
+  gap: 16px;
   min-width: 0;
-  padding: 11px 0;
-  border-bottom: 1px dashed #dce7f2;
+  padding: 6px 0 12px 18px;
 }
 
-.datahub-business-explanation__body > :last-child {
-  border-bottom: 0;
+.datahub-business-explanation__query-rules {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
 }
 
-.datahub-business-explanation__section h3 {
+.datahub-business-explanation__query-title {
+  margin: 0 0 8px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.datahub-business-explanation__steps > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 16px;
+}
+
+.datahub-business-explanation__steps > li:last-child {
+  padding-bottom: 0;
+}
+
+.datahub-business-explanation__steps > li:not(:last-child)::after {
+  position: absolute;
+  top: 26px;
+  bottom: 4px;
+  left: 10px;
+  width: 1px;
+  background: var(--xs-border);
+  content: "";
+}
+
+.datahub-business-explanation__step-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--xs-border);
+  border-radius: 50%;
+  color: var(--xs-text-3);
+  background: var(--xs-surface-soft);
+  font-size: var(--xs-fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.datahub-business-explanation__steps h4 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+  line-height: 22px;
+}
+
+.datahub-business-explanation__steps p {
+  margin: 3px 0 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.datahub-business-explanation__query-details {
+  margin: 10px 0 0 32px;
+}
+
+.datahub-business-explanation__query-details > summary {
   display: flex;
   align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 28px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  list-style: none;
+  cursor: pointer;
+}
+
+.datahub-business-explanation__query-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.datahub-business-explanation__query-details > summary:hover {
+  color: var(--xs-primary-2);
+}
+
+.datahub-business-explanation__query-details > summary:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: 2px;
+}
+
+.datahub-business-explanation__query-details > summary svg {
+  transition: transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+}
+
+.datahub-business-explanation__query-details[open] > summary svg {
+  transform: rotate(90deg);
+}
+
+.datahub-business-explanation__query-details[open] > .datahub-business-explanation__fields {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-control);
+  background: var(--xs-surface-soft);
+}
+
+.datahub-business-explanation__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 10px 24px;
+  min-width: 0;
+  margin: 0;
+}
+
+.datahub-business-explanation__field {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.datahub-business-explanation__field:only-child {
+  grid-column: 1 / -1;
+}
+
+.datahub-business-explanation__field dt {
+  padding-top: 4px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.65;
+}
+
+.datahub-business-explanation__field dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.datahub-business-explanation__values {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 3px 0;
+  list-style: none;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.datahub-business-explanation__values--sources {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  padding: 0;
+}
+
+.datahub-business-explanation__values--sources li {
+  max-width: min(100%, 30em);
+  overflow: hidden;
+  padding: 3px 9px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datahub-business-explanation__results {
+  min-width: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--xs-table-grid);
+}
+
+.datahub-business-explanation__results-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.datahub-business-explanation__results-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-medium);
 }
 
-.datahub-business-explanation__body p,
-.datahub-business-explanation__body ol,
-.datahub-business-explanation__body ul {
-  margin: 5px 0 0;
+.datahub-business-explanation__results-head > span {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
-  line-height: 1.65;
 }
 
-/* 怎么查 / 查到了什么都是散文：小标签 + 一段正文，没有编号圆圈也没有项目符号。 */
-.datahub-business-explanation__prose,
 .datahub-business-explanation__findings {
   display: grid;
   gap: 8px;
-  margin-top: 6px;
+  min-width: 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.datahub-business-explanation__body .datahub-business-explanation__prose > p,
-.datahub-business-explanation__body
-  .datahub-business-explanation__findings > li > p {
-  min-width: 0;
-  margin: 0;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-control);
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.datahub-business-explanation__findings li {
+.datahub-business-explanation__findings > li {
   min-width: 0;
 }
 
-/* 进行中的那句沿用运行态文字扫光，不再靠圆圈上的 pulse 表达。 */
-.datahub-business-explanation__body p[data-state="running"] {
-  background: linear-gradient(100deg, #294469 28%, #1768c9 50%, #294469 72%);
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: xs-datahub-shimmer 2.4s linear infinite;
+.datahub-business-explanation__results .analysis-result-tables + .datahub-business-explanation__findings {
+  margin-top: 12px;
 }
 
-/* 口径细则：定义表式的 label:value 行组，只用 1px 浅分隔，不用胶囊和图标。 */
-.datahub-business-explanation__scope-rows {
-  display: grid;
-  margin: 8px 0 0;
-  padding: 0;
-}
-
-.datahub-business-explanation__scope-row {
-  display: grid;
-  grid-template-columns: 5.5em minmax(0, 1fr);
-  align-items: baseline;
-  min-width: 0;
-  padding: 7px 0;
-}
-
-.datahub-business-explanation__scope-row
-  + .datahub-business-explanation__scope-row {
-  border-top: 1px solid #edf3fa;
-}
-
-.datahub-business-explanation__scope-row dt {
-  min-width: 0;
-  padding-right: 12px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.datahub-business-explanation__body .datahub-business-explanation__scope-row dd {
-  min-width: 0;
-  margin: 0;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-caption);
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.datahub-business-explanation__scope-detail {
-  padding: 11px 0;
-}
-
-.datahub-business-explanation__scope-detail > summary {
-  width: max-content;
-  max-width: 100%;
-  color: #356fae;
-  font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
-  cursor: pointer;
-}
-
-.datahub-business-explanation__scope-detail
-  .datahub-business-explanation__scope-rows {
-  margin-top: 2px;
-}
-
-.datahub-business-explanation__findings li > button {
+.datahub-business-explanation__result {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
+  gap: 12px;
   width: 100%;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid #d8e6f6;
-  border-radius: 10px;
-  color: var(--xs-text-2);
-  background: linear-gradient(135deg, #f8fbff, #fff);
+  padding: 12px 14px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
   font: inherit;
-  font-size: var(--xs-fs-control);
-  line-height: 1.7;
   text-align: left;
+}
+
+button.datahub-business-explanation__result {
   cursor: pointer;
-  transition:
-    border-color var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    transform var(--xs-motion-feedback) var(--xs-motion-ease-out);
+  transition: background var(--xs-motion-fast), border-color var(--xs-motion-fast);
 }
 
-.datahub-business-explanation__findings li > button:hover {
-  border-color: #aacdf5;
-  box-shadow: 0 7px 18px rgba(35, 92, 157, 0.07);
-  transform: translateY(-1px);
+button.datahub-business-explanation__result:hover {
+  border-color: var(--xs-border-strong);
+  background: var(--xs-surface-soft);
 }
 
-.datahub-business-explanation__findings li > button:active {
-  transform: translateY(0);
-}
-
-.datahub-business-explanation__findings li > button:focus-visible {
-  outline: 3px solid rgba(22, 119, 255, 0.2);
+button.datahub-business-explanation__result:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
   outline-offset: 2px;
 }
 
-.datahub-business-explanation__document-icon {
-  display: inline-grid;
+.datahub-business-explanation__result-icon {
+  display: grid;
+  place-items: center;
   width: 34px;
   height: 34px;
-  place-items: center;
-  border: 1px solid #cde0f7;
-  border-radius: 9px;
-  color: #2c6fb9;
-  background: #edf6ff;
+  border-radius: var(--xs-radius-control);
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
 }
 
-.datahub-business-explanation__findings li > button > span:nth-child(2) {
+.datahub-business-explanation__result-copy {
+  display: grid;
   min-width: 0;
+  gap: 6px;
+}
+
+.datahub-business-explanation__result-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.datahub-business-explanation__result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  min-width: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.datahub-business-explanation__result-meta > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datahub-business-explanation__result-meta > span + span::before {
+  content: "·";
+  padding: 0 7px;
+  color: var(--xs-table-muted);
 }
 
 .datahub-business-explanation__document-action {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  color: #356fae;
+  align-self: center;
+  gap: 4px;
+  color: var(--xs-interactive-text);
   font-size: var(--xs-fs-caption);
-  font-weight: var(--xs-fw-bold);
+  white-space: nowrap;
+}
+
+.datahub-business-explanation__preview {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+}
+
+.datahub-business-explanation__preview > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.datahub-business-explanation__preview > span > :last-child {
+  color: var(--xs-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.datahub-business-explanation__empty {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.datahub-business-explanation__scope-detail > summary {
+  width: fit-content;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  cursor: pointer;
+}
+
+.datahub-business-explanation__scope-rows {
+  margin: 8px 0 0;
+}
+
+.datahub-business-explanation__scope-row {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.65;
+}
+
+.datahub-business-explanation__scope-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .datahub-business-explanation__body {
+    padding-left: 0;
+  }
+
+  .datahub-business-explanation__field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .datahub-business-explanation__result {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .datahub-business-explanation__result-icon {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .datahub-source-modal .ant-modal-content {
@@ -813,6 +1028,36 @@
 .xs-datahub-collapse__inner {
   min-height: 0;
   overflow: hidden;
+}
+
+:is(.datahub-process-dock, .datahub-business-explanation) > .xs-datahub-collapse {
+  opacity: 0;
+  transition:
+    grid-template-rows var(--xs-motion-enter) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-base) var(--xs-motion-ease-out),
+    visibility 0s linear var(--xs-motion-enter);
+}
+
+:is(.datahub-process-dock, .datahub-business-explanation) > .xs-datahub-collapse--open {
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .datahub-phase-title {
+    animation: none !important;
+    background: none !important;
+    color: var(--xs-text-3) !important;
+    -webkit-text-fill-color: currentColor !important;
+  }
+
+  :is(.datahub-process-dock, .datahub-business-explanation) > .xs-datahub-collapse {
+    transition: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .datahub-phase-title { color: CanvasText !important; }
 }
 
 .xs-datahub-execution__body {
@@ -3886,48 +4131,21 @@ button.xs-datahub-subagent-dag__node:focus-visible {
   }
 }
 
-/* ==================== 思考折叠块（豆包式「已思考」） ==================== */
+/* ==================== 思考折叠块 ==================== */
 
 .datahub-process-dock {
-  margin-top: 14px;
-  border: 1px solid var(--xs-border);
-  border-radius: 12px;
-  background: #fbfdff;
-}
-
-.datahub-process-dock__summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  width: 100%;
-  gap: 8px;
-  padding: 11px 13px;
+  margin-top: 0;
   border: 0;
-  border-radius: 12px;
-  color: var(--xs-text-2);
   background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color var(--xs-motion-feedback) var(--xs-motion-ease-out),
-    background var(--xs-motion-feedback) var(--xs-motion-ease-out);
 }
 
 .datahub-process-dock__summary:hover {
   color: var(--xs-primary-2);
-  background: #f5f9ff;
 }
 
 .datahub-process-dock__summary:focus-visible {
   outline: 3px solid rgba(22, 119, 255, 0.2);
   outline-offset: -2px;
-}
-
-.datahub-process-dock__summary span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
 }
 
 .datahub-process-dock__summary > svg {
@@ -3936,24 +4154,20 @@ button.xs-datahub-subagent-dag__node:focus-visible {
 }
 
 .datahub-process-dock__summary[aria-expanded="true"] > svg {
-  transform: rotate(180deg);
-}
-
-.datahub-process-dock[data-status="running"] .datahub-process-dock__summary span {
-  color: var(--xs-primary-2);
+  transform: rotate(90deg);
 }
 
 .datahub-process-dock__body {
   display: grid;
   gap: 10px;
-  padding: 0 13px 12px;
+  padding: 4px 0 8px 18px;
 }
 
 .datahub-process-dock__decompose strong {
   display: block;
   margin-bottom: 6px;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
 }
 
 .datahub-process-dock__decompose ol {
@@ -3961,19 +4175,17 @@ button.xs-datahub-subagent-dag__node:focus-visible {
   gap: 4px;
   margin: 0;
   padding-left: 20px;
-  color: var(--xs-text-2);
-  font-size: var(--xs-fs-label);
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
 }
 
 .datahub-process-dock__thinking {
   max-height: 260px;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 4px 0;
   color: var(--xs-text-3);
-  border-left: 3px solid var(--xs-border);
-  border-radius: 8px;
-  background: var(--xs-surface-soft, #f7f9fc);
-  font-size: var(--xs-fs-label);
+
+  font-size: var(--xs-fs-caption);
   line-height: 1.7;
 }
 
@@ -3981,8 +4193,53 @@ button.xs-datahub-subagent-dag__node:focus-visible {
   margin: 0 0 6px;
 }
 
+.datahub-process-dock:not([data-status="running"]) .datahub-process-dock__thinking {
+  max-height: none;
+  overflow: visible;
+}
+
+.datahub-process-dock__thinking-section + .datahub-process-dock__thinking-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.datahub-process-dock__thinking-section h4 {
+  margin: 0 0 6px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.datahub-process-dock__source-note {
+  margin: 0;
+  color: var(--xs-table-muted);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
 .datahub-process-dock__placeholder {
   margin: 0;
   color: var(--xs-text-3);
-  font-size: var(--xs-fs-label);
+  font-size: var(--xs-fs-caption);
+}
+
+
+.analysis-citation-reference {
+  display: inline;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--xs-primary, #1762c4);
+  background: var(--xs-primary-soft, #eef5ff);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.knowledge-citations > summary {
+  padding: 8px 0;
+  color: var(--xs-text-secondary, #526780);
+  cursor: pointer;
 }

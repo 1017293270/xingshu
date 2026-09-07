@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contractAssetName, contractAssetQuestion } from "@/test/dashboardDesignFixtures";
-import { assetTopic, boardTitle, cleanQuestionText, shortWidgetTitle } from "./dashboardDesignTitles";
+import { dashboardOutputLabel, assetTopic, boardTitle, cleanQuestionText, shortWidgetTitle } from "./dashboardDesignTitles";
 
 const contractAsset = { name: contractAssetName, question: contractAssetQuestion };
 
@@ -85,5 +85,15 @@ describe("boardTitle", () => {
 
   it("需求与资产都给不出主题时退回原标题", () => {
     expect(boardTitle("做个大屏", undefined, "未命名大屏")).toBe("未命名大屏");
+  });
+});
+
+describe("dashboardOutputLabel", () => {
+  it("names machine outputs from their actual columns and keeps business labels", () => {
+    expect(dashboardOutputLabel({ outputKey: "output_003", label: "output_003", columns: [
+      { key: "year", label: "合同年度" }, { key: "amount", title: "合同金额" }
+    ] })).toBe("结果表 3 · 合同年度、合同金额");
+    expect(dashboardOutputLabel({ outputKey: "output_003", label: "年度合同汇总" })).toBe("年度合同汇总");
+    expect(dashboardOutputLabel({ outputKey: "raw" }, 1)).toBe("结果表 2");
   });
 });

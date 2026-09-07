@@ -17,12 +17,17 @@ const runtimeSchema = computed(() =>
 );
 const visibleWidgets = computed(() => runtimeSchema.value
   ? [...runtimeSchema.value.widgets]
-      .filter((item) => item.style.visible !== false)
-      .sort((left, right) => (left.style.zIndex ?? 0) - (right.style.zIndex ?? 0))
+      .filter((item) => item.style.visible !== false && (!readingLayout.value || item.type !== "decoration"))
+      .sort((left, right) => readingLayout.value
+        ? left.position.y - right.position.y || left.position.x - right.position.x
+        : (left.style.zIndex ?? 0) - (right.style.zIndex ?? 0))
   : []
 );
 const canvasViewport = ref<HTMLElement | null>(null);
 const canvasScale = ref(1);
+// 默认按屏幕重排组件，保持字号；原始画布的位置与比例只用于画布浏览。
+const readingScale = ref<number | "reading" | null>("reading");
+const readingLayout = computed(() => !props.fullscreen && readingScale.value === "reading");
 let canvasResizeObserver: ResizeObserver | null = null;
 const canvasBackgroundStyle = computed(() =>
   runtimeSchema.value
@@ -34,10 +39,10 @@ const useFullscreenDefaultBackground = computed(() =>
 );
 const canvasViewportStyle = computed(() => {
   if (!runtimeSchema.value) return {};
-  // 内联舞台吃满宽度、按画布比例撑高：首帧 JS 还没量出 scale 时高度就已经是对的，画布不会闪。
-  // 高度不设上限——画布比一屏高就让页面往下滚，不为了塞进一屏把画布缩窄成两侧白柱。
+  // 阅读态随内容撑高；原始画布在有界区域滚动，避免为了塞进一屏缩小字号。
+  if (readingLayout.value) return { height: "auto" };
   if (!props.fullscreen) {
-    return { aspectRatio: `${runtimeSchema.value.canvas.width} / ${runtimeSchema.value.canvas.height}` };
+    return { height: `${Math.min(runtimeSchema.value.canvas.height * canvasScale.value, 720)}px` };
   }
   return useFullscreenDefaultBackground.value
     ? canvasBackgroundStyle.value
@@ -62,7 +67,9 @@ function updateCanvasScale() {
   if (!viewport || !activeSchema) return;
 
   // 留白由外层舞台负责，画布自己吃满视口，所以这里不留 inset
-  canvasScale.value = calculateDashboardRuntimeScale(
+  canvasScale.value = !props.fullscreen && readingScale.value !== null
+    ? readingScale.value === "reading" ? 1 : readingScale.value
+    : calculateDashboardRuntimeScale(
     resolveDashboardRuntimeScaleMode(Boolean(props.fullscreen), activeSchema.canvas.scaleMode),
     activeSchema.canvas.width,
     activeSchema.canvas.height,
@@ -71,7 +78,7 @@ function updateCanvasScale() {
   );
 }
 
-watch(runtimeSchema, () => void nextTick(updateCanvasScale));
+watch([runtimeSchema, readingScale], () => void nextTick(updateCanvasScale));
 
 onMounted(() => {
   if (typeof ResizeObserver !== "undefined" && canvasViewport.value) {
@@ -89,7 +96,7 @@ function bindingForWidget(widget: DashboardWidget) {
 </script>
 
 <template>
-  <main class="xs-dashboard-runtime" :class="{ 'is-fullscreen': fullscreen }" aria-label="大屏运行态">
+  <component :is="fullscreen ? 'main' : 'section'" class="xs-dashboard-runtime" :class="{ 'is-fullscreen': fullscreen, 'is-reading': readingLayout }" aria-label="大屏运行态">
     <!-- 没有运行态有两种原因：草稿还没发布过（最常见，内联页天天遇到），或者真的取不到 -->
     <section v-if="!runtimeSchema" class="runtime-unavailable" role="alert">
       <h1>{{ record.status === 'published' ? '运行态暂不可用' : '这块看板还没有发布' }}</h1>
@@ -97,13 +104,30 @@ function bindingForWidget(widget: DashboardWidget) {
     </section>
     <!-- 内联态没有自己的 header：状态 / 来源 / 更新时间由宿主页面的一条 meta 行统一承担，
          这里再画一遍就是同一份信息出现两次。全屏态本来也不渲染 header。 -->
-    <div v-else ref="canvasViewport" class="runtime-canvas-viewport" :style="canvasViewportStyle">
+    <template v-else>
+    <div v-if="!fullscreen" class="runtime-reading-controls" aria-label="看板阅读缩放">
+      <label>阅读大小
+        <select v-model="readingScale" aria-label="看板阅读缩放">
+          <option value="reading">自适应阅读</option>
+          <option :value="1">100% · 原始画布</option>
+          <option :value="1.25">125%</option>
+          <option :value="1.5">150%</option>
+          <option :value="2">200%</option>
+          <option :value="null">适应宽度</option>
+        </select>
+      </label>
+      <span>{{ readingLayout ? "按当前屏幕排列，保留原始数据" : "可横向和纵向滚动浏览" }}</span>
+    </div>
+    <div ref="canvasViewport" class="runtime-canvas-viewport" :style="canvasViewportStyle"
+      :tabindex="fullscreen ? undefined : 0" :role="fullscreen ? undefined : 'region'"
+      :aria-label="fullscreen ? undefined : '看板画布，可使用方向键滚动'">
       <div class="runtime-canvas-stage" :style="canvasStageStyle">
         <div class="runtime-canvas" :style="canvasStyle">
           <DashboardWidgetCard
             v-for="(widget, index) in visibleWidgets"
             :key="widget.id"
             :widget="widget"
+            :data-widget-type="widget.type"
             :binding="bindingForWidget(widget)"
             :selected="false"
             readonly
@@ -116,7 +140,8 @@ function bindingForWidget(widget: DashboardWidget) {
         </div>
       </div>
     </div>
-  </main>
+    </template>
+  </component>
 </template>
 
 <style scoped>
@@ -156,17 +181,66 @@ function bindingForWidget(widget: DashboardWidget) {
   background: var(--xs-surface, #ffffff);
 }
 
-/* 内联态用 fit-width 缩放，舞台宽高本就等于视口：贴左贴顶，
-   免得 aspect-ratio 与实测宽度的亚像素差被居中摊成上下两条细缝。 */
+/* 内联画布从左上角开始浏览；溢出留在画布内，不撑破整页。 */
 .xs-dashboard-runtime:not(.is-fullscreen) .runtime-canvas-viewport {
   align-items: flex-start;
   justify-content: flex-start;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .is-fullscreen .runtime-canvas-viewport {
   height: 100dvh;
   min-height: 100dvh;
 }
+
+.is-reading .runtime-canvas-stage { width: 100% !important; height: auto !important; }
+.is-reading .runtime-canvas {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100% !important;
+  height: auto !important;
+  padding: 16px;
+  transform: none !important;
+}
+.is-reading :deep(.dashboard-widget-card) {
+  position: relative;
+  inset: auto !important;
+  width: 100% !important;
+  height: 320px !important;
+}
+.is-reading :deep([data-widget-type="metric"]) { height: 160px !important; }
+.is-reading :deep([data-widget-type="text"]) { grid-column: 1 / -1; height: auto !important; min-height: 80px; }
+.is-reading :deep([data-widget-type="table"]) { grid-column: 1 / -1; height: 360px !important; }
+.is-reading :deep(.text-renderer) { min-height: 80px; font-size: 22px !important; }
+.is-reading :deep(.text-renderer__main),
+.is-reading :deep(.text-renderer__subtitle) { white-space: normal; overflow-wrap: anywhere; }
+@container (max-width: 600px) {
+  .is-reading .runtime-canvas { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; }
+}
+
+.runtime-reading-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  background: var(--xs-surface, #fff);
+  color: var(--runtime-text-2);
+  font-size: 13px;
+}
+.runtime-reading-controls label { display: flex; align-items: center; gap: 8px; }
+.runtime-reading-controls select {
+  min-height: 32px;
+  border: 1px solid var(--runtime-border);
+  border-radius: 8px;
+  background: var(--xs-surface, #fff);
+  color: var(--runtime-text);
+  font: inherit;
+}
+.runtime-canvas-viewport:focus-visible { outline: 2px solid var(--xs-primary); outline-offset: -2px; }
 
 .runtime-canvas-stage {
   position: relative;

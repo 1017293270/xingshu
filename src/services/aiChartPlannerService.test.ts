@@ -888,3 +888,88 @@ describe("aiChartPlannerService", () => {
     ]));
   });
 });
+
+ it("does not accept a partial ranking that drops the final company", () => {
+    const input = table([{ key: "company", title: "公司" }, { key: "count", title: "数量" }],
+      [{ company: "甲公司", count: 13 }, { company: "乙公司", count: 5 }, { company: "蚁象公司", count: 3 }]);
+    const tables = resolveAiChartTables({ question: "合同 Top3", tables: [input],
+      answer: "- 甲公司：13 份\n- 乙公司：5 份\n- 卓一公司：4 份" });
+    const spec = buildGeneratedChartSpec({ chartable: true, reason: "排名", chartType: "bar",
+      tableIndex: 0, dimensionKey: "company", metricKeys: ["count"] }, tables);
+    expect(spec?.table.source).toBe("answer");
+    expect(spec?.table.rows.map((row) => row.name)).toEqual(["甲公司", "乙公司", "卓一公司"]);
+ });
+ it("identifies only a loaded single numeric result as scalar", async () => {
+    const { isDataHubScalarResult } = await import("./aiChartPlannerService");
+    expect(isDataHubScalarResult(table([{ key: "count", title: "数量" }], [{ count: 12 }]))).toBe(true);
+    expect(isDataHubScalarResult(table([{ key: "name", title: "名称" }], [{ name: "合同" }]))).toBe(false);
+    expect(isDataHubScalarResult({ ...table([{ key: "count", title: "数量" }], [{ count: 12 }]), totalRows: 5 })).toBe(false);
+ });
+
+
+describe("year rankings and chronological rendering", () => {
+  const table = { columns: [{ key: "year", title: "合同年度" }, { key: "count", title: "合同数量" }],
+    rows: [{ year: 2024, count: 34 }, { year: 2023, count: 24 }, { year: 2025, count: 22 }], totalRows: 3 };
+  it("overrides an AI line plan for an explicit ranking", async () => {
+    const plan = await planAiChart({ question: "合同数量排名前三的年度", tables: [table] }, {
+      dataHubPlanner: async () => ({ chartable: true, chartType: "line", reason: "year", dimensionKey: "year", metricKeys: ["count"] })
+    });
+    expect(plan.chartType).toBe("bar");
+    expect(plan.allowedTypes).not.toContain("line");
+    const spec = buildGeneratedChartSpec(plan, [table])!;
+    expect(spec.table.rows.map(row => row.year)).toEqual([2024, 2023, 2025]);
+  });
+  it("orders time labels and values together when rendering a genuine line chart", () => {
+    const spec = buildGeneratedChartSpec({ chartable: true, chartType: "line", reason: "trend", dimensionKey: "year", metricKeys: ["count"] }, [table])!;
+    const option = buildGeneratedChartOption(spec);
+    expect(option.xAxis).toMatchObject({ data: ["2023", "2024", "2025"] });
+    expect(option.series).toMatchObject([{ data: [24, 34, 22] }]);
+    expect(table.rows.map(row => row.year)).toEqual([2024, 2023, 2025]);
+  });
+});
+
+describe("interactive horizontal bar windows", () => {
+  it("renders an eight-record window without grouping, preserving nulls and stable metric colors", () => {
+    const source = table([
+      { key: "company", title: "合同乙方" }, { key: "amount", title: "合同金额", type: "number" },
+      { key: "received", title: "实际到账金额", type: "number" }
+    ], Array.from({ length: 50 }, (_, index) => ({ company: "同名长公司名称有限公司", amount: index === 8 ? 0 : 1000000 + index, received: index === 8 ? null : 12.3456 })));
+    const spec = buildGeneratedChartSpec({ chartable: true, reason: "按原始记录比较金额", chartType: "bar", dimensionKey: "company", metricKeys: ["amount", "received"], title: "金额比较" }, [source])!;
+    const windowSpec = { ...spec, table: { ...spec.table, rows: spec.table.rows.slice(8, 16), totalRows: 8 } };
+    const option = buildGeneratedChartOption(windowSpec, "bar", { rowOffset: 8 });
+    expect(option.yAxis).toMatchObject({ type: "category", inverse: true, data: Array.from({ length: 8 }, (_, index) => `${index + 9}. 同名长公司名称有限公司`) });
+    expect(option.xAxis).toMatchObject({ type: "value" });
+    expect(option.title).toMatchObject({ show: false });
+    const series = option.series as Array<{ data: unknown[]; itemStyle: { color: string }; label: { show: boolean; formatter: (params: { value: unknown }) => string } }>;
+    expect(series).toHaveLength(2);
+    expect(series[0].itemStyle.color).not.toBe(series[1].itemStyle.color);
+    expect(series[0].data).toEqual([0, 1000009, 1000010, 1000011, 1000012, 1000013, 1000014, 1000015]);
+    expect(series[1].data).toEqual([null, 12.3456, 12.3456, 12.3456, 12.3456, 12.3456, 12.3456, 12.3456]);
+    expect(series[0].label.show).toBe(true);
+    expect(series[0].label.formatter({ value: 1000000 })).toContain("万");
+    expect(series[0].label.formatter({ value: null })).toBe("");
+    expect(series[0].label.formatter({ value: 367200000 })).toBe("3.672亿");
+    expect(series[0].label.formatter({ value: 0.00123 })).toBe("0.00123");
+    const single = buildGeneratedChartOption(windowSpec, "bar", { rowOffset: 8, metricKey: "received" });
+    expect(single.series).toMatchObject([{ id: "received", itemStyle: { color: series[1].itemStyle.color }, data: series[1].data }]);
+    const tooltip = option.tooltip as { renderMode: string; formatter: (params: unknown) => string };
+    expect(tooltip.renderMode).toBe("richText");
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain("同名长公司名称有限公司");
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain("1,000,009");
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain("12.3456");
+    expect(tooltip.formatter([{ dataIndex: 1 }])).not.toContain("元");
+    expect(option.dataZoom).toBeUndefined();
+    expect(option.media).toBeUndefined();
+    const compact = buildGeneratedChartOption(windowSpec, "bar", { rowOffset: 8, compact: true });
+    expect(compact.grid).toMatchObject({ left: 12, right: 64 });
+    expect(compact.xAxis).toMatchObject({ splitNumber: 2 });
+    expect(compact.yAxis).toMatchObject({ axisLabel: { inside: true, align: "left", verticalAlign: "bottom", padding: [0, 0, 24, 0], width: 200, fontSize: 11, margin: 0 } });
+    expect(compact.series).toMatchObject([{ id: "amount", data: series[0].data }, { id: "received", data: series[1].data }]);
+    expect(compact.media).toBeUndefined();
+    expect(buildGeneratedChartOption(windowSpec, "pie", { metricKey: "received" })).toEqual(buildGeneratedChartOption(windowSpec, "pie"));
+    const original = buildGeneratedChartOption(spec);
+    expect(original.xAxis).toMatchObject({ type: "category", data: Array(50).fill("同名长公司名称有限公司") });
+    expect(original.dataZoom).toBeUndefined();
+    expect(source.rows).toHaveLength(50);
+  });
+});

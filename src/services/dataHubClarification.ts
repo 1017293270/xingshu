@@ -48,10 +48,12 @@ function isValidOption(option: unknown, native: boolean) {
     return false;
   }
 
-  // 原生卡只允许 label；历史 XML 卡必须另外带上要提交的 reply 原文。
-  return hasOnlyKeys(option, native ? ["label"] : ["label", "reply"])
+  // 原生卡显示 label，提交可选 value；历史 XML 卡使用 reply 原文。
+  return hasOnlyKeys(option, native ? ["label", "value"] : ["label", "reply"])
     && isBoundedText(option.label, MAX_OPTION_LABEL_CHARS)
-    && (native || isBoundedText(option.reply, MAX_CLARIFICATION_ANSWER_CHARS));
+    && (native
+      ? option.value === undefined || isBoundedText(option.value, MAX_CLARIFICATION_ANSWER_CHARS)
+      : isBoundedText(option.reply, MAX_CLARIFICATION_ANSWER_CHARS));
 }
 
 export function normalizeDataHubClarification(payload: unknown): DataHubClarification | null {
@@ -77,7 +79,8 @@ export function normalizeDataHubClarification(payload: unknown): DataHubClarific
 
   const options = (content.options as UnknownRecord[]).map<DataHubClarificationOption>((option) => ({
     label: String(option.label),
-    ...(typeof option.reply === "string" ? { reply: option.reply } : {})
+    ...(typeof option.reply === "string" ? { reply: option.reply } : {}),
+    ...(typeof option.value === "string" ? { value: option.value } : {})
   }));
 
   return {
@@ -113,9 +116,9 @@ export function normalizeDataHubClarificationResponse(
   };
 }
 
-/** 提交给后端的答案：历史 XML 卡给 reply 原文，原生卡就是 label 本身。 */
+/** 提交给后端的答案：历史 XML 卡给 reply 原文，原生卡优先 value，旧卡回退 label。 */
 export function clarificationAnswerOf(option: DataHubClarificationOption) {
-  return option.reply?.trim() || option.label.trim();
+  return option.reply?.trim() || option.value?.trim() || option.label.trim();
 }
 
 /** 同一个 interactionId 视作同一张卡：续跑时后端会重发它，不能堆成两张。 */

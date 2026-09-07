@@ -42,8 +42,8 @@ const accessibilityRoutes: AccessibilityRoute[] = [
     path: "/dashboard",
     authenticated: true,
     ready: async (page) => {
-      await expect(page.getByRole("heading", { name: "看板广场", level: 1 })).toBeVisible();
-      await expect(page.getByRole("region", { name: "看板广场空状态" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "我的看板", level: 1 })).toBeVisible();
+      await expect(page.getByRole("region", { name: "我的看板空状态" })).toBeVisible();
     }
   },
   {
@@ -112,14 +112,16 @@ test.describe("xingshu WCAG serious and critical gate", () => {
         await routeCase.ready(page);
         await page.evaluate(async () => {
           await document.fonts.ready;
-          document.getAnimations().forEach((animation) => {
-            const iterations = animation.effect?.getComputedTiming().iterations;
-            if (typeof iterations === "number" && Number.isFinite(iterations)) {
-              animation.finish();
-            }
-          });
+          // 正常动效也纳入覆盖：等待入场而非在透明帧扫描，保留页面自己的 reduced-motion 行为。
+          const finite = document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity);
+          await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         });
 
+        if (routeCase.slug === "home") {
+          const dialog = page.locator(".home-onboarding");
+          if (await dialog.count()) await expect(dialog).toHaveCSS("opacity", "1");
+        }
         const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();
         const blockingFindings = result.violations
           .filter((violation) => violation.impact === "serious" || violation.impact === "critical")

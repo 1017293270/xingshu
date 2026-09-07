@@ -8,6 +8,7 @@ import {
   loadDataHubCitationDocument,
   loadDataHubKnowledgeDocumentChunks,
   loadDataHubKnowledgeMarkdown,
+  loadDataHubKnowledgeImage,
   loadDataHubKnowledgeSource,
   normalizeDataHubKnowledgeBases,
   normalizeDataHubKnowledgeDocuments
@@ -55,6 +56,7 @@ describe("dataHubKnowledgeService", () => {
     const access = await loadDataHubCitationDocument(citation);
 
     expect(access.url).toBe("https://files.example.com/contract-policy.pdf");
+    expect(access.contentType).toBe("application/pdf");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/ai/rag/kb/source_document_preview?space_id=7&kb_id=kb-1&doc_key=contract-policy"
@@ -194,6 +196,82 @@ describe("dataHubKnowledgeService", () => {
     expect(access.url).toBe("blob:xingshu-pdf");
     expect(capturedBlob?.type).toBe("application/pdf");
     expect(access.contentType).toBe("application/pdf");
+  });
+
+  it("loads document-relative images through the authenticated artifact gateway and rejects HTML", async () => {
+    const revoke = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:document-image") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revoke });
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const parsed = new URL(String(url), "http://localhost");
+      expect(parsed.pathname).toBe("/api/ai/rag/kb/document-artifact");
+      expect(parsed.searchParams.get("artifact_path")).toBe("images/合同印章.jpg");
+      expect(parsed.searchParams.get("doc_id")).toBe("2092172346583781377");
+      expect(parsed.searchParams.get("kb_id")).toBe("kb-1");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-123");
+      expect(new Headers(init?.headers).get("X-Space-Id")).toBe("7");
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { headers: { "Content-Type": "image/jpeg" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const document = { id: "document", docId: "2092172346583781377", title: "合同", status: "indexed" as const, sourceAvailable: false };
+    const access = await loadDataHubKnowledgeImage("kb-1", document, "./images/合同印章.jpg", new AbortController().signal);
+    expect(access?.contentType).toBe("image/jpeg");
+    access?.revoke?.();
+    expect(revoke).toHaveBeenCalledWith("blob:document-image");
+    fetchMock.mockResolvedValueOnce(new Response("<!doctype html>", { headers: { "Content-Type": "text/html" } }));
+    await expect(loadDataHubKnowledgeImage("kb-1", document, "images/a.jpg", new AbortController().signal))
+      .rejects.toThrow("返回内容不是可显示的图片");
+  });
+
+  it("opens large PDFs with a short-lived document ticket rather than downloading the whole file first", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("/api/ai/rag/kb/source_document_ticket");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-123");
+      expect(JSON.parse(String(init?.body))).toEqual({ kb_id: "2092172346583781377", doc_id: "2092172346583781399" });
+      return new Response(JSON.stringify({ ticket: "document-only-ticket" }), { headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const access = await loadDataHubKnowledgeSource("2092172346583781377", {
+      id: "large-contract", docId: "2092172346583781399", title: "合同.pdf", status: "indexed", sourceAvailable: true,
+      sizeBytes: 44_670_976
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(access.contentType).toBe("application/pdf");
+    expect(access.url).toBe("/api/ai/rag/kb/source_document_direct?ticket=document-only-ticket");
+    expect(access.url).not.toContain("token-123");
+  });
+
+  it("never forwards image credentials to external URLs or traversal paths", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const document = { id: "document", docId: "9001", title: "合同", status: "indexed" as const, sourceAvailable: false };
+    for (const src of ["https://example.com/images/a.png", "//example.com/images/a.png"]) {
+      await expect(loadDataHubKnowledgeImage("kb-1", document, src, new AbortController().signal)).resolves.toBeNull();
+    }
+    await expect(loadDataHubKnowledgeImage("kb-1", document, "images/%2e%2e/private.png", new AbortController().signal))
+      .rejects.toThrow("图片路径无效");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("loads runtime-rewritten artifact URLs with the current document identity", async () => {
+    const create = vi.fn(() => "blob:protected-image");
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: create });
+    const document = { id: "document", docId: "9001", title: "合同", status: "indexed" as const, sourceAvailable: false };
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const query = new URL(String(url), window.location.origin).searchParams;
+      expect(query.get("artifact_path")).toBe("hybrid_auto/images/page-1.jpg");
+      expect(query.get("doc_id")).toBe("9001");
+      expect(query.get("space_id")).toBe("7");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-123");
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { "Content-Type": "image/jpeg" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const url = "/api/ai/rag/kb/document-artifact?kb_id=kb-1&doc_id=9001&artifact_path=hybrid_auto%2Fimages%2Fpage-1.jpg";
+    await expect(loadDataHubKnowledgeImage("kb-1", document, url, new AbortController().signal))
+      .resolves.toMatchObject({ url: "blob:protected-image", contentType: "image/jpeg" });
+    await expect(loadDataHubKnowledgeImage("kb-1", document, url.replace("doc_id=9001", "doc_id=9002"), new AbortController().signal))
+      .rejects.toThrow("图片不属于当前文档");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("reads parsed Markdown through the file-content endpoint", async () => {

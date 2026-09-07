@@ -8,6 +8,16 @@ import {
 import type { DataHubStreamEvent } from "@/types/dataHub";
 
 describe("dataHubAskDataPresenter", () => {
+  it("backfills a complete public thinking snapshot after an initial streamed introduction", () => {
+    const turn = createDataHubAskTurn("合同排名", [
+      { type: "thinking", content: "我来查询合同排名。", replyId: "planning", modelCallIndex: 1 },
+      { type: "done", content: { thinkingContent: "我来查询合同排名。\n\n已确认按合同乙方分组，并保留第三名并列。", summary: "合同结果。" } }
+    ], "done");
+    expect(turn.thinkingContent).toContain("已确认按合同乙方分组，并保留第三名并列。");
+    expect(turn.thinkingContent.match(/我来查询合同排名/g)).toHaveLength(1);
+    expect(turn.assistantContent).toBe("合同结果。");
+  });
+
   it("normalizes data-hub table payloads with object columns and rows", () => {
     const table = normalizeDataHubTableResult({
       columns: [
@@ -950,4 +960,138 @@ describe("buildDataHubBusinessTrace 查询过程", () => {
       { label: "合同金额（万元）", value: "1,242.2 万元" }
     ]);
   });
+});
+
+ it("keeps unknown source associations and query metadata unasserted", async () => {
+    const { buildDataHubBusinessTrace } = await import("./dataHubAskDataPresenter");
+    const turn = createDataHubAskTurn("合同数", [
+      { type: "data_source_selected", data: { datasourceId: 1, datasourceName: "甲库" } },
+      { type: "data_source_selected", data: { datasourceId: 2, datasourceName: "乙库" } },
+      { type: "table", data: { columns: [{ name: "count", title: "数量" }], rows: [{ count: 4 }] } }
+    ], "done");
+    const trace = buildDataHubBusinessTrace(turn, "合同数", "ASK_DATA");
+    expect(trace.queries?.[0].dataSource).toBeUndefined();
+    expect(trace.filters).toEqual(["本次未返回可复核的筛选条件"]);
+    expect(trace.relationships).toEqual(["本次未返回可复核的关联关系"]);
+ });
+ it.each([{ "Contract.count": "desc" }, [["Contract.count", "desc"]]])("translates Cube sort order %j", (order) => {
+    const result = normalizeDataHubTableResult({
+      columns: [{ name: "Contract.count", title: "合同数量" }], rows: [{ "Contract.count": 4 }],
+      query: { measures: ["Contract.count"], order }
+    });
+    expect(result?.business?.calculations).toContain("按合同数量降序排列");
+ });
+
+ it("opens numeric document identities without docKey and keeps different libraries distinct", async () => {
+    const { buildDataHubBusinessTrace } = await import("./dataHubAskDataPresenter");
+    const turn = createDataHubAskTurn("文档", [
+      { type: "citation_document", data: { docId: "123", kbId: "1" } },
+      { type: "citation_document", data: { docId: "123", kbId: "2", sourceAvailable: false } }
+    ], "done");
+    expect(turn.citationDocuments.map((doc) => doc.sourceAvailable)).toEqual([true, false]);
+    expect(buildDataHubBusinessTrace(turn, "文档", "ASK_KNOWLEDGE").documents[0]?.kbName).toBe("");
+ });
+
+it("uses annotation short titles even when explicit columns have long titles", () => {
+  const rows = [{ "Sales.region": "华东", "Sales.total": 120 }];
+  const result = normalizeDataHubTableResult({
+    columns: [
+      { name: "Sales.region", title: "销售明细表，记录各区域月度销售额。区域" },
+      { name: "Sales.total", title: "销售明细表，记录各区域月度销售额。销售额" }
+    ], rows,
+    annotation: {
+      dimensions: { "Sales.region": { title: "销售明细表，记录各区域月度销售额。区域", shortTitle: "区域" } },
+      measures: { "Sales.total": { title: "销售明细表，记录各区域月度销售额。销售额", shortTitle: "销售额" } }
+    }
+  });
+  expect(result?.columns.map(({ key, title }) => ({ key, title }))).toEqual([
+    { key: "Sales.region", title: "区域" }, { key: "Sales.total", title: "销售额" }
+  ]);
+  expect(result?.rows).toEqual(rows);
+  expect(result?.groupLabel).toBe("销售明细表，记录各区域月度销售额。");
+});
+
+it("honors supplied field comments and leaves metadata-free labels intact", () => {
+  const result = normalizeDataHubTableResult({
+    columns: [
+      { name: "amount", title: "合同表。金额", fieldComment: "合同金额（元）" },
+      { name: "note", title: "说明，备注。原始内容" },
+      "Contracts.count"
+    ], rows: [{ amount: 1, note: "备注", "Contracts.count": 2 }],
+    annotation: { measures: { "Contracts.count": { shortTitle: "合同数量" } } }
+  });
+  expect(result?.columns.map((column) => column.title)).toEqual(["合同金额（元）", "说明，备注。原始内容", "合同数量"]);
+});
+
+describe("mm thinking protocol envelopes", () => {
+  it("does not treat an isolated closing marker as an answer", () => {
+    const turn = createDataHubAskTurn("问题", [{ type: "text", content: "</mm:think>" }], "done");
+    expect(turn.answerBlocks).toEqual([]);
+    expect(turn.assistantContent).toBe("");
+  });
+  it("separates paired thinking received across deltas from the final answer", () => {
+    const turn = createDataHubAskTurn("问题", ["<mm:thi", "nk>内部推理", "</mm:", "think>正式结论"].map((content) => ({ type: "text", content })), "done");
+    expect(turn.assistantContent).toBe("正式结论");
+    expect(turn.thinkingContent).toContain("内部推理");
+    expect(turn.thinkingContent).not.toContain("mm:think");
+  });
+  it("cleans summary and explicit thinking wrappers without erasing literal code", () => {
+    const turn = createDataHubAskTurn("问题", [
+      { type: "thinking", content: "<mm:think>公开思考</mm:think>" },
+      { type: "done", content: { summary: "</mm:think>正式结论" } }
+    ], "done");
+    expect(turn.assistantContent).toBe("正式结论");
+    expect(turn.thinkingContent).toBe("公开思考");
+    const code = "示例：`<mm:think>内容</mm:think>`";
+    expect(createDataHubAskTurn("问题", [{ type: "text", content: code }], "done").assistantContent).toBe(code);
+  });
+});
+
+it("cleans protocol wrappers at each model-call boundary and the thinking-stream tail", () => {
+  const turn = createDataHubAskTurn("问题", [
+    { type: "text", replyId: "first", modelCallIndex: 1, content: "我先查询。" },
+    { type: "thinking", content: "公开思考</mm:think>" },
+    { type: "text", replyId: "second", modelCallIndex: 2, content: "<mm:thi" },
+    { type: "text", replyId: "second", modelCallIndex: 2, content: "nk>第二轮推理</mm:think>" },
+    { type: "text", replyId: "second", modelCallIndex: 2, content: "最终答案" }
+  ], "done");
+  expect(turn.assistantContent).toBe("我先查询。最终答案");
+  expect(turn.thinkingContent).toContain("公开思考");
+  expect(turn.thinkingContent).toContain("第二轮推理");
+  expect(turn.thinkingContent).not.toContain("mm:think");
+});
+
+it("preserves different SQL identifiers across answer blocks", () => {
+  const turn = createDataHubAskTurn("给出两个查询示例", [
+    { type: "text", content: "```sql\nSELECT customer_id FROM orders;\n```", replyId: "first" },
+    { type: "text", content: "```sql\nSELECT customerid FROM orders;\n```", replyId: "second" }
+  ], "done");
+  expect(turn.answerBlocks).toHaveLength(2);
+  expect(turn.assistantContent).toContain("SELECT customer_id FROM orders;");
+  expect(turn.assistantContent).toContain("SELECT customerid FROM orders;");
+});
+
+
+it("retains explicit evidence ids from completion after an earlier document event", () => {
+  const citation = { kbId: "7", docId: "101", fragments: ["第一片段"], sourceAvailable: true };
+  const turn = createDataHubAskTurn("验收要求", [
+    { type: "citation_document", content: citation },
+    { type: "done", content: { citationDocuments: [{ ...citation, fragments: ["验收片段"],
+      evidenceFragments: [{ evidenceId: "e4", text: "验收片段", secret: "not retained" },
+        { evidenceId: "wrong", text: "bad" }, { evidenceId: "e1", text: "" }] }] } }
+  ], "done");
+  expect(turn.citationDocuments).toHaveLength(1);
+  expect(turn.citationDocuments[0].evidenceFragments).toEqual([{ evidenceId: "e4", text: "验收片段" }]);
+  expect(turn.citationDocuments[0].fragments).toEqual(["第一片段", "验收片段"]);
+});
+
+it("keeps only received public text when a failed terminal summary is present", () => {
+  const turn = createDataHubAskTurn("统计收入", [
+    { type: "text", content: "本年度总收入为" },
+    { type: "done", content: { failed: true, summary: "这个失败摘要不能成为正式结论" } }
+  ], "error", "回答未完成，连接已结束，请重试");
+  expect(turn.assistantContent).toBe("本年度总收入为");
+  expect(turn.answerBlocks).toEqual([{ content: "本年度总收入为" }]);
+  expect(turn.status).toBe("error");
+  expect(resolveDataHubFinalAnswer("失败摘要", "", true)).toBe("");
 });

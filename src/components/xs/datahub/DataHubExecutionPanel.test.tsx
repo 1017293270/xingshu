@@ -5,6 +5,24 @@ import type { DataHubStreamEvent } from "@/types/dataHub";
 import { formatExecutionTime } from "./display";
 import { DataHubExecutionPanel } from "./DataHubExecutionPanel";
 
+it("cleans model protocol markers in expanded execution cards and activity narratives", () => {
+  const root = { sessionId: "marker-session", agentName: "问数智能体" };
+  const projection = projectDataHubExecutionEvents([
+    { ...root, type: "agent_start" },
+    { ...root, type: "thinking", content: "核对字段口径。</mm:think>", replyId: "reasoning", modelCallIndex: 1 },
+    { ...root, type: "activity", replyId: "answer", modelCallIndex: 2,
+      content: { activityId: "answer-model", kind: "model", action: "model_analysis", label: "整理结果", status: "success" } },
+    { ...root, type: "text", content: "</mm:think>合同共12份。", replyId: "answer", modelCallIndex: 2 },
+    { ...root, type: "text", content: "</mm:think>其中生效合同8份。", replyId: "answer-tail", modelCallIndex: 3 },
+    { ...root, type: "done", content: {} }
+  ], { mainSessionId: root.sessionId, terminalStatus: "done" });
+  const { container } = render(<DataHubExecutionPanel projection={projection} preferDirectMainExecution />);
+  expect(container).not.toHaveTextContent("mm:think");
+  expect(container).toHaveTextContent("合同共12份。");
+  expect(container).toHaveTextContent("其中生效合同8份。");
+  expect(container).toHaveTextContent("核对字段口径。");
+});
+
 const events: DataHubStreamEvent[] = [
   {
     type: "agent_start",
