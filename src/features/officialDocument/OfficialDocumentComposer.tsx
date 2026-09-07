@@ -7,6 +7,7 @@ import {
   type RefObject
 } from "react";
 import "./official-document-composer.css";
+import "@/components/xs/composer-surface.css";
 
 /** 文本区按行增高，行高与上下内边距写死在这里，CSS 只负责画皮。 */
 const LINE_HEIGHT = 22;
@@ -86,7 +87,7 @@ export function OfficialDocumentComposer({
   return (
     <div className="official-document-composer-slot">
       <section
-        className="official-document-composer"
+        className="official-document-composer xs-prompt-surface"
         aria-label={label}
         aria-busy={busy ? true : undefined}
         data-mode={mode}

@@ -1,5 +1,5 @@
 import { Button, Input, Popconfirm, Segmented, Tooltip } from "antd";
-import { AsteriskSimple, Check, CopySimple, PaperPlaneTilt, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowUp, AsteriskSimple, Check, CopySimple, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -234,18 +234,20 @@ export function TablePage() {
           <h1>想做一张什么表？</h1>
         </header>
         <XsComposerBox
-          className={`table-hero__composer${promptPulse === "filled" ? " table-hero__composer--filled" : ""}`}
+          className={`table-hero__composer xs-prompt-surface${promptPulse === "filled" ? " table-hero__composer--filled" : ""}`}
           mode="hero"
           toolbarLead="Enter 生成 · Shift + Enter 换行"
           toolbarTail={(
             <Button
+              className="xs-prompt-surface__send"
               type="primary"
-              icon={<PaperPlaneTilt size={17} weight="fill" aria-hidden="true" />}
+              shape="circle"
+              aria-label="生成表格"
+              title="生成表格"
+              icon={<ArrowUp size={18} weight="bold" aria-hidden="true" />}
               disabled={!prompt.trim()}
               onClick={handleGenerate}
-            >
-              生成表格
-            </Button>
+            />
           )}
           footnote="生成后进入独立的问表会话，结果表会标注数据源、字段数与行数。"
         >

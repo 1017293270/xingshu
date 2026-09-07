@@ -1,6 +1,7 @@
 import { ArrowDown } from "@phosphor-icons/react";
 import { Button } from "antd";
 import type { ReactNode } from "react";
+import "../composer-surface.css";
 
 export type XsComposerBoxProps = {
   /** hero=首屏大输入盒；chat=会话态压矮、工具条浮到底部那一条带上。 */

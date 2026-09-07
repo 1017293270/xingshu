@@ -1,0 +1,185 @@
+/* 首页、制表和公文复用的输入框外观；各页保留自己的输入与工具条行为。 */
+.xs-prompt-surface:is(.xs-command-box, .xs-composer, .official-document-composer) {
+  --composer-ink: #484848;
+  --composer-muted: #8f8f8f;
+  --composer-border: #ebebeb;
+  position: relative;
+  display: grid;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  border: 1px solid var(--composer-border);
+  border-radius: 24px;
+  background: var(--xs-surface);
+  color: var(--composer-ink);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 3%);
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.xs-prompt-surface:is(.xs-command-box, .xs-composer, .official-document-composer):focus-within {
+  border-color: #d4d4d4;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 4%);
+}
+
+.xs-command-box.xs-prompt-surface,
+.xs-prompt-surface[data-mode="hero"] {
+  min-height: 100px;
+}
+
+.xs-prompt-surface[data-busy] {
+  border-color: var(--composer-border);
+}
+
+.xs-prompt-surface :is(textarea, .ant-input) {
+  display: block;
+  width: 100%;
+  padding: 14px 12px 4px;
+  color: #252525;
+  border: 0;
+  border-radius: 24px 24px 0 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 22px;
+  resize: none;
+  scrollbar-width: thin;
+}
+
+.xs-prompt-surface .xs-command-box__input {
+  height: 62px;
+}
+
+.xs-prompt-surface :is(textarea, .ant-input):focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.xs-prompt-surface :is(textarea, .ant-input)::placeholder {
+  color: #a6a6a6;
+}
+
+.xs-prompt-surface :is(textarea, .ant-input):disabled {
+  color: var(--composer-muted);
+  cursor: not-allowed;
+}
+
+.xs-prompt-surface :is(.xs-command-box__toolbar, .xs-composer__toolbar, .official-document-composer__toolbar) {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 8px;
+  border-top: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.xs-prompt-surface .xs-composer__lead {
+  color: var(--composer-muted);
+  font-size: var(--xs-fs-caption);
+}
+
+.xs-prompt-surface .xs-command-box__toolbar {
+  padding-inline-start: 16px;
+}
+
+.xs-prompt-surface .xs-command-model-select__chip {
+  height: 28px;
+  padding-inline: 10px;
+  border-color: transparent;
+  border-radius: 14px;
+  color: #707070;
+  background: transparent;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+}
+
+.xs-prompt-surface .xs-command-model-select__chip:hover {
+  color: var(--composer-ink);
+  background: #f7f7f7;
+}
+
+.xs-prompt-surface .xs-command-model-select__chip[data-selected] {
+  border-color: transparent;
+  color: #303030;
+  background: #f3f3f3;
+  font-weight: var(--xs-fw-text);
+}
+
+.xs-prompt-surface .xs-command-model-select__chip[data-selected]:hover {
+  background: #ededed;
+}
+
+.xs-prompt-surface .xs-command-model-select__chip:focus-visible {
+  outline: 2px solid #858585;
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* 压过页面的通用 icon-only 尺寸，发送、语音和添加按钮保持正圆。 */
+.xs-prompt-surface :is(.xs-command-box__actions, .xs-composer__tail, .official-document-composer__toolbar) .ant-btn.ant-btn-icon-only {
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #252525;
+  background: transparent;
+  box-shadow: none;
+}
+
+.xs-prompt-surface :is(.xs-command-box__tool, .official-document-composer__plus).ant-btn:hover:not(:disabled) {
+  color: #161616;
+  background: #f5f5f5;
+}
+
+.xs-prompt-surface .xs-command-box__voice.ant-btn[aria-pressed="true"] {
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
+}
+
+.xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:not(:disabled) {
+  color: #fff;
+  background: #252525;
+}
+
+.xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:hover:not(:disabled) {
+  background: #424242;
+}
+
+.xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:disabled {
+  color: #bcbcbc;
+  background: #f3f3f3;
+}
+
+.xs-prompt-surface :is(.xs-command-box__stop, .official-document-composer__stop).ant-btn:not(:disabled) {
+  color: #fff;
+  background: #f47932;
+}
+
+.xs-prompt-surface :is(.xs-command-box__stop, .official-document-composer__stop).ant-btn:hover:not(:disabled) {
+  background: #e96b24;
+}
+
+@media (max-width: 640px) {
+  .xs-prompt-surface .xs-command-box__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .xs-prompt-surface .xs-command-model-select {
+    flex-basis: 100%;
+  }
+
+  .xs-prompt-surface .xs-command-box__actions {
+    width: auto;
+  }
+}

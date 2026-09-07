@@ -32,7 +32,8 @@ export function OfficialDocumentMentionMenu({
     const element = menuRef.current;
     const anchor = element?.parentElement;
     if (!element || !anchor) return;
-    const room = anchor.getBoundingClientRect().top - MENU_VIEWPORT_MARGIN;
+    const contentTop = anchor.closest("main")?.getBoundingClientRect().top ?? 0;
+    const room = anchor.getBoundingClientRect().top - contentTop - MENU_VIEWPORT_MARGIN;
     element.style.maxHeight = `${Math.max(0, Math.min(MAX_MENU_HEIGHT, room))}px`;
   }, [groups]);
 

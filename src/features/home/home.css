@@ -104,129 +104,6 @@
   font-weight: var(--xs-fw-regular);
 }
 
-/* ---------- 主命令输入框：全页唯一一级焦点 ---------- */
-
-.home-page .xs-command-box {
-  width: min(100%, 760px);
-  border-color: #d5e4f6;
-  border-radius: var(--xs-radius-large);
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 12px 32px rgba(35, 104, 210, 0.08);
-}
-
-.home-page .xs-command-box:focus-within {
-  border-color: #d5e4f6;
-  box-shadow: 0 12px 32px rgba(35, 104, 210, 0.08);
-}
-
-.home-page .xs-command-box__input {
-  height: 72px;
-  padding: 18px 22px 8px;
-  line-height: 1.55;
-  font-size: var(--xs-fs-control);
-}
-
-.home-page .xs-command-box__input::placeholder {
-  color: #8496b0;
-}
-
-.home-page .xs-command-box__input:focus-visible {
-  box-shadow: none;
-}
-
-.home-page .xs-command-box__toolbar {
-  min-height: 52px;
-  padding: 0 16px 10px 18px;
-  border-top: 0 !important;
-  box-shadow: none;
-  background: transparent;
-}
-
-.home-page .xs-command-box__actions {
-  gap: 8px;
-}
-
-.home-page .xs-command-model-select {
-  height: auto;
-  padding: 0;
-  font-size: var(--xs-fs-label);
-}
-
-.home-page .xs-command-box__actions .ant-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  box-sizing: border-box;
-  aspect-ratio: 1 / 1;
-  /* hero 里的工具/发送钮跟主输入走 lg 档，比工具条控件大一号 */
-  width: var(--xs-control-height-lg);
-  min-width: var(--xs-control-height-lg);
-  max-width: var(--xs-control-height-lg);
-  height: var(--xs-control-height-lg);
-  min-height: var(--xs-control-height-lg);
-  max-height: var(--xs-control-height-lg);
-  padding: 0;
-  line-height: 1;
-  color: #54729c;
-  border-color: transparent;
-  border-radius: var(--xs-radius-card);
-  background: transparent;
-  box-shadow: none;
-}
-
-.home-page .xs-command-box__actions .ant-btn .ant-btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-inline: 0;
-  line-height: 0;
-}
-
-.home-page .xs-command-box__actions .ant-btn svg {
-  display: block;
-  flex: none;
-  width: 18px;
-  height: 18px;
-}
-
-.home-page .xs-command-box__send.ant-btn,
-.home-page .xs-command-box__stop.ant-btn {
-  width: var(--xs-control-height-lg);
-  min-width: var(--xs-control-height-lg);
-  max-width: var(--xs-control-height-lg);
-  height: var(--xs-control-height-lg);
-  min-height: var(--xs-control-height-lg);
-  max-height: var(--xs-control-height-lg);
-}
-
-.home-page .xs-command-box__send.ant-btn {
-  color: var(--xs-surface);
-  border: 0;
-  border-radius: var(--xs-radius-card);
-  background: #176ff2;
-  box-shadow: none;
-}
-
-.home-page .xs-command-box__send.ant-btn:not(:disabled):hover,
-.home-page .xs-command-box__send.ant-btn:not(:disabled):focus-visible {
-  color: var(--xs-surface);
-  background: #0f63e8;
-}
-
-.home-page .xs-command-box__send.ant-btn:not(:disabled):active {
-  color: var(--xs-surface);
-  background: #0a58d0;
-  transform: scale(0.94);
-}
-
-.home-page .xs-command-box__send.ant-btn:disabled {
-  color: #9db4d4;
-  border: 0;
-  background: #eef3fa;
-  box-shadow: none;
-}
-
 /* 命令框回执走全站状态条，跟着页面轨道居中 */
 .home-page__status-slot {
   width: min(100%, var(--xs-page-track));
@@ -416,16 +293,6 @@
     margin: var(--home-hero-top) auto var(--home-hero-gap);
   }
 
-  /* 输入框是全页唯一一级焦点，任何视口都不参与压缩：矮屏省下来的高度
-     全部从留白和卡片壳子里出，主控件保持 72px + 52px 的原尺寸。 */
-  .home-page .xs-command-box__input {
-    height: 72px;
-  }
-
-  .home-page .xs-command-box__toolbar {
-    min-height: 52px;
-  }
-
   .home-page__apps,
   .home-page__questions {
     margin-top: var(--home-apps-gap);
@@ -479,25 +346,6 @@
 
   .home-page__hero {
     margin: 40px auto 32px;
-  }
-
-  .home-page .xs-command-box__input {
-    height: 118px;
-    padding: 20px;
-    font-size: var(--xs-fs-input);
-  }
-
-  .home-page .xs-command-box__toolbar {
-    min-height: 60px;
-    padding: 12px 16px;
-  }
-
-  .home-page .xs-command-box__actions {
-    width: 100%;
-  }
-
-  .home-page .xs-command-model-select {
-    margin-right: auto;
   }
 
   .home-page__app-grid {

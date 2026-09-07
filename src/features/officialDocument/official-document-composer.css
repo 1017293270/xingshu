@@ -1,77 +1,9 @@
-/* ---------- 公文写作输入盒与 @ 浮层：参考 Codex 的中性材质，仅作用于写作输入区 ---------- */
+/* 公文输入框的引用、浮层与提示；通用外观见 components/xs/composer-surface.css。 */
 
 .official-document-composer-slot {
   position: relative;
   width: 100%;
   margin-bottom: 26px;
-}
-
-.official-document-composer {
-  --composer-ink: #484848;
-  --composer-muted: #8f8f8f;
-  --composer-border: #ebebeb;
-  position: relative;
-  display: grid;
-  width: 100%;
-  border: 1px solid var(--composer-border);
-  border-radius: 24px;
-  background: var(--xs-surface);
-  color: var(--composer-ink);
-  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 3%);
-  transition:
-    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-fast) var(--xs-motion-ease-out);
-}
-
-.official-document-composer:focus-within {
-  border-color: #d4d4d4;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 4%);
-}
-
-.official-document-composer[data-busy] {
-  border-color: var(--composer-border);
-}
-
-.official-document-composer__input {
-  display: block;
-  width: 100%;
-  padding: 14px 12px 4px;
-  color: #252525;
-  border: 0;
-  border-radius: 24px 24px 0 0;
-  outline: 0;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--xs-fs-control);
-  font-weight: var(--xs-fw-regular);
-  line-height: 22px;
-  resize: none;
-  scrollbar-width: thin;
-}
-
-/* 焦点态由整个输入盒承担（:focus-within），内层文本域不再单独画一圈全局焦点环 */
-.official-document-composer__input:focus-visible {
-  outline: 0;
-  box-shadow: none;
-}
-
-.official-document-composer__input::placeholder {
-  color: #a6a6a6;
-}
-
-.official-document-composer__input:disabled {
-  color: var(--composer-muted);
-  cursor: not-allowed;
-}
-
-/* 工具条：左边是 + 号与本轮引用，右边只有一个发送 */
-.official-document-composer__toolbar {
-  display: flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 8px 8px;
 }
 
 .official-document-composer__lead {
@@ -87,50 +19,6 @@
   flex: none;
   align-items: center;
   gap: 8px;
-}
-
-/* + 号是行内次级动作：28px、幽灵、真圆形 */
-.official-document-composer__plus.ant-btn {
-  color: #252525;
-  box-shadow: none;
-}
-
-.official-document-composer__plus.ant-btn:hover:not(:disabled) {
-  color: #161616;
-  background: #f5f5f5;
-}
-
-/* 压过页面通用 icon-only 尺寸，保持 +、发送与停止为正圆。 */
-.official-document-composer .official-document-composer__toolbar .ant-btn.ant-btn-circle {
-  width: var(--xs-control-height-sm);
-  height: var(--xs-control-height-sm);
-  min-width: var(--xs-control-height-sm);
-  border: 0;
-  box-shadow: none;
-}
-
-.official-document-composer__send.ant-btn-primary:not(:disabled) {
-  color: #fff;
-  background: #252525;
-}
-
-.official-document-composer__send.ant-btn-primary:hover:not(:disabled) {
-  background: #424242;
-}
-
-.official-document-composer__send.ant-btn-primary:disabled {
-  color: #bcbcbc;
-  background: #f3f3f3;
-}
-
-.official-document-composer__stop.ant-btn {
-  color: #fff;
-  background: #f47932;
-}
-
-.official-document-composer__stop.ant-btn:hover {
-  color: #fff;
-  background: #e96b24;
 }
 
 .official-document-composer__footnote {

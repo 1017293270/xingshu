@@ -203,19 +203,9 @@ describe("HomePage", () => {
 
   it("keeps the command toolbar clean without hints or quick-prompt dividers", () => {
     renderHomePage();
-    const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
 
     expect(screen.queryByRole("group", { name: "快捷问题" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
-    expect(homeCss).toMatch(
-      /\.home-page \.xs-command-box__input:focus-visible \{[\s\S]*?box-shadow: none;/
-    );
-    expect(homeCss).toMatch(
-      /\.home-page \.xs-command-box__toolbar \{[\s\S]*?border-top: 0 !important;/
-    );
-    expect(homeCss).toMatch(
-      /\.home-page \.xs-command-box__send\.ant-btn \{[\s\S]*?background: #176ff2;/
-    );
   });
 
   /* 闲置态"一屏放下"是验收线：jsdom 量不了布局，这里锁住撑起这条线的几个机制。
@@ -235,10 +225,6 @@ describe("HomePage", () => {
     /* 卡片自然高度由内边距 + 图标 + 描述位撑起，只调 min-height 压不到 150px 档 */
     expect(homeCss).toContain("--xs-icon-tile-size: var(--home-card-tile);");
     expect(homeCss).toContain("min-height: var(--home-card-desc);");
-    /* 输入框是一级焦点，任何视口都不参与压缩 */
-    expect(homeCss).toMatch(
-      /@media \(min-width: 901px\)[\s\S]*?\.home-page \.xs-command-box__input \{\n\s+height: 72px;/
-    );
     /* 一屏锁只加在桌面档，移动端仍是可滚动的长页 */
     expect(homeCss).not.toMatch(
       /@media \(max-width: 900px\)[\s\S]*?\.xs-shell__main:has\(\.home-page\)/

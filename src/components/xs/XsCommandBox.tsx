@@ -5,6 +5,7 @@ import type { VoiceInputState } from "@/hooks/useVoiceInput";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
 import type { DataHubChatMode } from "@/types/dataHub";
 import { XsCommandModelSelect } from "./XsCommandModelSelect";
+import "./composer-surface.css";
 
 export type XsCommandSuggestion = {
   label: string;
@@ -12,6 +13,7 @@ export type XsCommandSuggestion = {
 };
 
 type XsCommandBoxProps = {
+  className?: string;
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -42,6 +44,7 @@ const voiceStateLabels = {
 const defaultPlaceholder = "给星数发送消息";
 
 export function XsCommandBox({
+  className,
   value,
   onChange,
   onSubmit,
@@ -66,7 +69,7 @@ export function XsCommandBox({
 
   return (
     <section
-      className="xs-command-box"
+      className={["xs-command-box", className].filter(Boolean).join(" ")}
       data-state={busy ? "generating" : "idle"}
       data-voice-state={voiceState}
       aria-label="星数命令输入区"

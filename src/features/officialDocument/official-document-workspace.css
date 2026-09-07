@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 0 0 var(--xs-shell-toggle-gutter);
+  padding: 0 clamp(24px, 2.2vw, 48px) 0 var(--xs-shell-toggle-gutter);
   background: var(--xs-surface);
 }
 
