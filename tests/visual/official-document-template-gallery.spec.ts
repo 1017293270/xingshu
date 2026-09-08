@@ -63,7 +63,7 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
     await page.screenshot({ path: `outputs/template-library-svg/library-${width}.png` });
   }
   await page.getByRole("button", { name: /待处理/ }).click();
-  await expect(page.locator(".official-document-template-card")).toHaveCount(2);
+  await expect(page.locator(".official-document-template-card")).toHaveCount(3);
   await expect(page.getByRole("button", { name: "使用模板 工作总结", exact: true })).toBeDisabled();
   await page.getByRole("textbox", { name: "搜索模板" }).fill("找不到的文件");
   await expect(page.getByText("没有符合条件的模板")).toBeVisible();

@@ -117,6 +117,8 @@ export type OfficialDocumentTemplateVersion = {
   fileSize: number;
   sha256?: string;
   createdAt: string;
+  /** 编译文件是否还在服务器上。false 表示文件已丢失，这一版生成不出成稿；缺省表示后端没给这项信息。 */
+  compiledAvailable?: boolean;
   analysis?: OfficialDocumentAnalysis;
 };
 

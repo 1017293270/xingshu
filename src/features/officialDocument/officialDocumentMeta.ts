@@ -8,18 +8,24 @@ import type {
   OfficialDocumentMappingRole,
   OfficialDocumentRiskSeverity,
   OfficialDocumentStructureNode,
+  OfficialDocumentTemplate,
   OfficialDocumentTemplateStatus,
   OfficialDocumentWorkspaceSnapshot,
   QueryBindingCandidate
 } from "@/types/officialDocument";
 
+/** 判断可用性只要状态和当前版本，调用方给整份模板或等价片段都行。 */
+export type TemplateUsability = Pick<OfficialDocumentTemplate, "status" | "currentVersion">;
+
 export const templateStatusLabel: Record<OfficialDocumentTemplateStatus, string> = {
   ANALYZING: "分析中",
-  NEEDS_REVIEW: "可用",
+  NEEDS_REVIEW: "待发布",
   PUBLISHED: "可用",
   BLOCKED: "有错误",
   FAILED: "分析失败"
 };
+
+export const TEMPLATE_FILE_MISSING_LABEL = "文件缺失，需重新上传";
 
 export const riskLabel: Record<OfficialDocumentRiskSeverity, string> = {
   INFO: "提示",
@@ -157,8 +163,18 @@ export function countBlockingRisks(analysis?: OfficialDocumentAnalysis) {
   return analysis?.risks.filter((risk) => risk.severity === "BLOCKING").length ?? 0;
 }
 
-export function templateIsUsable(status: OfficialDocumentTemplateStatus) {
-  return status === "PUBLISHED" || status === "NEEDS_REVIEW";
+/** 可用性只认「拿得到成稿」这一条：模板要已发布，编译文件也要还在服务器上。 */
+export function templateIsUsable(template: TemplateUsability) {
+  return template.status === "PUBLISHED" && template.currentVersion.compiledAvailable !== false;
+}
+
+export function templateFileIsMissing(template: TemplateUsability) {
+  return template.status === "PUBLISHED" && template.currentVersion.compiledAvailable === false;
+}
+
+/** 卡片和列表上的状态文案：文件丢了要直说，让用户知道该重新上传而不是等发布。 */
+export function templateUsabilityLabel(template: TemplateUsability) {
+  return templateFileIsMissing(template) ? TEMPLATE_FILE_MISSING_LABEL : templateStatusLabel[template.status];
 }
 
 export function buildOfficialDocumentMappings(

@@ -3,7 +3,7 @@ import { Button, Input } from "antd";
 import { useState, type ReactNode } from "react";
 import { summarizeOfficialDocumentTemplate } from "@/services/officialDocumentFullDraft";
 import type { OfficialDocumentTemplate } from "@/types/officialDocument";
-import { formatDate, templateIsUsable, templateStatusLabel } from "./officialDocumentMeta";
+import { formatDate, templateFileIsMissing, templateIsUsable, templateUsabilityLabel } from "./officialDocumentMeta";
 import { templateIconForName } from "./templateIcons";
 import "./official-document-templates.css";
 
@@ -24,7 +24,8 @@ export function TemplateGalleryCard({
   onUse: (template: OfficialDocumentTemplate) => void;
   onOpen: (template: OfficialDocumentTemplate) => void;
 }) {
-  const usable = templateIsUsable(template.status);
+  const usable = templateIsUsable(template);
+  const fileMissing = templateFileIsMissing(template);
   const headings = summarizeOfficialDocumentTemplate(template.currentVersion.analysis?.structureNodes ?? [])
     .filter((node) => node.role.startsWith("HEADING_"));
   const description = headings.some((node) => /[XＸ×_]{3,}/i.test(node.preview))
@@ -54,7 +55,7 @@ export function TemplateGalleryCard({
                 {!usable && (template.status === "ANALYZING"
                   ? <Clock size={14} aria-hidden="true" />
                   : <WarningCircle size={14} aria-hidden="true" />)}
-                {templateStatusLabel[template.status]}
+                {templateUsabilityLabel(template)}
               </span>
             </span>
           </span>
@@ -70,7 +71,11 @@ export function TemplateGalleryCard({
         type="button"
         className="official-document-template-card__use"
         aria-label={`使用模板 ${template.name}`}
-        title={usable ? "使用模板" : "请先查看结构并处理模板状态"}
+        title={usable
+          ? "使用模板"
+          : fileMissing
+            ? "模板文件已从服务器丢失，请重新上传这份模板后再使用"
+            : "请先查看结构并处理模板状态"}
         disabled={!usable}
         onClick={() => onUse(template)}
       >
@@ -102,10 +107,10 @@ export function TemplateGallery({
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const usableCount = templates.filter((template) => templateIsUsable(template.status)).length;
+  const usableCount = templates.filter((template) => templateIsUsable(template)).length;
   const query = search.trim().toLocaleLowerCase();
   const visibleTemplates = templates.filter((template) => {
-    const matchesStatus = filter === "all" || templateIsUsable(template.status) === (filter === "usable");
+    const matchesStatus = filter === "all" || templateIsUsable(template) === (filter === "usable");
     return matchesStatus && `${template.name} ${template.currentVersion.fileName}`.toLocaleLowerCase().includes(query);
   });
 

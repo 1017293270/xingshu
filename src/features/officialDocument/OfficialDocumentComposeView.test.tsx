@@ -257,6 +257,55 @@ const workspace: OfficialDocumentWorkspaceSnapshot = {
   queryBindingCandidates: []
 };
 
+/* 文件缺失（PUBLISHED 但编译文件没了）和待发布两种模板，连同各自的草稿，都不该出现在 @ 里。 */
+const unusableWorkspace: OfficialDocumentWorkspaceSnapshot = {
+  ...workspace,
+  templates: [
+    ...workspace.templates,
+    {
+      ...workspace.templates[0],
+      id: "template-missing",
+      name: "文件缺失模板",
+      currentVersion: {
+        ...workspace.templates[0].currentVersion,
+        id: "version-missing",
+        fileName: "文件缺失模板.docx",
+        compiledAvailable: false
+      }
+    },
+    {
+      ...workspace.templates[0],
+      id: "template-review",
+      name: "待发布模板",
+      status: "NEEDS_REVIEW",
+      currentVersion: {
+        ...workspace.templates[0].currentVersion,
+        id: "version-review",
+        fileName: "待发布模板.docx"
+      }
+    }
+  ],
+  drafts: [
+    ...workspace.drafts,
+    {
+      ...workspace.drafts[0],
+      id: "draft-missing",
+      title: "缺文件草稿",
+      templateId: "template-missing",
+      templateVersionId: "version-missing",
+      templateName: "文件缺失模板"
+    },
+    {
+      ...workspace.drafts[0],
+      id: "draft-review",
+      title: "待发布草稿",
+      templateId: "template-review",
+      templateVersionId: "version-review",
+      templateName: "待发布模板"
+    }
+  ]
+};
+
 function renderView() {
   return render(
     <AppProviders>
@@ -1098,6 +1147,22 @@ describe("OfficialDocumentComposeView", () => {
     expect(within(templateGroup).getByRole("option", { name: /通知模板/ })).toHaveTextContent("v1 · 通知模板.docx");
     const draftGroup = within(menu).getByRole("group", { name: "参考草稿" });
     expect(within(draftGroup).getByRole("option", { name: /季度通知草稿/ })).toHaveTextContent("通知模板");
+  });
+
+  it("@ 里不列文件缺失和待发布的模板，也不列它们的草稿", async () => {
+    mocks.loadWorkspace.mockResolvedValue(unusableWorkspace);
+    const user = userEvent.setup();
+    renderView();
+
+    const { menu } = await openMentions(user);
+    const templateGroup = within(menu).getByRole("group", { name: "模板" });
+    expect(within(templateGroup).getByRole("option", { name: /通知模板/ })).toBeInTheDocument();
+    expect(within(templateGroup).queryByRole("option", { name: /文件缺失模板/ })).not.toBeInTheDocument();
+    expect(within(templateGroup).queryByRole("option", { name: /待发布模板/ })).not.toBeInTheDocument();
+    const draftGroup = within(menu).getByRole("group", { name: "参考草稿" });
+    expect(within(draftGroup).getByRole("option", { name: /季度通知草稿/ })).toBeInTheDocument();
+    expect(within(draftGroup).queryByRole("option", { name: /缺文件草稿/ })).not.toBeInTheDocument();
+    expect(within(draftGroup).queryByRole("option", { name: /待发布草稿/ })).not.toBeInTheDocument();
   });
 
   it("@ 关键字过滤只留下匹配项", async () => {

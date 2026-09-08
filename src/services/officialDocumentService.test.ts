@@ -211,6 +211,39 @@ describe("officialDocumentService HTTP client", () => {
       .toEqual(["PRESERVE", "ISSUING_AUTHORITY", "TITLE", "RECIPIENT", "BODY"]);
   });
 
+  it("把后端的 compiledAvailable 原样带进模板版本，null 视为没有编译文件", async () => {
+    const version = (id: string, compiledAvailable?: boolean | null) => ({
+      id,
+      versionNumber: 1,
+      status: "PUBLISHED",
+      originalFileName: `${id}.docx`,
+      originalSize: 2048,
+      createdAt: "2026-09-07T00:00:00Z",
+      ...(compiledAvailable === undefined ? {} : { compiledAvailable })
+    });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/v1/capabilities")) return new Response(JSON.stringify({}));
+      if (path.endsWith("/v1/templates")) {
+        return new Response(JSON.stringify([
+          { id: "t-ok", name: "文件在", createdAt: "2026-09-07T00:00:00Z", versions: [version("v-ok", true)] },
+          { id: "t-gone", name: "文件丢了", createdAt: "2026-09-07T00:00:00Z", versions: [version("v-gone", false)] },
+          { id: "t-null", name: "没有编译文件", createdAt: "2026-09-07T00:00:00Z", versions: [version("v-null", null)] },
+          { id: "t-legacy", name: "旧后端", createdAt: "2026-09-07T00:00:00Z", versions: [version("v-legacy")] }
+        ]));
+      }
+      if (path.endsWith("/v1/drafts")) return new Response(JSON.stringify([]));
+      if (path.endsWith("/api/analytics/query-assets")) {
+        return new Response(JSON.stringify({ code: 200, message: "success", data: [] }));
+      }
+      throw new Error(`unexpected request: ${path}`);
+    }));
+
+    const workspace = await service.loadWorkspace();
+    expect(workspace.templates.map((template) => template.currentVersion.compiledAvailable))
+      .toEqual([true, false, undefined, undefined]);
+  });
+
   it("detaches a binding through the dedicated endpoint", async () => {
     const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(JSON.stringify({
       id: "bind-1",

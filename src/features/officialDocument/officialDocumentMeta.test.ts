@@ -1,13 +1,42 @@
 import { describe, expect, it } from "vitest";
-import type { OfficialDocumentStructureNode } from "@/types/officialDocument";
-import { buildOfficialDocumentMappings, draftStatusAllowsExport, operationErrorMessage, styleVariantId, templateIsUsable } from "./officialDocumentMeta";
+import type {
+  OfficialDocumentStructureNode,
+  OfficialDocumentTemplate,
+  OfficialDocumentTemplateStatus
+} from "@/types/officialDocument";
+import {
+  buildOfficialDocumentMappings,
+  draftStatusAllowsExport,
+  operationErrorMessage,
+  styleVariantId,
+  templateIsUsable,
+  templateUsabilityLabel
+} from "./officialDocumentMeta";
+
+function usabilityFixture(status: OfficialDocumentTemplateStatus, compiledAvailable?: boolean) {
+  return {
+    status,
+    currentVersion: { compiledAvailable }
+  } as Pick<OfficialDocumentTemplate, "status" | "currentVersion">;
+}
 
 describe("officialDocumentMeta template usage", () => {
-  it("treats analyzed and published templates as immediately usable", () => {
-    expect(templateIsUsable("NEEDS_REVIEW")).toBe(true);
-    expect(templateIsUsable("PUBLISHED")).toBe(true);
-    expect(templateIsUsable("ANALYZING")).toBe(false);
-    expect(templateIsUsable("BLOCKED")).toBe(false);
+  it("只有已发布且编译文件还在的模板才算可用", () => {
+    expect(templateIsUsable(usabilityFixture("PUBLISHED", true))).toBe(true);
+    // 旧后端不返回这个字段，缺省按可用处理，保持向后兼容
+    expect(templateIsUsable(usabilityFixture("PUBLISHED"))).toBe(true);
+    expect(templateIsUsable(usabilityFixture("PUBLISHED", false))).toBe(false);
+    // 待发布的模板生成得出来却下载不了，同样不给用
+    expect(templateIsUsable(usabilityFixture("NEEDS_REVIEW"))).toBe(false);
+    expect(templateIsUsable(usabilityFixture("ANALYZING"))).toBe(false);
+    expect(templateIsUsable(usabilityFixture("BLOCKED"))).toBe(false);
+  });
+
+  it("给出区分「文件缺失」和「待发布」的状态文案", () => {
+    expect(templateUsabilityLabel(usabilityFixture("PUBLISHED", false))).toBe("文件缺失，需重新上传");
+    expect(templateUsabilityLabel(usabilityFixture("PUBLISHED", true))).toBe("可用");
+    expect(templateUsabilityLabel(usabilityFixture("NEEDS_REVIEW"))).toBe("待发布");
+    expect(templateUsabilityLabel(usabilityFixture("ANALYZING"))).toBe("分析中");
   });
 
   it("builds body and optional table mappings from the current structure", () => {

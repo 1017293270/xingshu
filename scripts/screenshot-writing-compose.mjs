@@ -16,7 +16,8 @@ function paragraphs(lines) {
   }));
 }
 
-function template(id, name, fileName, status, sectionCount, headings) {
+// compiledAvailable：true=编译文件在，false=文件已丢失，null=这一版还没编译过。
+function template(id, name, fileName, status, sectionCount, headings, compiledAvailable) {
   return {
     id,
     name,
@@ -28,6 +29,7 @@ function template(id, name, fileName, status, sectionCount, headings) {
       originalFileName: fileName,
       originalSize: 42 * 1024,
       createdAt: "2026-08-27T00:00:00Z",
+      compiledAvailable: compiledAvailable ?? (status === "PUBLISHED" ? true : null),
       analysis: {
         structureProfile: {
           engineName: "Syncfusion DocIO",
@@ -63,7 +65,9 @@ const templates = [
   template("template-meeting", "党组会议纪要模板", "党组会议纪要.docx", "READY_FOR_MAPPING", 3, ["一、会议议题", "二、议定事项"]),
   template("template-request", "请示报批模板", "请示报批.docx", "PUBLISHED", 5, ["一、事项背景", "二、请示意见"]),
   template("template-brief", "工作简报模板", "工作简报.docx", "PUBLISHED", 3, ["一、本期要点", "二、下期计划"]),
-  template("template-safety", "安全检查通报模板", "安全检查通报.docx", "ANALYZING", 0, [])
+  template("template-safety", "安全检查通报模板", "安全检查通报.docx", "ANALYZING", 0, []),
+  // 已发布但编译文件在服务器上丢了：@ 里不该出现，模板库要标「文件缺失，需重新上传」
+  template("template-missing", "文件缺失通报模板", "文件缺失通报.docx", "PUBLISHED", 4, ["一、事项说明", "二、处理意见"], false)
 ];
 
 const drafts = [

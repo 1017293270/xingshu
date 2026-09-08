@@ -210,6 +210,8 @@ type ApiTemplateVersion = {
   originalFileName: string;
   originalSize: number;
   createdAt: string;
+  /** true=编译文件在；false=有编译键但文件已丢失；null/缺省=这一版还没有编译文件。 */
+  compiledAvailable?: boolean | null;
   analysisJob?: ApiAnalysisJob;
   analysis?: ApiTemplateAnalysis;
   mappingProfile?: ApiMappingProfile;
@@ -1026,6 +1028,7 @@ function mapTemplateVersion(version: ApiTemplateVersion): OfficialDocumentTempla
     fileSize: version.originalSize,
     sha256: version.originalSha256,
     createdAt: version.createdAt,
+    compiledAvailable: version.compiledAvailable ?? undefined,
     analysis: version.analysis
       ? mapAnalysis(version.id, version.status, version.analysisJob, version.analysis, version.mappingProfile)
       : undefined

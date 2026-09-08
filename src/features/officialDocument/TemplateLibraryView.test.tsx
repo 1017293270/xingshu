@@ -198,9 +198,10 @@ describe("TemplateLibraryView", () => {
     renderLibrary();
 
     expect(await screen.findByRole("button", { name: "使用模板 年度经营报告" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "使用模板 会议纪要" })).toBeEnabled();
+    // 待发布的模板生成得出来却下载不了，所以也不算可用
+    expect(screen.getByRole("button", { name: "使用模板 会议纪要" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /待处理/ }));
-    expect(screen.getAllByRole("button", { name: /打开模板/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /打开模板/ })).toHaveLength(2);
     await user.type(screen.getByRole("textbox", { name: "搜索模板" }), "  ANNUAL  ");
     expect(screen.getByRole("button", { name: "打开模板 年度经营报告" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /可用模板/ }));
@@ -208,6 +209,31 @@ describe("TemplateLibraryView", () => {
     await user.click(screen.getByRole("button", { name: "清除筛选" }));
     expect(screen.getAllByRole("button", { name: /打开模板/ })).toHaveLength(3);
     expect(screen.getByRole("textbox", { name: "搜索模板" })).toHaveValue("");
+  });
+
+  it("把编译文件丢失的模板标成需重新上传，并挡住使用入口", async () => {
+    const original = populatedWorkspace.templates[0];
+    loadOfficialDocumentWorkspace.mockResolvedValue({
+      ...populatedWorkspace,
+      templates: [original, {
+        ...original,
+        id: "template-missing",
+        name: "请示红头文件",
+        currentVersion: { ...original.currentVersion, id: "version-missing", compiledAvailable: false }
+      }]
+    });
+    const user = userEvent.setup();
+    renderLibrary();
+
+    const card = (await screen.findByRole("button", { name: "打开模板 请示红头文件" })).closest("article")!;
+    expect(within(card).getByText("文件缺失，需重新上传")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用模板 请示红头文件" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /可用模板/ })).toHaveTextContent("可用模板1");
+    expect(screen.getByRole("button", { name: /待处理/ })).toHaveTextContent("待处理1");
+
+    await user.click(screen.getByRole("button", { name: /待处理/ }));
+    expect(screen.getAllByRole("button", { name: /打开模板/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "打开模板 请示红头文件" })).toBeInTheDocument();
   });
 
   it("opens the template structure page from the card body", async () => {

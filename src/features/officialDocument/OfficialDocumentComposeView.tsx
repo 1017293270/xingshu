@@ -413,24 +413,31 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
 
-  /* 只有分析完成的结构才能当参考：草稿也得能找回它自己那一版模板结构。 */
+  /* 能 @ 的必须真能出成稿：模板要已发布、编译文件还在，结构也已分析完。 */
   const usableTemplates = useMemo(
-    () => templates.filter((template) => templateIsUsable(template.status) && template.currentVersion.analysis),
+    () => templates.filter((template) => templateIsUsable(template) && template.currentVersion.analysis),
     [templates]
+  );
+  /* 草稿再生成要靠它自己那一版模板，模板用不了这份草稿也就引用不了。 */
+  const referenceableDrafts = useMemo(
+    () => drafts.filter((draft) => usableTemplates.some((template) => (
+      template.id === draft.templateId && template.currentVersion.id === draft.templateVersionId
+    ))),
+    [drafts, usableTemplates]
   );
   const reference = useMemo<ComposeReference | null>(() => {
     if (!selection) return null;
     if (selection.kind === "template") {
-      const template = templates.find((item) => item.id === selection.id);
-      return template?.currentVersion.analysis ? { kind: "template", template } : null;
+      const template = usableTemplates.find((item) => item.id === selection.id);
+      return template ? { kind: "template", template } : null;
     }
-    const draft = drafts.find((item) => item.id === selection.id);
+    const draft = referenceableDrafts.find((item) => item.id === selection.id);
     if (!draft) return null;
-    const template = templates.find((item) => (
+    const template = usableTemplates.find((item) => (
       item.id === draft.templateId && item.currentVersion.id === draft.templateVersionId
     ));
-    return template?.currentVersion.analysis ? { kind: "draft", draft, template } : null;
-  }, [drafts, selection, templates]);
+    return template ? { kind: "draft", draft, template } : null;
+  }, [referenceableDrafts, selection, usableTemplates]);
 
   const scrollSignature = messages
     .map((message) => `${message.id}:${message.status}:${message.ask.assistantContent.length}`)
@@ -543,7 +550,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     {
       key: "drafts",
       title: "参考草稿",
-      items: drafts.map((draft) => ({
+      items: referenceableDrafts.map((draft) => ({
         key: `draft:${draft.id}`,
         label: draft.title,
         description: `${draft.templateName} · ${formatDate(draft.updatedAt)}`,
@@ -551,7 +558,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         searchText: `${draft.title} ${draft.templateName}`.toLocaleLowerCase()
       }))
     }
-  ], [drafts, usableTemplates]);
+  ], [referenceableDrafts, usableTemplates]);
 
   const visibleMentionGroups = useMemo(
     () => (mention ? filterMentionGroups(mentionGroups, mention.keyword) : []),

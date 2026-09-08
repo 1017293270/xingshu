@@ -79,7 +79,7 @@ export function DraftLibraryView() {
 
   const drafts = query.data?.drafts ?? [];
   const usableTemplateCount = (query.data?.templates ?? [])
-    .filter((template) => templateIsUsable(template.status)).length;
+    .filter((template) => templateIsUsable(template)).length;
   const searchKeyword = keyword.trim().toLocaleLowerCase();
   const visibleDrafts = drafts.filter((draft) => (
     (draftFilter === "ALL" || draft.status === draftFilter)
