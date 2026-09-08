@@ -60,6 +60,7 @@ test("replays suspended label/value choices and resumes the same chat with the s
       const input = (await page.locator(".analysis-composer .xs-command-box").boundingBox())!;
       return Math.max(Math.abs(bounds.width - input.width), Math.abs(bounds.x - input.x));
     }).toBeLessThan(0.5);
+    expect((await panel.boundingBox())!.width).toBeLessThanOrEqual(760);
     for (const option of options) {
       const button = panel.getByRole("button", { name: option.label, exact: true });
       await expect(button).toBeInViewport();

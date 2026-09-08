@@ -13,6 +13,7 @@ import {
   createContext,
   memo,
   useContext,
+  useCallback,
   type CSSProperties,
   type ReactElement,
   type Ref,
@@ -25,6 +26,8 @@ import {
 } from "react";
 import {
   getOfficialDocumentDraftContent,
+  getOfficialDocumentDraftPreview,
+  OfficialDocumentServiceError,
   getOfficialDocumentTemplatePreview,
   updateOfficialDocumentDraftContent
 } from "@/services/officialDocumentService";
@@ -35,10 +38,17 @@ import {
 } from "@/services/officialDocumentFullDraft";
 import type {
   OfficialDocumentDraft,
+  OfficialDocumentFactReview,
   OfficialDocumentDraftBlockRole,
   OfficialDocumentDraftContent,
   OfficialDocumentStructureNode
 } from "@/types/officialDocument";
+import { officialDocumentContentText } from "@/services/officialDocumentFactReview";
+import { useSessionQueryScope } from "@/app/sessionQuery";
+import {
+  structuredDraftRecoveryKey, readStructuredDraftRecovery, writeStructuredDraftRecovery,
+  clearStructuredDraftRecovery, sameStructuredDraftContent, type StructuredDraftRecovery
+} from "./structuredDraftRecovery";
 import { useDraftBlockMotion, type DraftBlock } from "./draftBlockMotion";
 import { OfficialDocumentAppActions } from "./OfficialDocumentAppShell";
 
@@ -283,6 +293,9 @@ export type StructuredDraftEditorHandle = {
   /** 把回答解析成标题/正文节点后追加；一次提交，只触发一次自动保存。 */
   appendText: (text: string) => number;
   getContent: () => OfficialDocumentDraftContent | undefined;
+  save: () => Promise<void>;
+  reload: () => Promise<void>;
+  saveFactReview: (review: OfficialDocumentFactReview) => Promise<OfficialDocumentDraftContent>;
   saveResearchResults: (results: NonNullable<OfficialDocumentDraftContent["researchResults"]>) => Promise<void>;
   applyBlocks: (blocks: OfficialDocumentDraftContent["blocks"]) => Promise<void>;
   normalizeForExport: () => Promise<number>;
@@ -303,6 +316,22 @@ export function StructuredDraftEditor({
   onContentChange?: (content: OfficialDocumentDraftContent) => void;
   ref?: Ref<StructuredDraftEditorHandle>;
 }) {
+  const sessionScope = useSessionQueryScope();
+  const recoveryKey = structuredDraftRecoveryKey(draft.id);
+  const contextKey = `${sessionScope.join(":")}:${draft.id}:${recoveryKey}`;
+  const [loadedContext, setLoadedContext] = useState("");
+  const [recoveryNotice, setRecoveryNotice] = useState("");
+  const [serverConflict, setServerConflict] = useState<OfficialDocumentDraftContent>();
+  const [conflictArchive, setConflictArchive] = useState<StructuredDraftRecovery>();
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [previewKind, setPreviewKind] = useState<"draft" | "template">("draft");
+  const [previewRevision, setPreviewRevision] = useState<number>();
+  const [previewError, setPreviewError] = useState("");
+  const contextEpochRef = useRef(0);
+  const previewRequestRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const recoveryIdRef = useRef<string | undefined>(undefined);
+  const serverConflictRef = useRef<OfficialDocumentDraftContent | undefined>(undefined);
   const [content, setContent] = useState<OfficialDocumentDraftContent>();
   const [saveState, setSaveState] = useState<StructuredDraftSaveState>("loading");
   const [saveError, setSaveError] = useState("");
@@ -318,6 +347,7 @@ export function StructuredDraftEditor({
   const generationRef = useRef(0);
   const saveTimerRef = useRef<number | undefined>(undefined);
   const savingRef = useRef(false);
+  const activeSaveRef = useRef<Promise<void> | undefined>(undefined);
   const pendingSaveRef = useRef(false);
   const applyingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -330,95 +360,214 @@ export function StructuredDraftEditor({
     [templateNodes]
   );
 
+  const persistRecovery = useCallback((snapshot: OfficialDocumentDraftContent) => {
+    try {
+      recoveryIdRef.current = writeStructuredDraftRecovery(recoveryKey, draft.templateVersionId, snapshot, serverConflictRef.current)?.id;
+    } catch {
+      setRecoveryNotice("浏览器未能保存本地副本，请使用保存草稿将修改保存到服务器。");
+    }
+  }, [recoveryKey, draft.templateVersionId]);
+
   const scheduleSave = () => {
     if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current);
+    if (serverConflictRef.current) return;
     setSaveError("");
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = undefined;
-      void performSaveRef.current();
+      void performSaveRef.current().catch(() => undefined);
     }, 600);
   };
 
   const commit = (mutate: (current: OfficialDocumentDraftContent) => OfficialDocumentDraftContent) => {
-    if (applyingRef.current) return;
+    if (applyingRef.current || recoveryKey !== structuredDraftRecoveryKey(draft.id)) return;
     const current = contentRef.current;
     if (!current) return;
-    const next = mutate(current);
+    const changed = mutate(current);
+    const next = changed.factReview?.confirmedAt && officialDocumentContentText(changed) !== officialDocumentContentText(current)
+      ? { ...changed, factReview: { ...changed.factReview, confirmedAt: undefined } } : changed;
     contentRef.current = next;
     generationRef.current += 1;
+    dirtyRef.current = true;
+    persistRecovery(next);
     setContent(next);
+    setSaveState(serverConflictRef.current ? "failed" : "saving");
+    // 预览对应旧内容，编辑后立刻撤下，不能拿旧PDF冒充当前稿。
+    if (previewKind === "draft") {
+      previewRequestRef.current += 1;
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = undefined;
+      setPreviewUrl(undefined);
+      setPreviewRevision(undefined);
+      setIsPreviewing(false);
+      setPreviewError(previewOpen ? "草稿已更新，请重新生成当前稿预览" : "");
+    }
     scheduleSave();
   };
 
-  performSaveRef.current = async () => {
+  performSaveRef.current = () => {
+    if (serverConflictRef.current) return Promise.reject(new Error("服务器已有新版本，本地修改已保留，可先对照再保存"));
+    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) return Promise.reject(new Error("账号或空间已切换，请重新打开草稿"));
     if (savingRef.current) {
       pendingSaveRef.current = true;
-      return;
+      return activeSaveRef.current ?? Promise.reject(new Error("正文正在应用，请稍后保存"));
     }
     const snapshot = contentRef.current;
-    if (!snapshot) return;
-    savingRef.current = true;
-    pendingSaveRef.current = false;
-    const capturedGeneration = generationRef.current;
-    setSaveState("saving");
-    try {
-      const saved = await updateOfficialDocumentDraftContent(draft.id, {
-        expectedRevision: revisionRef.current,
-        fixedValues: snapshot.fixedValues,
-        blocks: normalizeOrders(snapshot.blocks),
-        researchResults: snapshot.researchResults
-      });
-      revisionRef.current = saved.revision;
-      if (!mountedRef.current) return;
-      const latest = contentRef.current;
-      if (latest) {
-        const next = { ...latest, revision: saved.revision };
-        contentRef.current = next;
-        setContent(next);
-        onContentChange?.(next);
+    if (!snapshot || !mountedRef.current) return Promise.reject(new Error("草稿内容尚未加载或编辑器已关闭"));
+    const epoch = contextEpochRef.current;
+    const backupId = recoveryIdRef.current;
+    const operation = async () => {
+      savingRef.current = true;
+      pendingSaveRef.current = false;
+      const capturedGeneration = generationRef.current;
+      setSaveState("saving");
+      setSaveError("");
+      const acceptSaved = (saved: OfficialDocumentDraftContent) => {
+        clearStructuredDraftRecovery(recoveryKey, backupId);
+        if (!mountedRef.current || epoch !== contextEpochRef.current) return;
+        revisionRef.current = saved.revision;
+        const latest = contentRef.current;
+        if (latest) {
+          const next = { ...latest, revision: saved.revision };
+          contentRef.current = next;
+          setContent(next);
+          onContentChange?.(next);
+          if (generationRef.current !== capturedGeneration) persistRecovery(next);
+        }
+        if (generationRef.current === capturedGeneration) {
+          dirtyRef.current = false;
+          setSaveState("saved");
+          setRecoveryNotice((notice) => /正在同步|服务器暂不可用/.test(notice) ? "本机恢复的修改已保存到服务器。" : notice);
+        } else {
+          pendingSaveRef.current = true;
+        }
+      };
+      try {
+        const saved = await updateOfficialDocumentDraftContent(draft.id, {
+          expectedRevision: revisionRef.current,
+          fixedValues: snapshot.fixedValues,
+          blocks: normalizeOrders(snapshot.blocks),
+          researchResults: snapshot.researchResults,
+          factReview: snapshot.factReview
+        });
+        acceptSaved(saved);
+      } catch (error) {
+        if (!mountedRef.current || epoch !== contextEpochRef.current) throw error;
+        pendingSaveRef.current = false;
+        if (error instanceof OfficialDocumentServiceError && error.status === 409) {
+          try {
+            const server = await getOfficialDocumentDraftContent(draft.id);
+            if (mountedRef.current && epoch === contextEpochRef.current) {
+              // 上一页的离开保存可能已完成；相同提交只需接收新revision，不制造人工冲突。
+              if (sameStructuredDraftContent(server, snapshot)) {
+                acceptSaved(server);
+                return;
+              }
+              serverConflictRef.current = server;
+              setServerConflict(server);
+              if (contentRef.current) persistRecovery(contentRef.current);
+              setRecoveryNotice("服务器已有新版本。你的修改已留在本机，可以对照两份内容后继续。");
+            }
+          } catch { /* 原有本地修改仍保留，不用失败的刷新覆盖它。 */ }
+        }
+        if (!mountedRef.current || epoch !== contextEpochRef.current) throw error;
+        setSaveState("failed");
+        setSaveError(errorMessage(error));
+        onStatus("error", errorMessage(error));
+        throw error;
+      } finally {
+        if (epoch === contextEpochRef.current) {
+          savingRef.current = false;
+          if (pendingSaveRef.current && mountedRef.current) scheduleSave();
+        }
       }
-      if (generationRef.current === capturedGeneration) {
-        setSaveState("saved");
-      } else {
-        pendingSaveRef.current = true;
-      }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      setSaveState("failed");
-      setSaveError(errorMessage(error));
-      onStatus("error", errorMessage(error));
-    } finally {
-      savingRef.current = false;
-      if (pendingSaveRef.current && mountedRef.current) scheduleSave();
-    }
+    };
+    const pending = operation();
+    activeSaveRef.current = pending;
+    return pending;
   };
 
   useEffect(() => {
+    const epoch = ++contextEpochRef.current;
+    let disposed = false;
     mountedRef.current = true;
+    contentRef.current = undefined;
+    dirtyRef.current = false;
+    savingRef.current = false;
+    pendingSaveRef.current = false;
+    serverConflictRef.current = undefined;
+    recoveryIdRef.current = undefined;
+    setServerConflict(undefined);
+    setRecoveryNotice("");
+    setContent(undefined);
     setSaveState("loading");
     setSaveError("");
-    void getOfficialDocumentDraftContent(draft.id)
-      .then((loaded) => {
-        if (!mountedRef.current) return;
-        const normalized = { ...loaded, blocks: normalizeOrders(loaded.blocks) };
-        revisionRef.current = normalized.revision;
-        generationRef.current = 0;
-        contentRef.current = normalized;
-        setContent(normalized);
-        onContentChange?.(normalized);
-        setSaveState("saved");
-      })
-      .catch((error) => {
-        if (!mountedRef.current) return;
-        setSaveState("failed");
-        setSaveError(errorMessage(error));
-      });
+    setPreviewUrl(undefined);
+    setPreviewOpen(false);
+    setConflictArchive(readStructuredDraftRecovery(recoveryKey ? `${recoveryKey}:conflict` : null, draft.templateVersionId));
+    const backup = readStructuredDraftRecovery(recoveryKey, draft.templateVersionId);
+    const accept = (next: OfficialDocumentDraftContent, state: StructuredDraftSaveState) => {
+      contentRef.current = next;
+      revisionRef.current = next.revision;
+      generationRef.current = 0;
+      setContent(next);
+      setLoadedContext(contextKey);
+      onContentChange?.(next);
+      setSaveState(state);
+    };
+    void getOfficialDocumentDraftContent(draft.id).then((loaded) => {
+      if (disposed || epoch !== contextEpochRef.current) return;
+      const server = { ...loaded, blocks: normalizeOrders(loaded.blocks) };
+      if (!backup || sameStructuredDraftContent(backup.content, server)) {
+        clearStructuredDraftRecovery(recoveryKey, backup?.id);
+        accept(server, "saved");
+        return;
+      }
+      recoveryIdRef.current = backup.id;
+      dirtyRef.current = true;
+      const conflict = server.revision !== backup.content.revision;
+      serverConflictRef.current = conflict ? server : undefined;
+      setServerConflict(serverConflictRef.current);
+      accept(backup.content, conflict ? "failed" : "saving");
+      persistRecovery(backup.content);
+      setRecoveryNotice(conflict ? "服务器已有新版本。你的修改已留在本机，可以对照两份内容后继续。" : "已恢复上次未保存的修改，正在同步到服务器。");
+      if (!conflict) scheduleSave();
+    }).catch((error) => {
+      if (disposed || epoch !== contextEpochRef.current) return;
+      // 只有网络故障可使用本地副本；权限失效或文档已删除时不展示缓存正文。
+      if (backup && !(error instanceof OfficialDocumentServiceError && [401, 403, 404].includes(error.status ?? 0))) {
+        recoveryIdRef.current = backup.id;
+        dirtyRef.current = true;
+        accept(backup.content, "failed");
+        setRecoveryNotice("服务器暂不可用，已恢复本机尚未保存的修改。");
+      }
+      setSaveState("failed");
+      setSaveError(errorMessage(error));
+    });
+    const pageHide = () => {
+      if (!dirtyRef.current || serverConflictRef.current || recoveryKey !== structuredDraftRecoveryKey(draft.id)) return;
+      if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current);
+      void performSaveRef.current().catch(() => undefined);
+    };
+    window.addEventListener("pagehide", pageHide);
     return () => {
+      disposed = true;
+      // 导航不拦截；尽力保存尚未发出的快照，刷新被浏览器中断也有同步本地副本。
+      const snapshot = contentRef.current;
+      const backupId = recoveryIdRef.current;
+      if (dirtyRef.current && snapshot && !savingRef.current && !serverConflictRef.current && recoveryKey === structuredDraftRecoveryKey(draft.id)) {
+        void updateOfficialDocumentDraftContent(draft.id, { expectedRevision: revisionRef.current,
+          fixedValues: snapshot.fixedValues, blocks: normalizeOrders(snapshot.blocks), researchResults: snapshot.researchResults,
+          factReview: snapshot.factReview
+        }).then(() => clearStructuredDraftRecovery(recoveryKey, backupId)).catch(() => undefined);
+      }
       mountedRef.current = false;
       if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current);
+      window.removeEventListener("pagehide", pageHide);
+      previewRequestRef.current += 1;
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = undefined;
     };
-  }, [draft.id, onContentChange]);
+  }, [draft.id, draft.templateVersionId, contextKey, onContentChange, recoveryKey, persistRecovery]);
 
   useEffect(() => {
     onSaveStateChange?.(saveState);
@@ -546,11 +695,16 @@ export function StructuredDraftEditor({
 
   const flushPendingSave = async () => {
     for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (!mountedRef.current || !contentRef.current) throw new Error("草稿内容尚未加载或编辑器已关闭");
+      if (serverConflictRef.current) throw new Error("服务器已有新版本，本地修改已保留，可先对照再保存");
+      if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开草稿");
+      if (!dirtyRef.current && !savingRef.current && !pendingSaveRef.current) return;
       if (saveTimerRef.current !== undefined) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = undefined;
       }
-      if (!savingRef.current) await performSaveRef.current();
+      if (savingRef.current && activeSaveRef.current) await activeSaveRef.current;
+      else if (!savingRef.current) await performSaveRef.current();
       if (!savingRef.current && !pendingSaveRef.current) return;
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     }
@@ -576,7 +730,9 @@ export function StructuredDraftEditor({
         expectedRevision: revisionRef.current,
         fixedValues: snapshot.fixedValues,
         blocks: normalizeOrders(blocks),
-        researchResults: snapshot.researchResults
+        researchResults: snapshot.researchResults,
+        factReview: snapshot.factReview && officialDocumentContentText({ ...snapshot, blocks }) !== officialDocumentContentText(snapshot)
+          ? { ...snapshot.factReview, confirmedAt: undefined } : snapshot.factReview
       });
       const normalized = { ...saved, blocks: normalizeOrders(saved.blocks) };
       revisionRef.current = normalized.revision;
@@ -608,37 +764,132 @@ export function StructuredDraftEditor({
     return normalized.changedCount;
   };
 
+  const reload = async () => {
+    if (serverConflictRef.current) throw new Error("本地与服务器内容有冲突，已保留两份内容，请先对照");
+    if (dirtyRef.current || savingRef.current) await flushPendingSave();
+    const epoch = contextEpochRef.current;
+    const generation = generationRef.current;
+    const loaded = await getOfficialDocumentDraftContent(draft.id);
+    if (!mountedRef.current || epoch !== contextEpochRef.current) return;
+    if (generation !== generationRef.current) throw new Error("加载期间又有新修改，本地内容已保留，请保存后重试");
+    const normalized = { ...loaded, blocks: normalizeOrders(loaded.blocks) };
+    revisionRef.current = normalized.revision;
+    contentRef.current = normalized;
+    setContent(normalized);
+    onContentChange?.(normalized);
+    setSaveState("saved");
+    setSaveError("");
+    previewRequestRef.current += 1;
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = undefined;
+    setPreviewUrl(undefined);
+  };
+
+  const saveFactReview = async (review: OfficialDocumentFactReview) => {
+    await flushPendingSave();
+    const snapshot = contentRef.current;
+    if (!snapshot) throw new Error("草稿内容尚未加载");
+    const factReview = review.confirmedAt && review.textSnapshot !== officialDocumentContentText(snapshot)
+      ? { ...review, confirmedAt: undefined } : review;
+    commit((current) => ({ ...current, factReview }));
+    await flushPendingSave();
+    return contentRef.current!;
+  };
+
   useImperativeHandle(ref, () => ({
     appendText,
     getContent: () => contentRef.current,
+    save: flushPendingSave,
+    reload,
+    saveFactReview,
     saveResearchResults,
     applyBlocks,
     normalizeForExport
   }));
 
-  const refreshPreview = async () => {
-    if (!content || isPreviewing) return;
-    setIsPreviewing(true);
-    onStatus("loading", "正在加载当前结构模板 PDF");
+  const archiveConflict = () => {
+    const local = contentRef.current;
+    const server = serverConflictRef.current;
+    if (!local || !server) return false;
     try {
-      const blob = await getOfficialDocumentTemplatePreview(draft.templateId, draft.templateVersionId);
-      const signature = await blob.slice(0, 5).text();
-      if (signature !== "%PDF-") throw new Error("报告服务返回的模板预览不是有效 PDF");
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      const url = URL.createObjectURL(blob);
-      previewUrlRef.current = url;
-      setPreviewUrl(url);
-      onStatus("success", "结构模板 PDF 已打开，仅用于核对版式和结构。");
-    } catch (error) {
-      onStatus("error", errorMessage(error));
-    } finally {
-      setIsPreviewing(false);
+      // 仅保留最近一组冲突副本；正式历史版本由后端保存。
+      const archived = writeStructuredDraftRecovery(recoveryKey ? `${recoveryKey}:conflict` : null,
+        draft.templateVersionId, local, server);
+      setConflictArchive(archived);
+      return Boolean(archived);
+    } catch {
+      setConflictArchive({ id: crypto.randomUUID(), templateVersionId: draft.templateVersionId,
+        content: local, serverContent: server, updatedAt: new Date().toISOString() });
+      return false;
     }
   };
 
-  const openPreview = () => {
+  const resolveConflict = async (useLocal: boolean) => {
+    const local = contentRef.current;
+    const server = serverConflictRef.current;
+    if (!local || !server) return;
+    const archived = archiveConflict();
+    serverConflictRef.current = undefined;
+    setServerConflict(undefined);
+    const next = useLocal ? { ...local, revision: server.revision } : server;
+    revisionRef.current = server.revision;
+    contentRef.current = next;
+    setContent(next);
+    onContentChange?.(next);
+    setSaveError("");
+    if (useLocal) {
+      dirtyRef.current = true;
+      persistRecovery(next);
+      try { await performSaveRef.current(); } catch { /* 保存错误与副本均已保留。 */ }
+    } else {
+      dirtyRef.current = false;
+      clearStructuredDraftRecovery(recoveryKey, recoveryIdRef.current);
+      setSaveState("saved");
+    }
+    setRecoveryNotice(archived ? "上次冲突的两份内容保留在本机，可随时对照。" : "冲突副本仅保留在当前页面，离开前请复制需要保留的内容。");
+  };
+
+  const refreshPreview = async (kind: "draft" | "template" = previewKind) => {
+    const request = ++previewRequestRef.current;
+    const epoch = contextEpochRef.current;
+    setPreviewKind(kind);
     setPreviewOpen(true);
-    if (!previewUrl) void refreshPreview();
+    setIsPreviewing(true);
+    setPreviewError("");
+    setPreviewRevision(undefined);
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = undefined;
+    setPreviewUrl(undefined);
+    try {
+      if (kind === "draft") await flushPendingSave();
+      if (request !== previewRequestRef.current || epoch !== contextEpochRef.current) return;
+      const generation = generationRef.current;
+      const revision = revisionRef.current;
+      const renderedContent = contentRef.current;
+      const blob = kind === "draft" ? await getOfficialDocumentDraftPreview(draft.id)
+        : await getOfficialDocumentTemplatePreview(draft.templateId, draft.templateVersionId);
+      const signature = await blob.slice(0, 5).text();
+      if (signature !== "%PDF-") throw new Error("报告服务返回的预览不是有效 PDF");
+      if (kind === "draft") {
+        const server = await getOfficialDocumentDraftContent(draft.id);
+        if (server.revision !== revision || !renderedContent || !sameStructuredDraftContent(server, renderedContent)) {
+          throw new Error("服务器版本已变化，请重新打开草稿后预览");
+        }
+      }
+      if (!mountedRef.current || request !== previewRequestRef.current || epoch !== contextEpochRef.current) return;
+      if (kind === "draft" && generation !== generationRef.current) throw new Error("草稿已更新，请重新生成当前稿预览");
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      setPreviewUrl(url);
+      setPreviewRevision(kind === "draft" ? revision : undefined);
+      onStatus("success", kind === "draft" ? `当前稿预览已更新（内容修订 ${revision}）` : "结构模板 PDF 已打开，仅用于核对版式和结构。");
+    } catch (error) {
+      if (request !== previewRequestRef.current || epoch !== contextEpochRef.current) return;
+      setPreviewError(errorMessage(error));
+      onStatus("error", errorMessage(error));
+    } finally {
+      if (request === previewRequestRef.current && epoch === contextEpochRef.current) setIsPreviewing(false);
+    }
   };
 
   /* 序号表按 id 序列缓存：改正文不会让它换引用，只有增删移才通知订阅序号的叶子节点。 */
@@ -659,10 +910,12 @@ export function StructuredDraftEditor({
         ? "已保存"
         : "保存失败";
 
-  if (!content) {
+  if (!content || loadedContext !== contextKey) {
     return (
       <div className="structured-draft-editor-frame">
-        <div className="structured-draft-editor__loading" role="status">正在加载结构化草稿…</div>
+        <div className="structured-draft-editor__loading" role={saveError ? "alert" : "status"}>
+          {saveError || "正在加载结构化草稿…"}
+        </div>
       </div>
     );
   }
@@ -670,7 +923,8 @@ export function StructuredDraftEditor({
   return (
     <div className="structured-draft-editor-frame">
       <OfficialDocumentAppActions>
-        <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={openPreview}>模板 PDF 浏览</Button>
+        <Button icon={<Eye size={15} />} loading={isPreviewing && previewKind === "draft"} onClick={() => void refreshPreview("draft")}>预览当前稿</Button>
+        <Button icon={<Eye size={15} />} loading={isPreviewing && previewKind === "template"} onClick={() => void refreshPreview("template")}>模板 PDF 浏览</Button>
       </OfficialDocumentAppActions>
       <section
         className="structured-draft-editor"
@@ -710,7 +964,7 @@ export function StructuredDraftEditor({
               })}
               {!content.fixedValues.length ? <div className="official-document-inline-empty">模板没有固定文字槽位。</div> : null}
             </div>
-            <div className="structured-draft-editor__save-note"><FloppyDisk size={16} />结构化内容自动写入服务端，刷新页面不会丢失。</div>
+            <div className="structured-draft-editor__save-note"><FloppyDisk size={16} />输入后自动保存，未同步的修改会在本机保留。</div>
           </>
         )}
       </aside>
@@ -723,6 +977,16 @@ export function StructuredDraftEditor({
           </Tag>
         </header>
         {saveError ? <p className="structured-draft-editor__error">{saveError}</p> : null}
+        {recoveryNotice || serverConflict || conflictArchive ? (
+          <div className="structured-draft-editor__quick-add" role="status">
+            <span>{recoveryNotice}</span>
+            {serverConflict || conflictArchive ? <Button size="small" onClick={() => setComparisonOpen(true)}>对照冲突内容</Button> : null}
+            {serverConflict ? <>
+              <Button size="small" onClick={() => void resolveConflict(false)}>使用服务器版本</Button>
+              <Button size="small" onClick={() => void resolveConflict(true)}>保存本地修改</Button>
+            </> : null}
+          </div>
+        ) : null}
         <div className="structured-draft-editor__quick-add">
           <AddNodeTypeMenu onSelect={(role) => addBlock(undefined, role)}>
             <Button size="small" icon={<Plus size={14} />}>新增节点</Button>
@@ -763,28 +1027,43 @@ export function StructuredDraftEditor({
 
       <Modal
         className="official-document-preview-modal"
-        title="模板 PDF 浏览"
+        title={previewKind === "draft" ? "当前稿正文预览" : "模板 PDF 浏览"}
         width="min(980px, calc(100vw - 48px))"
         open={previewOpen}
         footer={(
           <div className="official-document-preview-modal__footer">
-            <span>当前绑定结构模板 · 不包含草稿正文</span>
+            <span>{previewKind === "template" ? "当前绑定结构模板 · 不包含草稿正文"
+              : previewRevision == null ? "保存成功后生成当前正文预览" : `当前已保存正文 · 内容修订 ${previewRevision}`}</span>
             <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={() => void refreshPreview()}>重新加载</Button>
           </div>
         )}
-        onCancel={() => setPreviewOpen(false)}
+        onCancel={() => {
+          previewRequestRef.current += 1;
+          setPreviewOpen(false);
+          setIsPreviewing(false);
+        }}
       >
         {previewUrl ? (
-          <object data={previewUrl} type="application/pdf" aria-label={`${draft.templateName} 模板 PDF`}>
+          <object data={previewUrl} type="application/pdf" aria-label={previewKind === "draft" ? `当前稿 PDF · 内容修订 ${previewRevision}` : `${draft.templateName} 模板 PDF`}>
             <a href={previewUrl} target="_blank" rel="noreferrer">新窗口查看 PDF</a>
           </object>
         ) : (
           <div className="structured-draft-editor__preview-empty">
             <Eye size={28} />
-            <strong>{isPreviewing ? "正在加载模板" : "尚未加载模板"}</strong>
-            <p>打开当前草稿绑定的结构模板 PDF，核对版式和静态元素。</p>
+            <strong>{isPreviewing ? "正在生成预览" : previewError ? "预览暂不可用" : "尚未生成预览"}</strong>
+            {previewError ? <p role="alert">{previewError}</p> : <p>{previewKind === "draft"
+              ? "保存当前内容后生成PDF，旧预览不会代替当前稿。" : "打开当前草稿绑定的结构模板 PDF，核对版式和静态元素。"}</p>}
           </div>
         )}
+      </Modal>
+      <Modal title="本地与服务器内容对照" open={comparisonOpen} footer={null} onCancel={() => setComparisonOpen(false)}>
+        {[{ label: "本地修改", value: serverConflict ? content : conflictArchive?.content },
+          { label: "服务器版本", value: serverConflict ?? conflictArchive?.serverContent }].map(({ label, value }) => value ? (
+          <section key={label} aria-label={label}>
+            <h3>{label} · 内容修订 {value.revision}</h3>
+            <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{officialDocumentContentText(value)}</pre>
+          </section>
+        ) : null)}
       </Modal>
       </section>
     </div>

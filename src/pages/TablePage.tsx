@@ -1,9 +1,10 @@
 import { Button, Input, Popconfirm, Segmented, Tooltip } from "antd";
-import { ArrowUp, AsteriskSimple, Check, CopySimple, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowUp, Check, CopySimple, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import promptStar from "@/assets/brand/xingshu-prompt-star.svg";
 import { XsComposerBox } from "@/components/xs/conversation";
 import { xsEnterStep } from "@/components/xs/motion";
 import { resolveXsAsyncStatus, XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
@@ -230,7 +231,7 @@ export function TablePage() {
       {/* 入口和会话是同一套对话：这里只是它的空态 */}
       <section className="table-hero xs-page-enter" aria-label="制表需求输入" style={xsEnterStep(1)}>
         <header className="table-hero__head">
-          <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
+          <img src={promptStar} alt="" width={24} height={24} aria-hidden="true" />
           <h1>想做一张什么表？</h1>
         </header>
         <XsComposerBox

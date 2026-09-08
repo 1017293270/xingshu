@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { getDashboardRuntime, getDashboardRuntimeInitialData } from "@/services/dashboardAnalyticsService";
-import { GearSix, MagicWand } from "@phosphor-icons/react";
-import { Button, Dropdown, Modal, Select, type MenuProps } from "antd";
+import { GearSix, MagicWand, Plus } from "@phosphor-icons/react";
+import { Button, ConfigProvider, Dropdown, Modal, Select, type MenuProps, type ThemeConfig } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { XsEmptyState } from "@/components/xs/XsEmptyState";
@@ -28,6 +28,30 @@ import { useUiStore } from "@/stores/uiStore";
 import { PageFrame } from "./PageFrame";
 import "./styles/page-shell.css";
 import "./styles/dashboard-list.css";
+import "./styles/dashboard-workspace.css";
+
+const dashboardWorkspaceTheme: ThemeConfig = {
+  token: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+    fontSize: 13,
+    fontWeightStrong: 500,
+    colorText: "#1a1c1f",
+    colorTextSecondary: "#62676e",
+    colorBorder: "#e0e2e5",
+    colorBgContainer: "#ffffff",
+    colorBgElevated: "#ffffff",
+    controlHeight: 32,
+    borderRadius: 8
+  },
+  components: {
+    Button: {
+      fontWeight: 500,
+      primaryShadow: "none"
+    },
+    Select: { optionSelectedBg: "#f0f1f2", optionSelectedColor: "#1a1c1f", optionSelectedFontWeight: 500 },
+    Modal: { titleFontSize: 18, titleColor: "#1a1c1f" }
+  }
+};
 
 function formatDateTime(value?: string) {
   if (!value) return "—";
@@ -120,6 +144,7 @@ export function DashboardPage() {
   const runtimeSource = (current?.publishedSchema ?? current?.schema)?.source;
 
   return (
+    <ConfigProvider theme={dashboardWorkspaceTheme}>
     <PageFrame
       className="dashboard-list dashboard-current"
       title="我的看板"
@@ -131,12 +156,14 @@ export function DashboardPage() {
               aria-label="切换当前看板"
               value={current.id}
               popupMatchSelectWidth={false}
+              classNames={{ popup: { root: "dashboard-workspace-popup" } }}
               options={records.map((record) => ({ value: record.id, label: record.schema.title }))}
               onChange={selectCurrent}
             />
           ) : null}
           <Button
             type="primary"
+            icon={<Plus size={15} aria-hidden="true" />}
             disabled={library.createMutation.isPending}
             data-testid="create-dashboard-button"
             onClick={() => library.requestCreate("blank")}
@@ -144,7 +171,7 @@ export function DashboardPage() {
             新建看板
           </Button>
           <Button
-            icon={<MagicWand size={16} weight="bold" aria-hidden="true" />}
+            icon={<MagicWand size={16} aria-hidden="true" />}
             onClick={() => navigate(
               current ? `${dashboardEditorPath(current.id)}&smart=1` : "/dashboard-editor?smart=1"
             )}
@@ -154,6 +181,7 @@ export function DashboardPage() {
           <Button onClick={() => navigate("/dashboard/square")}>看板广场</Button>
           {hasWorkbench && current ? (
             <Dropdown
+              overlayClassName="dashboard-workspace-popup"
               menu={{ items: settingsItems, onClick: handleSettingsClick }}
               placement="bottomRight"
               trigger={["click"]}
@@ -239,10 +267,11 @@ export function DashboardPage() {
         </>
       )}
 
-      <DashboardCreateDialog library={library} />
-      <DashboardArchiveDialog library={library} onArchived={() => setCurrentId(null)} />
+      <DashboardCreateDialog library={library} className="dashboard-workspace-dialog" />
+      <DashboardArchiveDialog library={library} className="dashboard-workspace-dialog" onArchived={() => setCurrentId(null)} />
 
       <Modal
+        className="dashboard-workspace-dialog"
         title="版本回滚"
         open={versionsOpen}
         footer={null}
@@ -273,5 +302,6 @@ export function DashboardPage() {
         )}
       </Modal>
     </PageFrame>
+    </ConfigProvider>
   );
 }

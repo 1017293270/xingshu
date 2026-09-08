@@ -1,6 +1,7 @@
 /* ---------- 首页布局基底 ---------- */
 
 .home-page {
+  --home-track: 760px;
   position: relative;
   width: 100%;
   min-height: calc(100vh - 108px);
@@ -18,7 +19,7 @@
   object-fit: cover;
   object-position: center 68%;
   transform: translateX(-50%);
-  opacity: 0.72;
+  opacity: 0.28;
   mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 24%, #000 68%, transparent 100%);
   pointer-events: none;
   user-select: none;
@@ -28,7 +29,7 @@
 
 /* 首屏问候区自己拿留白，主区 padding 保持与其他页面一致的 24px */
 .home-page__hero {
-  width: min(100%, 760px);
+  width: min(100%, var(--home-track));
   margin: 88px auto 40px;
   text-align: center;
 }
@@ -106,17 +107,21 @@
 
 /* 命令框回执走全站状态条，跟着页面轨道居中 */
 .home-page__status-slot {
-  width: min(100%, var(--xs-page-track));
+  width: min(100%, var(--home-track));
   margin: 14px auto 0;
   text-align: center;
 }
 
 /* ---------- 推荐应用：与命令框同宽的 3×2 网格 ---------- */
 
-/* 命令框是首屏唯一一级焦点，推荐应用跟它同宽（760px）才有同一条左右轴；
-   之前的 --xs-page-track（1170px 起）会让这一区比输入框宽出一大截。 */
+/* 首页共用 760px 轨道，命令框覆盖仅限首页，不影响其他业务输入区。 */
+.home-page .xs-command-box.xs-prompt-surface {
+  width: min(100%, var(--home-track));
+  max-width: var(--home-track);
+}
+
 .home-page__apps {
-  width: min(100%, 760px);
+  width: min(100%, var(--home-track));
   margin: 40px auto 0;
 }
 
@@ -130,13 +135,13 @@
 }
 
 /* 6 张推荐应用固定排成 3×2：列数写死才和命令框共用同一条左右轴，
-   auto-fit 会按 760px 轨道自己收敛成 4 列，把第二行摆成 4+2。
+   auto-fit 会随宽度改变列数，固定三列保留两行结构。
    gap 是唯一一个不跟着视口高度收缩的间距，动它会把纵向节奏的改动漏到横向去；
    矮屏要省的高度全从卡片自己的壳子里出。 */
 .home-page__app-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: 12px;
 }
 
 .home-page .xs-app-card {
@@ -144,37 +149,33 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  min-height: 188px;
+  min-height: 160px;
   gap: 0;
-  padding: 20px 16px 18px;
+  padding: 16px;
   text-align: center;
-  border-color: #d9e6f8;
+  border-color: var(--xs-border);
   border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 22px rgba(26, 83, 164, 0.06);
+  background: var(--xs-surface);
+  box-shadow: none;
 }
 
 .home-page .xs-app-card:hover {
-  border-color: #b4d0f3;
-  box-shadow: 0 14px 32px rgba(26, 83, 164, 0.11);
-  transform: translateY(-2px);
+  border-color: var(--xs-border-strong);
+  box-shadow: var(--xs-shadow-button);
+  transform: none;
 }
 
 .home-page .xs-app-card--selected,
 .home-page .xs-app-card--selected:hover {
   border-color: rgba(22, 119, 255, 0.55);
-  background: var(--xs-surface-soft);
-  box-shadow:
-    0 0 0 3px rgba(22, 119, 255, 0.08),
-    0 10px 24px rgba(26, 83, 164, 0.08);
+  background: var(--xs-info-soft);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
   transform: none;
 }
 
 .home-page .xs-app-card:has(.xs-app-card__main:focus-visible) {
-  border-color: #9ec2f0;
-  box-shadow:
-    0 0 0 3px rgba(37, 99, 235, 0.1),
-    0 8px 22px rgba(26, 83, 164, 0.06);
+  border-color: var(--xs-primary-2);
+  box-shadow: var(--xs-focus-ring);
   transform: none;
 }
 
@@ -191,11 +192,15 @@
 
 /* 应用图标是填色方块，比线性图标更满：只覆盖字形尺寸，底板尺寸仍走 token */
 .home-page .xs-app-card .xs-icon-tile {
-  box-shadow: 0 4px 10px rgba(26, 83, 164, 0.05);
+  box-shadow: none;
 }
 
 .home-page .xs-app-card .xs-icon-tile__image {
   --xs-icon-glyph-size: 42px;
+}
+
+.home-page .xs-app-card__body {
+  min-width: 0;
 }
 
 .home-page .xs-app-card__title {
@@ -219,7 +224,7 @@
 }
 
 .home-page__questions {
-  width: min(100%, 760px);
+  width: min(100%, var(--home-track));
   margin: 28px auto 0;
 }
 
@@ -245,7 +250,7 @@
 .home-page__question:hover,
 .home-page__question:focus-visible {
   color: var(--xs-primary-2);
-  border-color: #d8eaff;
+  border-color: var(--xs-border-strong);
   background: var(--xs-surface-soft);
   outline: none;
 }
@@ -265,13 +270,13 @@
     --home-hero-gap: clamp(22px, calc(6vh - 20px), 46px);
     --home-apps-gap: clamp(20px, calc(6vh - 22px), 44px);
     --home-apps-title-gap: clamp(10px, 1.6vh, 18px);
-    --home-card-height: clamp(144px, calc(27.8vh - 50px), 236px);
-    --home-card-pad-top: clamp(14px, 2.2vh, 20px);
-    --home-card-pad-bottom: clamp(12px, 2vh, 18px);
-    --home-card-stack-gap: clamp(8px, 1.4vh, 14px);
-    --home-card-tile: clamp(44px, 6vh, 52px);
-    --home-card-glyph: clamp(34px, 4.9vh, 42px);
-    --home-card-desc: clamp(36px, 5vh, 40px);
+    --home-card-height: clamp(144px, calc(20vh - 18px), 168px);
+    --home-card-pad-top: 14px;
+    --home-card-pad-bottom: 12px;
+    --home-card-stack-gap: 10px;
+    --home-card-tile: 44px;
+    --home-card-glyph: 34px;
+    --home-card-desc: 36px;
 
     min-height: 0;
   }
@@ -357,22 +362,23 @@
     flex-direction: row;
     align-items: center;
     min-height: 0;
-    gap: 14px;
-    padding: 16px 18px;
+    gap: 12px;
+    padding: 14px;
   }
 
   .home-page .xs-app-card__main {
     flex-direction: row;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
+    text-align: left;
   }
 
   .home-page .xs-app-card .xs-icon-tile {
-    --xs-icon-tile-size: 56px;
+    --xs-icon-tile-size: 44px;
   }
 
   .home-page .xs-app-card .xs-icon-tile__image {
-    --xs-icon-glyph-size: 46px;
+    --xs-icon-glyph-size: 34px;
   }
 
   .home-page .xs-app-card__desc {
@@ -401,7 +407,7 @@
   }
 
   to {
-    opacity: 0.72;
+    opacity: 0.28;
   }
 }
 

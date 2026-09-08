@@ -53,7 +53,7 @@
   max-width: 72%;
   padding: 11px 15px;
   border-radius: 18px 18px 4px 18px;
-  background: #f2f3f5;
+  background: var(--xs-surface-soft);
 }
 
 .xs-chat__user small {
@@ -175,7 +175,7 @@
 
 .xs-chat__actions button:hover:not(:disabled) {
   color: var(--xs-text);
-  background: #f2f5f9;
+  background: var(--xs-surface-soft);
 }
 
 .xs-chat__actions button:disabled {
@@ -314,6 +314,7 @@
   right: 0;
   bottom: calc(100% + 8px);
   left: 0;
+  width: min(760px, 100%);
   max-height: min(460px, calc(100dvh - 220px));
   margin-inline: auto;
   overflow: auto;
@@ -842,7 +843,7 @@
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  background: #f4f7fb;
+  background: var(--xs-surface-soft);
 }
 
 /* 窄屏没有分栏的位置：侧栏盖住对话，靠关闭按钮退出 */

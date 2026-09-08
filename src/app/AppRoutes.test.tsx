@@ -208,7 +208,7 @@ describe("AppRoutes", () => {
     expect(screen.queryByLabelText("报告草稿箱")).not.toBeInTheDocument();
   });
 
-  it("opens the draft box as a separate page with a slim header back to writing", async () => {
+  it("opens the draft box with shared writing navigation", async () => {
     renderRoute("/writing/drafts");
 
     expect(
@@ -216,7 +216,8 @@ describe("AppRoutes", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("结构模板库")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    expect(within(screen.getByRole("navigation", { name: "公文导航" })).getByRole("link", { name: "公文写作" }))
+      .toHaveAttribute("href", "/writing");
     expect(screen.getByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
   });
 

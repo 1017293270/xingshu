@@ -93,12 +93,12 @@ function handleResizePointerDown(event: PointerEvent) {
   >
     <div
       class="dashboard-widget-card__renderer"
-      :class="{ 'dashboard-widget-card__renderer--interactive': isChart }"
+      :class="{ 'dashboard-widget-card__renderer--interactive': isChart || (readonly && widget.type === 'table') }"
       aria-hidden="false"
     >
       <DashboardTextRenderer v-if="widget.type === 'text'" :widget="widget" />
       <DashboardMetricRenderer v-else-if="widget.type === 'metric'" :widget="widget" :binding="binding" />
-      <DashboardTableRenderer v-else-if="widget.type === 'table'" :widget="widget" :binding="binding" />
+      <DashboardTableRenderer v-else-if="widget.type === 'table'" :widget="widget" :binding="binding" :readonly="readonly" />
       <DashboardImageRenderer v-else-if="widget.type === 'image'" :widget="widget" />
       <DashboardDecorationRenderer v-else-if="widget.type === 'decoration'" :widget="widget" />
       <DashboardChartRenderer v-else-if="isChart" :widget="widget" :binding="binding" />

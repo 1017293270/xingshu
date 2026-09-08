@@ -7,7 +7,7 @@ describe("xingshu theme tokens", () => {
     expect(xingshuTokens.colorBg).toBe("#F3F8FF");
     expect(xingshuTokens.colorSurface).toBe("#FFFFFF");
     expect(xingshuTokens.colorPrimary).toBe("#1677FF");
-    expect(xingshuTokens.colorText).toBe("#081A3A");
+    expect(xingshuTokens.colorText).toBe("#303030");
     expect(xingshuTokens.radiusControl).toBe(8);
     expect(xingshuTokens.radiusCard).toBe(12);
     expect(xingshuTokens.controlHeight).toBe(36);

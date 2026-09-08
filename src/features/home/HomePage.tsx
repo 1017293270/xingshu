@@ -248,7 +248,6 @@ export function HomePage() {
       </section>
 
       <XsCommandBox
-        className="xs-prompt-surface"
         value={draft}
         onChange={setDraft}
         onSubmit={handleSubmit}

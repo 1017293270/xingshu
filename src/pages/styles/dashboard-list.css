@@ -26,7 +26,7 @@
 .dashboard-list__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  gap: 16px;
 }
 
 .dashboard-card {
@@ -76,9 +76,9 @@
 }
 
 .dashboard-card:hover {
-  transform: translateY(-2px);
+  transform: none;
   border-color: var(--xs-border-strong);
-  box-shadow: 0 14px 32px rgba(22, 119, 255, 0.12);
+  box-shadow: var(--xs-shadow-lift);
 }
 
 /* ---------- 卡片预览区 ---------- */
@@ -88,9 +88,7 @@
   display: grid;
   place-items: center;
   aspect-ratio: 16 / 9;
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgba(22, 119, 255, 0.08), transparent 60%),
-    linear-gradient(180deg, var(--xs-bg-2), var(--xs-surface-soft));
+  background: var(--xs-surface-soft);
   border-bottom: 1px solid var(--xs-border);
   border-radius: calc(var(--xs-radius-card) - 1px) calc(var(--xs-radius-card) - 1px) 0 0;
 }
@@ -248,7 +246,7 @@
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
   background: var(--xs-surface);
-  box-shadow: 0 16px 36px rgba(8, 26, 58, 0.14);
+  box-shadow: var(--xs-shadow-overlay);
   list-style: none;
   transform-origin: top right;
   animation: dashboard-menu-enter var(--xs-motion-feedback) var(--xs-motion-ease-out) backwards;

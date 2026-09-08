@@ -17,6 +17,7 @@ import {
   MAX_REFERENCE_MATERIALS_CHARS,
   MAX_REFERENCE_MATERIAL_CHARS,
   parseOfficialDocumentReferenceGeneration,
+  parseOfficialDocumentFullDraft,
   stripOfficialDocumentAnchors
 } from "./officialDocumentFullDraft";
 
@@ -419,7 +420,9 @@ describe("reference draft generation", () => {
 
     expect(result.title).toBe("关于加强2026年安全生产工作的通知");
     expect(result.fixedValues).toEqual([{ slotId: "title-slot", value: "关于加强2026年安全生产工作的通知" }]);
+    expect(result.recoveredAsText).toBe(true);
     expect(result.blocks.map((block) => [block.role, block.variantId, block.text])).toEqual([
+      ["BODY", "body-v1", "测试〔2026〕1号    签发人：待补充"],
       ["HEADING_1", "heading-v1", "一、工作要求"],
       ["BODY", "body-v1", "各部门要压实责任，严格落实安全生产制度。"]
     ]);
@@ -475,7 +478,7 @@ describe("reference draft generation", () => {
     expect(repeated.fixedValues).toEqual([
       { slotId: "title-slot", value: "关于加强安全生产工作的通知" }
     ]);
-    expect(() => parseOfficialDocumentReferenceGeneration({
+    const conflicting = parseOfficialDocumentReferenceGeneration({
       ...input,
       markdown: [
         "[[XS_FIXED:title-slot]]",
@@ -486,7 +489,10 @@ describe("reference draft generation", () => {
         "# 一、工作要求",
         "各部门要压实责任。"
       ].join("\n")
-    })).toThrow("重复固定字段的值不一致");
+    });
+    expect(conflicting.fixedValues[0].value).toBe("关于加强安全生产工作的通知");
+    expect(conflicting.blocks.map((block) => block.text)).toContain("关于开展消防检查的通知");
+    expect(conflicting.blocks.map((block) => block.text)).toContain("各部门要压实责任。");
   });
 
   describe("固定字段锚点的保守修复", () => {
@@ -557,32 +563,38 @@ describe("reference draft generation", () => {
       expect(valueOf(result, "date-slot")).toBe("2026年8月29日");
     });
 
-    it("同名显示名有多个字段时不猜，仍按未知锚点抛错", () => {
-      expect(() => parseHead(["[[XS_FIXED:固定字段]]", "测试公司"], [
+    it("同名字段保持未分配，原文仍可编辑", () => {
+      const result = parseHead(["[[XS_FIXED:固定字段]]", "测试公司"], [
         { slotId: "a-slot", role: "UNKNOWN", roleLabel: "固定字段", required: false, preview: "" },
         { slotId: "b-slot", role: "UNKNOWN", roleLabel: "固定字段", required: false, preview: "" }
-      ])).toThrow("生成结果包含未知的固定字段锚点：固定字段");
+      ]);
+      expect(result.fixedValues).toEqual([{ slotId: "a-slot", value: "" }, { slotId: "b-slot", value: "" }]);
+      expect(result.blocks.map((block) => block.text).join("\n")).toContain("测试公司");
     });
 
-    it("自创 id 仍然抛错，且错误信息带上具体 id", () => {
-      expect(() => parseHead(["[[XS_FIXED:signer-slot]]", "张三"]))
-        .toThrow("生成结果包含未知的固定字段锚点：signer-slot");
+    it("自创字段不会进入模板槽位，文字保留在正文", () => {
+      const result = parseHead(["[[XS_FIXED:signer-slot]]", "张三"]);
+      expect(result.fixedValues.some((field) => field.slotId === "signer-slot")).toBe(false);
+      expect(result.blocks.map((block) => block.text).join("\n")).toContain("张三");
     });
 
-    it("占位符数量超过声明字段时拒绝修复", () => {
-      expect(() => parseHead(["[[XS_FIXED:slot-id]]", "测试公司", "[[XS_FIXED:slot-id]]", "关于开展安全检查的通知"], [
+    it("过量占位符降级为可编辑文本，不写未知字段", () => {
+      const result = parseHead(["[[XS_FIXED:slot-id]]", "测试公司", "[[XS_FIXED:slot-id]]", "关于开展安全检查的通知"], [
         { slotId: "issuer-slot", role: "ISSUING_AUTHORITY", roleLabel: "发文机关", required: true, preview: "" }
-      ])).toThrow("生成结果包含未知的固定字段锚点：slot-id");
+      ]);
+      expect(result.fixedValues.map((field) => field.slotId)).toEqual(["issuer-slot"]);
+      expect(result.fixedValues[0].value).toBe("测试公司");
+      expect(result.blocks.map((block) => block.text).join("\n")).toContain("关于开展安全检查的通知");
     });
 
-    it("未知章节锚点的错误信息同样带 id", () => {
-      expect(() => parseOfficialDocumentReferenceGeneration({
+    it("未知章节锚点不再阻断已有正文", () => {
+      const result = parseOfficialDocumentReferenceGeneration({
         markdown: ["[[XS_SECTION:section-id]]", "通知正文。"].join("\n"),
         referenceDraftTitle: "参考草稿",
         sections: [{ id: "reference-body-1", order: 0, title: "正文", bodyRequired: true }],
-        fixedFields: [],
-        templateNodes
-      })).toThrow("生成结果包含未知的章节锚点：section-id");
+        fixedFields: [], templateNodes
+      });
+      expect(result.blocks.map((block) => block.text)).toEqual(["通知正文。"]);
     });
   });
 
@@ -728,7 +740,7 @@ describe("reference draft generation", () => {
       expect(result.blocks[0].variantId).toBe("heading-v1");
     });
 
-    it("合成标题后 bodyRequired 校验仍然有效，且不再出现「缺少标题」", () => {
+    it("空叶节保留可补写标题，不阻断其他已生成正文", () => {
       const call = () => parseSections(twoSections, [
         "[[XS_SECTION:reference-section-1]]",
         "# 一、总体要求",
@@ -736,8 +748,8 @@ describe("reference draft generation", () => {
         "[[XS_SECTION:reference-section-2]]"
       ]);
 
-      expect(call).toThrow("章节“（二）主要任务”没有生成正文");
-      expect(call).not.toThrow("缺少标题");
+      const result = call();
+      expect(result.blocks.map((block) => block.text)).toEqual(["一、总体要求", "各部门要压实安全生产责任。", "（二）主要任务"]);
     });
 
     it("章节内多写的下级标题按真实层级保留，不再整版拒绝", () => {
@@ -896,7 +908,7 @@ describe("reference draft generation", () => {
       })
     );
 
-    it("表格与图表接在本节文字之后，跳过项落待补充块，失败与缺来源不插块", () => {
+    it("表格与图表保留，必需失败与无结果项和跳过项均落待补充块", () => {
       const generated = parseWithResearch([
         researchResult({
           taskId: "t1",
@@ -917,19 +929,22 @@ describe("reference draft generation", () => {
         ["BODY", "sec-1", "全面落实安全生产责任制。"],
         ["TABLE", "sec-1", "近三年事故起数"],
         ["CHART_IMAGE", "sec-1", "近三年事故起数柱状图"],
+        ["BODY", "sec-1", "【待补充】失败问题（资料查询失败）"],
+        ["BODY", "sec-1", "【待补充】查无此数（未找到可用资料）"],
         ["HEADING_1", "sec-2", "二、重点任务"],
         ["BODY", "sec-2", "聚焦重点行业开展排查。"],
-        ["BODY", "sec-2", "【待补充】全省投入资金"]
+        ["BODY", "sec-2", "【待补充】全省投入资金（已跳过资料查询）"]
       ]);
-      expect(generated.blocks.map((block) => block.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+      expect(generated.blocks.map((block) => block.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
       expect(generated.blocks[2].table).toEqual(sampleTable);
       expect(generated.blocks[2].source).toEqual(sampleSource);
       expect(generated.blocks[2].sourceTaskIds).toEqual(["t1"]);
       expect(generated.blocks[3].chart).toEqual(sampleChart);
       expect(generated.blocks[3].source).toEqual(sampleSource);
       expect(generated.blocks[3].sourceTaskIds).toEqual(["t1"]);
-      expect(generated.blocks[6].sourceTaskIds).toEqual(["t5"]);
-      expect(generated.blocks[6].variantId).toBe("body-v1");
+      const skipped = generated.blocks.find((block) => block.sourceTaskIds?.includes("t5"));
+      expect(skipped?.sourceTaskIds).toEqual(["t5"]);
+      expect(skipped?.variantId).toBe("body-v1");
     });
 
     it("图表按全篇上限发放，超额的结果只落表格", () => {
@@ -1114,4 +1129,30 @@ it("distinguishes morning from afternoon while accepting the equivalent 24-hour 
   expect(reviewOfficialDocumentDraftFacts("会议上午10:00开始。", context)).toEqual([]);
   expect(reviewOfficialDocumentDraftFacts("会议下午10:00开始。", context)[0].additions).toContain("下午10:00");
   expect(reviewOfficialDocumentDraftFacts("会议22:00开始。", { sourceBlocks: [{ text: "晚上十点开会。" }] })).toEqual([]);
+});
+
+it("preserves required missing research and its reason in full-draft parsing", () => {
+  const section = { id: "sec-1", order: 0, headingRole: "HEADING_1" as const, title: "一、经营情况", purpose: "说明经营情况", keyPoints: [], sourceBlockIds: [] };
+  const generated = parseOfficialDocumentFullDraft({
+    markdown: "[[XS_SECTION:sec-1]]\n# 一、经营情况\n已知的经营情况说明。",
+    templateNodes,
+    profile: {
+      id: "profile", templateId: "template", templateVersionId: "v1", name: "正文", originalFileName: "原文.docx", originalSize: 1,
+      status: "CONFIRMED", createdBy: "1", createdAt: "", updatedAt: "",
+      profile: { source: { sourceSha256: "test", blocks: [], warnings: [] }, confirmedPlan: {
+        summary: "计划", sections: [section], researchNeeds: [], unassignedSourceBlockIds: [], warnings: []
+      } }
+    },
+    results: [
+      { taskId: "failed", sectionId: "sec-1", kind: "ASK_DATA", question: "收入总额", required: true, preferredOutput: "SCALAR", status: "FAILED", summary: "数据源连接失败", citations: [] },
+      { taskId: "none", sectionId: "sec-1", kind: "ASK_KNOWLEDGE", question: "费用制度", required: true, preferredOutput: "FACT", status: "NO_RESULT", summary: "未找到可引用来源", citations: [] },
+      { taskId: "optional", sectionId: "sec-1", kind: "ASK_DATA", question: "参考指标", required: false, preferredOutput: "SCALAR", status: "FAILED", summary: "连接失败", citations: [] },
+      { taskId: "orphan", sectionId: "old-section", kind: "ASK_KNOWLEDGE", question: "旧章节必需资料", required: true, preferredOutput: "FACT", status: "NO_RESULT", summary: "未找到资料", citations: [] }
+    ]
+  });
+  expect(generated.blocks.map((block) => block.text)).toEqual(expect.arrayContaining([
+    "已知的经营情况说明。", "【待补充】收入总额（数据源连接失败）", "【待补充】费用制度（未找到可引用来源）", "【待补充】旧章节必需资料（未找到资料）"
+  ]));
+  expect(generated.blocks.some((block) => block.text.includes("参考指标"))).toBe(false);
+  expect(generated.pendingCount).toBe(3);
 });

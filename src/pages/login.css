@@ -301,12 +301,10 @@
   flex-direction: column;
   min-height: var(--login-band);
   padding: 32px 38px 28px;
-  border: 1px solid rgba(199, 217, 246, 0.9);
-  border-radius: 20px;
+  border: 1px solid var(--xs-border);
+  border-radius: 18px;
   background: #ffffff;
-  box-shadow:
-    0 32px 64px rgba(23, 84, 170, 0.13),
-    0 4px 14px rgba(23, 84, 170, 0.06);
+  box-shadow: var(--xs-shadow-overlay);
 }
 
 .login-panel::before {
@@ -317,7 +315,7 @@
   height: 2px;
   border-radius: 2px;
   background: linear-gradient(90deg, rgba(22, 119, 255, 0.85), rgba(0, 194, 255, 0.42), transparent 85%);
-  content: "";
+  content: none;
 }
 
 .login-panel__meta {
@@ -360,7 +358,7 @@
   color: var(--xs-text);
   font-size: var(--xs-fs-section);
   line-height: var(--xs-lh-tight);
-  font-weight: var(--xs-fw-display);
+  font-weight: var(--xs-fw-text);
   letter-spacing: 0;
 }
 
@@ -453,7 +451,7 @@
 }
 
 .login-panel__submit {
-  min-height: 50px;
+  min-height: var(--xs-control-height-lg);
   margin-top: 6px;
   border-radius: var(--xs-radius-control);
   background: var(--xs-primary-2);

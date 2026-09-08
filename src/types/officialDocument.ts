@@ -284,6 +284,19 @@ export type OfficialDocumentResearchResult = {
   }>;
 };
 
+export type OfficialDocumentFactReview = {
+  reviewedAt: string;
+  issues: Array<{ sentence: string; additions: string[] }>;
+  confirmedAt?: string;
+  textSnapshot?: string;
+};
+
+export type OfficialDocumentDraftContentVersion = {
+  revision: number;
+  savedAt: string;
+  content: OfficialDocumentDraftContent;
+};
+
 export type OfficialDocumentDraftContent = {
   revision: number;
   fixedValues: Array<{
@@ -310,13 +323,16 @@ export type OfficialDocumentDraftContent = {
   }>;
   contentProfileId?: string;
   researchResults?: OfficialDocumentResearchResult[];
+  factReview?: OfficialDocumentFactReview;
 };
 
 export type UpdateOfficialDocumentDraftContentInput = {
+  restoreRevision?: number;
   expectedRevision: number;
   fixedValues: OfficialDocumentDraftContent["fixedValues"];
   blocks: OfficialDocumentDraftContent["blocks"];
   researchResults?: OfficialDocumentResearchResult[];
+  factReview?: OfficialDocumentFactReview;
 };
 
 export type QueryBindingCandidate = {
@@ -415,6 +431,7 @@ export type OfficialDocumentFidelityReport = {
 };
 
 export type OfficialDocumentExportRecord = {
+  contentRevision?: number | null;
   id: string;
   draftId: string;
   status: "GENERATED" | "BLOCKED" | "ENGINE_UNAVAILABLE";

@@ -1,7 +1,6 @@
 import {
   ArrowsClockwise,
   ArrowUp,
-  AsteriskSimple,
   CaretDown,
   CaretUp,
   CircleNotch,
@@ -18,8 +17,9 @@ import {
   X
 } from "@phosphor-icons/react";
 import { Button, Dropdown } from "antd";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
+import promptStar from "@/assets/brand/xingshu-prompt-star.svg";
 import mentionLibraryIcon from "@/assets/writing-mention-icons/library.svg";
 import mentionMaterialIcon from "@/assets/writing-mention-icons/material.svg";
 import mentionTemplateIcon from "@/assets/writing-mention-icons/template.svg";
@@ -67,6 +67,8 @@ import {
 } from "@/services/officialDocumentFullDraft";
 import { analyzeOfficialDocumentContent } from "@/services/writingContentAnalysisService";
 import { executeOfficialDocumentResearchPlan } from "@/services/officialDocumentResearchService";
+import { officialDocumentContentText } from "@/services/officialDocumentFactReview";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type {
   OfficialDocumentDraft,
   OfficialDocumentExportFormat,
@@ -108,7 +110,7 @@ import {
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
 import { TemplateGallery } from "./TemplateGallery";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
-import { useWritingChat } from "./useWritingChat";
+import { useWritingChat, type WritingChatSnapshot } from "./useWritingChat";
 
 /** 引用只决定下一轮的 writingContext，会话本身不跟着换，所以 key 固定。 */
 const COMPOSE_CHAT_KEY = "compose";
@@ -159,7 +161,7 @@ type ComposeTurnState = {
   templateNodes: OfficialDocumentStructureNode[];
   /** 这一轮发起的时刻，流式还没吐首字时用来给出真实耗时。 */
   startedAt: number;
-  /** 这一轮带的研究材料；重新生成时原样复用，不再重跑问数/问知。 */
+  /** 成功材料继续复用；失败任务可独立重试。 */
   research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
   /** 这一轮带的参考资料，重新生成时同样原样复用。 */
   materials?: ReferenceMaterialPayload;
@@ -167,7 +169,9 @@ type ComposeTurnState = {
   savedDraft?: OfficialDocumentDraft;
   recoveryDraft?: OfficialDocumentDraft;
   parseError?: string;
+  recoveredAsText?: boolean;
   factReview?: ReturnType<typeof reviewOfficialDocumentDraftFacts>;
+  factReviewConfirmedAt?: string;
   /** 这一轮的原始成稿文本，Word 引擎渲染失败时用它兜底出结构化预览。 */
   raw?: string;
   status?: ArtifactStatus;
@@ -187,6 +191,7 @@ type PendingSubmission = {
   requirement: string;
   reference: ComposeReference;
   startedAt: number;
+  materials?: ReferenceMaterialPayload;
 };
 
 /** 分析等待态：卡片要按真实耗时推进阶段，也要把参考结构的章节骨架亮出来。 */
@@ -202,7 +207,54 @@ type ComposePlanning = {
   phase: "confirm" | "researching";
   progressText?: string;
   failureCount: number;
+  materials?: ReferenceMaterialPayload;
+  results?: OfficialDocumentResearchResult[];
+  researchStarted?: boolean;
+  extraInstruction?: string;
 };
+
+type ComposeRecovery = {
+  version: 1;
+  value: string;
+  selection: { kind: "template" | "draft"; id: string } | null;
+  materials: ComposeMaterial[];
+  turnStates: Record<string, ComposeTurnState>;
+  planning: ComposePlanning | null;
+  interrupted?: PendingSubmission;
+  chat: WritingChatSnapshot;
+};
+
+function readComposeRecovery(key: string | null): ComposeRecovery | undefined {
+  if (!key) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null") as ComposeRecovery | null;
+    if (!saved || saved.version !== 1 || typeof saved.value !== "string"
+      || !Array.isArray(saved.materials) || !saved.turnStates || !Array.isArray(saved.chat?.turns)
+      || typeof saved.chat.sessionId !== "string") return;
+    const validReference = (reference: ComposeReference) => Array.isArray(reference?.template?.currentVersion?.analysis?.structureNodes);
+    if (Object.values(saved.turnStates).some((turn) => !validReference(turn.reference)
+      || !Array.isArray(turn.plan?.sections) || !Array.isArray(turn.plan?.fixedFields))
+      || saved.chat.turns.some((turn) => !turn || typeof turn.id !== "string" || typeof turn.question !== "string" || !Array.isArray(turn.events))
+      || saved.materials.some((material) => !material || typeof material.name !== "string"
+        || (material.content !== undefined && typeof material.content !== "string"))) return;
+    if (saved.planning && (!validReference(saved.planning.reference)
+      || !Array.isArray(saved.planning.plan?.sections) || !Array.isArray(saved.planning.plan?.researchNeeds))) return;
+    return {
+      ...saved,
+      chat: { ...saved.chat, turns: saved.chat.turns.map((turn) => ({
+        ...turn,
+        events: turn.events.filter((event) => event && typeof event.type === "string"),
+        status: ["done", "error", "cancelled"].includes(turn.status) ? turn.status : "cancelled"
+      })) },
+      value: saved.value || saved.interrupted?.requirement || "",
+      materials: saved.materials.map((material) => material.status === "reading"
+        ? { ...material, status: "failed", message: "解析已中断，请重新添加这份资料" } : material),
+      planning: saved.planning ? { ...saved.planning, phase: "confirm", progressText: undefined } : null
+    };
+  } catch {
+    return;
+  }
+}
 
 type GenerationInput = {
   requirement: string;
@@ -215,14 +267,14 @@ type GenerationInput = {
 /** 只把有内容的研究结果注入写作上下文；失败项由正文写「[待补充]」。 */
 function usableResearchResults(results: OfficialDocumentResearchResult[]) {
   return results.filter((result) => (
-    result.status !== "FAILED" && (result.summary.trim() || result.table || result.chart)
+    result.status === "SUCCESS" && (result.summary.trim() || result.table || result.chart)
   ));
 }
 
 /** 能进成稿的研究结果：成功且有料的落表格与图表，跳过的落「【待补充】」正文块。 */
 function embeddableResearchResults(results: OfficialDocumentResearchResult[]) {
   return results.filter((result) => (
-    result.status === "SKIPPED"
+    result.status === "SKIPPED" || result.status === "FAILED" || result.status === "NO_RESULT"
     || (result.status === "SUCCESS" && Boolean(result.summary.trim() || result.table || result.chart))
   ));
 }
@@ -304,37 +356,52 @@ function ComposeReferenceMeta({ reference }: { reference: ComposeReference }) {
 }
 
 export function OfficialDocumentComposeView() {
+  const userId = useDataHubAuthStore((state) => state.user?.userId);
+  const spaceId = useDataHubAuthStore((state) => state.currentSpaceId);
+  const storageKey = userId != null && spaceId != null ? `xingshu:writing:${userId}:${spaceId}` : null;
+  return <ComposeWorkspace key={storageKey ?? "anonymous"} storageKey={storageKey} />;
+}
+
+function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const updateWorkspaceCache = useUpdateOfficialDocumentWorkspaceCache();
   const { query, status } = useOfficialDocumentWorkspace();
-  const [value, setValue] = useState("");
+  const [recovered] = useState(() => readComposeRecovery(storageKey));
+  const [value, setValue] = useState(recovered?.value ?? "");
   const [selection, setSelection] = useState<{ kind: "template" | "draft"; id: string } | null>(
     () => {
       const requested = (location.state as { useTemplateId?: unknown } | null)?.useTemplateId;
-      return typeof requested === "string" && requested ? { kind: "template", id: requested } : null;
+      return typeof requested === "string" && requested ? { kind: "template", id: requested } : recovered?.selection ?? null;
     }
   );
   const [mention, setMention] = useState<MentionQuery | null>(null);
   const [activeMentionKey, setActiveMentionKey] = useState("");
-  const [materials, setMaterials] = useState<ComposeMaterial[]>([]);
+  const [materials, setMaterials] = useState<ComposeMaterial[]>(recovered?.materials ?? []);
+  const materialsRef = useRef(materials);
+  const materialTasksRef = useRef(new Map<string, Promise<void>>());
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>({});
+  const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>(recovered?.turnStates ?? {});
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission>();
   const [analyzingSubmission, setAnalyzingSubmission] = useState<AnalyzingSubmission>();
-  const [planning, setPlanning] = useState<ComposePlanning | null>(null);
+  const [planning, setPlanning] = useState<ComposePlanning | null>(recovered?.planning ?? null);
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [composerError, setComposerError] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
   const [viewerTurnId, setViewerTurnId] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const materialInputRef = useRef<HTMLInputElement>(null);
-  const finalizedTurnsRef = useRef(new Set<string>());
+  const finalizedTurnsRef = useRef(new Set(Object.entries(recovered?.turnStates ?? {})
+    .filter(([, turn]) => turn.artifact || (turn.raw && !turn.parseError)).map(([id]) => id)));
   /* 「跳过大纲」要能作废一次在途分析：token 不一致的分析结果直接丢弃。 */
   const analyzeTokenRef = useRef(0);
+  const generationTokenRef = useRef(0);
+  const researchControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
   const drafts = query.data?.drafts ?? EMPTY_DRAFTS;
   const templates = query.data?.templates ?? EMPTY_TEMPLATES;
-  const { messages, busy: writingBusy, send, stop } = useWritingChat(COMPOSE_CHAT_KEY);
+  const { messages, busy: writingBusy, send, stop, getSnapshot } = useWritingChat(COMPOSE_CHAT_KEY, recovered?.chat);
   const composerBusy = writingBusy
     || Boolean(pendingSubmission)
     || Boolean(analyzingSubmission)
@@ -375,11 +442,49 @@ export function OfficialDocumentComposeView() {
 
   const turnStatesRef = useRef(turnStates);
   turnStatesRef.current = turnStates;
-  useEffect(() => () => {
-    for (const state of Object.values(turnStatesRef.current)) {
-      if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
-    }
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      analyzeTokenRef.current += 1;
+      generationTokenRef.current += 1;
+      researchControllerRef.current?.abort();
+      for (const state of Object.values(turnStatesRef.current)) {
+        if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+      }
+    };
   }, []);
+
+  const recoveryRef = useRef({ value, selection, materials, turnStates, planning, interrupted: analyzingSubmission ?? pendingSubmission });
+  recoveryRef.current = { value, selection, materials, turnStates, planning, interrupted: analyzingSubmission ?? pendingSubmission };
+  const saveRecovery = useCallback(() => {
+    if (!storageKey || !getSnapshot) return;
+    const current = recoveryRef.current;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        ...current,
+        version: 1,
+        turnStates: Object.fromEntries(Object.entries(current.turnStates).map(([id, turn]) => [id, {
+          ...turn, previewUrl: undefined, previewLoading: undefined, previewError: undefined
+        }])),
+        chat: getSnapshot()
+      }));
+      if (mountedRef.current) setRecoveryError("");
+    } catch {
+      if (mountedRef.current) setRecoveryError("本地恢复暂不可用，请将成稿保存到草稿箱或复制正文后离开。");
+    }
+  }, [storageKey, getSnapshot]);
+  useEffect(() => {
+    window.addEventListener("pagehide", saveRecovery);
+    return () => {
+      window.removeEventListener("pagehide", saveRecovery);
+      saveRecovery();
+    };
+  }, [saveRecovery]);
+  useEffect(() => {
+    const timer = window.setTimeout(saveRecovery, 200);
+    return () => window.clearTimeout(timer);
+  }, [saveRecovery, value, selection, materials, turnStates, planning, analyzingSubmission, pendingSubmission, messages]);
 
   const viewerState = viewerTurnId ? turnStates[viewerTurnId] : undefined;
   const viewer = viewerState?.artifact
@@ -499,8 +604,8 @@ export function OfficialDocumentComposeView() {
   };
 
   /**
-   * 每一轮结束都试着解析成公文结构；解析不了不再弹红错，而是把回答当普通文字留在对话里，
-   * 让用户自己决定是不是要「重出完整版」——多轮追问下解析失败会变常见，红错会淹掉对话。
+   * 每轮结束整理为可编辑草稿；模型格式不规整时保留原文为文字草稿。
+   * 旧会话中曾解析失败的成稿会在重新打开时用当前解析规则重新整理。
    */
   useEffect(() => {
     for (const message of messages) {
@@ -548,6 +653,7 @@ export function OfficialDocumentComposeView() {
               version,
               raw: answer,
               parseError: undefined,
+              recoveredAsText: generated.recoveredAsText,
               factReview,
               artifact: {
                 templateId: existing.reference.template.id,
@@ -570,13 +676,15 @@ export function OfficialDocumentComposeView() {
   const runGeneration = async (input: GenerationInput) => {
     const { requirement, reference: turnReference, extraInstruction = "", research } = input;
     const startedAt = Date.now();
+    const token = ++generationTokenRef.current;
     const template = turnReference.template;
-    setPendingSubmission({ requirement, reference: turnReference, startedAt });
+    setPendingSubmission({ requirement, reference: turnReference, startedAt, materials: input.materials });
     try {
       /* 模板引用没有旧正文可读：章节骨架直接由结构节点的标题推出来。 */
       const content = turnReference.kind === "draft"
         ? await getOfficialDocumentDraftContent(turnReference.draft.id)
         : { revision: 0, fixedValues: [], blocks: [] };
+      if (!mountedRef.current || generationTokenRef.current !== token) return;
       const templateNodes = template.currentVersion.analysis!.structureNodes;
       const materialPayload = input.materials ?? composeMaterialPayload(resolvedMaterials);
       const planInput = {
@@ -625,6 +733,7 @@ export function OfficialDocumentComposeView() {
       }));
       setPendingSubmission(undefined);
     } catch (caught) {
+      if (!mountedRef.current || generationTokenRef.current !== token) return;
       setPendingSubmission(undefined);
       setComposerError(operationErrorMessage(caught));
       setValue((current) => current || requirement);
@@ -661,7 +770,12 @@ export function OfficialDocumentComposeView() {
       startedAt: Date.now(),
       templateNodes: structureNodes
     });
+    let materialPayload: ReferenceMaterialPayload = [];
     try {
+      await Promise.allSettled([...materialTasksRef.current.values()]);
+      if (analyzeTokenRef.current !== token || !mountedRef.current) return;
+      materialPayload = composeMaterialPayload(resolveComposeMaterials(materialsRef.current));
+      setAnalyzingSubmission((current) => current ? { ...current, materials: materialPayload } : current);
       const logicPlan = await analyzeOfficialDocumentContent({
         structureNodes,
         sourceBlocks: [{
@@ -672,12 +786,20 @@ export function OfficialDocumentComposeView() {
           headingHint: "USER_REQUIREMENT",
           columns: [],
           rows: []
-        }]
+        }, ...materialPayload.map((material, index) => ({
+          id: `reference-material-${index + 1}`,
+          order: index + 1,
+          kind: "PARAGRAPH" as const,
+          text: material.content,
+          headingHint: material.name,
+          columns: [],
+          rows: []
+        }))]
       });
       if (analyzeTokenRef.current !== token) return;
       setAnalyzingSubmission(undefined);
       if (!logicPlan.sections.length) {
-        await runGeneration({ requirement, reference: turnReference });
+        await runGeneration({ requirement, reference: turnReference, materials: materialPayload });
         return;
       }
       setPlanning({
@@ -685,12 +807,13 @@ export function OfficialDocumentComposeView() {
         reference: turnReference,
         plan: logicPlan,
         phase: "confirm",
-        failureCount: 0
+        failureCount: 0,
+        materials: materialPayload
       });
     } catch {
       if (analyzeTokenRef.current !== token) return;
       setAnalyzingSubmission(undefined);
-      await runGeneration({ requirement, reference: turnReference });
+      await runGeneration({ requirement, reference: turnReference, materials: materialPayload });
     }
   };
 
@@ -699,7 +822,7 @@ export function OfficialDocumentComposeView() {
     if (!current) return;
     analyzeTokenRef.current += 1;
     setAnalyzingSubmission(undefined);
-    await runGeneration({ requirement: current.requirement, reference: current.reference });
+    await runGeneration({ requirement: current.requirement, reference: current.reference, materials: current.materials });
   };
 
   /** 取消等待：作废在途分析，要求回到输入框，用户可以改完再来一次。 */
@@ -711,15 +834,35 @@ export function OfficialDocumentComposeView() {
     setValue((existing) => existing || current.requirement);
   };
 
-  const updatePlanningSectionTitle = (sectionId: string, title: string) => {
+  const updatePlanningSection = (sectionId: string, changes: { title?: string; purpose?: string; keyPoints?: string[] }) => {
+    setPlanning((current) => {
+      if (!current) return current;
+      const sections = current.plan.sections.map((section) => section.id === sectionId ? { ...section, ...changes } : section);
+      const section = sections.find((item) => item.id === sectionId);
+      if (!section) return current;
+      return {
+        ...current,
+        results: current.results?.filter((result) => result.sectionId !== sectionId),
+        plan: {
+          ...current.plan,
+          sections,
+          researchNeeds: current.plan.researchNeeds.map((need) => need.sectionId === sectionId ? {
+            ...need,
+            question: `为“${section.title}”补充${need.kind === "ASK_DATA" ? "数据" : "资料"}：${[section.purpose, ...section.keyPoints].filter(Boolean).join("；")}`,
+            reason: "已按修改后的章节更新，可继续调整资料问题"
+          } : need)
+        }
+      };
+    });
+  };
+
+  const updateResearchQuestion = (taskId: string, question: string) => {
     setPlanning((current) => current && ({
       ...current,
-      plan: {
-        ...current.plan,
-        sections: current.plan.sections.map((section) => (
-          section.id === sectionId ? { ...section, title } : section
-        ))
-      }
+      results: current.results?.filter((result) => result.taskId !== taskId),
+      plan: { ...current.plan, researchNeeds: current.plan.researchNeeds.map((need) => (
+        need.id === taskId ? { ...need, question } : need
+      )) }
     }));
   };
 
@@ -729,6 +872,7 @@ export function OfficialDocumentComposeView() {
       const sections = current.plan.sections.filter((section) => section.id !== sectionId);
       return {
         ...current,
+        results: current.results?.filter((result) => result.sectionId !== sectionId),
         plan: {
           ...current.plan,
           sections,
@@ -741,74 +885,130 @@ export function OfficialDocumentComposeView() {
     });
   };
 
-  const confirmPlanning = async () => {
-    const current = planning;
-    if (!current || current.phase !== "confirm") return;
-    if (!current.plan.researchNeeds.length) {
+  const runPlannedGeneration = async (current: ComposePlanning, retryMissing = false) => {
+    const controller = new AbortController();
+    researchControllerRef.current?.abort();
+    researchControllerRef.current = controller;
+    const settled = new Map((current.results ?? []).map((result) => [result.taskId, result]));
+    const needs = current.plan.researchNeeds.filter((need) => {
+      const result = settled.get(need.id);
+      return !result || (retryMissing && result.status !== "SUCCESS");
+    });
+    setPlanning({ ...current, phase: "researching", researchStarted: true, progressText: "正在补充资料…", failureCount: 0 });
+    try {
+      const results = await executeOfficialDocumentResearchPlan(needs, {
+        signal: controller.signal,
+        existingChartCount: [...settled.values()].filter((result) => result.status === "SUCCESS" && result.chart).length,
+        onResult: (result) => {
+          if (controller.signal.aborted || !mountedRef.current) return;
+          settled.set(result.taskId, result);
+          setPlanning((state) => state && ({ ...state, results: [...settled.values()] }));
+        },
+        onProgress: (progress) => {
+          if (controller.signal.aborted || !mountedRef.current) return;
+          setPlanning((state) => state && ({
+            ...state,
+            progressText: progress.status === "running"
+              ? `正在补充资料 ${progress.index + 1}/${progress.total}：${progress.need.question.slice(0, 40)}`
+              : state.progressText,
+            failureCount: state.failureCount + (progress.status === "failed" ? 1 : 0)
+          }));
+        }
+      });
+      if (controller.signal.aborted || !mountedRef.current) return;
+      for (const result of results) settled.set(result.taskId, result);
       setPlanning(null);
       await runGeneration({
         requirement: current.requirement,
         reference: current.reference,
-        research: { plan: current.plan, results: [] }
+        extraInstruction: current.extraInstruction,
+        research: { plan: current.plan, results: [...settled.values()] },
+        materials: current.materials
       });
-      return;
+    } catch (caught) {
+      if (controller.signal.aborted || !mountedRef.current) return;
+      setComposerError(operationErrorMessage(caught));
+      setPlanning((state) => state && ({ ...state, phase: "confirm" }));
+    } finally {
+      if (researchControllerRef.current === controller) researchControllerRef.current = null;
     }
+  };
 
-    setPlanning({ ...current, phase: "researching", progressText: "正在补充资料…", failureCount: 0 });
-    const results = await executeOfficialDocumentResearchPlan(current.plan.researchNeeds, {
-      onProgress: (progress) => {
-        setPlanning((state) => state && ({
-          ...state,
-          progressText: progress.status === "running"
-            ? `正在补充资料 ${progress.index + 1}/${progress.total}：${progress.need.question.slice(0, 40)}`
-            : state.progressText,
-          failureCount: state.failureCount + (progress.status === "failed" ? 1 : 0)
-        }));
-      }
-    });
-    setPlanning(null);
-    await runGeneration({
-      requirement: current.requirement,
-      reference: current.reference,
-      research: { plan: current.plan, results }
-    });
+  const confirmPlanning = async () => {
+    if (!planning || planning.phase !== "confirm") return;
+    await runPlannedGeneration(planning);
   };
 
   const skipPlanning = async () => {
     const current = planning;
     if (!current || current.phase !== "confirm") return;
     setPlanning(null);
-    await runGeneration({ requirement: current.requirement, reference: current.reference });
+    const settled = new Map((current.results ?? []).map((result) => [result.taskId, result]));
+    await runGeneration({
+      requirement: current.requirement,
+      reference: current.reference,
+      materials: current.materials,
+      ...(current.researchStarted ? { research: {
+        plan: current.plan,
+        results: current.plan.researchNeeds.map((need): OfficialDocumentResearchResult => settled.get(need.id) ?? {
+          taskId: need.id, sectionId: need.sectionId, kind: need.kind, question: need.question,
+          required: need.required, preferredOutput: need.preferredOutput, status: "SKIPPED",
+          summary: "用户选择使用现有资料生成", citations: []
+        })
+      } } : {})
+    });
   };
 
   const cancelPlanning = () => {
-    const current = planning;
-    if (!current || current.phase !== "confirm") return;
+    if (!planning) return;
+    if (planning.phase === "researching") {
+      researchControllerRef.current?.abort();
+      setPlanning((current) => current && ({ ...current, phase: "confirm", progressText: "已停止补充资料，完成的结果已保留。" }));
+      return;
+    }
     setPlanning(null);
-    setValue((existing) => existing || current.requirement);
+    setValue((existing) => existing || planning.requirement);
   };
 
-  /** 重试、重新生成、停止后继续、重出完整版都是「用同一要求再来一轮」，材料原样复用。 */
   const regenerate = async (turnId: string, extraInstruction = "") => {
     const state = turnStates[turnId];
     if (!state || composerBusy) return;
     setComposerError("");
+    if (state.research?.results.some((result) => result.status !== "SUCCESS")) {
+      await runPlannedGeneration({
+        requirement: state.requirement,
+        reference: state.reference,
+        plan: state.research.plan,
+        results: state.research.results,
+        phase: "confirm", failureCount: 0,
+        materials: state.materials ?? [],
+        extraInstruction
+      }, true);
+      return;
+    }
     await runGeneration({
-      requirement: state.requirement,
-      reference: state.reference,
-      extraInstruction,
-      research: state.research,
-      materials: state.materials ?? []
+      requirement: state.requirement, reference: state.reference, extraInstruction,
+      research: state.research, materials: state.materials ?? []
     });
   };
 
   const cancel = () => {
-    if (!writingBusy) return;
-    stop();
+    if (writingBusy) stop();
+    if (planning?.phase === "researching") cancelPlanning();
+    if (pendingSubmission) {
+      generationTokenRef.current += 1;
+      setValue((current) => current || pendingSubmission.requirement);
+      setPendingSubmission(undefined);
+    }
+  };
+
+  const updateMaterials = (update: (current: ComposeMaterial[]) => ComposeMaterial[]) => {
+    materialsRef.current = update(materialsRef.current);
+    setMaterials(materialsRef.current);
   };
 
   const patchMaterial = (id: string, patch: Partial<ComposeMaterial>) => {
-    setMaterials((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    updateMaterials((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
 
   /** DOCX 资料复用内容方案抽取管线，所以必须先有一份模板结构可以挂靠。 */
@@ -836,7 +1036,7 @@ export function OfficialDocumentComposeView() {
     const base = { id, name: file.name, size: file.size };
     const kind = classifyMaterialFile(file);
     if (kind === "unsupported") {
-      setMaterials((current) => [...current, {
+      updateMaterials((current) => [...current, {
         ...base,
         status: "failed",
         message: "暂不支持解析该格式，请转为 DOCX 或文本"
@@ -844,7 +1044,7 @@ export function OfficialDocumentComposeView() {
       return;
     }
     if (kind === "text" && file.size > MAX_TEXT_MATERIAL_BYTES) {
-      setMaterials((current) => [...current, {
+      updateMaterials((current) => [...current, {
         ...base,
         status: "failed",
         message: `文本资料不能超过 ${formatFileSize(MAX_TEXT_MATERIAL_BYTES)}`
@@ -852,7 +1052,7 @@ export function OfficialDocumentComposeView() {
       return;
     }
     if (kind === "docx" && !reference) {
-      setMaterials((current) => [...current, {
+      updateMaterials((current) => [...current, {
         ...base,
         status: "failed",
         message: "请先 @ 选择模板或参考草稿，再上传 DOCX 资料"
@@ -861,13 +1061,18 @@ export function OfficialDocumentComposeView() {
     }
 
     const template = reference?.template;
-    setMaterials((current) => [...current, { ...base, status: "reading" }]);
-    try {
-      const content = kind === "text" ? await file.text() : await extractDocxMaterial(template!, file);
-      patchMaterial(id, { status: "ready", content });
-    } catch (caught) {
-      patchMaterial(id, { status: "failed", message: operationErrorMessage(caught) });
-    }
+    updateMaterials((current) => [...current, { ...base, status: "reading" }]);
+    const task = (async () => {
+      try {
+        const content = kind === "text" ? await file.text() : await extractDocxMaterial(template!, file);
+        if (mountedRef.current) patchMaterial(id, { status: "ready", content });
+      } catch (caught) {
+        if (mountedRef.current) patchMaterial(id, { status: "failed", message: operationErrorMessage(caught) });
+      }
+    })();
+    materialTasksRef.current.set(id, task);
+    await task;
+    materialTasksRef.current.delete(id);
   };
 
   const handleUploadTemplate = async (file: File) => {
@@ -912,13 +1117,19 @@ export function OfficialDocumentComposeView() {
       /* 这一轮的问数/问知原样跟着落库：草稿里再走 FULL_DRAFT 才有出处和材料可用，
          口径与草稿编辑器一致——失败项也留着，资料面板要按状态列全量任务。 */
       const roundResearch = state.research?.results ?? [];
+      const fixedValues = initial.fixedValues.map((item) => ({
+        ...item, value: generatedFixedValues.get(item.slotId) ?? ""
+      }));
       await updateOfficialDocumentDraftContent(created.id, {
         expectedRevision: initial.revision,
-        fixedValues: initial.fixedValues.map((item) => ({
-          ...item,
-          value: generatedFixedValues.get(item.slotId) ?? ""
-        })),
+        fixedValues,
         blocks: state.artifact.blocks,
+        factReview: {
+          reviewedAt: new Date().toISOString(),
+          issues: state.factReview ?? [],
+          confirmedAt: state.factReviewConfirmedAt,
+          textSnapshot: officialDocumentContentText({ fixedValues, blocks: state.artifact.blocks })
+        },
         ...(roundResearch.length ? { researchResults: roundResearch } : {})
       });
       patchTurn(turnId, {
@@ -1043,7 +1254,7 @@ export function OfficialDocumentComposeView() {
       <XsArtifactCard
         label="生成的公文文件"
         icon={<FileText size={24} aria-hidden="true" />}
-        eyebrow={previewing ? "正在渲染…" : state.savedDraft ? "已保存 · 点击浏览" : "临时成稿 · 点击浏览"}
+        eyebrow={previewing ? "正在渲染…" : state.savedDraft ? "已保存 · 点击浏览" : state.recoveredAsText ? "文字草稿 · 点击浏览" : "临时成稿 · 点击浏览"}
         title={state.artifact.title}
         badge={state.version > 1 ? `v${state.version}` : undefined}
         meta={[
@@ -1170,8 +1381,27 @@ export function OfficialDocumentComposeView() {
               <ul>{state.factReview.map((issue, index) => (
                 <li key={index}>核对“{issue.additions.join("、")}”：{issue.sentence}</li>
               ))}</ul>
+              <Button type="text" size="small" onClick={() => patchTurn(message.id, {
+                factReviewConfirmedAt: state.factReviewConfirmedAt ? undefined : new Date().toISOString()
+              })}>
+                {state.factReviewConfirmedAt ? "已核对来源 · 撤销确认" : "我已核对来源"}
+              </Button>
             </div>
           </section>
+        ) : null}
+
+        {state?.research?.results.some((result) => result.status !== "SUCCESS") ? (
+          <section aria-label="未补齐的资料" className="official-document-compose__parse-note">
+            <div>
+              <strong>部分资料未补齐，可重试或继续使用当前成稿</strong>
+              <ul>{state.research.results.filter((result) => result.status !== "SUCCESS").map((result) => (
+                <li key={result.taskId}>{result.question}：{result.summary || "未取得可用结果"}</li>
+              ))}</ul>
+            </div>
+          </section>
+        ) : null}
+        {state?.research?.results.some((result) => result.kind === "ASK_KNOWLEDGE" && result.status === "SUCCESS" && !result.citations.length) ? (
+          <p className="official-document-compose__parse-note">部分资料未附来源链接，内容已保留供参考。</p>
         ) : null}
 
         {state?.artifact ? renderArtifact(message.id, state) : null}
@@ -1189,7 +1419,9 @@ export function OfficialDocumentComposeView() {
             {state ? (
               <XsChatActionButton
                 icon={<ArrowsClockwise size={14} aria-hidden="true" />}
-                label={failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
+                label={state.research?.results.some((result) => result.status !== "SUCCESS")
+                  ? "重试缺失资料并重新生成"
+                  : failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
                 disabled={composerBusy}
                 onClick={() => void regenerate(message.id, state.parseError ? RETRY_HINT : "")}
               />
@@ -1250,7 +1482,8 @@ export function OfficialDocumentComposeView() {
           <button
             type="button"
             aria-label={`移除参考资料 ${material.name}`}
-            onClick={() => setMaterials((current) => current.filter((item) => item.id !== material.id))}
+            disabled={composerBusy}
+            onClick={() => updateMaterials((current) => current.filter((item) => item.id !== material.id))}
           ><X size={12} aria-hidden="true" /></button>
         </span>
       ))}
@@ -1278,7 +1511,7 @@ export function OfficialDocumentComposeView() {
         >
           {!conversationVisible ? (
             <header>
-              <AsteriskSimple size={40} weight="bold" aria-hidden="true" />
+              <img src={promptStar} alt="" width={24} height={24} aria-hidden="true" />
               <h2>想写一篇什么公文？</h2>
             </header>
           ) : null}
@@ -1334,7 +1567,11 @@ export function OfficialDocumentComposeView() {
                       phase={planning.phase}
                       progressText={planning.progressText}
                       failureCount={planning.failureCount}
-                      onChangeSectionTitle={updatePlanningSectionTitle}
+                      completedCount={planning.results?.filter((result) => result.status === "SUCCESS").length}
+                      researchStarted={planning.researchStarted}
+                      onChangeResearchQuestion={updateResearchQuestion}
+                      onChangeSectionTitle={(sectionId, title) => updatePlanningSection(sectionId, { title })}
+                      onChangeSectionLogic={updatePlanningSection}
                       onRemoveSection={removePlanningSection}
                       onConfirm={() => void confirmPlanning()}
                       onSkip={() => void skipPlanning()}
@@ -1413,7 +1650,7 @@ export function OfficialDocumentComposeView() {
                 </Dropdown>
               )}
               chips={composerChips}
-              tail={writingBusy ? (
+              tail={writingBusy || planning?.phase === "researching" || pendingSubmission ? (
                 <Button
                   className="official-document-composer__stop"
                   type="text"
@@ -1434,7 +1671,7 @@ export function OfficialDocumentComposeView() {
                   onClick={() => void submit()}
                 />
               )}
-              footnote="生成结果先保留在当前会话，确认后再保存到草稿箱。"
+              footnote="写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。"
               onChange={(next) => {
                 setValue(next);
                 syncMention(next);
@@ -1453,6 +1690,7 @@ export function OfficialDocumentComposeView() {
           )}
 
           {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
+          {recoveryError ? <XsStatusBar tone="error" message={recoveryError} /> : null}
         </div>
       </XsAsyncPanel>
 

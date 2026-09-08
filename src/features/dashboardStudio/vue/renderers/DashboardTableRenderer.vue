@@ -3,7 +3,7 @@ import { computed } from "vue";
 import type { DashboardDataBinding, DashboardWidget } from "@/types/dashboardStudio";
 import { isLightDashboardSurface, resolveDashboardWidgetStyle } from "../../core/dashboardChartThemes";
 
-const props = defineProps<{ widget: DashboardWidget; binding?: DashboardDataBinding }>();
+const props = defineProps<{ widget: DashboardWidget; binding?: DashboardDataBinding; readonly?: boolean }>();
 /*
  * resolveDashboardWidgetStyle 的旧指挥屏兜底有一支是「chartTheme === command-default 且底色偏深
  * → 判定成遗留白卡，整张改写回冰蓝浅底」。表格卡根本不画 ECharts 面板，chartTheme 只是组件默认样式
@@ -50,7 +50,7 @@ const panelStyle = computed(() => ({
         <span class="table-renderer__notice-text">这张表暂时没有数据行</span>
       </span>
     </p>
-    <div v-else class="table-renderer__scroll"><table><thead><tr><th v-for="column in binding.table.columns" :key="column.key">{{ column.title }}</th></tr></thead><tbody><tr v-for="(row,rowIndex) in binding.table.rows" :key="rowIndex"><td v-for="column in binding.table.columns" :key="column.key">{{ row[column.key] ?? '' }}</td></tr></tbody></table></div>
+    <div v-else class="table-renderer__scroll" :tabindex="readonly ? 0 : undefined" :role="readonly ? 'region' : undefined" :aria-label="readonly ? `${widget.title}表格内容` : undefined"><table><thead><tr><th v-for="column in binding.table.columns" :key="column.key">{{ column.title }}</th></tr></thead><tbody><tr v-for="(row,rowIndex) in binding.table.rows" :key="rowIndex"><td v-for="column in binding.table.columns" :key="column.key">{{ row[column.key] ?? '' }}</td></tr></tbody></table></div>
   </section>
 </template>
 <style scoped>
@@ -59,6 +59,7 @@ const panelStyle = computed(() => ({
 .table-renderer__header { display:flex; min-width:0; align-items:center; gap:8px; overflow:hidden; padding-bottom:10px; font-size:14px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
 .table-renderer__header::before { width:3px; height:12px; flex:0 0 auto; border-radius:2px; background:var(--table-accent); content:""; }
 .table-renderer__scroll { min-width:0; min-height:0; overflow:auto; }
+.table-renderer__scroll:focus-visible { outline:2px solid var(--table-accent); outline-offset:-2px; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
 th,td { max-width:180px; padding:9px 10px; overflow:hidden; border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent); text-align:left; text-overflow:ellipsis; white-space:nowrap; }
 th { color:color-mix(in srgb,currentColor 70%,transparent); font-size:12px; font-weight:600; }

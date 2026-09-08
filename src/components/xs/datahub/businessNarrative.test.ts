@@ -19,7 +19,7 @@ describe("structured business facts", () => {
       filters: ["合同甲方单位名称等于“善治数字科技（成都）有限公司”"],
       time: ["签订日期：2026-01-01 至 2026-06-30"], rows: 10, preview
     }] });
-    expect(result.process.map(({ steps: _steps, ...group }) => group)).toEqual([{ key: "query-0", title: "查询 1", rows: [
+    expect(result.process.map(({ steps: _steps, ...group }) => group)).toEqual([{ key: "query-0", title: "按合同乙方单位名称统计记录数", rows: [
       { label: "数据源", values: ["合同数据系统"] },
       { label: "数据表", values: ["合同主数据清单"] },
       { label: "筛选", values: ["合同甲方单位名称等于“善治数字科技（成都）有限公司”"] },
@@ -126,4 +126,35 @@ it("does not invent completed work or steps when query metadata is absent", () =
   expect(result.process).toEqual([]);
   const known = narrate({ queries: [{ table: "甲表", dimensions: [], measures: [], filters: [], time: [] }] }, { status: "running" });
   expect(JSON.stringify(known.process[0].steps)).not.toMatch(/已完成|已返回|返回结果|筛选|排序/);
+});
+
+it("names detail and different aggregations from their actual operations on the same table", () => {
+  const base = { table: "发票开具明细", filters: ["销方等于甲公司", "购方等于乙公司"], time: [], rows: 3 };
+  const result = narrate({ queries: [
+    { ...base, dimensions: ["销方名称", "购方名称", "开票日期", "金额"], measures: [], rowKind: "list" },
+    { ...base, dimensions: ["购方单位名称"], measures: [{ label: "记录数", aggregation: "计数" }], rowKind: "grouped" },
+    { ...base, dimensions: ["购方单位名称"], measures: [{ label: "开票金额", aggregation: "求和" }], rowKind: "grouped" }
+  ] });
+  expect(result.process.map((item) => item.title)).toEqual([
+    "查询发票开具明细", "按购方单位名称统计记录数", "按购方单位名称汇总开票金额"
+  ]);
+  expect(result.found.map((item) => item.title)).toEqual(["发票开具明细", "发票开具明细", "发票开具明细"]);
+  expect(result.process[0].rows.find((row) => row.label === "筛选")?.values).toEqual(base.filters);
+});
+
+it("uses neutral names when business identity is unavailable instead of numbered queries or guessed intent", () => {
+  const result = narrate({ queries: [{ dimensions: [], measures: [], filters: [], time: [], rows: 0 }] },
+    { question: "重试并扩大范围核验公司情况" });
+  expect(result.process[0].title).toBe("查询数据");
+  expect(result.found[0].title).toBe("查询结果");
+  expect(JSON.stringify(result)).not.toMatch(/重试|扩大范围|核验|查询 1/);
+});
+
+it("keeps complex fields in the facts instead of piling them into a query title", () => {
+  const dimensions = ["购方单位完整名称及归属业务部门说明".repeat(3), "销方名称", "所属年度"];
+  const result = narrate({ queries: [{ table: "发票开具明细", dimensions,
+    measures: [{ label: "开票金额", aggregation: "求和" }, { label: "记录数", aggregation: "计数" }],
+    filters: [], time: [], rows: 3, rowKind: "grouped" }] });
+  expect(result.process[0].title).toBe("发票开具明细汇总统计");
+  expect(result.process[0].rows.find((row) => row.label === "分组")?.values).toEqual(dimensions);
 });

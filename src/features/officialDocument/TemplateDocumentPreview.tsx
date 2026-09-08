@@ -63,7 +63,7 @@ export function TemplateDocumentPreview({
   }
 
   return (
-    <div className="template-document" ref={scrollRef}>
+    <div className="template-document" ref={scrollRef} role="region" aria-label="原文阅读区" tabIndex={0}>
       <article className="template-document__page">
         {nodes.map((node) => (
           <p

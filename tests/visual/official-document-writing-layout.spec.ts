@@ -180,7 +180,7 @@ test("真实 React 页面可通过 @ 搜索并选择草稿", async ({ page }) =>
   await input.fill("撰写2026年第三季度经营工作通报");
   const submit = page.getByRole("button", { name: "生成完整公文" });
   await expect(submit).toBeEnabled();
-  await expect(submit).toHaveCSS("background-color", "rgb(37, 37, 37)");
+  await expect(submit).toHaveCSS("background-color", "rgb(37, 99, 235)");
   await page.screenshot({ path: "outputs/report-writing/compose-app-selected-1440.png", fullPage: false });
 
   await page.setViewportSize({ width: 390, height: 844 });

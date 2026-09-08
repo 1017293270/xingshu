@@ -1,6 +1,9 @@
 import {
   CaretRight,
   CheckCircle,
+  CircleNotch,
+  MinusCircle,
+  WarningCircle,
   FileText,
   Database,
   Quotes
@@ -132,6 +135,7 @@ export function DataHubBusinessExplanation({
         : "失败";
   const { process, found, statusMessage } = buildBusinessNarrative({ trace: content, kind, status, question: intent });
   const findings = resultTables ? found.filter((item) => item.document) : found;
+  const waitingForResults = status === "running" && findings.length === 0 && !resultTables;
   const detailRows = scopeDetailRows(content);
   const stateText = [stateLabel, elapsedMs != null ? `${Math.max(0, Math.round(elapsedMs / 1000))}秒` : ""]
     .filter(Boolean);
@@ -179,7 +183,7 @@ export function DataHubBusinessExplanation({
                     </dl>;
                   return (
                     <div className="datahub-business-explanation__query-group" key={group.key}>
-                      {group.title && process.length > 1 ? <p className="datahub-business-explanation__query-title">{group.title}</p> : null}
+                      {group.title && process.length > 1 ? <h3 className="datahub-business-explanation__query-title">{group.title}</h3> : null}
                       {group.steps?.length ? <>
                         <ol className="datahub-business-explanation__steps" aria-label="查询步骤">
                           {group.steps.map((step, index) => (
@@ -203,9 +207,15 @@ export function DataHubBusinessExplanation({
               </section>
             ) : null}
 
-            <section className="datahub-business-explanation__results" aria-label="查询结果">
+            <section className="datahub-business-explanation__results" aria-label="查询结果" aria-busy={status === "running"}>
               {(!resultTables || findings.length > 0) ? <header className="datahub-business-explanation__results-head">
-                <h3><CheckCircle size={16} aria-hidden="true" />查询结果</h3>
+                <h3>
+                  {status === "running" ? <CircleNotch className="datahub-query-waiting-icon" size={16} aria-hidden="true" />
+                    : status === "error" ? <WarningCircle size={16} aria-hidden="true" />
+                      : status === "cancelled" ? <MinusCircle size={16} aria-hidden="true" />
+                        : <CheckCircle size={16} aria-hidden="true" />}
+                  查询结果
+                </h3>
                 {findings.length > 0 ? <span>{findings.length} {findings.every((item) => item.document) ? "份文档" : "项结果"}</span> : null}
               </header> : null}
               {resultTables}
@@ -251,7 +261,9 @@ export function DataHubBusinessExplanation({
                     );
                   })}
                 </ul>
-              ) : !resultTables ? <p className="datahub-business-explanation__empty" role="status">{statusMessage}</p> : null}
+              ) : !resultTables ? <p className="datahub-business-explanation__empty" role="status">
+                {waitingForResults ? <span className="datahub-query-waiting-text">{statusMessage}</span> : statusMessage}
+              </p> : null}
             </section>
 
             {detailRows.length ? (

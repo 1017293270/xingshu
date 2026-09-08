@@ -49,6 +49,7 @@ import { buildTemplateOutline } from "./templateOutline";
 import { TemplateOutlineMissingHint, TemplateOutlineTree } from "./TemplateOutlineTree";
 import { TemplateDocumentPreview } from "./TemplateDocumentPreview";
 import "./official-document.css";
+import "./official-document-template-detail.css";
 
 function TemplateNotFound() {
   return (
@@ -435,13 +436,13 @@ function CalibrationPanel({
       </div>
 
       <Modal
-        className="official-document-preview-modal"
+        className="official-document-preview-modal official-document-template-dialog"
         title="原稿 PDF 预览"
         width="min(980px, calc(100vw - 48px))"
         open={previewOpen}
         footer={(
           <div className="official-document-preview-modal__footer">
-            <span>LibreOffice 实际渲染 · 只读对照</span>
+            <span>原稿只读对照</span>
             {previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer">新窗口查看</a> : null}
           </div>
         )}
@@ -625,7 +626,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
     : undefined;
 
   return (
-    <div className="official-document-detail">
+    <div className="official-document-detail official-document-template-detail">
       <XsAsyncPanel
         className="official-document-canvas-panel"
         status={workspaceStatus}
@@ -666,6 +667,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
 
       {draftModalOpen && template ? (
         <Modal
+          className="official-document-template-dialog"
           title="按结构创建报告草稿"
           open
           okText="创建草稿"

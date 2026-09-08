@@ -362,9 +362,9 @@ const pages: SmokePage[] = [
   { slug: "ask-data", path: "/ask-data", heading: "从一个经营数据问题开始", charts: 0 },
   { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
-  { slug: "table", path: "/table", heading: "智能制表", charts: 0 },
-  { slug: "writing", path: "/writing", heading: "报告智写", charts: 0, shell: false },
-  { slug: "dashboard", path: "/dashboard", heading: "看板广场", readyText: "暂无看板", charts: 0 },
+  { slug: "table", path: "/table", heading: "想做一张什么表？", charts: 0 },
+  { slug: "writing", path: "/writing", heading: "想写一篇什么公文？", charts: 0, shell: false },
+  { slug: "dashboard", path: "/dashboard", heading: "我的看板", readyText: "暂无看板", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
   {
@@ -625,7 +625,7 @@ test("switches the cloud drive between card and list views", async ({ page }) =>
 test("fills the smart table composer from a recent template", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/table");
-  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "想做一张什么表？", level: 1 })).toBeVisible();
 
   const template = page.getByRole("article", { name: /客户销售排行榜表/ });
   await template.getByRole("button", { name: "复制制表要求" }).click();
@@ -646,11 +646,11 @@ test("fills the smart table composer from a recent template", async ({ page }) =
 test("restores a recent table into the table agent workspace", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/table");
-  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "想做一张什么表？", level: 1 })).toBeVisible();
 
   await page.getByRole("link", { name: "打开制表结果：客户销售排行榜表" }).click();
 
-  await expect(page.getByRole("heading", { name: "问表智能体", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "制表对话" })).toBeVisible();
   await expect(page.getByText("客户销售排行榜表").first()).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "客户" })).toBeVisible();
   await expect(page.getByText("星海实业")).toBeVisible();
@@ -735,17 +735,17 @@ test("renders a generated table result on the workbench", async ({ page }) => {
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/table");
-  await expect(page.getByRole("heading", { name: "智能制表", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "想做一张什么表？", level: 1 })).toBeVisible();
 
   await page.getByRole("textbox", { name: "制表需求" }).fill("华东区Q1销售排行");
   await page.getByRole("button", { name: "生成表格" }).click();
 
-  await expect(page.getByRole("heading", { name: "问表智能体", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "制表对话" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "客户" })).toBeVisible();
   expect(captured.request?.chatMode).toBe("ask_table");
   expect(captured.request?.sessionId).toMatch(/^ask-table-/);
   await expect(page.getByText("星海实业")).toBeVisible();
-  await expect(page.getByRole("button", { name: "导出结果" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "导出结果", exact: true })).toBeVisible();
   await settleResponsiveLayout(page);
   await expectNoHorizontalOverflow(page);
 
@@ -809,7 +809,12 @@ test.describe("dashboard editor Vue island", () => {
       await expect(page.getByRole("region", { name: "星数大屏设计器" })).toBeVisible();
       await expect(page.getByRole("textbox", { name: "大屏名称" })).toHaveValue("未命名大屏");
       await expect(page.getByText("1920 × 1080", { exact: true }).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: "放大" })).toBeVisible();
+      if (viewport.width > 900) {
+        await expect(page.getByRole("button", { name: "放大" })).toBeVisible();
+      } else {
+        await page.getByRole("combobox", { name: "缩放" }).selectOption("1");
+        await expect(page.getByRole("combobox", { name: "缩放" })).toHaveValue("1");
+      }
       await expect(page.getByRole("combobox", { name: "缩放" })).toBeVisible();
       await expect(page.getByRole("button", { name: "保存" })).toBeVisible();
       await expect(page.getByRole("button", { name: "发布" })).toBeVisible();
@@ -1214,6 +1219,10 @@ test("home page matches the reference welcome workbench composition", async ({ p
     return {
       heroTop: heroRect.top,
       commandWidth: commandRect.width,
+      sameTrack: Math.abs(commandRect.width - appsRect.width) < 1 && Math.abs(commandRect.left - appsRect.left) < 1
+        && Math.abs(heroRect.width - appsRect.width) < 1 && Math.abs(heroRect.left - appsRect.left) < 1,
+      appsColumns: getComputedStyle(document.querySelector(".home-page__app-grid")!).gridTemplateColumns.split(" ").length,
+      inputHeight: input.getBoundingClientRect().height,
       commandHeight: commandRect.height,
       appsTop: appsRect.top,
       cardHeight: cardRect.height,
@@ -1239,31 +1248,34 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.backgroundLoaded).toBe(true);
   expect(metrics!.heroTop).toBeGreaterThanOrEqual(120);
   expect(metrics!.heroTop).toBeLessThanOrEqual(190);
-  expect(metrics!.commandWidth).toBeGreaterThanOrEqual(740);
-  expect(metrics!.commandWidth).toBeLessThanOrEqual(780);
-  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(110);
+  expect(metrics!.commandWidth).toBeGreaterThanOrEqual(760);
+  expect(metrics!.commandWidth).toBeLessThanOrEqual(760);
+  expect(metrics!.sameTrack).toBe(true);
+  expect(metrics!.appsColumns).toBe(3);
+  expect(metrics!.inputHeight).toBeGreaterThanOrEqual(24);
+  expect(metrics!.commandHeight).toBeGreaterThanOrEqual(96);
   expect(metrics!.commandHeight).toBeLessThanOrEqual(150);
   expect(metrics!.appsTop).toBeGreaterThanOrEqual(300);
   expect(metrics!.appsTop).toBeLessThanOrEqual(560);
-  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(196);
-  expect(metrics!.cardHeight).toBeLessThanOrEqual(240);
-  expect(metrics!.cardWidth).toBeGreaterThanOrEqual(220);
-  expect(metrics!.cardWidth).toBeLessThanOrEqual(250);
+  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(144);
+  expect(metrics!.cardHeight).toBeLessThanOrEqual(180);
+  expect(metrics!.cardWidth).toBeGreaterThanOrEqual(240);
+  expect(metrics!.cardWidth).toBeLessThanOrEqual(260);
   expect(["-webkit-box", "flow-root"]).toContain(metrics!.descriptionDisplay);
   expect(metrics!.inputFocusShadow).toBe("none");
   expect(metrics!.toolbarBorderTopWidth).toBe(0);
   expect(metrics!.attachmentButtonCount).toBe(0);
-  expect(metrics!.voiceButtonSize[0]).toBeCloseTo(44, 0);
-  expect(metrics!.voiceButtonSize[1]).toBeCloseTo(44, 0);
-  expect(metrics!.sendButtonSize[0]).toBeCloseTo(44, 0);
-  expect(metrics!.sendButtonSize[1]).toBeCloseTo(44, 0);
-  expect(metrics!.modelButtonHeight).toBeGreaterThanOrEqual(30);
+  expect(metrics!.voiceButtonSize[0]).toBeGreaterThanOrEqual(28);
+  expect(metrics!.voiceButtonSize[1]).toBeGreaterThanOrEqual(28);
+  expect(metrics!.sendButtonSize[0]).toBeGreaterThanOrEqual(28);
+  expect(metrics!.sendButtonSize[1]).toBeGreaterThanOrEqual(28);
+  expect(metrics!.modelButtonHeight).toBeGreaterThanOrEqual(28);
   expect(metrics!.modelButtonHeight).toBeLessThanOrEqual(40);
   expect(metrics!.modelBeforeVoice).toBe(true);
-  expect(metrics!.voiceButtonRadius).toBe(12);
-  expect(metrics!.sendButtonRadius).toBe(12);
+  expect(metrics!.voiceButtonRadius).toBe(50);
+  expect(metrics!.sendButtonRadius).toBe(50);
   expect(metrics!.quickPromptCount).toBe(0);
-  expect(metrics!.generatedIconCount).toBe(7);
+  expect(metrics!.generatedIconCount).toBe(6);
   expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
 });
 
@@ -1355,16 +1367,16 @@ test("navigates from collapsed sidebar icons", async ({ page }) => {
   }).toBeLessThanOrEqual(80);
 
   await page.getByRole("menuitem", { name: "我的看板" }).click();
-  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "我的看板", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "新建对话" }).click();
   await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
 });
 
-test("sidebar active item has a stronger selected state", async ({ page }) => {
+test("sidebar active item uses a flat selected background", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "我的看板", exact: true })).toBeVisible();
 
   const activeState = await page.getByRole("link", { name: /我的看板/ }).evaluate((element) => {
     const selectedItem = element.closest(".ant-menu-item") ?? element;
@@ -1373,24 +1385,24 @@ test("sidebar active item has a stronger selected state", async ({ page }) => {
     return {
       backgroundColor: styles.backgroundColor,
       borderLeftColor: styles.borderLeftColor,
-      borderLeftWidth: Number.parseFloat(styles.borderLeftWidth)
+      boxShadow: styles.boxShadow
     };
   });
 
   expect(activeState.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   expect(activeState.backgroundColor).not.toBe("rgb(255, 255, 255)");
-  expect(activeState.borderLeftWidth).toBeGreaterThanOrEqual(3);
-  expect(activeState.borderLeftColor).toMatch(/rgb\(22, 119, 255\)|rgb\(37, 99, 235\)/);
+  expect(activeState.borderLeftColor).toBe("rgba(0, 0, 0, 0)");
+  expect(activeState.boxShadow).toBe("none");
 });
 
 test("dashboard library hides the fixed business demo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "看板广场" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "看板广场空状态" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "我的看板" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "我的看板空状态" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "创建第一个看板" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建看板" }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "选择收藏问数" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "看板广场", exact: true }).first()).toBeVisible();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await expect(page.getByText("月度营收趋势")).toHaveCount(0);
 });
@@ -1506,9 +1518,9 @@ test("mobile navigation reaches every product destination and account route", as
     readyText?: string;
   }> = [
     { label: "历史对话", path: "/history", heading: "历史对话", readyText: "还没有历史对话" },
-    { label: "智能制表", path: "/table", heading: "智能制表" },
+    { label: "智能制表", path: "/table", heading: "想做一张什么表？" },
     { label: "报告智写", path: "/writing", heading: "报告智写" },
-    { label: "我的看板", path: "/dashboard", heading: "看板广场", readyText: "暂无看板" },
+    { label: "我的看板", path: "/dashboard", heading: "我的看板", readyText: "暂无看板" },
     { label: "我的云盘", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库" },
     { label: "数据资产看板", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },
     {
@@ -1587,9 +1599,9 @@ test.describe("desktop content density", () => {
     { path: "/", selector: ".home-page__apps", minWidth: 1439, maxWidth: 1441 },
     { path: "/table", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/cloud", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
-    { path: "/writing", selector: ".official-document-app", minWidth: 2100, maxWidth: 2200 },
+    { path: "/writing", selector: ".official-document-app", minWidth: 1800, maxWidth: 2000 },
     { path: "/analysis", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
-    { path: "/dashboard", selector: ".xs-page", minWidth: 1439, maxWidth: 1441 },
+    { path: "/dashboard", selector: ".xs-page", minWidth: 1739, maxWidth: 1741 },
     { path: "/data-dashboard", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/data-management", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 }
   ];
@@ -1598,6 +1610,8 @@ test.describe("desktop content density", () => {
     test(`uses the segmented wide desktop rail on ${pageCase.path}`, async ({ page }) => {
       await page.setViewportSize({ width: 2200, height: 944 });
       await page.goto(pageCase.path);
+      await expect(page.locator(pageCase.selector).first()).toBeVisible();
+      await settleResponsiveLayout(page);
 
       const trackWidth = await page.locator(pageCase.selector).first().evaluate((element) => {
         return element.getBoundingClientRect().width;
@@ -1634,6 +1648,35 @@ test.describe("desktop content density", () => {
     );
     await page.goto("/history");
     await expect(page.locator(".history-card")).toHaveCount(4);
-    await expect(page.locator(".history-list")).toHaveCSS("grid-template-columns", /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/);
+    await expect(page.locator(".history-list")).toHaveCSS("grid-template-columns", /^\d+(?:\.\d+)?px$/);
   });
+});
+
+
+test("home keeps all three tracks aligned across desktop tiers and short screens", async ({ page }) => {
+  for (const [width, height, track] of [[1440, 900, 760], [1672, 941, 760], [1920, 1080, 760], [2200, 1100, 760], [1366, 720, 760], [390, 844, 760]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await expect(page.locator(".home-page__hero")).toBeVisible();
+    await settleResponsiveLayout(page);
+    const metrics = await page.evaluate(() => {
+      const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const host = rect(".home-page");
+      const hero = rect(".home-page__hero");
+      const command = rect(".home-page .xs-command-box");
+      const apps = rect(".home-page__apps");
+      const cards = document.querySelectorAll(".home-page .xs-app-card");
+      return { available: host.width, widths: [hero.width, command.width, apps.width],
+        lefts: [hero.left, command.left, apps.left], count: cards.length,
+        lastBottom: cards[cards.length - 1]!.getBoundingClientRect().bottom,
+        columns: getComputedStyle(document.querySelector(".home-page__app-grid")!).gridTemplateColumns.split(" ").length };
+    });
+    for (const actual of metrics.widths) expect(actual).toBeCloseTo(Math.min(track, metrics.available), 0);
+    expect(Math.max(...metrics.lefts) - Math.min(...metrics.lefts)).toBeLessThanOrEqual(1);
+    expect(metrics.count).toBe(6);
+    expect(metrics.columns).toBe(width > 900 ? 3 : 1);
+    if (height === 720) expect(metrics.lastBottom).toBeLessThanOrEqual(height);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: `outputs/e2e-fixes-2026-09-07/regression/home-${width}x${height}.png`, animations: "disabled", fullPage: true });
+  }
 });

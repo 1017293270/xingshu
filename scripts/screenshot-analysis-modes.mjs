@@ -1,12 +1,15 @@
 import { mkdir } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { chromium } from "@playwright/test";
 
 /**
  * 四种分析模式（查数据 / 查知识 / 找文档 / 智能编排）的过程区骨架比对图。
- * 会话列表与流式接口都用 route.fulfill 造出完成态，不依赖后端。
+ * 会话与图表使用本地夹具，SSE 按阶段由本地服务推送，不依赖业务后端。
  */
-const base = "http://127.0.0.1:5173";
-const dir = "outputs/ui-audit";
+const base = process.env.ANALYSIS_QA_URL || "http://127.0.0.1:4175";
+const dir = process.env.ANALYSIS_QA_DIR || "outputs/beta03";
+const backendPort = Number(process.env.ANALYSIS_QA_BACKEND_PORT || 65534);
 const streamPath = "**/api/agentScore/chat/completions/stream";
 
 const mockSessions = [
@@ -19,10 +22,6 @@ const mockSessions = [
     updatedAt: "2026-08-30T09:32:00"
   }
 ];
-
-function sse(events) {
-  return `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
-}
 
 const askEvents = (sessionId, chatId) => {
   // 数据源选择在真实后端是子智能体，事件带 parentSessionId；
@@ -545,7 +544,29 @@ const modes = [
 
 await mkdir(dir, { recursive: true });
 
+// 与隔离 Vite 的 65534 本地代理配合，真实分批推送 SSE，验证阶段先后。
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const server = createServer(async (request, response) => {
+  let body = "";
+  for await (const chunk of request) body += chunk;
+  const payload = JSON.parse(body);
+  const mode = modes.find((item) => item.question === payload.message) || modes[0];
+  response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+  let pausedQuery = false;
+  for (const event of mode.events(payload.sessionId, payload.chatId)) {
+    response.write(`data: ${JSON.stringify({ ...event, timestamp: Date.now() })}\n\n`);
+    if (event.type === "thinking" && !event.parentSessionId) await delay(1600);
+    else if (!pausedQuery && ["activity", "subagent_exposed", "tool_call", "citation_document"].includes(event.type)) {
+      pausedQuery = true;
+      await delay(1600);
+    } else await delay(40);
+  }
+  response.end("data: [DONE]\n\n");
+});
+await new Promise((resolve, reject) => server.listen(backendPort, "127.0.0.1", resolve).once("error", reject));
 const browser = await chromium.launch();
+try {
+
 
 for (const mode of modes) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -571,31 +592,65 @@ for (const mode of modes) {
       body: JSON.stringify({ code: 200, message: "ok", data: mockSessions })
     })
   );
-  await page.route(streamPath, (route) => {
-    const sessionId = `shot-${mode.name}-session`;
-    const chatId = `shot-${mode.name}-chat`;
-    route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: sse(mode.events(sessionId, chatId))
-    });
+  await page.route("**/api/v1/chat/chart-plan", (route) => {
+    const { tables } = route.request().postDataJSON();
+    const table = tables.find((item) => item.title.includes("回答")) || tables[0];
+    const metric = table?.columns.find((column) => column.type === "number");
+    const dimension = table?.columns.find((column) => column !== metric && column.type !== "number");
+    return route.fulfill({ json: { code: 200, message: "fixture", data: {
+      chartable: Boolean(metric && dimension), title: "区域经营表现", reason: "按本次最终结果展示",
+      chartType: "bar", allowedTypes: ["bar", "pie"], tableIndex: table?.tableIndex,
+      dimensionKey: dimension?.key, metricKeys: metric ? [metric.key] : []
+    } } });
   });
+  await page.route(streamPath, (route) => route.continue());
 
   await page.goto(`${base}${mode.route}`, { waitUntil: "networkidle" });
   await page.getByRole("textbox", { name: "命令输入" }).fill(mode.question);
   await page.getByRole("button", { name: "发送" }).click();
 
-  await page.getByLabel("任务动态").waitFor({ state: "visible" });
-  await page.waitForFunction(
-    () => document.querySelector(".analysis-live") === null,
-    undefined,
-    { timeout: 20000 }
-  );
+  await page.locator('.datahub-process-dock[data-status="running"]').waitFor();
+  assert.equal(await page.locator(".analysis-output").count(), 0, "思考阶段不提前展示结果");
+  await page.screenshot({ path: `${dir}/analysis-${mode.name}-thinking-live.png` });
+  await page.locator('.datahub-business-explanation[data-status="running"]').waitFor();
+  assert.equal(await page.locator(".analysis-output").count(), 0, "检索阶段不提前展示结果");
+  await page.screenshot({ path: `${dir}/analysis-${mode.name}-query-live.png` });
+  await page.locator('.analysis-turn[data-status="done"]').waitFor();
+  assert.equal(await page.getByLabel("任务动态").count(), 0);
   // 结果区可能继续追加 AI 图表，等它落定再把轮次顶部（过程区）滚回视野
   await page.waitForTimeout(2500);
   await page.locator(".analysis-question").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${dir}/analysis-${mode.name}-collapsed.png` });
+
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+    await page.locator(".analysis-question").first().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const metrics = await page.evaluate(() => {
+      const question = document.querySelector(".analysis-question > div");
+      const card = document.querySelector(".analysis-card");
+      const answer = document.querySelector(".datahub-answer .xs-safe-markdown");
+      return {
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        alignment: Math.abs(question.getBoundingClientRect().right - card.getBoundingClientRect().right),
+        sameFontSize: !answer || getComputedStyle(answer).fontSize === getComputedStyle(question.querySelector("strong")).fontSize
+      };
+    });
+    assert(metrics.overflow <= 1, `${mode.name} ${width}: 页面横向溢出`);
+    assert(metrics.alignment <= 2, `${mode.name} ${width}: 问题与回答右侧不对齐 ${metrics.alignment}px`);
+    assert(metrics.sameFontSize, "问题与回答字号一致");
+    await page.screenshot({ path: `${dir}/analysis-${mode.name}-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const tableSwitch = page.getByRole("radio", { name: "表格", exact: true });
+  if (await tableSwitch.count()) {
+    await tableSwitch.locator("..").click();
+    await page.getByRole("region", { name: "智能图表建议" }).scrollIntoViewIfNeeded();
+    assert(await page.getByRole("region", { name: "智能图表建议" }).getByRole("table").count());
+    await page.screenshot({ path: `${dir}/analysis-${mode.name}-chart-table.png` });
+    await page.getByRole("radio", { name: "柱状", exact: true }).locator("..").click();
+  }
 
   // 查询过程结束后会自动收成一行，展开它才能看到「怎么查 / 查到了什么」。
   const businessToggle = page.getByRole("button", { name: /查询过程/ }).first();
@@ -607,8 +662,6 @@ for (const mode of modes) {
     await businessToggle.scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${dir}/analysis-${mode.name}-business.png` });
-    await businessToggle.click();
-    await page.waitForTimeout(400);
   }
 
   const panelToggle = page.locator(".xs-datahub-execution__heading").first();
@@ -670,4 +723,7 @@ for (const mode of modes) {
   await page.close();
 }
 
-await browser.close();
+} finally {
+  await browser.close();
+  await new Promise((resolve) => server.close(resolve));
+}

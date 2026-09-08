@@ -8,7 +8,7 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import "./official-document.css";
 import "./official-document-workspace.css";
 
@@ -37,7 +37,7 @@ function stageForPath(pathname: string): OfficialDocumentAppStage {
 const stageContext: Record<OfficialDocumentAppStage, string> = {
   compose: "公文写作",
   library: "模板库",
-  drafts: "草稿箱",
+  drafts: "草稿管理",
   template: "模板结构",
   draft: "结构化起草"
 };
@@ -55,7 +55,7 @@ export function useOfficialDocumentAppChrome(chrome: OfficialDocumentAppChrome) 
 
   useEffect(() => {
     if (!setChrome) return;
-    setChrome(chrome);
+    setChrome({ stage: chrome.stage, context: chrome.context, contextDetail: chrome.contextDetail, contextTo: chrome.contextTo });
   }, [chrome.context, chrome.contextDetail, chrome.contextTo, chrome.stage, setChrome]);
 }
 
@@ -79,17 +79,27 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
     () => ({ actionsHost, setChrome }),
     [actionsHost]
   );
+  const detailStage = chrome.stage === "template" || chrome.stage === "draft";
+  const parentPath = chrome.stage === "draft" ? OFFICIAL_DOCUMENT_DRAFTS_PATH : OFFICIAL_DOCUMENT_TEMPLATES_PATH;
 
   return (
     <OfficialDocumentAppContext.Provider value={value}>
       <div className="official-document-app" data-stage={chrome.stage}>
         <a className="xs-skip-link" href="#official-document-workspace">跳到报告工作区</a>
-        {chrome.stage !== "compose" ? (
-          <header className="official-document-app__bar" data-stage={chrome.stage}>
-            <Link className="official-document-app__back" to={OFFICIAL_DOCUMENT_COMPOSE_PATH}>
+        <header className="official-document-app__bar" data-stage={chrome.stage}>
+          {detailStage ? (
+            <Link className="official-document-app__back" to={parentPath}>
               <ArrowLeft size={15} aria-hidden="true" />
-              返回公文写作
+              {chrome.stage === "draft" ? "返回草稿管理" : "返回格式模板"}
             </Link>
+          ) : (
+            <nav className="official-document-app__nav" aria-label="公文导航">
+              <NavLink to={OFFICIAL_DOCUMENT_COMPOSE_PATH} end>公文写作</NavLink>
+              <NavLink to={OFFICIAL_DOCUMENT_TEMPLATES_PATH}>格式模板</NavLink>
+              <NavLink to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>草稿管理</NavLink>
+            </nav>
+          )}
+          {detailStage ? (
             <div className="official-document-app__context">
               <p className="official-document-app__context-title">
                 {chrome.contextTo ? (
@@ -101,9 +111,9 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
               </p>
               {chrome.contextDetail ? <small>{chrome.contextDetail}</small> : null}
             </div>
-            <div className="official-document-app__actions" ref={setActionsHost} />
-          </header>
-        ) : null}
+          ) : null}
+          <div className="official-document-app__actions" ref={setActionsHost} />
+        </header>
         <section
           className="official-document-app__workspace"
           id="official-document-workspace"

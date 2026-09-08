@@ -1,4 +1,26 @@
+.data-dashboard-page .xs-page__title h1,
+.data-management-page .xs-page__title h1 {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.data-dashboard-page .xs-page__actions {
+  gap: 8px 12px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.data-dashboard-page .xs-stat-card,
+.data-management-page .xs-stat-card {
+  padding: 16px 18px;
+  gap: 12px;
+  box-shadow: none;
+}
+
 .data-card h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -9,7 +31,7 @@
 .data-dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
 
 .data-card--hot {
@@ -20,7 +42,24 @@
 }
 
 .data-card {
-  padding: 22px;
+  min-width: 0;
+  padding: 18px;
+  border-color: var(--xs-border);
+  border-radius: 14px;
+  background: var(--xs-surface);
+  box-shadow: none;
+}
+
+.data-card--hot .xs-table {
+  font-size: 13px;
+}
+
+.data-card--hot .xs-table strong {
+  font-weight: 400;
+}
+
+.data-card--hot .xs-table td:nth-child(2) {
+  overflow-wrap: anywhere;
 }
 
 .source-bars {
@@ -39,7 +78,7 @@
 
 .asset-tabs {
   display: block;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 /* 资产标签页会横向溢出，这里只加"能滑"的部分；外观走 xs.css 的全站分段器规则 */
@@ -78,13 +117,16 @@
   display: grid;
   grid-template-columns: minmax(280px, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  margin: -8px 0 24px;
+  gap: 12px;
+  margin: 0 0 16px;
 }
 
-.asset-filter .ant-input-affix-wrapper,
-.asset-filter .ant-input {
+.asset-filter .ant-input-affix-wrapper {
   min-height: var(--xs-control-height);
+}
+
+.asset-filter .ant-input {
+  font-size: 13px;
 }
 
 .data-dashboard-page time {
@@ -106,7 +148,17 @@
 
 @media (max-width: 900px) {
   .data-dashboard-grid {
-    display: block;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .data-dashboard-page .xs-page__head,
+  .data-management-page .xs-page__head {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .data-card {
+    padding: 14px;
   }
 
   .asset-filter {
@@ -122,6 +174,23 @@
   .asset-tabs .ant-segmented {
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
     mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  }
+}
+
+@media (max-width: 640px) {
+  .data-dashboard-page .xs-stat-card {
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .data-dashboard-page .xs-stat-card .xs-icon-tile {
+    --xs-icon-tile-size: 32px;
+    border-radius: 10px;
+  }
+
+  .data-dashboard-page .xs-stat-card .xs-icon-tile svg {
+    width: 24px;
+    height: 24px;
   }
 }
 

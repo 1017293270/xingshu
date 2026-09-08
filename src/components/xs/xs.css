@@ -30,6 +30,17 @@
   animation: xs-route-view-in var(--xs-motion-base) var(--xs-motion-ease-out) backwards;
 }
 
+/* 查询页的滚动区与输入框共同使用主区的可用高度。 */
+.xs-shell__main:has(.analysis-page) {
+  display: flex;
+  flex-direction: column;
+}
+
+.xs-shell__main:has(.analysis-page) > .xs-route-view {
+  flex: 1;
+  min-height: 0;
+}
+
 .xs-route-fallback {
   display: grid;
   width: min(100%, var(--xs-page-track));
@@ -421,7 +432,7 @@
   border-inline-end: 0 !important;
   background: transparent;
   font-size: var(--xs-fs-label);
-  font-weight: var(--xs-fw-text);
+  font-weight: var(--xs-fw-regular);
 }
 
 .xs-sidebar__menu.ant-menu-inline .ant-menu-item,
@@ -429,7 +440,7 @@
   display: flex;
   align-items: center;
   /* 图标与文字的间距在这里显式给出，不再吃 antd 的继承 margin（见下方归零规则） */
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   height: 36px !important;
   line-height: 36px !important;
@@ -439,8 +450,8 @@
   border-left: 3px solid transparent;
   border-radius: var(--xs-radius-control);
   color: var(--xs-text-2);
-  font-weight: var(--xs-fw-text);
-  letter-spacing: 0.01em;
+  font-weight: var(--xs-fw-regular);
+  letter-spacing: 0;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -460,7 +471,6 @@
 
 .xs-sidebar__menu.ant-menu-inline .ant-menu-item-selected {
   color: var(--xs-primary-2) !important;
-  border-left-color: var(--xs-primary);
   background: var(--xs-info-soft) !important;
   font-weight: var(--xs-fw-text);
 }
@@ -3014,302 +3024,226 @@
   }
 }
 
-/* antd 模态/抽屉遮罩统一轻模糊，配合 colorBgMask 墨蓝调暗（reduced-transparency 下全局禁用 blur） */
+/* 模态与抽屉使用轻模糊；降低透明度设置仍由全局规则处理。 */
 .ant-modal-mask,
 .ant-drawer-mask {
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(2px);
 }
 
 /* ---------- 文件上传弹窗（拖入 / 点击 / 粘贴，全站复用） ---------- */
 
+.xs-upload-dialog-root .ant-modal-mask {
+  background: var(--xs-scrim-modal);
+  backdrop-filter: blur(2px);
+}
+
+.xs-upload-dialog {
+  color: #303030;
+  font-family: var(--xs-font-family);
+  background: transparent;
+}
+
 .xs-upload-dialog .ant-modal-content {
   overflow: hidden;
   padding: 0;
-  border-radius: var(--xs-radius-large);
-  box-shadow: var(--xs-shadow-modal);
+  border: 1px solid var(--xs-border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 20px 64px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .xs-upload-dialog .ant-modal-header {
   margin: 0;
-  padding: 20px 22px 16px;
-  border-bottom: 1px solid var(--xs-border);
+  padding: 22px 24px 0;
+  border: 0;
   border-radius: 0;
-  background:
-    radial-gradient(circle at 4% -60%, rgba(0, 194, 255, 0.16), transparent 48%),
-    linear-gradient(180deg, #fbfdff 0%, #f2f8ff 100%);
+  background: transparent;
 }
 
 .xs-upload-dialog .ant-modal-body {
   display: grid;
   gap: 12px;
-  padding: 18px 22px 18px;
+  padding: 20px 24px;
 }
 
 .xs-upload-dialog .ant-modal-close {
-  top: 15px;
-  inset-inline-end: 13px;
-  color: var(--xs-text-3);
+  top: 14px;
+  inset-inline-end: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #707070;
+}
+
+.xs-upload-dialog .ant-modal-close:hover {
+  color: #303030;
+  background: var(--xs-surface-hover);
 }
 
 .xs-upload-dialog__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding-inline-end: 26px;
-}
-
-.xs-upload-dialog__head-glyph {
   display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  color: var(--xs-primary-2);
-  border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-control);
-  background: linear-gradient(180deg, #ffffff, #eff6ff);
-  box-shadow: var(--xs-shadow-soft);
-}
-
-.xs-upload-dialog__head-copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+  gap: 6px;
+  padding-inline-end: 28px;
 }
 
 .xs-upload-dialog__title {
-  color: var(--xs-text);
+  color: #303030;
   font-size: var(--xs-fs-control-lg);
-  font-weight: var(--xs-fw-medium);
-  line-height: var(--xs-lh-tight);
-  letter-spacing: 0;
+  font-weight: var(--xs-fw-text);
+  line-height: 1.5;
+  letter-spacing: var(--xs-ls-title);
 }
 
 .xs-upload-dialog__description {
-  color: var(--xs-text-3);
+  color: #737373;
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-regular);
   line-height: var(--xs-lh-body);
 }
 
-/* 投放区：四态由 data-state 切换（idle / dragging / selected / uploading） */
+/* 四种状态共用尺寸，选择文件和上传时弹窗不会跳动。 */
 .xs-upload-dialog__zone {
-  position: relative;
   display: grid;
   place-items: center;
-  min-height: 208px;
-  padding: 14px;
+  min-width: 0;
+  min-height: 180px;
+  padding: 16px;
   overflow: hidden;
   border: 1px dashed var(--xs-border-strong);
-  border-radius: var(--xs-radius-card);
-  background:
-    radial-gradient(circle at 50% 4%, rgba(22, 119, 255, 0.07), transparent 62%),
-    var(--xs-surface-soft);
+  border-radius: 12px;
+  background: var(--xs-surface-soft);
   transition:
     border-color var(--xs-motion-state) var(--xs-motion-ease-out),
-    background-color var(--xs-motion-state) var(--xs-motion-ease-out),
-    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
+    background-color var(--xs-motion-state) var(--xs-motion-ease-out);
 }
 
-/* 拖拽悬停：虚线转实线 + 自下而上的一束光，说明"松手就落在这里" */
-.xs-upload-dialog__zone::after {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 58%;
-  opacity: 0;
-  background: linear-gradient(180deg, transparent, rgba(22, 119, 255, 0.16));
-  transition: opacity var(--xs-motion-state) var(--xs-motion-ease-out);
-  pointer-events: none;
-  content: "";
+.xs-upload-dialog__zone:has(.xs-upload-dialog__browse:hover) {
+  border-color: var(--xs-primary);
+  background: var(--xs-surface-hover);
 }
 
 .xs-upload-dialog__zone[data-state="dragging"] {
   border-style: solid;
   border-color: var(--xs-primary-2);
   background: var(--xs-info-soft);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
-}
-
-.xs-upload-dialog__zone[data-state="dragging"]::after {
-  opacity: 1;
-  animation: xs-upload-beam 1400ms var(--xs-motion-ease-ambient) infinite;
 }
 
 .xs-upload-dialog__zone[data-state="selected"],
 .xs-upload-dialog__zone[data-state="uploading"] {
   border-style: solid;
   border-color: var(--xs-border);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(22, 119, 255, 0.06), transparent 58%),
-    var(--xs-surface);
-}
-
-@keyframes xs-upload-beam {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(14%);
-  }
-
-  50% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  background: var(--xs-surface-soft);
 }
 
 .xs-upload-dialog__browse {
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 16px;
+  padding: 4px;
   border: 0;
-  border-radius: var(--xs-radius-card);
+  border-radius: 8px;
   background: transparent;
-  color: var(--xs-text-2);
+  color: #525252;
   text-align: center;
   cursor: pointer;
 }
 
-.xs-upload-dialog__plate {
+.xs-upload-dialog :is(.xs-upload-dialog__browse, .ant-btn, .ant-modal-close):focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.xs-upload-dialog__plate,
+.xs-upload-dialog__file-glyph {
   position: relative;
   display: grid;
   place-items: center;
-  width: 62px;
-  height: 62px;
-  margin-bottom: 2px;
-  color: #ffffff;
-  border-radius: 20px;
-  background: linear-gradient(158deg, #4c8df6 0%, #2563eb 100%);
-  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.26);
-  transition:
-    transform var(--xs-motion-state) var(--xs-motion-ease-spring),
-    box-shadow var(--xs-motion-state) var(--xs-motion-ease-out);
-}
-
-.xs-upload-dialog__plate::before {
-  position: absolute;
-  inset: -12px;
-  border-radius: 28px;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.16), transparent 68%);
-  content: "";
-}
-
-.xs-upload-dialog__browse:hover .xs-upload-dialog__plate,
-.xs-upload-dialog__zone[data-state="dragging"] .xs-upload-dialog__plate {
-  transform: translateY(-4px) scale(1.04);
-  box-shadow: 0 18px 32px rgba(37, 99, 235, 0.3);
-}
-
-.xs-upload-dialog__zone[data-state="dragging"] .xs-upload-dialog__plate {
-  animation: xs-upload-plate-bob 1100ms var(--xs-motion-ease-ambient) infinite;
-}
-
-@keyframes xs-upload-plate-bob {
-  0%,
-  100% {
-    transform: translateY(-4px) scale(1.04);
-  }
-
-  50% {
-    transform: translateY(-10px) scale(1.04);
-  }
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  color: var(--xs-primary-2);
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+  background: var(--xs-surface);
 }
 
 .xs-upload-dialog__headline {
-  color: var(--xs-text);
-  font-size: var(--xs-fs-card);
-  font-weight: var(--xs-fw-medium);
-  line-height: var(--xs-lh-tight);
+  color: #3a3a3a;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-text);
+  line-height: 1.5;
 }
 
 .xs-upload-dialog__sub {
-  color: var(--xs-text-3);
+  color: #737373;
   font-size: var(--xs-fs-label);
   line-height: var(--xs-lh-body);
 }
 
 .xs-upload-dialog__sub em {
   margin: 0 2px;
-  color: var(--xs-interactive-text);
+  color: #404040;
   font-style: normal;
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-/* 已选文件：竖排确认卡，换文件不引起弹窗高度跳变 */
 .xs-upload-dialog__file {
   display: grid;
   justify-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
   width: 100%;
-  padding: 4px 18px;
+  padding: 4px 8px;
   text-align: center;
-}
-
-.xs-upload-dialog__file-glyph {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  margin-bottom: 2px;
-  color: var(--xs-primary-2);
-  border: 1px solid var(--xs-border);
-  border-radius: 18px;
-  background: linear-gradient(180deg, #ffffff, #eef5ff);
-  box-shadow: var(--xs-shadow-soft);
-  animation: xs-upload-file-in var(--xs-motion-state) var(--xs-motion-ease-spring);
 }
 
 .xs-upload-dialog__file-badge {
   position: absolute;
-  right: -5px;
-  bottom: -5px;
+  right: -4px;
+  bottom: -4px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  color: #ffffff;
-  border: 2px solid var(--xs-surface);
+  width: 17px;
+  height: 17px;
+  color: #fff;
+  border: 2px solid var(--xs-surface-soft);
   border-radius: 50%;
-  background: var(--xs-success);
-}
-
-@keyframes xs-upload-file-in {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  background: #408463;
 }
 
 .xs-upload-dialog__file-name {
   max-width: 100%;
   overflow: hidden;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-body);
-  font-weight: var(--xs-fw-medium);
+  color: #3a3a3a;
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-text);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .xs-upload-dialog__file-meta {
-  color: var(--xs-text-3);
+  color: #737373;
   font-size: var(--xs-fs-caption);
   font-variant-numeric: tabular-nums;
 }
 
 .xs-upload-dialog__file-clear.ant-btn {
   margin-top: 2px;
-  color: var(--xs-interactive-text);
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 7px;
+  color: #525252;
   font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+}
+
+.xs-upload-dialog__file-clear.ant-btn:hover {
+  color: #303030;
+  background: var(--xs-surface-hover);
 }
 
 .xs-upload-dialog__progress {
@@ -3319,7 +3253,7 @@
   margin-top: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.14);
+  background: var(--xs-info-soft);
 }
 
 .xs-upload-dialog__progress > span {
@@ -3327,7 +3261,7 @@
   inset-block: 0;
   left: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, #4c8df6, #2563eb);
+  background: var(--xs-primary-2);
 }
 
 .xs-upload-dialog__progress[data-mode="determinate"] > span {
@@ -3351,7 +3285,7 @@
 
 .xs-upload-dialog__limits {
   margin: 0;
-  color: var(--xs-text-3);
+  color: #737373;
   font-size: var(--xs-fs-caption);
   line-height: var(--xs-lh-body);
   text-align: center;
@@ -3359,37 +3293,82 @@
 
 .xs-upload-dialog__error {
   margin: 2px 0 0;
-  text-align: center;
 }
 
 .xs-upload-dialog__footer {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-top: 14px;
+  gap: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--xs-border);
 }
 
 .xs-upload-dialog__hint {
-  color: var(--xs-text-3);
+  color: #737373;
   font-size: var(--xs-fs-caption);
   line-height: var(--xs-lh-body);
 }
 
 .xs-upload-dialog__actions {
   display: flex;
-  gap: 10px;
+  flex: none;
+  gap: 8px;
   margin-inline-start: auto;
 }
 
+.xs-upload-dialog__actions .ant-btn {
+  height: 32px;
+  padding-inline: 14px;
+  border-color: var(--xs-border-strong);
+  border-radius: 8px;
+  color: #414141;
+  background: #fff;
+  box-shadow: none;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-text);
+}
+
+.xs-upload-dialog__actions .ant-btn:not(:disabled):hover {
+  border-color: var(--xs-border-strong);
+  color: #303030;
+  background: var(--xs-surface-soft);
+}
+
+.xs-upload-dialog__actions .ant-btn-primary {
+  border-color: var(--xs-primary-2);
+  color: #fff;
+  background: var(--xs-primary-2);
+}
+
+.xs-upload-dialog__actions .ant-btn-primary:not(:disabled):hover {
+  border-color: var(--xs-interactive-text);
+  color: #fff;
+  background: var(--xs-interactive-text);
+}
+
+.xs-upload-dialog__actions .ant-btn:disabled {
+  border-color: #ebebeb;
+  color: #aaa;
+  background: var(--xs-surface-soft);
+}
+
 @media (max-width: 600px) {
+  .xs-upload-dialog .ant-modal-header {
+    padding: 20px 20px 0;
+  }
+
+  .xs-upload-dialog .ant-modal-body {
+    padding: 18px 20px 20px;
+  }
+
   .xs-upload-dialog__zone {
-    min-height: 176px;
+    min-height: 196px;
   }
 
   .xs-upload-dialog__footer {
     flex-direction: column;
     align-items: stretch;
+    gap: 14px;
   }
 
   .xs-upload-dialog__actions {
@@ -3398,13 +3377,6 @@
 
   .xs-upload-dialog__actions .ant-btn {
     flex: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .xs-upload-dialog__plate,
-  .xs-upload-dialog__browse:hover .xs-upload-dialog__plate,
-  .xs-upload-dialog__zone[data-state="dragging"] .xs-upload-dialog__plate {
-    transform: none;
+    min-height: 40px;
   }
 }

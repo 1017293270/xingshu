@@ -20,6 +20,11 @@
   color: var(--xs-text-3);
 }
 
+.cloud-toolbar__count {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+}
+
 .cloud-toolbar__controls {
   display: flex;
   align-items: center;
@@ -82,14 +87,14 @@
   width: 104px;
   height: 6px;
   border-radius: 999px;
-  background: #e7effc;
+  background: var(--xs-surface-soft);
 }
 
 .cloud-share__track i {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--xs-primary), var(--xs-cyan));
+  background: var(--xs-primary);
 }
 
 /* ---------- 列表视图 ---------- */
@@ -123,8 +128,8 @@
 }
 
 .cloud-kb-row {
-  min-height: 74px;
-  border-bottom: 1px solid #eff4fc;
+  min-height: 64px;
+  border-bottom: 1px solid var(--xs-border);
   color: inherit;
   text-decoration: none;
   transition: background-color var(--xs-motion-state) var(--xs-motion-ease-out);
@@ -135,7 +140,7 @@
 }
 
 .cloud-kb-row:hover {
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .cloud-kb-row__name {
@@ -222,6 +227,7 @@
 
 .cloud-detail__crumb {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   margin: -8px 0 18px;
@@ -229,7 +235,15 @@
   font-size: var(--xs-fs-label);
 }
 
+.cloud-detail__crumb > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cloud-detail__crumb a {
+  flex-shrink: 0;
   color: var(--xs-primary-2);
   font-weight: var(--xs-fw-medium);
 }
@@ -267,8 +281,8 @@
 }
 
 .cloud-doc-row {
-  min-height: 68px;
-  border-bottom: 1px solid #eff4fc;
+  min-height: 60px;
+  border-bottom: 1px solid var(--xs-border);
   transition: background-color var(--xs-motion-state) var(--xs-motion-ease-out);
 }
 
@@ -277,7 +291,7 @@
 }
 
 .cloud-doc-row:hover {
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .cloud-doc-row__name {
@@ -296,7 +310,7 @@
   color: var(--xs-primary-2);
   border: 1px solid var(--xs-border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #ffffff, #f1f7ff);
+  background: var(--xs-surface-soft);
 }
 
 .cloud-doc-row__text {
@@ -365,7 +379,7 @@
 
 .cloud-doc-status--muted {
   color: var(--xs-text-3);
-  background: #f1f5fc;
+  background: var(--xs-surface-soft);
 }
 
 @media (max-width: 1180px) {
@@ -448,7 +462,6 @@
   place-items: center;
   padding: 24px;
   background: var(--xs-scrim-modal);
-  backdrop-filter: blur(10px);
   animation: cloud-preview-scrim-in 180ms var(--xs-motion-ease-out) backwards;
 }
 
@@ -472,8 +485,7 @@
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--xs-border);
-  background:
-    linear-gradient(180deg, rgba(234, 243, 255, 0.9), rgba(248, 251, 255, 0.65) 28%, var(--xs-surface-soft));
+  background: var(--xs-surface);
 }
 
 .cloud-preview__rail > p {
@@ -507,7 +519,7 @@
   text-align: left;
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--xs-radius-control);
   background: transparent;
 }
 
@@ -538,13 +550,13 @@
 }
 
 .cloud-preview__rail-item:hover {
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .cloud-preview__rail-item[aria-current="true"] {
-  border-color: #d7e6ff;
+  color: var(--xs-interactive-text);
+  border-color: transparent;
   background: var(--xs-info-soft);
-  box-shadow: inset 3px 0 0 var(--xs-primary-2);
 }
 
 .cloud-preview__main {
@@ -628,13 +640,18 @@
 
 .cloud-preview__download:hover {
   border-color: var(--xs-border-strong);
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .cloud-preview__download--primary {
   color: var(--xs-surface);
   border-color: transparent;
-  background: var(--xs-primary);
+  background: var(--xs-primary-2);
+}
+
+.cloud-preview__download--primary:hover {
+  border-color: transparent;
+  background: var(--xs-interactive-text);
 }
 
 .cloud-preview__close {
@@ -645,12 +662,12 @@
   color: var(--xs-text-2);
   cursor: pointer;
   border: 1px solid var(--xs-border);
-  border-radius: 12px;
+  border-radius: var(--xs-radius-control);
   background: var(--xs-surface);
 }
 
 .cloud-preview__close:hover {
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .cloud-preview__stage {
@@ -824,6 +841,25 @@
 
   .cloud-preview__count {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .cloud-preview__header {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .cloud-preview__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .cloud-preview__download {
+    padding: 0 10px;
+    white-space: nowrap;
   }
 }
 

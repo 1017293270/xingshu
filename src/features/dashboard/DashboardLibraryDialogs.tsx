@@ -2,11 +2,12 @@ import { Input, Modal } from "antd";
 import type { DashboardLibrary } from "./useDashboardLibrary";
 
 /** 新建看板弹窗：「我的看板」与「看板广场」共用同一个创建流。 */
-export function DashboardCreateDialog({ library }: { library: DashboardLibrary }) {
+export function DashboardCreateDialog({ library, className }: { library: DashboardLibrary; className?: string }) {
   const { createDialogOpen, createSource, createTitle, createMutation } = library;
 
   return (
     <Modal
+      className={className}
       title={createSource === "favorites" ? "从收藏问数创建看板" : "新建看板"}
       open={createDialogOpen}
       okText={createMutation.isPending ? "创建中" : "创建并进入编辑器"}
@@ -37,15 +38,18 @@ export function DashboardCreateDialog({ library }: { library: DashboardLibrary }
  */
 export function DashboardArchiveDialog({
   library,
+  className,
   onArchived
 }: {
   library: DashboardLibrary;
+  className?: string;
   onArchived?: (id: string) => void;
 }) {
   const { archiveCandidate, archiveMutation } = library;
 
   return (
     <Modal
+      className={className}
       title="归档看板"
       open={Boolean(archiveCandidate)}
       okText="确认归档"

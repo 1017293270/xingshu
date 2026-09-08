@@ -162,7 +162,7 @@ function flushPendingAskDataEvents(runId?: DataHubAskRunId) {
 
 function queueAskDataEvent(runId: DataHubAskRunId, event: DataHubStreamEvent) {
   const events = pendingAskDataEvents.get(runId) ?? [];
-  events.push(event);
+  events.push(event.timestamp == null ? { ...event, timestamp: Date.now() } : event);
   pendingAskDataEvents.set(runId, events);
 
   if (import.meta.env.MODE === "test") {

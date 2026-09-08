@@ -122,39 +122,44 @@ export function XsGlyphServiceCalls(props: XsMetricGlyphProps) {
   );
 }
 
-/** 知识库总数：摊开的书。合起来的书在 32px 下只剩一个方块，认不出来。 */
+/** 知识库：弧形书页、书脊与下沿页叠，正文随纸面弯曲。 */
 export function XsGlyphKnowledgeTotal(props: XsMetricGlyphProps) {
   return (
     <Glyph {...props}>
-      <path d="M16 9C13.6 6.8 10.4 5.6 6.5 5.6A2 2 0 0 0 4.5 7.6v14.6a2 2 0 0 0 2 2c3.9 0 7.1 1.2 9.5 3.4" />
-      <path d="M16 9v18.6" />
-      <path d="M16 9c2.4-2.2 5.6-3.4 9.5-3.4a2 2 0 0 1 2 2v14.6a2 2 0 0 1-2 2c-3.9 0-7.1 1.2-9.5 3.4" opacity={ACCENT_OPACITY} />
+      <path d="M16 8.5C13 6.4 9.5 5.4 5.7 5.5A1.7 1.7 0 0 0 4 7.2v14.2c0 .9.7 1.6 1.6 1.6 3.9 0 7.4 1 10.4 3 3-2 6.5-3 10.4-3 .9 0 1.6-.7 1.6-1.6V7.2a1.7 1.7 0 0 0-1.7-1.7C22.5 5.4 19 6.4 16 8.5Z" />
+      <path d="M16 8.5V26" />
+      <g opacity={ACCENT_OPACITY}>
+        <path d="M4 26c4.4 0 8.4 1 12 3 3.6-2 7.6-3 12-3" />
+        <path d="M8 11.5c1.4.1 2.7.5 4 1.1m-4 3.9c1.4.1 2.7.5 4 1.1" />
+        <path d="M20 12.6c1.3-.6 2.6-1 4-1.1m-4 6.1c1.3-.6 2.6-1 4-1.1" />
+      </g>
     </Glyph>
   );
 }
 
-/** 文档总数：文档叠层。 */
+/** 文档总数：错位纸张、圆角折页与长短正文行。 */
 export function XsGlyphDocumentTotal(props: XsMetricGlyphProps) {
   return (
     <Glyph {...props}>
-      <path d="M8 9h7l6 6v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V11a2 2 0 0 1 2-2z" />
-      <path d="M15 9v6h6" />
-      <path d="M11 7V5a2 2 0 0 1 2-2h6l6 6v12a2 2 0 0 1-2 2h-2" opacity={ACCENT_OPACITY} />
+      <path d="M11 3.5h8.5L26 10v14a2.5 2.5 0 0 1-2.5 2.5H11A2.5 2.5 0 0 1 8.5 24V6A2.5 2.5 0 0 1 11 3.5Z" />
+      <path d="M19.5 3.5v5A1.5 1.5 0 0 0 21 10h5" />
+      <g opacity={ACCENT_OPACITY}>
+        <path d="M4.5 10v16.5A2.5 2.5 0 0 0 7 29h12" />
+        <path d="M12.5 15h9m-9 4.5h9m-9 4.5H17" />
+      </g>
     </Glyph>
   );
 }
 
-/** 最近更新：时钟。 */
+/** 最近更新：回转箭头融入表盘，内缩刻度为指针留白。 */
 export function XsGlyphRecentUpdate(props: XsMetricGlyphProps) {
   return (
     <Glyph {...props}>
-      <circle cx="16" cy="16" r="12" />
-      <path d="M16 9.5V16l4.5 2.5" />
+      <path d="M26.4 10A12 12 0 1 0 28 16" />
+      <path d="M26.5 4.5V10H21" />
+      <path d="M16 10v5.5c0 .6.3 1.1.8 1.4l3.7 2.1" />
       <g opacity={ACCENT_OPACITY}>
-        <path d="M16 4v2" />
-        <path d="M28 16h-2" />
-        <path d="M16 28v-2" />
-        <path d="M4 16h2" />
+        <path d="M16 7v.5m-9 8.5h.5M16 25v-.5m9-8.5h-.5" />
       </g>
     </Glyph>
   );

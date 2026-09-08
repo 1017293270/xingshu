@@ -6,11 +6,14 @@ export const antdTheme: ThemeConfig = {
     colorPrimary: xingshuTokens.colorPrimary,
     colorBgLayout: xingshuTokens.colorBg,
     colorBgContainer: xingshuTokens.colorSurface,
-    colorBgMask: "rgba(8, 26, 58, 0.45)",
+    colorBgMask: xingshuTokens.scrimModal,
+    colorBgElevated: xingshuTokens.colorSurface,
     colorText: xingshuTokens.colorText,
     colorTextSecondary: xingshuTokens.colorTextSecondary,
     colorTextTertiary: xingshuTokens.colorTextTertiary,
     colorBorder: xingshuTokens.colorBorder,
+    colorBorderSecondary: "#E8EFF8",
+    colorFillAlter: xingshuTokens.colorSurfaceSoft,
     colorSuccess: xingshuTokens.colorSuccess,
     colorWarning: xingshuTokens.colorWarning,
     colorError: xingshuTokens.colorDanger,
@@ -18,6 +21,12 @@ export const antdTheme: ThemeConfig = {
     borderRadiusLG: xingshuTokens.radiusCard,
     borderRadiusSM: xingshuTokens.radiusSmall,
     fontFamily: xingshuTokens.fontFamily,
+    fontSize: 14,
+    fontSizeSM: 12,
+    fontWeightStrong: 500,
+    lineHeight: 1.5,
+    boxShadow: xingshuTokens.shadowOverlay,
+    boxShadowSecondary: xingshuTokens.shadowOverlay,
     controlHeight: xingshuTokens.controlHeight,
     controlHeightLG: xingshuTokens.controlHeightLarge,
     controlHeightSM: xingshuTokens.controlHeightSmall,
@@ -35,6 +44,12 @@ export const antdTheme: ThemeConfig = {
       primaryShadow: xingshuTokens.shadowButton,
       defaultShadow: "none",
       dangerShadow: xingshuTokens.shadowButton,
+      defaultBorderColor: xingshuTokens.colorBorderStrong,
+      defaultColor: xingshuTokens.colorText,
+      defaultHoverBg: xingshuTokens.colorSurfaceHover,
+      defaultHoverBorderColor: xingshuTokens.colorBorderStrong,
+      defaultHoverColor: xingshuTokens.colorPrimaryStrong,
+      textHoverBg: xingshuTokens.colorSurfaceHover,
       // 实心按钮用更深的品牌蓝：#1677FF 配白字只有 3.4:1，达不到 WCAG AA 正文对比度。
       // 品牌主色仍用于边框、链接、选中态。
       colorPrimary: xingshuTokens.colorPrimaryStrong,
@@ -42,11 +57,13 @@ export const antdTheme: ThemeConfig = {
       colorPrimaryActive: xingshuTokens.colorPrimarySolidActive
     },
     Card: {
-      borderRadiusLG: xingshuTokens.radiusCard
+      borderRadiusLG: xingshuTokens.radiusCard,
+      headerFontSize: 16,
+      bodyPadding: 20
     },
     Input: {
       borderRadius: xingshuTokens.radiusControl,
-      activeBorderColor: xingshuTokens.colorBorderStrong,
+      activeBorderColor: xingshuTokens.colorPrimaryStrong,
       hoverBorderColor: xingshuTokens.colorBorderStrong
     },
     Layout: {
@@ -59,22 +76,22 @@ export const antdTheme: ThemeConfig = {
       itemBorderRadius: xingshuTokens.radiusControl,
       itemBg: "transparent",
       itemColor: xingshuTokens.colorTextSecondary,
-      itemHoverBg: "#F5F9FF",
+      itemHoverBg: xingshuTokens.colorSurfaceHover,
       itemHoverColor: xingshuTokens.colorPrimaryStrong,
       itemSelectedBg: "#EAF3FF",
       itemSelectedColor: xingshuTokens.colorPrimaryStrong,
       subMenuItemBg: "transparent",
       iconSize: 20,
       collapsedIconSize: 20,
-      itemHeight: 48,
+      itemHeight: 36,
       itemMarginInline: 0,
-      itemMarginBlock: 4
+      itemMarginBlock: 2
     },
     Segmented: {
       borderRadius: xingshuTokens.radiusControl,
-      itemSelectedBg: xingshuTokens.colorSurface,
-      // 选中项靠白底＋投影浮起来表达，文字保持墨色：品牌蓝在这里会和主按钮抢一个层级
-      itemSelectedColor: xingshuTokens.colorText,
+      itemSelectedBg: "#EAF3FF",
+      // 选中项通过表面层级表达，主操作保留品牌蓝。
+      itemSelectedColor: xingshuTokens.colorPrimaryStrong,
       itemColor: xingshuTokens.colorTextSecondary,
       trackBg: xingshuTokens.colorSurfaceSoft,
       trackPadding: 2
@@ -86,6 +103,34 @@ export const antdTheme: ThemeConfig = {
     },
     Alert: {
       borderRadiusLG: xingshuTokens.radiusCard
+    },
+    Modal: {
+      titleFontSize: 16,
+      titleColor: xingshuTokens.colorText,
+      contentBg: xingshuTokens.colorSurface,
+      headerBg: xingshuTokens.colorSurface,
+      borderRadiusLG: 18
+    },
+    Drawer: {
+      fontSizeLG: 16
+    },
+    Dropdown: {
+      fontSize: 13,
+      controlHeight: 32,
+      borderRadiusLG: 12,
+      controlItemBgHover: xingshuTokens.colorSurfaceHover
+    },
+    Tooltip: {
+      fontSize: 12,
+      borderRadius: 8
+    },
+    Table: {
+      headerBg: xingshuTokens.colorSurfaceSoft,
+      headerColor: xingshuTokens.colorTextSecondary,
+      borderColor: xingshuTokens.colorBorder,
+      cellPaddingBlockSM: 8,
+      cellPaddingInlineSM: 12,
+      cellFontSizeSM: 13
     }
   }
 };

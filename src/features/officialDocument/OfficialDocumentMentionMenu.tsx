@@ -4,7 +4,7 @@ import {
   type OfficialDocumentMentionItem
 } from "./officialDocumentMentions";
 
-/** 浮层最高 360，但永远不越过视口顶端。 */
+/** 浮层最高 360，不越过写作工作区顶端。 */
 const MAX_MENU_HEIGHT = 360;
 const MENU_VIEWPORT_MARGIN = 16;
 
@@ -32,7 +32,8 @@ export function OfficialDocumentMentionMenu({
     const element = menuRef.current;
     const anchor = element?.parentElement;
     if (!element || !anchor) return;
-    const contentTop = anchor.closest("main")?.getBoundingClientRect().top ?? 0;
+    const contentTop = (anchor.closest(".official-document-app__workspace") ?? anchor.closest("main"))
+      ?.getBoundingClientRect().top ?? 0;
     const room = anchor.getBoundingClientRect().top - contentTop - MENU_VIEWPORT_MARGIN;
     element.style.maxHeight = `${Math.max(0, Math.min(MAX_MENU_HEIGHT, room))}px`;
   }, [groups]);

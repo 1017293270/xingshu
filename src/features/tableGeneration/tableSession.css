@@ -5,12 +5,12 @@
 
 .tgs {
   --tgs-line: var(--xs-border);
-  --tgs-line-soft: #EDF1F7;
+  --tgs-line-soft: var(--xs-table-grid);
   --tgs-ink: var(--xs-text);
-  --tgs-ink-2: #48566E;
-  --tgs-ink-3: #7A8899;
-  --tgs-soft: #F4F6F9;
-  --tgs-soft-2: #FAFBFD;
+  --tgs-ink-2: var(--xs-text-2);
+  --tgs-ink-3: var(--xs-text-3);
+  --tgs-soft: var(--xs-surface-soft);
+  --tgs-soft-2: #FAFBFC;
   --tgs-column: 840px;
   --tgs-gutter: 24px;
   /* 结果台宽度只在这儿定义一次：展开靠 width，收起靠等值的负外边距 */
@@ -809,9 +809,9 @@
   min-height: 44px;
   align-items: flex-end;
   gap: 6px;
-  padding: 4px 4px 4px 12px;
+  padding: 6px 8px 6px 16px;
   border: 1px solid var(--tgs-line);
-  border-radius: 10px;
+  border-radius: 24px;
   background: var(--xs-surface);
   transition:
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -819,8 +819,8 @@
 }
 
 .tgs-composer:focus-within {
-  border-color: var(--xs-primary);
-  box-shadow: 0 0 0 3px rgb(22 119 255 / 10%);
+  border-color: var(--xs-border-strong);
+  box-shadow: var(--xs-shadow-soft);
 }
 
 .tgs-composer .ant-input,
@@ -876,7 +876,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: var(--xs-radius-small);
+  border-radius: 50%;
   box-shadow: none;
 }
 
@@ -963,11 +963,6 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-}
-
-.tgs .xs-clarify-dock {
-  border-radius: 12px;
-  box-shadow: 0 16px 36px rgb(15 38 74 / 12%);
 }
 
 .tgs .xs-clarify {

@@ -1,8 +1,8 @@
-/* 首页、制表和公文复用的输入框外观；各页保留自己的输入与工具条行为。 */
+/* 各工作区复用的输入框外观；页面保留自己的输入与工具条行为。 */
 .xs-prompt-surface:is(.xs-command-box, .xs-composer, .official-document-composer) {
   --composer-ink: #484848;
   --composer-muted: #8f8f8f;
-  --composer-border: #ebebeb;
+  --composer-border: var(--xs-border);
   position: relative;
   display: grid;
   width: 100%;
@@ -19,7 +19,7 @@
 }
 
 .xs-prompt-surface:is(.xs-command-box, .xs-composer, .official-document-composer):focus-within {
-  border-color: #d4d4d4;
+  border-color: var(--xs-border-strong);
   box-shadow: 0 2px 4px rgb(0 0 0 / 2%), 0 8px 32px rgb(0 0 0 / 4%);
 }
 
@@ -84,7 +84,8 @@
   font-size: var(--xs-fs-caption);
 }
 
-.xs-prompt-surface .xs-command-box__toolbar {
+.xs-prompt-surface .xs-command-box__toolbar,
+.xs-prompt-surface .xs-composer__toolbar {
   padding-inline-start: 16px;
 }
 
@@ -100,23 +101,23 @@
 }
 
 .xs-prompt-surface .xs-command-model-select__chip:hover {
-  color: var(--composer-ink);
-  background: #f7f7f7;
+  color: var(--xs-primary-2);
+  background: var(--xs-surface-hover);
 }
 
 .xs-prompt-surface .xs-command-model-select__chip[data-selected] {
   border-color: transparent;
-  color: #303030;
-  background: #f3f3f3;
+  color: var(--xs-primary-2);
+  background: var(--xs-info-soft);
   font-weight: var(--xs-fw-text);
 }
 
 .xs-prompt-surface .xs-command-model-select__chip[data-selected]:hover {
-  background: #ededed;
+  background: #E0EDFF;
 }
 
 .xs-prompt-surface .xs-command-model-select__chip:focus-visible {
-  outline: 2px solid #858585;
+  outline: 2px solid var(--xs-primary-2);
   outline-offset: -2px;
   box-shadow: none;
 }
@@ -138,8 +139,8 @@
 }
 
 .xs-prompt-surface :is(.xs-command-box__tool, .official-document-composer__plus).ant-btn:hover:not(:disabled) {
-  color: #161616;
-  background: #f5f5f5;
+  color: var(--xs-primary-2);
+  background: var(--xs-surface-hover);
 }
 
 .xs-prompt-surface .xs-command-box__voice.ant-btn[aria-pressed="true"] {
@@ -149,11 +150,11 @@
 
 .xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:not(:disabled) {
   color: #fff;
-  background: #252525;
+  background: var(--xs-primary-2);
 }
 
 .xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:hover:not(:disabled) {
-  background: #424242;
+  background: var(--xs-interactive-text);
 }
 
 .xs-prompt-surface :is(.xs-command-box__send, .xs-prompt-surface__send, .official-document-composer__send).ant-btn:disabled {

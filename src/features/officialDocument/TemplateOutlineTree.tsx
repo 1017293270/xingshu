@@ -49,7 +49,7 @@ function OutlineRow({
             {item.kind === "preserve" ? <TextAa size={12} weight="bold" aria-hidden="true" /> : null}
             {item.label}
           </span>
-          <span className="template-outline__preview">{item.preview}</span>
+          <span className="template-outline__preview" title={item.preview}>{item.preview}</span>
         </button>
       </div>
 

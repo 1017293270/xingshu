@@ -355,7 +355,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(screen.queryByLabelText("我的文稿")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /设为参考/ })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "公文写作要求" })).toBeInTheDocument();
-    expect(screen.getByText("生成结果先保留在当前会话，确认后再保存到草稿箱。")).toBeInTheDocument();
+    expect(screen.getByText("写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。")).toBeInTheDocument();
   });
 
   it("keeps the mention menu closed after Escape keyup", async () => {
@@ -626,7 +626,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(send.mock.calls[1][0]).toBe("撰写2026年安全检查通知");
   });
 
-  it("keeps an unparsable answer as plain text instead of a red error", async () => {
+  it("keeps unanchored output as an editable text draft without a structure error", async () => {
     chat.state.autoSettleContent = "标题可以改成《关于安全检查的通知》，其余章节保持不变。";
     const user = userEvent.setup();
     renderView();
@@ -634,11 +634,11 @@ describe("OfficialDocumentComposeView", () => {
     await pickReference(user);
     await submitRequirement(user, "标题改一下");
 
-    const note = await screen.findByText(/没能解析成公文结构/);
-    expect(note).toBeInTheDocument();
+    expect(await screen.findByText("文字草稿 · 点击浏览")).toBeInTheDocument();
+    expect(screen.queryByText(/没能解析成公文结构/)).not.toBeInTheDocument();
     expect(screen.getByText(/关于安全检查的通知/)).toBeInTheDocument();
-    expect(screen.queryByRole("article", { name: "生成的公文文件" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重出完整版" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存到草稿箱" })).toBeEnabled();
   });
 
   it("keeps the conversation when the reference draft changes", async () => {
@@ -792,8 +792,10 @@ describe("OfficialDocumentComposeView", () => {
     expect(within(card).getByText("正在梳理写作大纲")).toBeInTheDocument();
     expect(within(card).getByText(/\d+ 秒/)).toBeInTheDocument();
     // 骨架来自参考模板真实的标题节点
-    expect(within(card).getByText("《通知模板》· 1 个章节")).toBeInTheDocument();
-    expect(within(card).getByText("一、原章节")).toBeInTheDocument();
+    expect(within(card).getByText("《通知模板》· 1 个章节")).not.toBeVisible();
+    await user.click(card.querySelector("summary")!);
+    expect(within(card).getByText("《通知模板》· 1 个章节")).toBeVisible();
+    expect(within(card).getByText("一、原章节")).toBeVisible();
     expect(within(card).getByRole("button", { name: "跳过大纲直接生成" })).toBeInTheDocument();
     expect(send).not.toHaveBeenCalled();
   });
@@ -845,7 +847,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(mocks.executeResearchPlan).not.toHaveBeenCalled();
   });
 
-  it("大纲确认环：改过的标题和删掉的章节真正决定成稿骨架", async () => {
+  it("大纲确认环：修改标题、目的和要点后按本次大纲生成", async () => {
     const user = userEvent.setup();
     mocks.analyzeContent.mockReset().mockResolvedValue({
       summary: "",
@@ -873,6 +875,13 @@ describe("OfficialDocumentComposeView", () => {
     await user.clear(title);
     await user.type(title, "一、检查安排（用户改过）");
     await user.click(within(outline).getByRole("button", { name: "删除章节：二、工作要求" }));
+    await user.click(within(outline).getByText("调整写作思路"));
+    const purpose = within(outline).getByRole("textbox", { name: "章节写作目的：一、检查安排（用户改过）" });
+    await user.clear(purpose);
+    await user.type(purpose, "先说明问题，再安排复查");
+    const points = within(outline).getByRole("textbox", { name: "章节内容要点：一、检查安排（用户改过）" });
+    await user.clear(points);
+    await user.type(points, "列出已核实的问题{Enter}标记尚未确认的事项");
     await user.click(within(outline).getByRole("button", { name: "确认大纲并生成" }));
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
@@ -887,8 +896,8 @@ describe("OfficialDocumentComposeView", () => {
       headingRole: "HEADING_1",
       title: "一、检查安排（用户改过）",
       bodyRequired: true,
-      purpose: "交代本次检查的范围",
-      keyPoints: ["覆盖四个环节"]
+      purpose: "先说明问题，再安排复查",
+      keyPoints: ["列出已核实的问题", "标记尚未确认的事项"]
     }]);
     expect(context.outputRules.sectionAnchors).toEqual(["[[XS_SECTION:s1]]"]);
     expect(context.outputRules.confirmedOutline).toBe(true);
@@ -1193,6 +1202,11 @@ describe("OfficialDocumentComposeView", () => {
       { name: "隐患台账.md", content: "上季度检查共发现隐患 18 处。" }
     ]);
     expect(context.outputRules.referenceMaterialsRule).toContain("referenceMaterials");
+    expect(mocks.analyzeContent).toHaveBeenCalledWith(expect.objectContaining({
+      sourceBlocks: expect.arrayContaining([expect.objectContaining({
+        headingHint: "隐患台账.md", text: "上季度检查共发现隐患 18 处。"
+      })])
+    }));
   });
 
   it("不支持的资料格式就地拒绝，不进写作上下文", async () => {
@@ -1285,9 +1299,87 @@ describe("OfficialDocumentComposeView", () => {
     const review = await screen.findByRole("region", { name: "事实校对" });
     expect(review).toHaveTextContent("十五分钟、签到");
     expect(review).toHaveTextContent("原文已保留");
+    await user.click(within(review).getByRole("button", { name: "我已核对来源" }));
     expect(await screen.findByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
     expect(mocks.createDraft).not.toHaveBeenCalled();
     expect(mocks.exportTransient).not.toHaveBeenCalled();
+  });
+
+  const closurePlan = {
+    summary: "年度情况",
+    sections: [{ id: "s1", order: 0, headingRole: "HEADING_1", title: "销售收入", purpose: "核对年度收入", keyPoints: ["主要变化"], sourceBlockIds: [] }],
+    researchNeeds: [{ id: "n1", sectionId: "s1", kind: "ASK_KNOWLEDGE", question: "年度销售收入资料", reason: "依据", required: true, preferredOutput: "FACT" }],
+    unassignedSourceBlockIds: [], warnings: []
+  };
+
+  it("章节改为人员结构后更新查询，允许用户直接编辑资料问题", async () => {
+    const user = userEvent.setup();
+    mocks.analyzeContent.mockResolvedValue(closurePlan);
+    renderView();
+    await pickReference(user);
+    await submitRequirement(user, "撰写年度报告");
+    const outline = await screen.findByRole("region", { name: "写作大纲确认" });
+    const title = within(outline).getByRole("textbox", { name: "章节标题：销售收入" });
+    await user.clear(title);
+    await user.type(title, "人员结构");
+    await user.click(within(outline).getByText("调整写作思路"));
+    const purpose = within(outline).getByRole("textbox", { name: "章节写作目的：人员结构" });
+    await user.clear(purpose);
+    await user.type(purpose, "核对人员分布");
+    const question = within(outline).getByRole("textbox", { name: "资料问题：n1" });
+    expect(question).toHaveValue("为“人员结构”补充资料：核对人员分布；主要变化");
+    await user.clear(question);
+    await user.type(question, "2026年在岗人员的部门分布");
+    await user.click(within(outline).getByRole("button", { name: "确认大纲，补资料并生成" }));
+    await waitFor(() => expect(mocks.executeResearchPlan).toHaveBeenCalledWith(
+      [expect.objectContaining({ question: "2026年在岗人员的部门分布" })], expect.anything()
+    ));
+  });
+
+  it("停止和离开研究阶段后，迟到结果不能启动成稿", async () => {
+    const user = userEvent.setup();
+    mocks.analyzeContent.mockResolvedValue(closurePlan);
+    let release!: (results: unknown[]) => void;
+    mocks.executeResearchPlan.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const view = renderView();
+    await pickReference(user);
+    await submitRequirement(user, "撰写年度报告");
+    await user.click(await screen.findByRole("button", { name: "确认大纲，补资料并生成" }));
+    await waitFor(() => expect(mocks.executeResearchPlan).toHaveBeenCalledOnce());
+    const signal = mocks.executeResearchPlan.mock.calls[0][1].signal as AbortSignal;
+    await user.click(screen.getByRole("button", { name: "停止补充资料" }));
+    expect(signal.aborted).toBe(true);
+    await act(async () => release([]));
+    expect(send).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "继续补充资料并生成" }));
+    await waitFor(() => expect(mocks.executeResearchPlan).toHaveBeenCalledTimes(2));
+    const secondSignal = mocks.executeResearchPlan.mock.calls[1][1].signal as AbortSignal;
+    view.unmount();
+    expect(secondSignal.aborted).toBe(true);
+    await act(async () => release([]));
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("失败资料保留原因和正文待补充，重试只补缺项再生成", async () => {
+    const user = userEvent.setup();
+    chat.state.autoSettleContent = "[[XS_FIXED:title-slot]]\n年度报告\n[[XS_SECTION:s1]]\n# 销售收入\n已知情况。";
+    const failed = { taskId: "n1", sectionId: "s1", kind: "ASK_KNOWLEDGE", question: "年度销售收入资料", required: true, preferredOutput: "FACT", status: "FAILED", summary: "查询暂不可用", citations: [] };
+    const succeeded = { ...failed, taskId: "n2", status: "SUCCESS", summary: "已完成资料" };
+    mocks.analyzeContent.mockResolvedValue({ ...closurePlan, researchNeeds: [...closurePlan.researchNeeds, { ...closurePlan.researchNeeds[0], id: "n2" }] });
+    mocks.executeResearchPlan.mockResolvedValueOnce([failed, succeeded]).mockResolvedValueOnce([{ ...failed, status: "SUCCESS", summary: "新取得收入依据" }]);
+    renderView();
+    await pickReference(user);
+    await submitRequirement(user, "撰写年度报告");
+    await user.click(await screen.findByRole("button", { name: "确认大纲，补资料并生成" }));
+    await screen.findByRole("article", { name: "生成的公文文件" });
+    expect(screen.getByRole("region", { name: "未补齐的资料" })).toHaveTextContent("查询暂不可用");
+    const firstContext = send.mock.calls[0][1]!.writingContext as { researchResults: Array<{ status: string }> };
+    expect(firstContext.researchResults.every((result) => result.status === "SUCCESS")).toBe(true);
+    await user.click(screen.getByRole("button", { name: "重试缺失资料并重新生成" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(mocks.executeResearchPlan.mock.calls[1][0]).toEqual([expect.objectContaining({ id: "n1" })]);
+    const secondContext = send.mock.calls[1][1]!.writingContext as { researchResults: Array<{ summary: string }> };
+    expect(secondContext.researchResults.map((result) => result.summary)).toEqual(["新取得收入依据", "已完成资料"]);
   });
 
 });

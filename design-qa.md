@@ -756,3 +756,449 @@ final result: passed
 已移除写作页返回入口及其专用样式、已无调用的返回路径解析；保留主侧栏和列表/详情中的“返回公文写作”。6 项相关测试、构建、视觉测试类型检查和 `git diff --check` 通过。1440 / 1672 / 1920 / 390 四档实际浏览器检查确认返回入口不存在，侧栏或手机导航正常；截图在 `outputs/ui-audit/writing-no-exit/`。
 
 final result: passed
+
+## 模板库：参考图质感调整（2026-09-07）
+
+- source visual truth path: `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-a8342491-b1f6-40cf-b15c-5d08210bd1f1.png`
+- implementation screenshot path: `outputs/template-library-neutral/overlay-1512.png`；另有 `library-{width}.png` 和 `overlay-{width}.png`。
+- viewport / density: 来源图 1512×1312 px，原始 CSS 视口与 DPR 未知。实现补拍 1512×1312 CSS px、DPR 1，并检查 1440、1672、1920、2200、390px。按卡片比例、层级与材质对照，不宣称像素级复制。
+- state: 模板库打开、全部模板、17 份测试夹具；真实登录页另核验 17 份模板。实现保留星数现有侧栏和分段内容宽度，参考图则只有图库内容区，这是明确的产品差异。
+- full-view comparison evidence: 在同次视觉输入中打开参考图、1512px 成品、390px 成品及 1920px 独立页；中性双列横卡、图标与标题组合、右上角加号和两层摘要与参考方向一致。
+- focused region comparison evidence: 1512px 图片中的首卡、长标题卡、工具栏均可直接读清，逐项检查了图标槽、名称/元信息基线、阴影边缘及加号触控区，无需额外放大裁切。
+- Fonts and typography: 复用星数系统中文字体；桌面标题 20px/500，元信息 14px，摘要 16px；移动端适配 17/12/15px。原始英文名称、下载量改为真实模板名称、结构规模、版本和状态。
+- Spacing and layout rhythm: 双列、24px 列间距、24px 卡片圆角、58px 图标槽；桌面网格各行等高，移动端单列按内容撑开，搜索/筛选/卡片不重叠。
+- Colors and tokens: 仅模板库采用白色底与暖灰文字/边框，弱化实心蓝按钮；保留全局星数主题、侧栏品牌、键盘焦点和错误状态。两层低透明度阴影形成参考图的柔和层次。
+- Image quality and asset fidelity: 复用 Phosphor 的 FileText/Plus 线性图标，未新增位图、手工绘图或图标依赖。
+- Copy and content: 摘要来自真实结构标题；连续 X 等占位内容用已有结构角色说明呈现，缺少标题时显示源文件名，不编造用途或模板分类。更新时间保留。
+- comparison history: 首轮发现 [P2] 长名称造成桌面行高不一致、真实模板的占位标题干扰摘要阅读；调整网格等高并转换占位摘要后重新截图对照，两项已解决。最后一轮未发现剩余 P0/P1/P2 问题。
+- Verification: 当前相关组件测试 46 项通过；定向 ESLint、生产构建、视觉测试类型检查通过；模板库 Playwright 测试通过，包含双入口/响应式/等高/搜索/筛选/禁用/关闭后焦点/减少动效和 axe 无障碍检查。构建保留现有大分块提示。测试使用隔离接口夹具；未提交、部署或写入模板数据。
+- final result: passed
+
+
+## 首页、制表与公文输入框复用（2026-09-07）
+
+按本轮已说明的理解，以前一轮公文框为外观基准，将首页和制表入口接入同一份 `src/components/xs/composer-surface.css`；公文输入框从原先约 920px 收至 760px。仅这三处通过 `xs-prompt-surface` 启用共享外观，移除首页和公文的重复外观规则，各自的业务输入组件继续负责原有行为。
+
+- 视觉基准：此前公文输入框截图 `outputs/ui-audit/writing-no-exit/writing-1440.png`；本轮用户提供的首页截图 `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-6f91bbb2-1d9a-4b08-bc78-81a56a3e35a8.png` 用于宽度对齐。
+- 同尺寸对照：`outputs/ui-audit/shared-composer/three-composers.png`，包含三处 760×100 的浏览器实际渲染区域；完整桌面/手机截图为该目录的 `{home,table,writing}-{1440,1672,1920,390}.png`。
+- 1440 / 1672 / 1920 三档桌面：三处输入框均为 760×100px，左边缘分别完全一致，为 444.656 / 558.109 / 679.375px。390 手机：均为 358px 宽、左边缘 16px；首页因四个模式与语音/发送按钮换行，高度为 136px，其余为 100px。详细测量在 `measurements.json`、`mobile-measurements.json`。
+- 字体：三处共用 14px、22px 行高和系统字体；内边距统一为 14px 12px 4px，提示文字使用相同灰阶。
+- 间距和颜色：24px 圆角、浅灰细边框、同一组轻阴影；文字、模式和发送状态保留可读层级。首页及制表页面的原有浅蓝背景保留，公文页面继续使用白底。
+- 资产与文案：原有业务图标、四枚公文彩色 SVG、模式切换与语音入口继续使用；制表发送改为圆形上箭头，保留“生成表格”无障碍名称与悬停标题。
+- 第一轮发现自动增高的制表文本域会短暂出现较矮首帧：为三处首屏框统一设置 100px 最小高度，后续多行输入仍可增高。再次截图确认各桌面尺寸高度一致。
+- 手机菜单复核发现公文 @ 列表可能被 64px 顶部导航覆盖：高度计算现在使用 main 内容区顶沿；`writing-menu-390.png` 已确认分组标题和选项完整位于导航下方。
+- 验证：6 个相关测试文件、97 项用例通过；构建、本轮 TSX ESLint 和 `git diff --check` 通过。浏览器检查涵盖模式切换、输入、发送可用态、模板选择、@ 菜单同宽、四档宽度与位置一致、无横向溢出，运行时错误为 0。使用本地确定性测试数据。
+
+final result: passed
+
+## 模板卡片：系统蓝色对齐（2026-09-07）
+
+- 用户已认可卡片布局；本轮仅调整卡片配色，不采用随后上传的图片作为改版参考。
+- 布局参考：`outputs/template-library-neutral/overlay-1512.png`；配色来源：`src/styles/tokens.css`。同次对照最新 `outputs/template-library-blue/overlay-1512.png` 与移动端 `overlay-390.png`。
+- 卡片内映射深蓝标题、蓝灰摘要、浅蓝边框、品牌蓝图标/加号和交互态；白色卡面保留。页面背景、标题、筛选与搜索保持原样。
+- 逐项比对本轮前后的 CSS：布局、尺寸、间距、字号、圆角和阴影几何值未变，只修改卡片颜色及局部颜色变量。
+- 当前验证：生产构建、现有模板库 Playwright 双入口/响应式/等高/无障碍回归与 `git diff --check` 通过。截图仍使用隔离测试夹具；没有新增业务逻辑或提交、发布操作。
+- final result: passed
+
+
+## 输入框模式按钮统一（2026-09-07）
+
+共享输入框内的“编排 / 查数据 / 查知识 / 找文档”改为 28px 高、14px 圆角、中性灰文字与浅灰选中底，常规字重 400、选中 500；保留悬停和 2px 内侧键盘焦点环。调整仅作用于 `xs-prompt-surface`，四个模式的业务切换不变。
+
+31 项相关测试通过；1440 / 1672 / 1920 / 390 四档浏览器验证了四个模式切换、唯一选中态、无横向溢出及键盘焦点。截图在 `outputs/ui-audit/composer-mode-tabs/`，其中 `mode-tabs-detail.png` 为整体对照，`home-390.png` 为手机排版。
+
+final result: passed
+
+
+### 模式按钮左侧留白（2026-09-07）
+
+模式工具条左内边距由 8px 调整为 16px；实测第一枚按钮距输入框外沿 17px（含 1px 边框）。1440 / 1672 / 1920 / 390 四档截图、模式切换和键盘焦点检查通过，手机四个模式仍在同一行，无横向溢出。截图：`outputs/ui-audit/composer-mode-spacing/`。
+
+## 模板库：紧凑尺寸与三至四列（2026-09-07）
+
+- 用户本轮要求缩小卡片与字体，提高每排模板数；沿用已确认的蓝色配色。
+- source visual truth path: 用户截图 `codex-clipboard-cbe20fc4-cff0-44db-9be3-37364337270c.png` 与上一版 `outputs/template-library-blue/overlay-1920.png`。
+- implementation screenshot path: `outputs/template-library-compact/overlay-1920.png`；另有 1440、1512、1672、2200、1024、768、390px 截图及独立页截图。
+- 同次输入对照上一版和新版 1920×1080、DPR 1 截图：两列改为四列，卡片标题 20→16px、摘要 16→13px、元信息与日期 14→12px，图标槽 58→40px、内边距 26/28→16px、间距 24→16px；白色卡面与蓝色文字、图标、边框保留。
+- 响应式：1200–1839px 三列，1840px 起四列；641–1199px 两列，640px 及以下单列。桌面等高、两行标题及悬停完整名称保留，缩小图标但保留按钮热区。
+- 验证：生产构建、视觉测试类型检查、定向 ESLint、`git diff --check` 和现有 Playwright 回归通过；覆盖列数、16px 标题、长名称、等高、横向溢出、搜索/筛选/禁用/关闭焦点及 axe 检查。截图为隔离模板夹具；本轮不涉及业务逻辑或后端写入。
+- final result: passed
+
+
+## 2026-09-07 beta0.3：查数据、查知识、找文档输出交互
+
+- 修改前已创建本地基线提交 `8504200`；本轮后续修改保留在工作区，没有再次提交、推送或部署。
+- 思考、查询、结果按真实 SSE 事件推进；运行显示本阶段计时，结束收起，手动展开保持。缺失历史阶段时间不补造耗时，第二轮没有 reasoning 时使用真实缺失提示。
+- 去掉任务动态与冗余结果标题；执行详情嵌在查询过程中，保留多 agents Canvas 和子任务抽屉。
+- 正文先给结论，随后显示真实中文查询依据；单数值直接回答，计算中间表留在查询过程；柱图、饼图、表格共享图表结果，已有 shortTitle 优先用于列标题。
+- 引文使用 Markdown blockquote，文档按知识库 ID 与文档身份区分；不虚构“企业知识库”。原文与解析内容并发加载。
+- 浏览器发现并修复独立进入问答时原文弹窗缺样式：`CloudDocumentPreview` 自行导入现有 `cloud.css`，解除侧栏对按钮的遮挡。
+
+验证证据：
+
+- `npm run build`、`npm run check:bundle`、`npm run test:visual:typecheck` 通过；入口 121.7 KB gzip（预算 220 KB），图表运行时 237.0 KB（预算 250 KB）。构建保留现有大 chunk 提示。
+- `npm run lint`：0 errors、30 warnings；未扩展修改无关 lint 问题。
+- 全量 Vitest 检查运行 146 文件、1239 用例，1238 通过，1 个旧的“无查询过程”断言失败；更新为真实历史附件可展开查询的契约后，相关 4 文件 59 用例通过。原文样式修复后的最终 3 文件 37 用例通过。
+- `tests/visual/datahub-chat-flows.spec.ts` 18 项分批通过（包括后补的可读原文回退检查），包括收藏、CSV、停止、Canvas、原文预览、鉴权与移动端。Headless Chromium 的新标签 PDF 按 download 事件验收，确认 URL、文件名和无下载错误。
+- `scripts/screenshot-analysis-modes.mjs`：4 模式真实分段本地 SSE，1440/1672/1920/2200/390 宽度截图；阶段顺序、问答右边缘和正文字号一致、无页面横向溢出。
+- 截图：`outputs/beta03/analysis-ask-1440.png`、`analysis-ask-chart-table.png`、`analysis-knowledge-1440.png`、`analysis-document-lookup-1440.png`、`analysis-agent-expanded.png`，及各宽度和运行中截图。
+- 原文回归日志：`/tmp/xingshu-pw-source-download.log`；最终预览单测：`/tmp/xingshu-beta03-preview-regressions.log`。
+- `git diff --check` 与截图脚本 `node --check` 通过。
+
+范围与运行边界：
+
+- 浏览器验证全部使用本地夹具，不代表真实业务后端或模型已验收。可复跑截图：Vite 绑定 4175，显式把 DataHub/公文/图片代理设为 `http://127.0.0.1:65534`，再执行 `node scripts/screenshot-analysis-modes.mjs`；脚本自行管理该本地 SSE 夹具服务。与 Playwright 的 4173/65535 隔离。
+- `DataHub/datahub-ai-service` 仅修改 `ask-knowledge.harness.txt`、`orchestrator.harness.txt` 两份既有 Prompt，约束直接回答提问主体、我方不明先澄清、保留必要原文与条件。未修改编排流程。既有 39 条字符串契约离线核对通过；本机缺 Maven，Java 测试未启动。这部分需要后端发布后才生效。
+- 同工作区其他任务产生的首页、写作、输入组件及 `design/` 草图改动保留，不能把它们计为本轮的功能交付。
+
+- 补充原文可读性证据：PDF 原文请求失败时，真实 file_content 接口返回的 Markdown 正文在桌面和移动端均可见，回退用例通过。无界面 Chromium 的 PDF 正文渲染不据 iframe 可见判定已验收；只确认该路径的原文件请求与下载。移动端预览工具栏改为独占第二行，避免标题挤压与按钮逐字换行。
+
+- 最终移动端复核：`/tmp/xingshu-pw-markdown-mobile-final.log` 1/1 通过，已检查标题、第二行工具栏与正文可读性。本轮固定截图保存在 `outputs/beta03/`；Playwright 通用输出目录正在被同仓库的其他测试复用。交互参考：[Codex 官方展示](https://openai.com/index/introducing-the-codex-app/)。
+
+## 模板卡片：手绘 SVG 图标（2026-09-07）
+
+- 按用户本轮明确要求，手绘 8 枚独立 SVG：合同履约、请示报批、报告总结、通知通报、往来函件、会议纪要、批复文件、通用文档；正式源文件位于 `src/assets/template-icons/`。
+- 使用统一 40×40 viewBox、圆角细线、蓝色描边、浅蓝纸面与少量青色细节。卡片内以 28px 渲染，既有 40px 图标槽、3/4 列布局和字体均保持不变。
+- 图标依据模板名称匹配，只改变装饰呈现；合同等具体文种优先于“报告”等泛称，未知名称使用通用文档。
+- 独立预览：`outputs/template-icons/preview.svg`、`preview.png`（1040×650 CSS px，DPR 2）；源文件包：`outputs/template-icons/xingshu-template-icons.zip`。
+- 应用截图：`outputs/template-library-svg/overlay-1920.png`、`overlay-390.png` 等。已检查放大预览和卡片实际尺寸，细线、折角、标识均清楚，无裁切或文本位移。
+- 预览修正：拼装图标总览时补回 SVG 根节点 `fill="none"`，避免未指定填充的线条出现黑色闭合区域；正式独立 SVG 本身已声明该属性。
+- 验证：8 枚 SVG XML 校验通过；2 个相关测试文件共 8 项通过；生产构建、定向 ESLint、视觉测试类型检查及 Playwright 回归通过，确认 17 张卡片加载成功、8 种图标均实际出现，并通过响应式及 axe 检查。
+- final result: passed
+
+
+## 2026-09-07 查询结果优先展示（纠正默认收起）
+
+- 用户明确要求查询结果重点展示；撤回前一轮把多表或子任务表默认归为过程的判断。当前接口没有 final/intermediate 标记，表数量和子任务身份不能用来推断中间结果。
+- 没有独立汇总结果时，真实返回表默认展开在结果区，保留复制和下载；只有明确的正文汇总表承接结果时，原始计算表才收进查询过程。图表只承接一张独立表时，其他表继续显示在结果区。
+- 删除“查询已完成，返回的数据可在查询过程中查看”的占位提示；保留单值直接回答、图表/表格切换、思考/查询折叠和多 agents Canvas。
+- 复现：新增单根多表、单子任务表、多子任务表 3 种场景，修改前全部失败（结果区找不到 table）；修复后连同图表和工作流共 50 项针对测试通过。
+- 浏览器回归覆盖真实 SSE 入口、根任务不产生文本、图表不适用时两张子任务结果仍直接可见；1440/1672/1920/2200/390 五档截图无页面横向溢出。截图在 `outputs/result-visibility/query-results-<width>.png`，使用独立输出目录保留。
+- `npm run build`、`npm run test:visual:typecheck`、`git diff --check` 通过。本轮未提交或部署。
+
+
+## 历史对话与制表列表的 Codex 风格对齐（2026-09-07）
+
+先按用户要求创建基线提交 `42f7e3a`：提交本任务输入框统一相关的 11 个文件。随后完成本节列表样式，作为新的工作区改动保留；未把其他任务的问答、模板库或后端改动纳入该提交。
+
+**参考与范围**
+
+- 用户提供的现状截图：`/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-2f7e0175-5e44-4307-b691-1b3bf112a90b.png`、`codex-clipboard-3984b285-673d-42f4-9488-0221c48c9dbf.png`；副本为 `outputs/ui-audit/codex-lists/reference-{history,tables}.png`。
+- 风格沿用本会话已使用的 Codex 参考和共享输入框：中性灰、常规字重、轻边框、浅灰交互态。原图为裁切画面、设备倍率未提供；本轮为产品列表布局改进，不宣称与原图逐像素复制。
+- 实现证据：`outputs/ui-audit/codex-lists/history-{1440,1672,1920,2200,390}.png`、`tables-*.png`、`table-templates-*.png`，以及 `my-tables-1440.png`、`history-filtered.png`。原生浏览器 CSS 视口同文件名、DPR 1；整页和手机实际画面已人工检查。
+
+**字体与布局**
+
+- 两类列表均改单列，标题使用系统字体、14px / 400，中性深灰；元信息为 12px 中灰，制表时间不再使用独立等宽字族。
+- 历史页标题 20px / 500；搜索、筛选与分页采用紧凑灰阶样式。保留搜索、分类、分页、标题 Tooltip、完整可访问名称与打开记录行为。
+- 制表记录去掉双列卡片、重复描边和图标色块，桌面标题与类型/时间横向对齐，普通记录约 44px；模板保留用途副行，编辑、删除和复制动作保持。
+- 白色列表容器、14px 圆角、1px 浅灰边框、无大阴影；悬停与激活为浅灰。原有品牌侧栏、浅冰蓝页面底色及输入框保持。
+- 复用现有 SVG 图标与业务文案，没有新增位图或依赖；长标题按可用宽度省略，完整文本仍可访问。
+
+**比较与修正**
+
+- 第一轮手机截图发现两行历史信息被压进 44px 行，以及分页贴到底部。通过 `grid-auto-rows: max-content`、手机约 60px 最小行高、标题跨整行和正确扣除导航/主区留白修复。
+- 最终 `history-390.png` 中行内标题、类型、时间互不挤压，分页完整显示；自动检查逐行确认子元素都在本行内。
+- `tables-1440.png` 与 `table-templates-390.png` 确认了普通记录与模板副行的差别：都用同一字号与中性颜色，信息量不同处保留相应行数。
+
+**验证**
+
+- `HistoryPage.test.tsx`、`TablePage.templates.test.tsx`、`WorkflowRefinements.test.tsx` 共 24 项通过。
+- 构建、视觉测试类型检查和 `git diff --check` 通过；保留既有 ECharts 大 chunk 提示。
+- 1440×900、1672×960、1920×1080、2200×1080、390×844 浏览器检查全部通过：单列、字号/字重、行内不溢出、分页留在视口、无页面横向溢出；覆盖搜索、分类、翻页、复制制表要求、最近/我的/模板标签页和键盘焦点。运行时错误为 0。
+- 预览：`http://127.0.0.1:5192/.codex-tmp/list-ui-qa/start.html`；API 仅指向本机 5191 夹具服务，使用 24 条历史、8 条制表记录和 3 个模板，不代表真实业务后端验收。
+
+final result: passed
+
+
+## 2026-09-07 查询过程 / 查询结果结构化设计
+
+- 用户要求正式命名和重设计：删除“怎么查”“查到了什么”。保留外层唯一“查询过程”标题，展开内容以来源和条件字段呈现；查询结果独立分区，文件/表名为主标题，知识库、章节、页码、片段数为次级元信息。
+- 删除问题复述、“检索相关文档并核对来源”等拼接长句，以及猜测实体短名和查询动作的转换逻辑。缺失检索方式时不补造“全文/混合检索”。多条数据查询分别保留来源、表、筛选、分组、统计、时间；全局未绑定来源独立展示。
+- 知识库逐个标签展示，完整名称保留在DOM/title；同名文档跨库保持独立。文件名两行限高，点击条目继续打开引用片段。补充 aria-describedby 保留每条来源信息。
+- 数据查询采用随容器宽度变化的字段网格；结果条目使用现有Phosphor图标、星数颜色和圆角，保留可键盘操作、折叠粘性和减少动态效果。最终回答/表格的重点展示及多 agents Canvas 行为未调整。
+- 4 个相关单测文件 57 项通过；3 项生产页面浏览器回归通过（来源/收藏、原文、新增长来源布局），1440/1672/1920/2200/390 截图及移动端原文片段可读、无页面横向溢出。已用当前用户截图对照检查新的信息层级，测试使用本地夹具。
+- 正式页面截图：`outputs/query-process-design/production-1672.png`、`production-390.png`、`production-fragment-390.png`。本地可交互预览：`http://127.0.0.1:4181/outputs/query-process-design/index.html`，使用正式组件和明示示例数据，代理均显式指向本地空端口，不连接业务后端。
+- 已在 Codex in-app Browser 亲自核对桌面/移动端、查数/查知识、展开和引用弹窗。改动未提交或部署。
+
+- 最终补证：结构化事实与组件 16 项复测通过；生产长名称场景再次通过并导出局部对比图 `outputs/query-process-design/query-details-1672.png`。内置浏览器已回到查知识展开态并保留预览；桌面查数双列字段网格也已亲自核对。
+
+
+### 制表标题与快捷键提示（2026-09-07）
+
+制表标题改为深灰、500 字重，桌面 24px / 手机 22px；沿用现有系统字族，星标改为 20px 常规线条、中性灰。保留既有标题槽位和桌面输入框位置。`Enter 生成` 工具条左内边距由 8px 改为 16px，实测距外沿 17px（含边框）。16 项相关测试、`git diff --check` 与 1440 / 1672 / 1920 / 390 四档浏览器检查通过；包含字号字重、左侧距离、无横向溢出及发送可用态。截图等待记录入场完成后保存于 `outputs/ui-audit/table-heading/`。
+
+## 模板详情与结构校准：Codex 风格（2026-09-07）
+
+- 范围：截图中的模板详情、大纲、原文阅读区、结构校准属性栏及创建草稿/PDF 对话框。样式仅绑定模板详情 stage 和局部 dialog class；本轮未重做模板库卡片、SVG 或全站侧栏。
+- source visual truth path：用户截图 `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-21a475e1-495d-4639-9330-bd80b2056da5.png`。
+- Codex 参数依据：只读核查 `/Applications/ChatGPT.app/Contents/Info.plist`，bundle 为 `com.openai.codex`；安装包 `app.asar` 的 `webview/assets/app-initial-5b0a474bff5e.css` 声明系统字体栈、14px 基础字号、桌面 430 正文字重、500 中字重、12/13px 辅助字号。主 agent 独立核对了字体栈、基础字号、430 字重和文字色声明。
+- 限制：原生 Codex 窗口自动截图被工具限制拒绝；本轮依据静态样式参数做风格迁移，不宣称原生窗口或用户自定义字体设置的一比一复刻。中文显式补充 PingFang SC / Microsoft YaHei fallback；未提取字体文件。
+- implementation screenshot path：`outputs/template-detail-codex/read-{width}.png`、`calibrate-{width}.png`、`readonly-1440.png`、`create-dialog-1440.png`；主要视口 1440×900、1672×1000、1920×1080、2200×1200、1024×900、390×844，DPR 1。
+- Full-view comparison：同次输入打开原始截图、1920px 阅读态与校准态；原始图片含浏览器 chrome 且 DPR 未知，按内容区域的字号层级、边框与分栏密度对照，不做像素差异承诺。另检查 1440px、390px 及弹窗细节。
+- Fonts / typography：界面以 13–14px、430/500 字重为主，辅助 12px；原文保留标题、正文缩进、各级标题、署名与日期的既有角色对齐，不修改映射或导出数据。
+- Layout / surfaces：48px 顶栏、固定宽度大纲、连续细线分栏；阅读态两栏，校准态增加属性栏。灰白画布、白纸面、轻边框和蓝色选中/操作强调替代多层蓝边卡片。
+- Interaction / accessibility：原文区域补上键盘焦点，可通过 PageDown 滚动；大纲截断文字增加完整 title。正文映射、发布、创建、预览和只读控制继续使用原有流程。
+- Iteration findings：修正中文 fallback、分栏头部辅助文字换行、对话框根背景导致的方形白边，以及 axe 发现的原文滚动区不可聚焦问题；后续重拍通过。未留下 P0/P1/P2 问题。
+- Verification：相关 3 个单元测试文件共 16 项通过；生产构建、定向 ESLint、视觉测试类型检查、diff 检查通过。真实 React 路由 Playwright 覆盖大纲定位、空段落开关、校准切换、移动端/中屏、PageDown、已发布 Select/Checkbox 禁用、创建弹窗取消以及 axe 无违规。
+- Real page：在现有用户登录环境核验原模板 32 个节点与 10 个空段落，校准属性保持只读；未进行发布、保存结构、创建草稿或导出写入。预览服务停止后按项目既有配置恢复 5173；Vite 的显式代理配置检查通过，未读取或展示真实环境值。
+- final result: passed
+
+
+### 公文标题与手绘星标（2026-09-07）
+
+- 参考：用户截图 `codex-clipboard-4d1656ef-fa5c-44d9-ae91-894fe4230888.png`，公文标题同步上一轮制表页的 Codex 风格：系统字体、桌面 24px / 手机 22px、500 字重、深灰色、10px 图文间隔。样式限定入口 header。
+- 手写 `src/assets/brand/xingshu-prompt-star.svg`：保留五向星标，使用圆润端点、内侧收尖的贝塞尔曲线与克制的蓝青色变化；以 24px 渲染，公文和制表共用一份本地 SVG。装饰图片使用空 alt 和 aria-hidden。
+- 复用当前 5189 / 5192 本地预览及 5190 / 5191 夹具服务。Playwright 检查两页 1440 / 1672 / 1920 / 390 四档，确认标题字号字重、SVG 加载、居中与输入框间距、无横向溢出、制表 Enter 提示左侧 16px 内边距；实际键入 @ 后菜单打开和 Escape 关闭通过，运行时错误为 0。
+- 人工核对桌面和手机截图：`outputs/ui-audit/prompt-star/writing-{width}.png`、`table-{width}.png` 与 `writing-heading-and-input.png`、`table-heading-and-input.png`。
+- 44 项相关组件测试、生产构建、定向 ESLint、git diff --check 通过；构建保留现有大 chunk 提示。未提交或部署。
+
+final result: passed
+
+
+### 上传弹窗的 Codex 风格（2026-09-07）
+
+- 参考用户截图 `codex-clipboard-4240447c-e467-4b04-845a-c85548b1b85d.png`，直接修改现有 XsUploadDialog；写作、模板库和内容 DOCX 的共用弹窗同步使用新样式。
+- 采用灰白表面、18px 外圆角、16px / 500 标题、13px 说明与按钮、12px 辅助文字；删除重复的标题图标和蓝色光晕、漂浮装饰。投放图标收至 44px 底板 / 24px 图形，已选文件保留小型绿色确认标记。
+- 拖放、悬停、选择、上传、失败、禁用与键盘焦点分别保留清晰状态；主按钮深灰，遮罩只对上传弹窗使用中性调暗和轻模糊。继续复用既有文件校验、粘贴、进度和失败重试逻辑。
+- 修正手机已选文件比空白投放区略高的问题：移动端投放区预留 196px，包含触屏“重新选择”的热区。长文件名保留完整 title，行内省略且不撑宽弹窗。
+- 48 项相关组件测试、定向 ESLint、构建及 diff 检查通过；保留已有大 chunk 构建提示。Playwright 在 1440 / 1672 / 1920 / 390 四档检查拖放、系统文件选择、粘贴、错误格式、同高切换、无横向溢出与 axe。桌面另验上传中不能关闭、失败后可重试及真实 Tab / Shift+Tab 焦点。上传请求由本地夹具拦截，不代表业务后端上传验收。
+- 桌面通过公文 + 菜单与模板库入口验证；390px 使用触屏仿真，从模板库打开同一弹窗验证。仿真中的公文 + 下拉菜单有定位到视口外的情况，未纳入本轮上传弹窗样式修改。
+- 实际截图已审阅，保存在 `outputs/ui-audit/codex-upload/`：`idle-dialog-{width}.png`、`selected-dialog-{width}.png`、`error-dialog-{width}.png`、`uploading-dialog.png`、`failed-dialog.png`、`keyboard-focus.png` 与模板库入口截图。未提交或部署。
+
+final result: upload dialog passed
+
+
+### 制表“新建模板”按钮的品牌蓝（2026-09-07）
+
+按用户截图 `codex-clipboard-228cbb1e-daed-4d98-ba10-facf3a532c37.png`，将该按钮常态改为现有 `--xs-primary-2`，悬停使用 `--xs-interactive-text`。保留 8px 圆角、12px / 500 字体、白色文字和低阴影的 Codex 风格，仅调整该操作的配色。9 项现有模板测试、diff 检查以及 1440 / 1672 / 1920 / 390 四档浏览器检查通过；包含常态、悬停、无横向溢出、打开新建弹窗与取消。截图：`outputs/ui-audit/blue-template-button/`。未提交。
+
+
+## 我的看板与大屏编辑器：Codex 排版、品牌蓝控件（2026-09-07）
+
+- 最终范围：我的看板页头、切换菜单与弹窗；大屏编辑器工具栏、组件库、属性栏、图表类型选择、收藏问数、智享面板和确认/美化弹窗。保留白面板、浅冰蓝编辑工作区及系统蓝色主操作。
+- source visual truth：用户提供的 `codex-clipboard-293caca3-1a5b-4507-a0ec-8011254b908e.png` 与 `codex-clipboard-f205c4e0-babd-43f4-89ea-1ed89d31e544.png`，均位于 `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/`。后者与当前编辑器截图在同次输入中对照，比较工具栏、两侧面板、字体密度、蓝色操作及组件图标；原图有系统浮层且 DPR 未知，不作逐像素承诺。
+- 字体依据沿用本会话已核查的 Codex 安装包默认系统字体参数，补中文 fallback。控件/正文 13px、辅助 12px、面板标题 16px、弹窗标题 18px；字重主要 400/430/500。未提取或复制字体文件。
+- 组件库复用现有 Phosphor `widgetTypeIcon` 映射，用蓝色线性图标替代黑底单字。主按钮继承品牌蓝或采用同一 `#2563EB`，hover `#1D4ED8`；危险操作保留红色语义。
+- 大屏配置保真：按用户更正移除临时 workspace 重排/换色副本，恢复直接展示 publishedSchema。保留背景图及 fit、画布宽高、组件 x/y/w/h、字体、装饰和数据绑定。编辑器字体覆盖限定控件区域，未改变画布字体继承、保存/发布逻辑或独立预览缩放。
+- 修复检查中发现的可访问性问题：内联运行态使用 section 避免嵌套 main；只读表格支持鼠标和键盘滚动，编辑器拖拽语义保留；空图表提示继承配置文字色，避免叠加透明度降低对比度。
+- implementation screenshots：`outputs/dashboard-codex/configured-page-{width}.png`、`editor-{width}.png`，视口宽 1440/1672/1920/2200/960/390；另有 `blue-create-dialog.png`、`configured-settings.png`、`editor-properties-1672.png`、`editor-chart-properties-1672.png`、`editor-beautify-dialog.png`、`editor-smart-1672.png`。截图使用明确的本地示例数据；等待 ECharts ready 后拍摄，非真实业务数据验收。
+- 浏览器验证：正式 React/Vue 路由、真实 ECharts；分别通过大屏保真/蓝色按钮用例和编辑器用例。涵盖主按钮常态/hover、创建禁用/填写/取消、表格 PageDown、窄屏更多菜单及 Esc、资源切换、组件选中属性、美化取消保留布局、智享打开、无页面横向溢出和相关区域 axe 无违规。记录的看板 API 写请求和页面运行时错误均为 0。
+- 代码验证：看板相关 5 文件 34 项 + 编辑器相关 3 文件 21 项，共 55 项测试通过；定向 ESLint、视觉类型检查、最终生产构建和 diff 检查通过。首次并行检查在机器高负载下出现超时，串行复测通过；构建保留已有大 chunk 提示。
+- 真实 Chrome 自动读取多次超时，本轮最终视觉证据为隔离服务的正式页面，不声称已重新核验真实记录的后端数据。5173 用户服务保持运行；未提交、发布或改写真实看板配置。
+
+final result: passed
+
+
+## 2026-09-07 恢复表格前的结果总结
+
+- 用户截图问题：提问“和善治签合同的公司签合同数量top3”，只显示表格，没有直接回答问题的总结。
+- 根因：子任务答案提取遇到 tableResults 就直接跳过，导致有表的完整子任务文字一起丢失；结束事件里的子任务 summary 也未进入正式回答。
+- 修改：成功子任务保留 text/content 与 done.summary（终态总结优先、去重、保留短答案）；查询和编排模式在根没有最终结论时显示子结论。根终态 summary 纳入最终答案优先级，纯完成状态不覆盖结论；失败/取消不生成新的结果摘要。
+- 当根与子任务均无正文时，复用现有字段分类和表格格式化，根据实际返回行生成简短摘要。仅单表、单分类、单数值且无重复分类时响应明确 TopN；声明“本次返回”范围，不推断完整数据集、不合并甲乙方或多表。原表保持完整可见，摘要不当作模型汇总表替换原表。
+- 展示顺序：默认折叠的思考/查询过程 → 正式结果总结 → 表格或图表；复制取同一份可见答案；Canvas 保持可展开。
+- 验证：最初两个纯表格回归因缺少“正式回答”而失败；整合后 7 组 90/90 通过，终态边界调整后 3 组 37/37 通过。定向 ESLint 新增代码无错误，页面保留 2 个既有 Hook warning。构建和视觉类型检查通过。
+- 生产路由浏览器：子 text、子 done.summary、仅表格三个分支 3/3 通过；另既有多表优先用例通过。复制内容、完整十行表和 Canvas 子节点已验证。截图覆盖 1440/1672/1920/2200/390；主 agent 亲自检查桌面与移动端，总结在表格前、手机无需横滚即可读到摘要数值。业务请求使用隔离测试数据，不代表真实业务后端执行验收。
+- 截图：outputs/result-summary/production-{text,summary,none}-{1440,1672,1920,2200,390}.png。日志：/tmp/xingshu-result-summary-regression.log、/tmp/xingshu-result-summary-final-tests.log、/tmp/xingshu-top3-result-summary-final.log。
+- 本轮未提交、推送或部署，保留其他任务改动。
+
+
+### 收藏问数侧栏：增加留白与问题阅读空间（2026-09-07）
+
+- 参考：用户局部截图 `/var/folders/zm/7wl78xs92rv9034kjsgwgd200000gn/T/codex-clipboard-f6c7d2a3-10f7-4ecf-bd33-b49a01a3f982.png`。原图与 `outputs/dashboard-favorites-spacious/panel-1672.png` 在同次输入中检查；原图为局部裁剪且 DPR 不详，按搜索空间、文字换行和条目层次比较。
+- 收藏模式桌面侧栏由 260px 扩至 320px，1800px 以上为 340px；中屏 280px，手机增加资源区域高度。组件模式沿用之前的宽度；画布数据、组件几何和主题不变。
+- 搜索独占整行，范围与蓝色搜索按钮位于下一行；36px 控件、10px 间距。条目内边距改为 14px/12px，条目间距 10px，正文层间距 7px；蓝色线性星标继续复用 Phosphor。
+- 名称 13px/500，最多三行；问题说明最多两行，名称与问题完全相同时只展示一次。完整问题保留 title 和可访问文本，选中条目具有 aria-pressed；版本与范围使用 12px 次级文字，已加入状态靠右。
+- 人工检查桌面/手机截图，标题换行、边距与操作层次符合本轮调整，搜索框被挤窄和问题重复展示的情况已处理。截图：`outputs/dashboard-favorites-spacious/editor-{1440,1672,1920,2200,960,390}.png`、`panel-1672.png`；使用本地示例收藏数据。
+- 验证：11 项现有设计器组件测试通过；2 项 Playwright 用例通过，覆盖六档宽度、完整搜索框、去重/非重复说明、Enter 搜索及范围参数、滚动列表下添加操作可见，以及添加图表后保存/重载。最终生产构建、视觉类型检查、定向 ESLint、diff 检查通过。未提交或改写真实看板数据。
+
+final result: passed
+
+
+## 2026-09-07 清理思考协议标记并收紧过程标题
+
+- 用户截图：完成的思考/查询标题下直接显示 `</mm:think>`，两条过程行间距和图标显得过重。
+- 输出修复：按既有 replyId/modelCallIndex 聚合同次模型分片，在 DataHub 服务层拆分开头的 mm:think 协议外壳；根正文、结束 summary、子答案与阶段判定共用清洗。marker-only 不算正式答案，不阻止真实表格摘要。完整思考转入思考区，已在思考流里的尾部关闭标记被去除；正文/引用的 Markdown 和代码示例保留。
+- Canvas 的正常模型文本与思考显示复用同一清洗函数，未改编排关系、原始事件、来源引用或工具数据。
+- 视觉：过程标题去掉脑形/列表图标，改为紧邻标题的 12px 展开箭头；统一 28px 行高、12px 常规文字、独立淡色状态/耗时，移除叠加的 14px 外边距。保留按钮可访问名称、真实耗时、独立折叠、手动展开粘性和键盘焦点；主回答重点恢复 600 字重，正文与过程间距收至 16px。
+- 验证：10 组 126/126 服务与组件测试通过；2 个生产浏览器回归首跑通过，覆盖分片标签、思考/正式答案分区、根/子/summary marker-only、数据摘要、复制内容与 Canvas 入口。构建及视觉类型检查通过，定向 ESLint 0 错误、1 个既有 Fast Refresh 警告。git diff --check 通过。
+- 视觉检查：1440/1672/1920/2200/390 五档。主 agent 检查问数和编排卡片及移动端；过程行紧凑，结论清楚，无页面横向溢出。移动端表格仍使用现有内部横向滚动，摘要数值直接可读。
+- 截图位于 outputs/think-process-polish/，包括 production-{ask,agent}-{width}.png 与同次捕获的 analysis-card-{ask,agent}-1672.png。测试使用隔离示例数据，不代表真实业务后端执行验收。
+- 日志：/tmp/xingshu-think-process-final-tests.log、/tmp/xingshu-think-process-polish.log、/tmp/xingshu-think-process-build.log、/tmp/xingshu-think-process-types.log。本轮未提交、推送或部署，保留其他任务已有改动。
+
+
+## 2026-09-07 结果表归入查询过程并默认折叠（用户新要求）
+
+- 用户明确调整布局：结果表放到查询过程，做精致下拉。本节取代此前“原表默认铺在正文”的展示要求；正式结果总结仍默认可读。
+- 复用 AnalysisResultTables，入口为“查询过程 → 结果表”，显示表数和行数，默认收起；点击平滑展开/收起，保留原表复制、CSV 下载、横向键盘滚动和完整数据。下拉使用现有 token 的细边框、轻背景、小表格图标与数量标记；长表名只在展开后展示，并限制视觉行数，完整名称保留 title。
+- DataHubBusinessExplanation 接入 resultTables 内容位，以完整表格下拉替换重复的数据摘要卡；文档来源、知识片段与 Canvas 入口保留。所有非标量结构化原表都可查看，包括已被图表选用的表；正文图表及其手动数据切换保持原行为。
+- 新增 dataHubAnswerTables，复用已锁定的 GFM 解析栈，按真实 AST 表节点把模型正文中的 Markdown 表也归入下拉，保留其他文字、标题、列表与代码示例。支持纯 Markdown、单行、非数值、转义竖线及重复表头。只去除正文对原表的重复展示，独立原始查询即使内容相同也全部保留。
+- 纯表回答在移表后仍根据实际返回数据生成摘要，避免出现“只有过程、没有结果总结”。思考协议标记清理与根/子总结优先级保留。
+- 验证：3 组组件 13/13 通过；最初归属回归发现正文 Markdown 表漏移（58/59），修复后 4 组 65/65 通过；再补纯 Markdown 摘要边界并复验 2 组 25/25 通过。构建、视觉类型检查通过；定向 ESLint 0 错误、2 个既有页面 Hook 警告；diff 检查通过。
+- 浏览器：下拉/图表主流程 2/2 通过，Top3 三种来源与思考标记两个流程共 5 项通过。纯 Markdown 收藏路径在归表完成前曾缺下拉；主 agent 补全后与下拉流程再次 2/2 通过。实际读取下载 CSV 内容验证复制与导出，单次收藏身份保持一致。
+- 五档截图检查 1440/1672/1920/2200/390，主 agent 检查收起/展开及移动端。最终直接捕获下拉本身，避免父容器滚动裁切：outputs/query-table-dropdown/dropdown-collapsed-1672.png、dropdown-expanded-1672.png；其余 expanded-{width}.png 为展开布局证据。全部为隔离示例数据，不代表真实业务后端执行验收。
+- 日志：/tmp/xingshu-query-table-final-tests.log、/tmp/xingshu-query-table-final-summary-tests.log、/tmp/xingshu-query-table-dropdown.log、/tmp/xingshu-query-table-related.log、/tmp/xingshu-query-table-final-browser.log、/tmp/xingshu-query-table-final-build.log。
+- 本轮未提交、推送或部署；同时进行的主题、首页、写作和看板改动保持原样。
+
+
+## 2026-09-07 修复移表后只剩标题与统计说明
+
+- 用户截图仅剩“善治数字科技（成都）有限公司合同对手方数量排名（Top 3，并列全部列出）”和统计口径，公司与数量消失。
+- 已按该结构复现：之前移走 Markdown 表后，只在剩余正文完全为空时生成摘要；标题和统计说明让判断提前结束。两个页面回归明确因找不到公司名称而失败。
+- 修复：从正式回答移入查询过程的 Markdown 表，无论剩余叙述是否为空，都保留由该表真实数据生成的正文列表；保留模型原标题/解释和完整原表下拉，不靠“正式回答区域存在”判定结果已展示。
+- 摘要支持排名/名次/rank辅助列，优先依据已返回名次列保留Top3的全部并列；没有名次时仅根据本表数值边界保留并列。不能可靠推断排名时，答案表保留所有已返回行与字段，不再被通用三行预览限制截掉；不合并原始多查询、不推断未知数据集。
+- 单元/组件：5组75/75通过，覆盖标题+口径+排名表、并列、空值/多指标、表归属、复制/下载与图表交互。构建/视觉类型检查通过，定向lint无错误、2个既有页面Hook warning，diff检查通过。
+- 生产浏览器精确回归：标题+统计说明+4行答案表、5行原始表。正式回答和复制逐项为广州6、杭州5、云南3、成都并列公司3；第四名仅在完整原表，正文无遗漏。原始5行和答案4行合计2张9行在查询下拉。该测试为示例数据，不代表这次真实业务查询的返回内容。
+- 最新精确浏览器用例1/1通过，退出码0；主agent亲自检查1672回答、390回答及页面图，五档1440/1672/1920/2200/390均有截图。证据 outputs/result-summary-content/answer-{width}.png、production-{width}.png、query-table-1672.png。
+- 日志 /tmp/xingshu-answer-facts-red.log、/tmp/xingshu-answer-facts-regression.log、/tmp/xingshu-result-summary-content.log、/tmp/xingshu-answer-facts-build.log。本轮未提交、推送或部署，保留并行任务改动。
+
+
+## 2026-09-07 补齐实际返回的思考摘要并说明上游边界
+
+- 用户截图：展开思考过程只显示一条“我来帮您查询……”开场白。已查实当前后端只公开受控的简短摘要：根工具调用前的普通开场白可转成 thinking；标准子任务的原生 THINKING_BLOCK_DELTA 通常被 converter 过滤。因此不能仅凭截图断言有更多内容到达浏览器，也不能恢复服务端未发送的原始思考。
+- 前端另有两处明确遗漏并已先红复现：顶部只绑定根 turn.thinkingContent；有任何流式根思考时忽略 done.thinkingContent 的完整快照。
+- 修复：新增 getDataHubThinkingSections，复用既有逐会话 Presenter 收集实际返回的根/子公开思考，按任务分组，工具参数和正式答案不冒充思考。完整终态快照补入并去重，保留真实内容和不同模型调用段落，不改根/子答案归属。
+- 展示：完成、失败、停止后的展开内容取消260px内部高度上限；运行中保留原滚动展示。多任务摘要不套用根阶段耗时冒充总思考时长。实际只收到根单段且有子任务时，注明“本轮仅返回以上公开思考摘要，详细执行步骤可在查询过程查看。”；缺失内容不编造。
+- 后端仅更新 orchestrator.harness.txt 的“公开决策摘要”末节：完整闭合<think>内1—3句交代当前已知条件、基于真实返回信息的阶段判断与下一步，禁止只给开场白、禁止编造核验或来源；保留原始思考过滤和所有既有敏感内容限制。末节之前字节与编辑前一致；现有34条字面提示词契约静态检查通过；mvn不在PATH，未跑JUnit。
+- 前端5组106/106通过，构建与视觉类型检查通过，定向lint无错误、2个既有页面Hook warning，diff检查通过。
+- 浏览器两条精确夹具2/2通过：根开场+子两轮公开摘要+10段完整快照（各段恰好1次、按来源分组、不内裁剪）；实际仅根单段（原文+限制说明、不扩写）。复制/结果区/查询下拉/Canvas操作保持。五档1440/1672/1920/2200/390已检查，主agent亲自查看1672与390的完整思考容器以及单段场景。
+- 截图 outputs/thinking-completeness/complete-thinking-{1672,390}.png、single-thinking-{1672,390}.png 与五档页面图。长内容来自模拟公开返回的测试夹具，不是这次真实查询的模型输出，也不代表当前后端会生成这些内容。
+- 日志 /tmp/xingshu-thinking-completeness-red.log、/tmp/xingshu-thinking-completeness-tests.log、/tmp/xingshu-thinking-completeness.log、/tmp/xingshu-thinking-completeness-build.log。
+- 前后端本轮均未提交、推送、部署或重启。后端新摘要要求尚未验证在运行服务中生效；当前服务若只发一句，前端仍只能显示已收到的这一句与真实限制说明。保留其他任务改动。
+
+
+## 2026-09-07 易读查询步骤与阶段动效（暂停后继续）
+
+- 用户补充查询/思考标题需要类似Codex的动效，并继续此前暂停的易读查询过程改造。
+- 查询说明由字段网格改为基于真实数据的2—4条短步骤：限定范围、汇总统计、已返回的排序、返回结果；将“分组/计数”解释为同字段记录归到一组、统计每组记录数。原始字段保留在默认收起的“查看查询细节”；单查询的排序并入其详情，多个查询未关联的排序不假定归属。知识库独立名称、原文引用、结果摘要、表格下拉和Canvas保留。
+- 动效只用于状态为running的标题，复用既有xs-datahub-shimmer，2.4秒灰色文字流光；计时数字保持静态字形。完成/失败/停止后无持续动画。两处外层折叠复用grid高度过渡并增加淡入淡出，保持自动收起和用户手动展开状态。
+- reduced-motion和forced-colors下去掉流光与过渡，恢复可读文字，不让background-clip透明文字残留。没有新增动画依赖、原生DOM状态或业务计时规则。
+- 5组82项单元/组件回归通过；构建、视觉类型检查、定向ESLint、diff检查通过。6项精确浏览器检查分批通过：思考/查询标题180ms实帧背景位置变化、终态静止、两折叠各自高度+opacity中间帧、减少动画/高对比静态可读、生产查询自然步骤及详情、跨知识库同名文档保持独立。最初一个亚像素终态比较差异改为小数精度容差，中间帧检查保留，两个折叠复验通过。
+- 已检查1440/1672/1920/2200/390五档截图。主agent在Codex内置浏览器实测查询标题backgroundPosition变化，完成后两标题animationName均none，并检查完成状态与步骤排版；另亲自查看生产步骤1672与移动预览390。
+- 交互预览： http://127.0.0.1:4181/outputs/process-motion/index.html ，实际复用正式组件，按钮可切换思考中/查询中/已完成/失败/已停止；页面明确标记示例数据和计时。预览由安全本地代理65535启动，不访问实际业务后端。最终保留在查询中，内置浏览器tab已markDeliverable。
+- 证据：outputs/process-motion/qa/readable-steps-1672.png、running-390.png及该目录五档截图；日志 /tmp/xingshu-process-motion-tests.log、/tmp/xingshu-process-motion.log、/tmp/xingshu-process-collapse.log、/tmp/xingshu-process-motion-build.log。
+- 未提交、推送或部署；保留其他并行改动。之前后端公开摘要提示词的本地改动仍未部署，本节没有修改后端。
+
+
+## 全站蓝色 Codex UI 统一：最终核验（2026-09-07）
+
+- 按用户最新要求保留蓝色主基调并减少灰底：白色内容面板、F5F9FF浅蓝辅助面、F0F6FF悬停、EAF3FF选中与2563EB主操作，边框DCE6F4/C5D5ED。蓝色浮层遮罩和清淡阴影保持层次；文字仍以深色保证可读。
+- 保留已对齐的Codex字体/密度（14/13/12、400/500、轻边界）、24px输入框和8px常规控件圆角。统一了首页、查询、历史、制表/会话、写作/模板/草稿、云盘/预览、数据资产和看板chrome的背景/选择态。原文格式与用户大屏背景、坐标、尺寸、字体、publishedSchema保持。
+- 修复纯CSS布局问题：写作grid显式minmax(0,1fr)避免草稿/助手被撑出；查询route-view获得可用高度，手机长回答不再把输入框推出视口；降低动态效果时transition-duration使用0s，避免rc-trigger同步测量被0.01ms位置过渡干扰。未修改业务请求/权限/数据/保存发布逻辑。此前共享输入框的JSX只增减class，已逐行核对。
+- 验证覆盖1440/1672/1920/2200/390：首页与引导、查询4模式及别名/引用/子agent弹层、历史/制表列表与流程、制表结果会话、写作5路由及上传/引用/创建草稿/导出检查/内容方案、云盘预览、数据资产4个真实ECharts、看板广场/当前/编辑器、登录与欢迎。多数页面使用非空、长内容夹具；不是以空态替代。
+- 核心54项组件测试、查询4项与看板2项现有浏览器用例、各家族五宽脚本全部通过；最新构建、视觉类型检查、定向ESLint和git diff --check通过。构建保留原有ECharts大chunk提示。没有真实API写入。
+- 已人工看桌面和手机代表图；触屏390的+菜单/上传及桌面Select/账户菜单位置正常，选中文件后的上传按钮为品牌蓝。图片及各组测量文件：outputs/ui-audit/codex-blue/；看板配置保真证据：outputs/dashboard-codex/。
+- 效果总览：outputs/ui-audit/codex-blue/review.html，可按页面及视口切换；本地示例数据仅用于UI审阅。完整要求核验：.codex-tmp/codex-blue/completion-audit.md。
+- 业务边界：并行查询任务的service/store和analysis-result-tables改动保留但不冒认为本任务；本次不修既有云盘焦点恢复行为，不改业务或用户内容来满足视觉断言。改动未提交、推送或部署。
+
+final result: passed
+
+
+## 2026-09-07 草稿管理与本次大纲编辑
+
+- 用户确认第一版包含搜索、编辑、保存、重命名和删除；行文逻辑先使用本次可修改大纲，不建设独立方案库。
+- 报告智写增加公文写作、格式模板、草稿管理导航；详情返回对应列表。草稿按标题/模板搜索、实际更新时间排序；更多菜单提供重命名和删除确认，接口成功才更新缓存，失败可重试。
+- 编辑页增加保存草稿按钮；修复保存失败未向导出调用方抛错，支持等待在途保存与补交新编辑，后台保存失败不会形成未处理Promise。尚未加入全应用SPA离开保护。
+- 大纲每节可展开调整写作思路，修改写作目的与内容要点；验证修改会进入后续生成上下文。现有参考草稿入口保持兼容，不是开始写作的必要前置。
+- 新增公文服务PUT草稿title、DELETE及持久化updatedAt；按空间/创建者鉴权，删除保留共享模板/对象并隐藏草稿及其导出下载。后端源码位于同级official-document-service，尚未部署，新API不能视为当前业务环境已可用。
+- 前端6文件82项测试通过，导航最后变更后4项复验通过；最终build、visual typecheck、diff-check通过。ESLint无错误，保留两个文件的既有Fast Refresh warning；构建保留既有ECharts大块提示。
+- 后端最终31项定向测试与bootJar通过，主agent直接核对JUnit XML。JDBC是SQL契约mock验证，尚未实测MySQL迁移。首轮全套87项中，未修改的CapabilityControllerTest存在1项空指针失败，未处理该无关项。
+- 两个真实组件浏览器场景分别通过：管理入口→搜索排序→重命名失败重试→编辑保存→重开保留→删除取消/失败/成功；大纲目的/要点编辑并进入写作上下文。全部API用隔离夹具，未删除或重命名真实业务草稿。
+- 1440/1672/1920/2200/390列表、编辑页、大纲共15张截图检查。修复表头/行字段偏移及390时Segmented撑开默认grid轨导致更多按钮被裁切；保留列x对齐、按钮边界及可点击断言。
+- 截图：`outputs/draft-management/list-{width}.png`、`editor-{width}.png`、`outline-{width}.png`；主agent另检查5173真实已登录草稿列表（仅展示），截图`live-list.png`。
+- 证据：`/tmp/xingshu-draft-management-tests.log`、`/tmp/xingshu-draft-management-fixed-browser.log`（最终管理通过）、`/tmp/xingshu-draft-management-final-browser.log`（大纲通过；其中旧管理失败已修复复验）、`/tmp/xingshu-draft-management-build-final.log`。
+- 后端契约、迁移、回滚限制与测试：`outputs/draft-management/backend-handoff.md`；补丁`backend-changes.patch`。旧模板文档对象404、新建草稿/正式导出失败未在本轮恢复；没有commit、push或部署。
+
+
+## 2026-09-07 公文写作等待区与大纲改为轻量对话样式
+
+- 用户反馈大纲分析卡过重，要求参照Codex样式。本轮仅调整公文前端展示：等待区使用无外框状态行、灰阶文字流光、紧凑耗时与文字操作；真实参考结构默认折叠，支持原生键盘展开。确认大纲去外框、降低说明文字权重、使用深灰确认按钮；保留每节目的/要点编辑。顶部活动标签改为中性灰，并收紧对话顶部留白。
+- 删除按1.2s/25s自动标记步骤完成的时钟推断。大纲分析没有中间事件，等待时只表达真实等待与耗时；参考章节不再写成必然沿用，60s后提供继续等待/跳过的提示。ComposeElapsed和取消/跳过的迟到响应保护保留。
+- 复用全局xs-skeleton-shimmer，无新动画依赖；减少动态效果与强制颜色模式均保持文字可读、动画静止。
+- ComposeAnalyzingCard与ComposeView单测42/42通过，浏览器3/3通过；另补5宽整页截图的首场景复验1/1通过。build、visual typecheck、对应文件ESLint、git diff --check通过。构建仅保留已有大块提示。
+- 浏览器验证1440/1672/1920/2200/390等待折叠、参考展开、大纲编辑；实测backgroundPosition推进，减弱动画/强制颜色静止；验证跨旧时钟阈值不虚构已完成、展开状态不被计时重置、取消/跳过迟到响应不重现。业务API全部隔离，没有新业务写入。
+- 截图：outputs/codex-writing/waiting-{width}.png、reference-{width}.png、outline-{width}.png及page-waiting/page-outline整页图。主agent检查1672整页等待/确认、390参考展开，布局无阻断问题。
+- 日志：/tmp/xingshu-codex-writing-unit.log、/tmp/xingshu-codex-writing-browser.log、/tmp/xingshu-codex-writing-context.log、/tmp/xingshu-codex-writing-types.log、/tmp/xingshu-writing-codex-build.log。未提交、部署或修改后端。
+
+
+## 2026-09-07 公文写作纯白背景
+
+- 按用户最新图2参考，将公文写作compose阶段的外层主工作区和内部应用背景改用已有纯白--xs-surface token；作用范围限定为该写作页面。
+- 复用现有Codex写作视觉场景，1/1通过（7.3s）；截图覆盖1440/1672/1920/2200/390等待、展开和大纲。人工查看1672整页与390移动端，页面背景为白色，输入与操作正常。
+- 证据：outputs/codex-writing/page-waiting-{width}.png；/tmp/xingshu-writing-white-background.log。git diff --check通过，无新测试/依赖，无业务请求、提交或部署。
+
+
+## 2026-09-07 加宽公文会话底部输入框
+
+- 根据用户反馈，覆盖公文会话输入框的共享760px上限，并将会话外层轨道按桌面宽度分为1080/1200/1320/1440px，始终受可用容器宽度约束；消息内容继续使用840px阅读轨道。仅调整公文会话底部输入框布局。
+- 复用现有写作视觉场景，1/1通过（7.6s），覆盖1440/1672/1920/2200/390等待/展开/大纲；人工查看1672与390整页，输入框大屏明显加宽、手机无横向溢出。
+- 证据：outputs/writing-wide-composer/waiting-{width}.png；/tmp/xingshu-writing-wide-composer.log。git diff --check通过，无新增逻辑测试/依赖、业务请求、提交或部署。
+
+
+## 2026-09-07 加高公文会话底部输入框
+
+- 用户继续反馈输入框过扁。定位到会话模式的最小行数为1，改为3行，复用原有自动增高逻辑及8行上限；首屏、横向宽度与其他页面保持既有设置。
+- 复用现有写作视觉场景，1/1通过（7.3s），生成1440/1672/1920/2200/390截图；人工查看1672与390，默认输入框高度约122px，模板标签和按钮完整可见。
+- 证据：outputs/writing-taller-composer/waiting-{width}.png；/tmp/xingshu-writing-taller-composer.log。业务API全部由隔离夹具拦截，无真实业务写入、提交或部署。
+
+
+## 2026-09-07 去掉列表页白色顶条并统一顶部按钮
+
+- 根据用户截图，格式模板与草稿管理的页头改为透明底和透明分隔线，融入页面底色；顶部上传、新建按钮统一为32px高、深灰底、13px文字、6px图文间距，手机换行后仍靠右。模板覆盖层的上传按钮保持原有作用域，避免跨页样式相互覆盖。
+- 模板回归发现手机390宽度下顶部导航挡住@菜单首项：原高度计算以整个main为上界，改用实际公文工作区顶端，保留独立渲染时main兜底。沿用现有鼠标点击验证，没有强制点击或跳过场景。
+- 草稿管理原有场景通过（12.1s）；模板库首次在上述菜单点击处失败，修复后全场景通过（8.0s，包含模板双入口、筛选、响应式和axe检查）。业务API全部由隔离夹具拦截。定向ESLint与git diff --check通过。
+- 截图覆盖1440/1672/1920/2200/390，人工检查模板与草稿的1672、390整页，白色顶条消失、按钮对齐且完整可见。证据：outputs/writing-header-codex/templates-{width}.png、drafts-{width}.png、overlay-390.png。
+- 日志：/tmp/xingshu-writing-header-codex.log（含首次菜单失败）、/tmp/xingshu-writing-header-codex-template-fixed.log（最终模板通过）。没有提交、推送或部署，保留并行工作改动。
+
+
+## 2026-09-07 顶部操作按钮恢复品牌蓝
+
+- 按用户最新要求，上传结构DOCX与新建草稿恢复品牌蓝，悬停/按下使用深蓝；保留32px高度、紧凑间距、对齐方式与透明页头。
+- 复用模板库和草稿管理两个浏览器场景，2/2通过（21.4s），覆盖1440/1672/1920/2200/390；人工检查模板1672和草稿390截图。证据：outputs/writing-header-blue/，日志/tmp/xingshu-writing-header-blue.log。API全部隔离，无真实业务写入、提交或部署。
+
+
+## 2026-09-07 空思考与被丢弃的原生澄清卡
+
+- 在用户原Chrome问数页复现，并从同一历史会话的messages/list、events/list读取真实公开事件。共12条：7条正文、2条model activity、agent_start、clarification、done；没有thinking或查询工具。clarification包含4个label/value选项，done.suspended=true；本轮实际等待用户确认，并未完成查询。
+- 根因：前端原生选项白名单仅接受label，真实后端NativeInteraction返回label/value，导致整张澄清卡被丢弃；此外clarification被计入查询阶段，无内容的思考阶段仍被显示为已完成。
+- 修复：原生选项兼容可选value，显示label并提交value，旧label-only和XML reply保留；继续验证类型、长度及未知键。已选历史卡映射回可读label。无公开内容的终态思考区域隐藏，clarification本身不触发查询过程，待答终态显示“等待你补充信息”。没有从内部推理记录补造公开摘要。
+- 最小回归先红：选项解析1失败、空阶段3失败、已选值展示1失败；修复后合并5文件88/88通过。定向ESLint无错误（AnalysisPage保留2个已有Hook警告），视觉类型检查与diff-check通过。npm run build停在本任务未修改的src/app/AppRoutes.test.tsx:219，getByRole的ByRoleOptions不支持exact参数；未声明全量构建通过。
+- 新增隔离浏览器场景1/1通过（9.5s）：真实历史包装格式→恢复4个选项→收起/重新展开→以value而非label提交→继续原session/chat→显示实际返回的思考摘要→重开历史保留人类可读选择。所有请求拦截为测试数据，未替用户提交实际业务选项。
+- 用户原会话通过热更新已恢复4项选择和等待状态，主agent亲自在真实页面确认。1440/1672/1920/2200/390截图检查，另查看1672与390等待卡；原页面保留给用户选择。
+- 证据：outputs/thinking-empty-history/public-events.json、messages.json、before.png、live-after.png、waiting-{width}.png；不含请求头或鉴权令牌。日志/tmp/xingshu-empty-thinking-red.log、/tmp/xingshu-clarification-value-red.log、/tmp/xingshu-clarification-display-red.log、/tmp/xingshu-native-clarification-final-tests.log、/tmp/xingshu-native-clarification-browser.log、/tmp/xingshu-native-clarification-build.log。本轮未修改后端、提交或部署。
+
+
+## 2026-09-07 多条金额对比图的可读性
+
+- 用户原图为50条记录、两个数量级悬殊的指标，长公司名全部斜排。已在原Chrome图表的同源表核实行数50、合同总金额/总贷方发生额/合同乙方三个展示字段，同名公司重复出现，0与缺失值并存。
+- 仅对问数交互图中的多分类/长名称柱图启用横向比较，每组8条并可逐组翻到第49–50条；保留原返回顺序与原值，用连续行号区分重复名称，不做公司汇总。增加单指标查看，蓝/绿颜色按原指标保持，表格仍包含全量50行且维度列在前。标题只显示一次，明确总条数和当前范围。
+- 条末与数值轴用Intl中文紧凑格式和4位有效数字，如3.672亿；不擅自添加货币单位。richText tooltip保留完整原名和精确数值，null保留缺失、0保留为0。手机把公司名放到条形上方并减少轴刻度，避免标签挤占绘图区。
+- renderer通过可选barView启用，公文960x540静态PNG的默认调用保持原行为。首次实帧回归暴露media与共享replaceMerge组合在单指标更新时清空系列，最终改为复用useMediaQuery传入compact、稳定series.id，不修改共享XsEChart、不引入dataZoom或新依赖。
+- 单元/组件2文件41/41通过；最终真实ECharts浏览器场景1/1通过（9.0s），验证8条窗口、最后2条、50行表、单指标颜色、原名精确值及仅一次查询。构建、视觉类型检查与diff-check通过，定向ESLint无错误（2个已有Hook警告），构建仅已有大块提示。
+- 1440/1672/1920/2200/390截图；主agent查看1672横向比较及390比较/单指标效果，轴标清晰。测试使用代表性示例数据，未重新发送业务查询；用户已切至模板页，未将其导航回问数或替换当前页。
+- 证据：outputs/readable-amount-chart/chart-{width}.png、received-390.png；日志/tmp/xingshu-readable-chart-final-tests.log、/tmp/xingshu-readable-chart-final-browser.log、/tmp/xingshu-readable-chart-final-build.log、/tmp/xingshu-readable-chart-final-types.log。本轮未提交、推送或部署。
+
+
+## 2026-09-07 询问浮层收紧与首页宽度还原
+
+- 用户明确要求首页还原之前宽度。核对HEAD可见hero/应用区/问题区原宽760px，当前工作树新增home-track及大屏断点将其扩至1170/1320/1440px。本轮将首页统一轨道恢复760px并移除放宽断点；保留现有颜色、六张卡及移动端单列，共享输入框与公文专用加宽/加高规则未动。
+- 询问浮层限制为min(760px,100%)并居中对齐输入框；改为12px圆角、细边框、轻阴影、14px题目与选项、40px选项行、20px小方形序号，补充输入与主操作统一32px高。限制超长内容高度并支持内部滚动，保留键盘焦点、原有选择/提交和错误重试逻辑；主操作继续用品牌蓝。移除制表对共享询问浮层阴影的旧覆盖。
+- 三个原有浏览器场景分别通过：原生澄清历史恢复/提交/重开（8.5s）、首页多宽和矮屏对齐（14.1s）、首页构图（最终3.6s）。首次构图的320px卡宽断言属于放宽版，按本次还原要求更新为760px三列对应范围后通过；未减弱对齐、六卡、短屏与无溢出验证。视觉类型检查和diff-check通过。
+- 询问面板在1440/1672/1920/2200/390逐项验证左右边缘和宽度与输入框一致、四项完整可见；首页另覆盖1366x720。主agent人工查看1672首页、1672和390询问浮层，排版正常。
+- 证据：outputs/codex-clarification/panel-{width}.png、home-{width}.png；日志/tmp/xingshu-compact-home-clarify.log（含首轮旧卡宽断言失败）、/tmp/xingshu-compact-home-final.log（最终构图通过）、/tmp/xingshu-compact-home-clarify-types.log。全部业务请求由隔离夹具拦截，无真实业务写入、提交或部署。
+
+## 2026-09-07 思考与查询过程标题字号
+
+- 按用户反馈，将两个过程共享折叠标题从12px调整为14px，行高从20px调整为22px；同一行状态与耗时同步继承字号。复用现有正文token与运行态文字扫光。
+- 现有动效浏览器测试4/4通过（14.0s），覆盖运行/结束状态、两个过程的展开收起、减少动态效果及强制颜色。完成1440/1672/1920/2200/390截图，人工查看1672与390，无溢出；证据outputs/process-motion/qa/running-{width}.png，日志/tmp/xingshu-process-title-size.log。使用本地正式组件预览，无真实业务请求。
+
+
+## 知识库管理：手绘 SVG 精修（2026-09-07）
+
+- 参考：用户提供的 `codex-clipboard-3438d87a-837c-4134-a0fe-96610495a1dc.png`，并明确选择“精绘页面图标并接入”。
+- 在 `src/components/xs/XsMetricGlyphs.tsx` 中重绘知识库、文档总数、最近更新三枚图标：弧形书页与页叠、圆角折页与正文行、带更新箭头的表盘。保留 32×32 网格、2px 圆角描边、currentColor 与统一降调，直接由现有知识库卡片及统计卡复用。
+- 独立源文件及预览：`outputs/knowledge-icons/{knowledge,documents,recent-update,preview}.svg`、`preview.png`、`xingshu-knowledge-icons.zip`。4 份 SVG 的 XML 校验通过，无嵌入位图。
+- 浏览器：在本次启动的 5196 本地服务使用隔离接口夹具，代理显式指向 `127.0.0.1:65535`；没有外部请求。数据资产管理页截图覆盖 1440、1672、1920、2200、390px，云盘共用入口覆盖 1440、390px；图标均为 32px，无几何裁切或横向溢出，搜索筛选通过，运行时错误为 0。
+- 已查看 `preview.png`、`page-1672.png`、`page-2200.png`、`page-390.png` 与 `cloud-390.png`，确认实际尺寸中的书页、折角及更新箭头可辨认，原有标题、卡片与图标槽对齐正常。截图采用 6 个知识库的测试夹具，不代表线上知识库数量。
+- 验证：图标、知识库卡片、数据资产操作及云盘 4 个测试文件共 26 项通过；定向 ESLint 为 0 error / 1 个原有 `react-refresh/only-export-components` warning；`git diff --check` 通过。
+- 本次全量构建未通过：工作树内 `StructuredDraftEditor.tsx` 的 328、329、360、480、481、511 行报告 6 处类型错误。本轮没有修改该文件；图标局部验收通过，不据此声明整仓构建通过。

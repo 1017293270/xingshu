@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>查询展示验证</title><style>
+html, body, #root { height: auto; min-height: 100%; overflow: auto; }
+body { margin: 0; background: var(--xs-bg); font-family: var(--xs-font-family); color: var(--xs-text); }
+.phase-preview { max-width: 1100px; margin: 0 auto; padding: 36px 24px; }
+.phase-preview > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.phase-preview > header span { color: var(--xs-text-3); font-size: var(--xs-fs-caption); }
+.phase-preview > nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.phase-preview > nav button { border: 1px solid var(--xs-border); border-radius: var(--xs-radius-control); background: var(--xs-surface); color: var(--xs-text-2); padding: 7px 12px; font: inherit; font-size: var(--xs-fs-label); cursor: pointer; }
+.phase-preview > nav button[aria-pressed="true"] { color: var(--xs-primary-2); border-color: var(--xs-primary-2); background: var(--xs-info-soft); }
+.phase-preview .analysis-card { background: var(--xs-surface); border: 1px solid var(--xs-border); border-radius: var(--xs-radius-card); }
+.phase-preview__table { border: 1px solid var(--xs-border); border-radius: var(--xs-radius-control); padding: 12px; }
+.phase-preview__table > summary { cursor: pointer; font-size: var(--xs-fs-label); }
+.phase-preview__table .datahub-table-card { margin-top: 12px; }
+@media (max-width: 620px) { .phase-preview { padding: 24px 12px; } .phase-preview > header { align-items: flex-start; flex-direction: column; gap: 6px; } }
+</style></head><body><div id="root"></div><script type="module">
+import { createElement as h, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { AppProviders } from "/src/app/providers";
+import { DataHubProcessDock } from "/src/components/xs/datahub/DataHubProcessDock";
+import { DataHubBusinessExplanation } from "/src/components/xs/datahub/DataHubBusinessExplanation";
+import { DataHubResultTable } from "/src/components/xs/datahub/DataHubResultTable";
+import "/src/styles/tokens.css";
+import "/src/components/xs/xs.css";
+import "/src/pages/pages.css";
+import "/src/pages/styles/analysis-motion.css";
+const stages = [["thinking","思考中"],["query","查询中"],["done","已完成"],["multiple","多次查询"],["error","失败"],["cancelled","已停止"]];
+const baseTrace = { intent:"合同数量排名前三", tasks:[], steps:[], dataSources:["合同系统"], dataTables:[], fields:[], filters:[], calculations:["按记录数降序排列"], relationships:[], metricDefinitions:[], synonymMappings:[], time:[], documents:[] };
+const query = { dataSource:"合同系统", table:"合同主数据清单", dimensions:["合同乙方单位名称"], measures:[{label:"记录数",aggregation:"计数"}], filters:["合同甲方单位等于“示例科技公司”"], time:[] };
+const invoiceQueries = [
+ {table:"发票开具明细",dataSource:"发票数据",dimensions:["货物名称","规格型号","计量单位","销方单位名称"],measures:[],filters:["销方单位名称包含“示例科技”","购方单位名称包含“示例客户”"],time:[],rows:0,rowKind:"list"},
+ {table:"发票开具明细",dataSource:"发票数据",dimensions:["购方单位名称"],measures:[{label:"记录数",aggregation:"计数"}],filters:[],time:[],rows:8},
+ {table:"发票开具明细",dataSource:"发票数据",dimensions:["购方单位名称"],measures:[{label:"开票金额",aggregation:"求和"}],filters:[],time:[],rows:8}
+];
+const table = {columns:[{key:"company",title:"公司"},{key:"count",title:"合同数量",type:"number"}],rows:[{company:"示例公司 A",count:6},{company:"示例公司 B",count:5},{company:"示例公司 C",count:3}],totalRows:3,tableIndex:0,groupLabel:"合同数量",source:"cube"};
+function Preview() {
+ const [stage,setStage]=useState("query");
+ const [startedAt,setStartedAt]=useState(Date.now);
+ const interrupted=stage==="error"||stage==="cancelled"?stage:undefined;
+ return h(AppProviders,null,h("main",{className:"phase-preview"},
+  h("header",null,h("strong",null,"查询等待与查询目的"),h("span",null,"交互预览 · 示例数据与计时")),
+  h("nav",{"aria-label":"演示阶段"},stages.map(([value,label])=>h("button",{key:value,type:"button","aria-pressed":value===stage,onClick:()=>{setStartedAt(Date.now());setStage(value);}},label))),
+  h("article",{className:"xs-card analysis-card"},
+   h(DataHubProcessDock,{thinkingContent:"先确认合同甲方范围，再按乙方单位统计记录数量。",status:interrupted??(stage==="thinking"?"running":"done"),startedAt,durationMs:7000}),
+   stage!=="thinking"?h(DataHubBusinessExplanation,{kind:"ASK_DATA",intent:"合同数量排名前三",status:interrupted??(stage==="query"?"running":"done"),startedAt,durationMs:59000,
+    trace:stage==="multiple"?{...baseTrace,dataSources:["发票数据"],calculations:[],queries:invoiceQueries}:{...baseTrace,queries:[{...query,...(stage==="done"?{rows:3}:{})}]},
+    resultTables:stage==="done"?h("details",{className:"phase-preview__table"},h("summary",null,"结果表 · 3 行"),h(DataHubResultTable,{table})):undefined
+   }):null,
+   stage==="done"?h("div",{className:"analysis-output"},h("p",null,"合同数量前三名为：",h("strong",null,"示例公司 A 6 份、示例公司 B 5 份、示例公司 C 3 份"),"。")):null
+  )
+ ));
+}
+createRoot(document.getElementById("root")).render(h(Preview));
+</script></body></html>

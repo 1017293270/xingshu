@@ -2243,7 +2243,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
       </div>
     </header>
 
-    <div class="designer-workspace" @keydown="handleCanvasKeydown">
+    <div class="designer-workspace" :class="{ 'is-browsing-assets': paletteTab === 'assets' }" @keydown="handleCanvasKeydown">
       <aside class="designer-panel designer-palette" :class="{ 'is-drawer-open': activeDrawer === 'palette' }" aria-label="组件库">
         <header class="designer-palette__header">
           <p>构建</p>
@@ -2264,7 +2264,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
             :title="item.description"
             @click="addWidget(item.type)"
           >
-            <span class="designer-palette__icon" aria-hidden="true">{{ item.label.slice(0, 1) }}</span>
+            <span class="designer-palette__icon" aria-hidden="true"><component :is="widgetTypeIcon(item.type)" :size="20" weight="regular" /></span>
             <span class="designer-palette__copy">
               <strong>{{ item.label }}</strong>
               <small>{{ item.description }}</small>
@@ -2314,10 +2314,10 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
               <div class="query-asset-panel__filters">
                 <label class="query-asset-panel__search-field">
                   <PhMagnifyingGlass :size="14" aria-hidden="true" />
-                  <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索问题" @keyup.enter="loadAssets" />
+                  <input v-model="assetSearch" aria-label="搜索收藏问数" placeholder="搜索收藏问题" @keyup.enter="loadAssets" />
                 </label>
                 <select v-model="assetScope" aria-label="收藏范围" @change="loadAssets">
-                  <option value="ALL">全部</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
+                  <option value="ALL">全部收藏</option><option value="PRIVATE">仅自己</option><option value="SPACE">空间可用</option>
                 </select>
                 <button type="button" :disabled="assetState === 'loading'" @click="loadAssets">{{ assetState === 'loading' ? '加载中' : '搜索' }}</button>
               </div>
@@ -2329,12 +2329,14 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
                   :key="asset.id"
                   type="button"
                   :class="{ 'is-active': selectedAssetId === asset.id }"
+                  :aria-pressed="selectedAssetId === asset.id"
+                  :title="asset.resolvedQuestion || asset.name"
                   @click="chooseAsset(asset)"
                 >
-                  <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="14" weight="fill" /></span>
+                  <span class="query-asset-panel__asset-icon" aria-hidden="true"><PhStar :size="16" weight="regular" /></span>
                   <span class="query-asset-panel__asset-body">
                     <strong>{{ asset.name }}</strong>
-                    <span>{{ asset.resolvedQuestion }}</span>
+                    <span v-if="asset.resolvedQuestion?.trim() && asset.resolvedQuestion.trim() !== asset.name.trim()">{{ asset.resolvedQuestion }}</span>
                     <small>
                       <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
                       <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
@@ -3948,7 +3950,7 @@ textarea:focus-visible {
   min-height: 0;
   align-content: start;
   gap: 0;
-  padding: 4px 10px 16px 14px;
+  padding: 8px 12px 20px 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -3968,12 +3970,12 @@ textarea:focus-visible {
 /* 左面板分区：每块只有「分区标题 + 内容」两层，块与块之间靠 22px 呼吸带分开 */
 .query-asset-panel__section {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .query-asset-panel__section + .query-asset-panel__section {
-  margin-top: 8px;
-  padding-top: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
   border-top: 1px solid var(--studio-border);
 }
 
@@ -4106,16 +4108,18 @@ textarea:focus-visible {
   background: #fef2f2;
 }
 
-/* 搜索 + 范围 + 搜索按钮并成一条，不再三行堆叠 */
+/* 搜索独占一行，范围与搜索操作在下一行，窄面板也能完整输入。 */
 .query-asset-panel__filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px auto;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 84px;
+  gap: 10px;
+  margin: 2px 0 4px;
 }
 
 .query-asset-panel__search-field {
   position: relative;
   display: flex;
+  grid-column: 1 / -1;
   min-width: 0;
   align-items: center;
 }
@@ -4149,6 +4153,7 @@ textarea:focus-visible {
 
 .query-asset-panel__search-field input {
   padding-left: 30px;
+  height: 36px;
 }
 
 .query-asset-panel__filters input:focus-visible,
@@ -4180,17 +4185,17 @@ textarea:focus-visible {
 
 .query-asset-panel__list {
   display: grid;
-  gap: 4px;
+  gap: 10px;
 }
 
 /* 结果卡降噪：只留一层细描边，名称是唯一的重音，元信息退到裸文字 */
 .query-asset-panel__list > button {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 14px 12px;
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--studio-text-2);
@@ -4211,26 +4216,32 @@ textarea:focus-visible {
 
 .query-asset-panel__asset-icon {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border-radius: 8px;
-  color: #b8862a;
-  background: #fdf5e3;
+  color: var(--studio-primary-strong);
+  background: #edf3ff;
 }
 
 .query-asset-panel__asset-body {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 7px;
 }
 
 .query-asset-panel__asset-body strong,
 .query-asset-panel__asset-body > span {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
+
+.query-asset-panel__asset-body > span { -webkit-line-clamp: 2; }
 
 .query-asset-panel__asset-body strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
 .query-asset-panel__asset-body > span { color: var(--studio-text-3); font-size: 11px; }
@@ -4263,9 +4274,12 @@ textarea:focus-visible {
 }
 
 .query-asset-panel__asset-body small b {
+  margin-left: auto;
   color: var(--studio-primary);
   font-weight: 600;
 }
+
+.query-asset-panel__asset-body small b::before { display: none; }
 
 .query-asset-panel__empty,
 .query-asset-panel__error {
@@ -5462,3 +5476,5 @@ textarea:focus-visible {
 </style>
 
 <style scoped src="./dashboardDesignerOriginal.css"></style>
+
+<style scoped src="./dashboardDesignerChrome.css"></style>

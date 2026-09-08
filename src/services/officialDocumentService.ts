@@ -11,6 +11,7 @@ import type {
   OfficialDocumentWritingLogicPlan,
   OfficialDocumentDraft,
   OfficialDocumentDraftContent,
+  OfficialDocumentDraftContentVersion,
   OfficialDocumentExportFormat,
   OfficialDocumentExportRecord,
   OfficialDocumentMappingProfile,
@@ -93,6 +94,10 @@ export type OfficialDocumentService = {
   updateTemplateMapping(input: UpdateOfficialDocumentMappingInput): Promise<OfficialDocumentMappingProfile>;
   publishTemplate(templateId: string, versionId: string): Promise<OfficialDocumentTemplateVersion>;
   createDraft(input: CreateOfficialDocumentDraftInput): Promise<OfficialDocumentDraft>;
+  renameDraft(draftId: string, title: string): Promise<OfficialDocumentDraft>;
+  deleteDraft(draftId: string): Promise<void>;
+  listDraftContentVersions(draftId: string): Promise<OfficialDocumentDraftContentVersion[]>;
+  listDraftExports(draftId: string): Promise<OfficialDocumentExportRecord[]>;
   getDraftContent(draftId: string): Promise<OfficialDocumentDraftContent>;
   updateDraftContent(draftId: string, input: UpdateOfficialDocumentDraftContentInput): Promise<OfficialDocumentDraftContent>;
   bindContentProfile(draftId: string, input: BindOfficialDocumentContentProfileInput): Promise<OfficialDocumentDraftContent>;
@@ -244,6 +249,7 @@ type ApiDraftSnapshot = {
   templateVersionId: string;
   title: string;
   createdAt: string;
+  updatedAt?: string;
   status: string;
   fileVersions?: Array<{ versionNumber: number; createdAt: string }>;
   bindings?: ApiDraftBinding[];
@@ -262,6 +268,7 @@ type ApiFidelityReport = {
 };
 
 type ApiExportRecord = {
+  contentRevision?: number | null;
   id: string;
   draftId: string;
   status: OfficialDocumentExportRecord["status"];
@@ -1043,6 +1050,7 @@ function mapTemplate(view: ApiTemplateView): OfficialDocumentTemplate {
 
 function mapExportRecord(record: ApiExportRecord): OfficialDocumentExportRecord {
   return {
+    contentRevision: record.contentRevision,
     id: record.id,
     draftId: record.draftId,
     status: record.status,
@@ -1090,7 +1098,7 @@ function mapDraft(snapshot: ApiDraftSnapshot, templateNames: Map<string, string>
     templateName: templateNames.get(snapshot.templateId) ?? "报告模板",
     contentProfileId: snapshot.content?.contentProfileId || undefined,
     currentFileVersionNo: currentFileVersion?.versionNumber ?? 1,
-    updatedAt: currentFileVersion?.createdAt ?? snapshot.createdAt,
+    updatedAt: snapshot.updatedAt || currentFileVersion?.createdAt || snapshot.createdAt,
     bindings: (snapshot.bindings ?? []).map(mapBinding)
   };
 }
@@ -1289,6 +1297,28 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
       });
       return mapDraft(snapshot, new Map([[input.templateId, "报告模板"]]));
     },
+    async renameDraft(draftId, title) {
+      const trimmed = title.trim();
+      if (!trimmed || trimmed.length > 255) throw new OfficialDocumentServiceError("草稿名称不能为空且不能超过 255 个字符", { code: "DRAFT_TITLE_INVALID" });
+      const snapshot = await requestOfficialDocument<ApiDraftSnapshot>(baseUrl, `/v1/drafts/${encodeURIComponent(draftId)}/title`, {
+        method: "PUT", body: JSON.stringify({ title: trimmed })
+      });
+      return mapDraft(snapshot, new Map());
+    },
+    async deleteDraft(draftId) {
+      await requestOfficialDocument<void>(baseUrl, `/v1/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+    },
+    async listDraftContentVersions(draftId) {
+      return requestOfficialDocument<OfficialDocumentDraftContentVersion[]>(
+        baseUrl, `/v1/drafts/${encodeURIComponent(draftId)}/content/versions`
+      );
+    },
+    async listDraftExports(draftId) {
+      const records = await requestOfficialDocument<ApiExportRecord[]>(
+        baseUrl, `/v1/drafts/${encodeURIComponent(draftId)}/exports`
+      );
+      return records.map(mapExportRecord);
+    },
     async getDraftContent(draftId) {
       return requestOfficialDocument<ApiDraftContent>(
         baseUrl,
@@ -1448,6 +1478,10 @@ function createUnconfiguredService(): OfficialDocumentService {
     updateTemplateMapping: unavailable,
     publishTemplate: unavailable,
     createDraft: unavailable,
+    renameDraft: unavailable,
+    deleteDraft: unavailable,
+    listDraftContentVersions: unavailable,
+    listDraftExports: unavailable,
     getDraftContent: unavailable,
     updateDraftContent: unavailable,
     bindContentProfile: unavailable,
@@ -1531,3 +1565,11 @@ export const exportOfficialDocumentTransient = (
 ) => officialDocumentService.exportTransient(input, format);
 export const downloadOfficialDocumentExport = (exportId: string) =>
   officialDocumentService.downloadExport(exportId);
+
+export const renameOfficialDocumentDraft = (draftId: string, title: string) => officialDocumentService.renameDraft(draftId, title);
+export const deleteOfficialDocumentDraft = (draftId: string) => officialDocumentService.deleteDraft(draftId);
+
+export const listOfficialDocumentDraftContentVersions = (draftId: string) =>
+  officialDocumentService.listDraftContentVersions(draftId);
+export const listOfficialDocumentDraftExports = (draftId: string) =>
+  officialDocumentService.listDraftExports(draftId);

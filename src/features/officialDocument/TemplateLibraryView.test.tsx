@@ -159,6 +159,24 @@ describe("TemplateLibraryView", () => {
     expect(await screen.findByLabelText("公文写作台")).toBeInTheDocument();
   });
 
+  it("describes placeholder headings using their structure roles", async () => {
+    const template = populatedWorkspace.templates[0];
+    const analysis = template.currentVersion.analysis!;
+    loadOfficialDocumentWorkspace.mockResolvedValue({
+      ...populatedWorkspace,
+      templates: [{
+        ...template,
+        currentVersion: { ...template.currentVersion, analysis: {
+          ...analysis,
+          structureNodes: [{ ...analysis.structureNodes[0], preview: "一、XXXXXXXX（一级标题）" }]
+        } }
+      }]
+    });
+    renderLibrary();
+    expect(await screen.findByText("包含一级标题结构")).toBeInTheDocument();
+    expect(screen.queryByText(/XXXXXXXX/)).not.toBeInTheDocument();
+  });
+
   it("combines filename search with status filters and recovers from no results", async () => {
     const original = populatedWorkspace.templates[0];
     loadOfficialDocumentWorkspace.mockResolvedValue({

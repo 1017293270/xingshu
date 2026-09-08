@@ -321,11 +321,12 @@ async function installApiFixture(
 }
 
 test("favorite panel keeps chart actions visible when the asset list overflows", async ({ page }) => {
+  const longQuestion = "最近 3 个月，社区咨询数量最多的五个社区分别是哪些？";
   const overflowAssets = Array.from({ length: 12 }, (_, index) => ({
     ...contractAsset,
     id: `asset-overflow-${index + 1}`,
-    name: `收藏问数示例 ${String(index + 1).padStart(2, "0")}`,
-    resolvedQuestion: `用于验证侧栏滚动的收藏问题 ${index + 1}`,
+    name: index === 0 ? longQuestion : `收藏问数示例 ${String(index + 1).padStart(2, "0")}`,
+    resolvedQuestion: index === 0 ? longQuestion : `统计 2023 年至 2026 年各年度合同金额与签约公司数量，按年度对比变化 ${index + 1}`,
     stableVersionId: `version-overflow-${index + 1}`,
     stableVersion: {
       ...contractAsset.stableVersion,
@@ -350,6 +351,33 @@ test("favorite panel keeps chart actions visible when the asset list overflows",
   const addButton = page.getByRole("button", { name: "添加到画布", exact: true });
   await expect(addButton).toBeVisible();
   await expect(addButton).toBeEnabled();
+  const filters = page.locator(".query-asset-panel__filters");
+  const search = page.getByRole("textbox", { name: "搜索收藏问数" });
+  const scope = page.getByRole("combobox", { name: "收藏范围" });
+  const item = page.locator(".query-asset-panel__list > button").filter({ hasText: longQuestion });
+  await expect(item.locator(".query-asset-panel__asset-body > span")).toHaveCount(0);
+  await expect(item).toHaveAttribute("title", longQuestion);
+  await expect(page.locator(".query-asset-panel__list > button").filter({ hasText: "收藏问数示例 02" }).locator(".query-asset-panel__asset-body > span")).toBeVisible();
+
+  for (const [width, height] of [[1440, 900], [1672, 1000], [1920, 1080], [2200, 1200], [960, 1000], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await expect.poll(async () => Math.abs((await search.boundingBox())!.width - (await filters.boundingBox())!.width)).toBeLessThanOrEqual(1);
+    expect((await scope.boundingBox())!.y).toBeGreaterThan((await search.boundingBox())!.y + 30);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    await expect(addButton).toBeVisible();
+    await page.screenshot({ path: `outputs/dashboard-favorites-spacious/editor-${width}.png`, animations: "disabled" });
+  }
+
+  await page.setViewportSize({ width: 1672, height: 1000 });
+  await page.locator(".designer-palette").screenshot({ path: "outputs/dashboard-favorites-spacious/panel-1672.png" });
+  const searchRequest = page.waitForRequest(request => request.url().includes("/api/analytics/query-assets?") && new URL(request.url()).searchParams.get("keyword") === "社区");
+  await search.fill("社区");
+  await search.press("Enter");
+  await searchRequest;
+  const scopeRequest = page.waitForRequest(request => request.url().includes("/api/analytics/query-assets?") && new URL(request.url()).searchParams.get("scope") === "PRIVATE");
+  await scope.selectOption("PRIVATE");
+  await scopeRequest;
+  await page.setViewportSize({ width: 1440, height: 760 });
 
   const layout = await page.evaluate(() => {
     const palette = document.querySelector<HTMLElement>(".designer-palette")!;

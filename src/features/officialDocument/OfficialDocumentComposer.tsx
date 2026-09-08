@@ -19,7 +19,7 @@ function composerHeight(rows: number) {
 }
 
 export type OfficialDocumentComposerProps = {
-  /** hero=首屏两行起步；chat=会话态压到一行。 */
+  /** hero=首屏两行起步；chat=会话态预留三行输入空间。 */
   mode: "hero" | "chat";
   label?: string;
   value: string;
@@ -72,7 +72,7 @@ export function OfficialDocumentComposer({
   onSelectionChange,
   onBlur
 }: OfficialDocumentComposerProps) {
-  const minRows = mode === "hero" ? 2 : 1;
+  const minRows = mode === "hero" ? 2 : 3;
 
   useLayoutEffect(() => {
     const element = textareaRef.current;

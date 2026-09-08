@@ -21,16 +21,16 @@
   margin: 0;
   color: var(--xs-text);
   font-size: var(--xs-fs-title);
-  line-height: var(--xs-lh-tight);
-  font-weight: var(--xs-fw-medium);
-  letter-spacing: 0;
+  line-height: 1.35;
+  font-weight: var(--xs-fw-text);
+  letter-spacing: var(--xs-ls-title);
 }
 
 .xs-page__actions,
 .page-disclaimer {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-control);
-  font-weight: var(--xs-fw-medium);
+  font-weight: var(--xs-fw-regular);
 }
 
 .xs-page__title p {
@@ -71,9 +71,9 @@
 }
 
 .xs-page .ant-btn-default:not(:disabled):hover {
-  border-color: var(--xs-primary);
+  border-color: var(--xs-border-strong);
   color: var(--xs-primary-2);
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 /* 纯图标按钮压成正方，避免和带文字的按钮在一行里宽窄不一 */
@@ -125,7 +125,7 @@
 .xs-card {
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--xs-surface);
   box-shadow: var(--xs-shadow-soft);
 }
 
@@ -143,8 +143,8 @@
 
 .xs-card-link:hover,
 .xs-card-button:hover {
-  border-color: #b8d6ff;
-  box-shadow: 0 14px 32px rgba(22, 119, 255, 0.12);
+  border-color: var(--xs-border-strong);
+  box-shadow: var(--xs-shadow-lift);
 }
 
 .xs-mini-link {

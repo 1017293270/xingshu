@@ -18,11 +18,55 @@ describe("officialDocumentService HTTP client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renames with a trimmed title and authoritative updatedAt, then accepts deletion 204", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ id: "draft/1", title: "新标题", templateId: "t", templateVersionId: "v", status: "READY", createdAt: "2026-08-01T00:00:00Z", updatedAt: "2026-09-07T00:00:00Z", fileVersions: [{ versionNumber: 1, createdAt: "2026-08-02T00:00:00Z" }] })))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(service.renameDraft("draft/1", "  新标题  ")).resolves.toMatchObject({ title: "新标题", updatedAt: "2026-09-07T00:00:00Z" });
+    expect(fetchMock.mock.calls[0][0]).toContain("/v1/drafts/draft%2F1/title");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "PUT", body: JSON.stringify({ title: "新标题" }) });
+    await expect(service.deleteDraft("draft/1")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[1][0]).toContain("/v1/drafts/draft%2F1");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "DELETE" });
+  });
+
+  it("rejects invalid titles before requests and propagates rename/delete failures", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ code: "DRAFT_NOT_FOUND", message: "草稿不存在" }), { status: 404 })));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(service.renameDraft("draft-1", " ")).rejects.toMatchObject({ code: "DRAFT_TITLE_INVALID" });
+    await expect(service.renameDraft("draft-1", "名".repeat(256))).rejects.toMatchObject({ code: "DRAFT_TITLE_INVALID" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(service.renameDraft("draft-1", "新名称")).rejects.toMatchObject({ code: "DRAFT_NOT_FOUND", status: 404 });
+    await expect(service.deleteDraft("draft-1")).rejects.toMatchObject({ code: "DRAFT_NOT_FOUND", status: 404 });
+    const unconfigured = createOfficialDocumentService("");
+    await expect(unconfigured.renameDraft("draft-1", "名称")).rejects.toMatchObject({ code: "OFFICIAL_DOCUMENT_API_NOT_CONFIGURED" });
+    await expect(unconfigured.deleteDraft("draft-1")).rejects.toMatchObject({ code: "OFFICIAL_DOCUMENT_API_NOT_CONFIGURED" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns structured draft content from the real content endpoint", async () => {
     const content = { revision: 3, fixedValues: [{ slotId: "title", value: "通知" }], blocks: [] };
     vi.stubGlobal("fetch", vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(JSON.stringify(content))));
 
     await expect(service.getDraftContent("draft-1")).resolves.toEqual(content);
+  });
+
+  it("preserves fact review and research snapshots and maps revision-linked export history", async () => {
+    const factReview = { reviewedAt: "2026-09-07T00:00:00Z", issues: [{ sentence: "增长三成", additions: ["三成"] }], textSnapshot: "增长三成", confirmedAt: "2026-09-07T00:01:00Z" };
+    const content = { revision: 2, fixedValues: [], blocks: [], researchResults: [], factReview };
+    const versions = [{ revision: 2, savedAt: factReview.reviewedAt, content }];
+    const records = [{ id: "export-1", draftId: "draft/1", format: "DOCX", status: "GENERATED", contentRevision: 2, createdAt: factReview.reviewedAt }];
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(versions)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(records)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(content)));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(service.listDraftContentVersions("draft/1")).resolves.toEqual(versions);
+    await expect(service.listDraftExports("draft/1")).resolves.toMatchObject(records);
+    const input = { expectedRevision: 1, restoreRevision: 0, fixedValues: [], blocks: [], researchResults: [], factReview };
+    await expect(service.updateDraftContent("draft/1", input)).resolves.toEqual(content);
+    expect(fetchMock.mock.calls[0][0]).toContain("/drafts/draft%2F1/content/versions");
+    expect(fetchMock.mock.calls[1][0]).toContain("/drafts/draft%2F1/exports");
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual(input);
   });
 
   it("offers only QueryAssets collected by the current user", async () => {

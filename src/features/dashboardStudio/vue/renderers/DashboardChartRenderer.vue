@@ -105,7 +105,7 @@ const panelStyle = computed(() => ({
 }
 .chart-renderer__body { min-width: 0; min-height: 0; overflow: hidden; }
 .chart-renderer__chart { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
-.chart-renderer__state { display: grid; place-content: center; gap: 10px; width: 100%; height: 100%; margin: 0; color: color-mix(in srgb, currentColor 72%, transparent); font-size: 14px; overflow-wrap: anywhere; }
+.chart-renderer__state { display: grid; place-content: center; gap: 10px; width: 100%; height: 100%; margin: 0; color: inherit; font-size: 14px; overflow-wrap: anywhere; }
 .chart-renderer__skeleton { display: block; width: 180px; max-width: 70%; height: 16px; border-radius: 6px; background: color-mix(in srgb, currentColor 14%, transparent); }
 .chart-renderer__skeleton--short { width: 120px; }
 /*

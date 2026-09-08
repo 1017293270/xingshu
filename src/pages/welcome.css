@@ -123,8 +123,8 @@
   padding: 0 22px;
   border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-control);
-  font-size: var(--xs-fs-card);
-  font-weight: var(--xs-fw-display);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-text);
   text-decoration: none;
   transition:
     color var(--xs-motion-feedback) var(--xs-motion-ease-out),
@@ -142,16 +142,16 @@
 }
 
 .welcome-page__button--primary {
-  border-color: var(--xs-primary);
+  border-color: var(--xs-primary-2);
   color: #fff;
-  background: linear-gradient(135deg, var(--xs-primary), var(--xs-primary-2));
+  background: var(--xs-primary-2);
   box-shadow: var(--xs-shadow-button);
 }
 
 .welcome-page__button--secondary {
   color: var(--xs-text);
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 8px 20px rgba(22, 119, 255, 0.08);
+  background: var(--xs-surface);
+  box-shadow: none;
 }
 
 .welcome-page__button:hover,
@@ -190,10 +190,10 @@
   min-height: 112px;
   gap: 14px;
   padding: 18px;
-  border: 1px solid rgba(199, 217, 246, 0.82);
+  border: 1px solid var(--xs-border);
   border-radius: var(--xs-radius-card);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 12px 26px rgba(22, 119, 255, 0.07);
+  background: var(--xs-surface);
+  box-shadow: none;
 }
 
 .welcome-page__capability-icon {

@@ -26,6 +26,9 @@ type TextBlockRole = "HEADING_1" | "HEADING_2" | "HEADING_3" | "BODY";
 
 type ParsedTextBlock = { role: TextBlockRole; text: string };
 
+/** 模型输出的格式差异可降级整理，程序错误仍正常抛出。 */
+class GeneratedStructureError extends Error {}
+
 export type OfficialDocumentReferenceSection = {
   id: string;
   order: number;
@@ -53,10 +56,21 @@ export type OfficialDocumentReferenceWritingPlan = {
 };
 
 export type OfficialDocumentReferenceGeneration = {
+  /** 模型没有遵循章节标记时，原文仍可保存为文字草稿。 */
+  recoveredAsText?: boolean;
   title: string;
   fixedValues: OfficialDocumentDraftContent["fixedValues"];
   blocks: OfficialDocumentDraftContent["blocks"];
 };
+
+/** Required missing evidence remains visible in both draft-generation paths. */
+export function officialDocumentResearchPendingText(result: OfficialDocumentResearchResult): string | undefined {
+  if (result.status !== "SKIPPED" && !(result.required && (result.status === "FAILED" || result.status === "NO_RESULT"))) return undefined;
+  const fallback = result.status === "FAILED" ? "资料查询失败"
+    : result.status === "NO_RESULT" ? "未找到可用资料" : "已跳过资料查询";
+  const reason = result.summary.trim() || fallback;
+  return `【待补充】${result.question}（${reason}）`;
+}
 
 export const MAX_REFERENCE_REQUIREMENT_CHARS = 20_000;
 const MAX_REFERENCE_STYLE_CHARS = 6_000;
@@ -76,6 +90,17 @@ const HEADING_DEPTH: Record<Exclude<TextBlockRole, "BODY">, number> = {
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, "").replace(/[“”‘’]/g, "").toLocaleLowerCase();
+}
+
+function documentTitleSection<T extends { title: string; purpose?: string }>(
+  sections: T[], fields: Array<{ role: OfficialDocumentRole; preview: string }>
+) {
+  const first = sections[0];
+  const titles = fields.filter((field) => field.role === "TITLE");
+  if (!first?.title.trim() || !titles.length) return undefined;
+  const explicitTitle = /(?:作为|用作).{0,12}(?:整篇|全文|整份|报告|公文|文档|文章).{0,6}(?:标题|题目)|^(?:整篇|全文|报告|公文|文档|文章)?(?:总标题|标题|题目)(?:[：:，,。]|$)/.test(first.purpose ?? "");
+  return explicitTitle || (!isNumberedHeading(first.title) && titles.some((field) => normalizeText(field.preview) === normalizeText(first.title)))
+    ? first : undefined;
 }
 
 function bodyRegionSpan(node: OfficialDocumentStructureNode) {
@@ -172,7 +197,9 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
     .map((block, index) => ({ block, index }))
     .filter(({ block }) => block.role === "HEADING_1" || block.role === "HEADING_2" || block.role === "HEADING_3");
   const sections: OfficialDocumentReferenceSection[] = [];
-  const confirmedSections = [...(input.confirmedPlan?.sections ?? [])].sort((left, right) => left.order - right.order);
+  const plannedSections = [...(input.confirmedPlan?.sections ?? [])].sort((left, right) => left.order - right.order);
+  const documentTitle = documentTitleSection(plannedSections, input.templateNodes);
+  const confirmedSections = plannedSections.filter((section) => section !== documentTitle);
   const leadingBody = headingIndexes.length > 0
     && orderedBlocks.slice(0, headingIndexes[0].index)
       .some((block) => block.role === "BODY" && block.text.trim());
@@ -317,6 +344,9 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         // 把可用锚点逐字列出来才有东西可抄。
         fixedFieldAnchors: fixedFields.map((field) => `[[XS_FIXED:${field.slotId}]]`),
         sectionAnchors: sections.map((section) => `[[XS_SECTION:${section.id}]]`),
+        ...(documentTitle ? {
+          documentTitleRule: `本篇总标题为“${documentTitle.title}”，应写入 TITLE 固定字段；总标题不是正文篇章，不重复生成标题章节。`
+        } : {}),
         // 标题和首句写在同一行时整行会被当成正文，只能靠解析阶梯事后补救；
         // 这条规则和 sectionAnchors 一样随 writingContext 原样注入提示词，加了即刻生效。
         sectionHeadingFirstLine: "每个 [[XS_SECTION:section-id]] 锚点后的第一行必须是该章节标题，标题文字可以按本次主题改写，但必须独立成行、行尾不带句号冒号等标点，不得与正文写在同一行",
@@ -333,6 +363,7 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         keepSectionOrder: true,
         allowHeadingRewrite: true,
         copyReferenceFacts: false,
+        missingResearchRule: "researchResults 中 FAILED、NO_RESULT、SKIPPED 是尚未补齐的资料，不是业务事实；必需缺项保留【待补充】及问题与原因，不能据错误说明编造数据或声称已经核实。正常可用资料照常写入，不因缺项阻止成稿。",
         factSourceRule: "事实只可来自用户明确提供且未撤回的信息、sourceBlocks、referenceMaterials及status为SUCCESS的researchResults。用户要求仅使用指定事实或禁止研究时优先遵守。模板、fixedFields.preview、templateOutline和styleSamples只提供格式与文风，不是本轮事实。不得新增日期、时间、数量、地点、人员、职责或执行要求。",
         missingFactRule: "不能为了凑字数、套用通知惯例或补齐章节而编造安排；尤其不得自行增加提前签到、提前十五分钟到场、提交材料、缴费等要求。未给出的必要事实标为【待确认：具体事项】或省略，不以肯定口吻写入正文。正常措辞调整不得改变事实或增加义务。",
         allowResearch: researchResults.length > 0
@@ -468,13 +499,14 @@ function normalizedHeadingLine(value: string) {
 
 function splitAnchoredSections(markdown: string, sections: Array<{ id: string; title: string }>) {
   const sectionIds = sections.map((section) => section.id);
+  if (!sectionIds.length) throw new GeneratedStructureError("当前方案没有分节，按原文整理");
   const anchors = [...markdown.matchAll(/\[\[XS_SECTION:([^\]\r\n]+)\]\]/g)];
   if (anchors.length) {
-    if (anchors.length !== sectionIds.length) throw new Error("生成结果的章节锚点数量与已确认方案不一致");
+    if (anchors.length !== sectionIds.length) throw new GeneratedStructureError("生成结果的章节锚点数量与已确认方案不一致");
     const values = new Map<string, string>();
     anchors.forEach((match, index) => {
       const id = match[1].trim();
-      if (!sectionIds.includes(id) || values.has(id)) throw new Error("生成结果包含无效或重复的章节锚点");
+      if (!sectionIds.includes(id) || values.has(id)) throw new GeneratedStructureError("生成结果包含无效或重复的章节锚点");
       const start = (match.index ?? 0) + match[0].length;
       const end = anchors[index + 1]?.index ?? markdown.length;
       values.set(id, markdown.slice(start, end).trim());
@@ -508,7 +540,7 @@ function splitAnchoredSections(markdown: string, sections: Array<{ id: string; t
 
   const headings = [...markdown.matchAll(/^#{1,3}\s+.+$/gm)];
   if (headings.length !== sectionIds.length) {
-    throw new Error("模型漏写章节锚点，且标题数量与已确认方案不一致，不能应用");
+    throw new GeneratedStructureError("模型漏写章节锚点，且标题数量与已确认方案不一致，不能应用");
   }
   return headings.map((match, index) => {
     const start = (match.index ?? 0) + match[0].length;
@@ -527,7 +559,7 @@ const PLACEHOLDER_FIXED_ANCHOR_IDS = new Set(["slot-id", "slotid", "<slot-id>", 
  * 1) 归一化（去空白、小写）后等于某个声明 slotId；
  * 2) 归一化后等于某个声明字段的显示名 roleLabel（同名字段多于一个时视为对不上，不猜）；
  * 3) 字面就是占位符时，按文档顺序补到「没被任何合法锚点认领」的声明字段上。
- * 都对不上就原样返回，由调用方抛出带 id 的错误——宁可拒绝，也不把值写进错字段。
+ * 都对不上就原样返回；调用方将未分配的文字保留为可编辑正文，不写进错误字段。
  */
 function resolveFixedAnchorIds(
   markers: Array<{ kind: "FIXED" | "SECTION"; id: string }>,
@@ -672,7 +704,7 @@ function repairSectionHeadings(
   });
 }
 
-export function parseOfficialDocumentReferenceGeneration(input: {
+function parseAnchoredReferenceGeneration(input: {
   markdown: string;
   referenceDraftTitle: string;
   sections: OfficialDocumentReferenceSection[];
@@ -680,7 +712,7 @@ export function parseOfficialDocumentReferenceGeneration(input: {
   templateNodes: OfficialDocumentStructureNode[];
   /** 这一轮问数/问知的产物；传进来才会把表格与图表混排进成稿。 */
   researchResults?: OfficialDocumentResearchResult[];
-}): OfficialDocumentReferenceGeneration {
+}, preserveUnplannedHeadings = false): OfficialDocumentReferenceGeneration {
   const markerPattern = /\[\[XS_(FIXED|SECTION):([^\]\r\n]+)\]\]/g;
   const fixedFieldValue = (value: string | undefined) => value
     ?.replace(/\r\n/g, "\n")
@@ -702,14 +734,17 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     rawId: marker.id
   }));
   const firstSectionIndex = markers.findIndex((marker) => marker.kind === "SECTION");
-  if (firstSectionIndex < 0) throw new Error("生成结果缺少章节锚点");
+  if (firstSectionIndex < 0) throw new GeneratedStructureError("生成结果缺少章节锚点");
+  if (input.markdown.slice(0, markers[0]?.index ?? 0).trim()) {
+    throw new GeneratedStructureError("章节标记前还有需要保留的文字");
+  }
   const lastSectionIndex = markers.reduce(
     (last, marker, index) => marker.kind === "SECTION" ? index : last,
     -1
   );
   if (markers.some((marker, index) => marker.kind === "FIXED"
     && index > firstSectionIndex && index < lastSectionIndex)) {
-    throw new Error("生成结果的固定字段不能夹在章节之间");
+    throw new GeneratedStructureError("生成结果的固定字段不能夹在章节之间");
   }
 
   const fixedIds = new Set(input.fixedFields.map((field) => field.slotId));
@@ -719,14 +754,17 @@ export function parseOfficialDocumentReferenceGeneration(input: {
   markers.forEach((marker, index) => {
     const value = input.markdown.slice(marker.end, markers[index + 1]?.index ?? input.markdown.length).trim();
     const target = marker.kind === "FIXED" ? fixedValues : sectionValues;
+    if (marker.kind === "FIXED" && value.split("\n").filter((line) => line.trim()).length > 1) {
+      throw new GeneratedStructureError("固定字段旁有额外文字需要保留");
+    }
     const allowed = marker.kind === "FIXED" ? fixedIds.has(marker.id) : sectionIds.includes(marker.id);
     if (!allowed) {
-      throw new Error(`生成结果包含未知的${marker.kind === "FIXED" ? "固定字段" : "章节"}锚点：${marker.rawId}`);
+      throw new GeneratedStructureError(`生成结果包含未知的${marker.kind === "FIXED" ? "固定字段" : "章节"}锚点：${marker.rawId}`);
     }
     if (target.has(marker.id)) {
       if (marker.kind === "FIXED"
         && fixedFieldValue(target.get(marker.id)) === fixedFieldValue(value)) return;
-      throw new Error(marker.kind === "FIXED"
+      throw new GeneratedStructureError(marker.kind === "FIXED"
         ? "生成结果中重复固定字段的值不一致"
         : "生成结果包含重复的章节锚点");
     }
@@ -736,7 +774,7 @@ export function parseOfficialDocumentReferenceGeneration(input: {
   const generatedSectionIds = markers.filter((marker) => marker.kind === "SECTION").map((marker) => marker.id);
   if (generatedSectionIds.length !== sectionIds.length
     || generatedSectionIds.some((id, index) => id !== sectionIds[index])) {
-    throw new Error("生成结果的章节数量或顺序与参考草稿不一致");
+    throw new GeneratedStructureError("生成结果的章节数量或顺序与参考草稿不一致");
   }
 
   const blocks: OfficialDocumentDraftContent["blocks"] = [];
@@ -762,11 +800,12 @@ export function parseOfficialDocumentReferenceGeneration(input: {
   let chartBudget = MAX_OFFICIAL_DOCUMENT_CHARTS;
   const appendResearchBlocks = (sectionId: string, results: OfficialDocumentResearchResult[]) => {
     results.forEach((result) => {
-      if (result.status === "SKIPPED") {
+      const pending = officialDocumentResearchPendingText(result);
+      if (pending) {
         blocks.push({
           id: crypto.randomUUID(), order: order++, role: "BODY",
           variantId: officialDocumentVariantId(input.templateNodes, "BODY"), sectionId,
-          sourceTaskIds: [result.taskId], text: `【待补充】${result.question}`
+          sourceTaskIds: [result.taskId], text: pending
         });
         return;
       }
@@ -789,8 +828,22 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     });
   };
 
+  const documentTitle = documentTitleSection(input.sections, input.fixedFields.map((field) => ({
+    ...field, preview: fixedFieldValue(fixedValues.get(field.slotId)) || field.preview
+  })));
   input.sections.forEach((section, index) => {
     const parsed = parsedBySection[index];
+    if (section === documentTitle) {
+      const titleField = input.fixedFields.find((field) => field.role === "TITLE")!;
+      const heading = parsed.shift();
+      fixedValues.set(titleField.slotId, heading?.text || section.title);
+      // 总标题进入固定字段，标题后真的写出的引言仍按原顺序保留。
+      parsed.forEach((item) => blocks.push({ id: crypto.randomUUID(), order: order++, role: item.role,
+        variantId: officialDocumentVariantId(input.templateNodes, item.role, item.text),
+        sectionId: section.id, sourceTaskIds: [], text: item.text }));
+      appendResearchBlocks(section.id, researchBySection.get(section.id) ?? []);
+      return;
+    }
     if (section.headingRole) {
       // 修复阶梯保证首块一定是标题；这里的兜底只是防御，任何情况下都不再整版拒绝。
       const heading = parsed[0] ?? { role: section.headingRole, text: section.title };
@@ -798,9 +851,6 @@ export function parseOfficialDocumentReferenceGeneration(input: {
       // 标题层级仍按参考草稿声明的 headingRole 落库，模型多写出来的下级标题按各自层级保留：
       // blocks 是一条扁平有序链，编辑器、导出和预览都不假设一个 sectionId 只有一个标题，
       // 降级成正文反而会丢掉公文分级。
-      if (section.bodyRequired && !rest.some((block) => block.role === "BODY")) {
-        throw new Error(`章节“${section.title}”没有生成正文`);
-      }
       blocks.push({
         id: crypto.randomUUID(),
         order: order++,
@@ -820,16 +870,12 @@ export function parseOfficialDocumentReferenceGeneration(input: {
         text: item.text
       }));
     } else {
-      if (!parsed.length) throw new Error("生成结果没有正文");
-      parsed.forEach((item) => blocks.push({
-        id: crypto.randomUUID(),
-        order: order++,
-        role: "BODY",
-        variantId: officialDocumentVariantId(input.templateNodes, "BODY"),
-        sectionId: section.id,
-        sourceTaskIds: [],
-        text: item.text
-      }));
+      parsed.forEach((item) => {
+        const role = preserveUnplannedHeadings && input.templateNodes.some((node) => node.role === item.role) ? item.role : "BODY";
+        blocks.push({ id: crypto.randomUUID(), order: order++, role,
+          variantId: officialDocumentVariantId(input.templateNodes, role, item.text),
+          sectionId: section.id, sourceTaskIds: [], text: item.text });
+      });
     }
     appendResearchBlocks(section.id, researchBySection.get(section.id) ?? []);
   });
@@ -863,6 +909,51 @@ export function parseOfficialDocumentReferenceGeneration(input: {
     : `${input.referenceDraftTitle.replace(/\s*-\s*生成稿$/, "")} - 生成稿`.slice(0, 200);
 
   return { title, fixedValues: normalizedFixedValues, blocks: deduplicatedBlocks };
+}
+
+/** 锚点缺失或格式不一致时，以原文形成可编辑草稿，不向未知固定槽位写入值。 */
+export function parseOfficialDocumentReferenceGeneration(
+  input: Parameters<typeof parseAnchoredReferenceGeneration>[0]
+): OfficialDocumentReferenceGeneration {
+  if (!stripOfficialDocumentAnchors(input.markdown).trim()) throw new Error("生成结果没有可整理的正文");
+  try {
+    return parseAnchoredReferenceGeneration(input);
+  } catch (error) {
+    if (!(error instanceof GeneratedStructureError)) throw error;
+    const markers = [...input.markdown.matchAll(/\[\[XS_(FIXED|SECTION):([^\]\r\n]+)\]\]/g)].map((match) => ({
+      kind: match[1] as "FIXED" | "SECTION", id: match[2].trim(), start: match.index!, end: match.index! + match[0].length
+    }));
+    const resolvedIds = resolveFixedAnchorIds(markers, input.fixedFields);
+    const values = new Map<string, string>();
+    const parts = [input.markdown.slice(0, markers[0]?.start ?? input.markdown.length)];
+    markers.forEach((marker, index) => {
+      const id = resolvedIds[index];
+      const lines = input.markdown.slice(marker.end, markers[index + 1]?.start ?? input.markdown.length).split("\n");
+      const valueIndex = lines.findIndex((line) => line.trim());
+      if (marker.kind === "FIXED" && input.fixedFields.some((field) => field.slotId === id) && valueIndex >= 0) {
+        const value = lines[valueIndex].trim();
+        if (!values.has(id) || values.get(id) === value) {
+          values.set(id, value);
+          lines.splice(valueIndex, 1);
+        }
+      }
+      parts.push(lines.join("\n"));
+    });
+    let readable = stripOfficialDocumentAnchors(parts.join("\n\n")).trim();
+    if (!readable) throw new Error("生成结果没有可整理的正文");
+    const titleField = input.fixedFields.find((field) => field.role === "TITLE");
+    const markdownTitle = readable.match(/^#\s+([^\n]+)(?:\n|$)/);
+    if (titleField && !values.has(titleField.slotId) && markdownTitle && !isNumberedHeading(markdownTitle[1])) {
+      values.set(titleField.slotId, markdownTitle[1].trim());
+      readable = readable.slice(markdownTitle[0].length).trim();
+    }
+    const canonical = [
+      ...[...values].map(([id, value]) => `[[XS_FIXED:${id}]]\n${value}`),
+      "[[XS_SECTION:recovered-body]]", readable
+    ].join("\n\n");
+    return { ...parseAnchoredReferenceGeneration({ ...input, markdown: canonical,
+      sections: [{ id: "recovered-body", order: 0, title: "正文", bodyRequired: false }] }, true), recoveredAsText: true };
+  }
 }
 
 export function buildOfficialDocumentWritingContext(input: {
@@ -925,8 +1016,21 @@ export function parseOfficialDocumentFullDraft(input: {
   const plan = input.profile.profile.confirmedPlan;
   const source = input.profile.profile.source;
   if (!plan || !source) throw new Error("内容方案尚未确认或原始内容不可用");
-  const orderedSections = [...plan.sections].sort((left, right) => left.order - right.order);
-  const generatedSections = splitAnchoredSections(input.markdown, orderedSections);
+  if (!stripOfficialDocumentAnchors(input.markdown).trim()) throw new Error("生成结果没有可整理的正文");
+  let orderedSections = [...plan.sections].sort((left, right) => left.order - right.order);
+  let generatedSections: string[];
+  let recovered = false;
+  try {
+    generatedSections = splitAnchoredSections(input.markdown, orderedSections);
+  } catch (error) {
+    if (!(error instanceof GeneratedStructureError)) throw error;
+    const readable = stripOfficialDocumentAnchors(input.markdown).trim();
+    if (!readable) throw new Error("生成结果没有可整理的正文");
+    recovered = true;
+    generatedSections = [readable];
+    orderedSections = [{ id: "recovered-body", order: 0, title: "", headingRole: "HEADING_1", purpose: "",
+      keyPoints: [], sourceBlockIds: [...new Set(orderedSections.flatMap((section) => section.sourceBlockIds))] }];
+  }
   const sourceById = new Map(source.blocks.map((block) => [block.id, block]));
   const standaloneQueryAssets = (input.currentBlocks ?? []).filter((block) => (
     ["TABLE", "CHART_IMAGE"].includes(block.role)
@@ -938,11 +1042,11 @@ export function parseOfficialDocumentFullDraft(input: {
   let order = 0;
 
   orderedSections.forEach((section, sectionIndex) => {
-    const research = input.results.filter((result) => result.sectionId === section.id);
+    const research = input.results.filter((result) => recovered || result.sectionId === section.id);
     const knowledgeTaskIds = research
       .filter((result) => result.kind === "ASK_KNOWLEDGE" && result.status === "SUCCESS")
       .map((result) => result.taskId);
-    blocks.push({
+    if (!recovered) blocks.push({
       id: crypto.randomUUID(),
       order: order++,
       role: section.headingRole,
@@ -957,10 +1061,7 @@ export function parseOfficialDocumentFullDraft(input: {
       } : undefined
     });
     const generated = parseOfficialDocumentAssistantText(generatedSections[sectionIndex], true);
-    const sectionBlocks = generated[0]?.role.startsWith("HEADING_") ? generated.slice(1) : generated;
-    if (!sectionBlocks.some((block) => block.role === "BODY")) {
-      throw new Error(`章节“${section.title}”没有生成正文，不能应用`);
-    }
+    const sectionBlocks = !recovered && generated[0]?.role.startsWith("HEADING_") ? generated.slice(1) : generated;
     sectionBlocks.forEach((generatedBlock) => blocks.push({
       id: crypto.randomUUID(),
       order: order++,
@@ -993,11 +1094,12 @@ export function parseOfficialDocumentFullDraft(input: {
         }
       }));
     research.forEach((result) => {
-      if (result.status === "SKIPPED") {
+      const pending = officialDocumentResearchPendingText(result);
+      if (pending) {
         blocks.push({
           id: crypto.randomUUID(), order: order++, role: "BODY",
           variantId: officialDocumentVariantId(input.templateNodes, "BODY"), sectionId: section.id,
-          sourceTaskIds: [result.taskId], text: `【待补充】${result.question}`
+          sourceTaskIds: [result.taskId], text: pending
         });
       }
       if (result.status !== "SUCCESS" || !result.querySource) return;
@@ -1024,6 +1126,13 @@ export function parseOfficialDocumentFullDraft(input: {
       });
   });
 
+  // A stale section mapping must not silently discard a required missing item.
+  input.results.filter((result) => !recovered && !orderedSections.some((section) => section.id === result.sectionId)).forEach((result) => {
+    const pending = officialDocumentResearchPendingText(result);
+    if (pending) blocks.push({ id: crypto.randomUUID(), order: order++, role: "BODY",
+      variantId: officialDocumentVariantId(input.templateNodes, "BODY"), sourceTaskIds: [result.taskId], text: pending });
+  });
+
   standaloneQueryAssets
     .filter((block) => !restoredAssetIds.has(block.id))
     .forEach((block) => blocks.push({ ...block, order: order++ }));
@@ -1045,7 +1154,7 @@ export function parseOfficialDocumentFullDraft(input: {
     tableCount: blocks.filter((block) => block.role === "TABLE").length,
     chartCount: blocks.filter((block) => block.role === "CHART_IMAGE").length,
     knowledgeSourceCount: new Set(input.results.flatMap((result) => result.citations.map((citation) => citation.docId))).size,
-    pendingCount: input.results.filter((result) => result.status === "SKIPPED").length
+    pendingCount: input.results.filter((result) => officialDocumentResearchPendingText(result)).length
   };
 }
 
@@ -1162,8 +1271,9 @@ export function reviewOfficialDocumentDraftFacts(
     }
     return String(total + current);
   };
-  const tokens = (text: string) => {
+  const tokens = (text: string, compact = false) => {
     const found = new Map<string, string>();
+    const covered: Array<[number, number]> = [];
     const patterns = [
       new RegExp(`(${number})年(${number})月(${number})[日号]`, "g"),
       new RegExp(`(上午|下午|晚上|中午|凌晨)?\\s*(${number})(?:[点时](?:(${number})分?)?|[：:](\\d{2}))`, "g"),
@@ -1171,6 +1281,10 @@ export function reviewOfficialDocumentDraftFacts(
     ];
     patterns.forEach((pattern, index) => {
       for (const match of text.matchAll(pattern)) {
+        const start = match.index!;
+        const end = start + match[0].length;
+        if (compact && covered.some(([left, right]) => start >= left && end <= right)) continue;
+        if (index < 2) covered.push([start, end]);
         let hour = index === 1 ? Number(normalizedNumber(match[2])) : 0;
         if (index === 1 && /下午|晚上|中午/.test(match[1] ?? "") && hour < 12) hour += 12;
         if (index === 1 && match[1] === "凌晨" && hour === 12) hour = 0;
@@ -1189,7 +1303,7 @@ export function reviewOfficialDocumentDraftFacts(
   // ponytail: 仅做显式日期/数值与常见义务核对；复杂语义交由用户校对，不冒充事实验证器。
   return stripOfficialDocumentAnchors(markdown).split(/(?<=[。！？；;])|\n+/)
     .map((sentence) => {
-      const additions = [...tokens(sentence)].filter(([key]) => !known.has(key)).map(([, raw]) => raw);
+      const additions = [...tokens(sentence, true)].filter(([key]) => !known.has(key)).map(([, raw]) => raw);
       if (/请|须|需|应|必须|务必|不得|提前|做好/.test(sentence)) {
         for (const match of sentence.matchAll(actions)) {
           if (!knownActions.has(canonicalAction(match[0]))) additions.push(match[0]);

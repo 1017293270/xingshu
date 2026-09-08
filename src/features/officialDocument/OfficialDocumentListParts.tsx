@@ -118,19 +118,22 @@ export function OfficialDocumentRow({
   ariaLabel,
   index,
   onOpen,
-  children
+  children,
+  actions
 }: {
   ariaLabel: string;
   index: number;
   onOpen: () => void;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
-    <li className="official-document-row xs-page-enter" style={{ animationDelay: listStaggerDelay(index) }}>
+    <li data-actions={actions ? true : undefined} className="official-document-row xs-page-enter" style={{ animationDelay: listStaggerDelay(index) }}>
       <button type="button" aria-label={ariaLabel} onClick={onOpen}>
         {children}
-        <CaretRight size={15} aria-hidden="true" className="official-document-row__caret" />
+        {actions ? <span className="official-document-draft-edit">编辑</span> : <CaretRight size={15} aria-hidden="true" className="official-document-row__caret" />}
       </button>
+      {actions ? <div className="official-document-draft-actions">{actions}</div> : null}
     </li>
   );
 }

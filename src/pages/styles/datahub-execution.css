@@ -69,7 +69,7 @@
 
 /* 仅正在运行的阶段扫过文字，沿用执行面板已有的 shimmer 节拍。 */
 @supports ((background-clip: text) or (-webkit-background-clip: text)) {
-  :is(.datahub-process-dock, .datahub-business-explanation)[data-status="running"] .datahub-phase-title {
+  :is(.datahub-process-dock, .datahub-business-explanation)[data-status="running"] :is(.datahub-phase-title, .datahub-query-waiting-text) {
     background-image: linear-gradient(110deg, var(--xs-text-3) 30%, var(--xs-text) 50%, var(--xs-text-3) 70%);
     background-size: 220% 100%;
     background-clip: text;
@@ -104,8 +104,10 @@
 
 .datahub-business-explanation__query-title {
   margin: 0 0 8px;
-  color: var(--xs-text-3);
-  font-size: var(--xs-fs-caption);
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+  overflow-wrap: anywhere;
 }
 
 .datahub-business-explanation__steps {
@@ -434,6 +436,9 @@ button.datahub-business-explanation__result:focus-visible {
   color: var(--xs-text-3);
   font-size: var(--xs-fs-caption);
 }
+
+.datahub-query-waiting-text { display: inline-block; }
+.datahub-query-waiting-icon { animation: xs-datahub-spin 1.15s linear infinite; }
 
 .datahub-business-explanation__scope-detail > summary {
   width: fit-content;
@@ -1044,12 +1049,15 @@ button.datahub-business-explanation__result:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .datahub-phase-title {
+  .datahub-phase-title,
+  .datahub-query-waiting-text {
     animation: none !important;
     background: none !important;
     color: var(--xs-text-3) !important;
     -webkit-text-fill-color: currentColor !important;
   }
+
+  .datahub-query-waiting-icon { animation: none !important; }
 
   :is(.datahub-process-dock, .datahub-business-explanation) > .xs-datahub-collapse {
     transition: none !important;
@@ -1057,7 +1065,8 @@ button.datahub-business-explanation__result:focus-visible {
 }
 
 @media (forced-colors: active) {
-  .datahub-phase-title { color: CanvasText !important; }
+  .datahub-phase-title,
+  .datahub-query-waiting-text { color: CanvasText !important; }
 }
 
 .xs-datahub-execution__body {

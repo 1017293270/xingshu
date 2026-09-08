@@ -2,12 +2,12 @@
   --xs-bg: #F3F8FF;
   --xs-bg-2: #EDF5FF;
   --xs-surface: #FFFFFF;
-  --xs-surface-soft: #F8FBFF;
+  --xs-surface-soft: #F5F9FF;
+  --xs-surface-hover: #F0F6FF;
   --xs-surface-raised: #FFFFFF;
-  /* 浮层材质：配合 backdrop blur 使用，0.85 让模糊可见 */
-  --xs-surface-overlay: rgba(255, 255, 255, 0.85);
-  --xs-border: #DCE8FB;
-  --xs-border-strong: #C7D9F6;
+  --xs-surface-overlay: rgba(255, 255, 255, 0.98);
+  --xs-border: #DCE6F4;
+  --xs-border-strong: #C5D5ED;
   --xs-primary: #1677FF;
   --xs-primary-2: #2563EB;
   --xs-cyan: #00C2FF;
@@ -29,13 +29,11 @@
   --xs-warning-line: #E8BF6E;
   --xs-danger-ink: #8C1D18;
   --xs-danger-line: #EFB3AC;
-  --xs-text: #081A3A;
-  --xs-text-2: #294469;
-  --xs-text-3: #536987;
+  --xs-text: #303030;
+  --xs-text-2: #54595F;
+  --xs-text-3: #707070;
   --xs-interactive-text: #1D4ED8;
-  /* 圆角四档：small 用于标签与分段项，control 用于按钮/输入/分段外框，
-     card 用于内容卡与浮层，large 只留给 hero 级输入盒。
-     数值刻意压低——曲率越大越像消费级应用，企业界面靠直角和描边表达密度。 */
+  /* 圆角按组件角色分档；对话输入框沿用独立的 24px 曲率。 */
   --xs-radius-control: 8px;
   --xs-radius-card: 12px;
   --xs-radius-small: 6px;
@@ -52,16 +50,16 @@
   --xs-page-track: clamp(1170px, calc((100vw - var(--xs-sidebar-width)) * 0.82), 1440px);
   --xs-data-track: clamp(1220px, calc((100vw - var(--xs-sidebar-width)) * 0.84), 1480px);
   --xs-dashboard-track: clamp(1080px, calc((100vw - var(--xs-sidebar-width)) * 0.87), 1960px);
-  --xs-shadow-soft: 0 10px 28px rgba(22, 119, 255, 0.08);
+  --xs-shadow-soft: 0 1px 3px rgba(26, 28, 31, 0.04);
   /* 按钮不参与海拔分级：实心按钮靠颜色本身站出来，只留一道 1px 的贴地投影定形 */
-  --xs-shadow-button: 0 1px 2px rgba(8, 26, 58, 0.06);
+  --xs-shadow-button: 0 1px 2px rgba(26, 28, 31, 0.04);
   /* 阴影海拔分级：lift=悬浮控件/hover，overlay=菜单/下拉/弹层面板，modal=模态对话框/全屏层 */
-  --xs-shadow-lift: 0 14px 32px rgba(22, 119, 255, 0.12);
-  --xs-shadow-overlay: 0 18px 44px rgba(8, 26, 58, 0.14);
-  --xs-shadow-modal: 0 28px 72px rgba(8, 26, 58, 0.22);
+  --xs-shadow-lift: 0 4px 12px rgba(26, 28, 31, 0.06);
+  --xs-shadow-overlay: 0 8px 24px rgba(26, 28, 31, 0.12);
+  --xs-shadow-modal: 0 20px 64px rgba(26, 28, 31, 0.16);
   /* scrim 两级语义：modal=阻断式模态调暗，sheet=并行抽屉/面板轻调暗 */
-  --xs-scrim-modal: rgba(8, 26, 58, 0.5);
-  --xs-scrim-sheet: rgba(10, 31, 60, 0.22);
+  --xs-scrim-modal: rgba(32, 65, 112, 0.24);
+  --xs-scrim-sheet: rgba(32, 65, 112, 0.16);
   --xs-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.24);
   --xs-motion-fast: 120ms;
   --xs-motion-base: 180ms;
@@ -88,11 +86,11 @@
   /* 数据字体：行数、时间戳、单元格数值统一走等宽表格数字，保证列内小数点纵向对齐 */
   --xs-font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
   /* 数据表配色：网格线比容器边框更浅，表头带底色，数值用更重的墨色代替加粗 */
-  --xs-table-grid: #E9F0FA;
-  --xs-table-head: #F4F9FF;
-  --xs-table-numeric: #0B2A5B;
-  --xs-table-muted: #62748F;
-  --xs-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+  --xs-table-grid: #E8EFF8;
+  --xs-table-head: #F5F9FF;
+  --xs-table-numeric: #303030;
+  --xs-table-muted: #707070;
+  --xs-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
   /* ---------- 排版比例尺 ----------
      字号按角色定义，页面样式只允许引用这些变量，不再自定字号。
      display 只用于登录/欢迎/首页问候；title 是所有一级页面标题的唯一字号。 */
@@ -101,11 +99,11 @@
   --xs-fs-metric: 30px;
   /* 看板主指标：比标准 metric 再大一档，只给一屏一个的营收/总量数字 */
   --xs-fs-metric-lg: 34px;
-  --xs-fs-section: 20px;
+  --xs-fs-section: 18px;
   /* 首页问候：display 太大、title 太小，2026-08-20 定的中间档 */
   --xs-fs-hero: 28px;
-  --xs-fs-card: 17px;
-  --xs-fs-body: 15px;
+  --xs-fs-card: 16px;
+  --xs-fs-body: 14px;
   --xs-fs-label: 13px;
   --xs-fs-caption: 12px;
   /* 控件与输入：antd 控件、命令框和已发送问题同一档 14 */
@@ -114,13 +112,12 @@
   --xs-fs-input: 14px;
   /* 行内小数值：卡片里的份数、条数 */
   --xs-fs-metric-sm: 22px;
-  /* 字重五档：正文 400、外壳导航与行内次要文字 500、次要强调 600、强调 700、标题与数值 760。
-     只有这五个值——系统字体本来就只有有限档位，写 650/720/780 是假精度，渲染出来和邻档同粗。 */
+  /* 系统中文正文使用 400，导航与标题使用 500，强调与指标使用 600。 */
   --xs-fw-regular: 400;
   --xs-fw-text: 500;
-  --xs-fw-medium: 600;
-  --xs-fw-bold: 700;
-  --xs-fw-display: 760;
+  --xs-fw-medium: 500;
+  --xs-fw-bold: 600;
+  --xs-fw-display: 600;
   /* 光学字距：只有大字号需要收紧，全大写标签需要放开 */
   --xs-ls-display: -0.015em;
   --xs-ls-title: -0.012em;
@@ -166,6 +163,9 @@ body {
   background: var(--xs-bg);
   color: var(--xs-text);
   font-family: var(--xs-font-family);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.5;
 }
 
 button,
@@ -203,7 +203,8 @@ textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    /* 定位必须立即生效，微小过渡也会干扰弹层的同步测量。 */
+    transition-duration: 0s !important;
   }
 
   /* 加载指示豁免：骨架条与 Spin 保留仅 opacity 脉冲，保证加载状态可感知（不恢复位移/形变动画） */

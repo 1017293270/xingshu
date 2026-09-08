@@ -126,7 +126,7 @@ describe("TablePage 表格模板选项卡", () => {
   });
 });
 
-/* 一屏化与两列布局是验收线，但 jsdom 量不了布局，所以这里锁住撑起它的几条规则。
+/* 一屏化与单列布局是验收线，但 jsdom 量不了布局，所以这里锁住撑起它的几条规则。
    缺任何一条，/table 首页都会重新变回"列表一长整页就滚"。 */
 describe("TablePage 入口页一屏布局", () => {
   const workflowsCss = readCss("src/pages/styles/workflows.css");
@@ -160,18 +160,10 @@ describe("TablePage 入口页一屏布局", () => {
     expect(workflowsCss.match(/\.xs-shell__main:has\(\.table-page\)/g)).toHaveLength(3);
   });
 
-  it("记录列表一排两条，窄面板回退单列", () => {
-    expect(workflowsCss).toMatch(
-      /@media \(min-width: 761px\) \{\n\s+\.sheet-list \{\n\s+grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
-    );
-    /* 两列后横线断句会变成半张网格，改成每条记录自己成卡 */
-    expect(workflowsCss).toMatch(
-      /@media \(min-width: 761px\)[\s\S]*?\.sheet-row \+ \.sheet-row::before \{\n\s+content: none;/
-    );
-    /* 单列版（移动端）仍然靠横线断句 */
-    expect(workflowsCss).toMatch(/\.sheet-row \+ \.sheet-row::before \{\n\s+content: "";/);
-    /* 半幅卡里时间与列数是定长锚点，被截的应该是提示词 */
-    expect(workflowsCss).toMatch(/\.sheet-row__cols,\n\s+\.sheet-row__meta > em \{\n\s+flex: none;/);
+  it("记录列表保持单列，时间与列数不被长标题挤掉", () => {
+    expect(workflowsCss).toMatch(/\.sheet-list \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
+    expect(workflowsCss).not.toMatch(/\.sheet-list \{[^}]*grid-template-columns: repeat\(2/);
+    expect(workflowsCss).toMatch(/\.sheet-row__cols,\n\s*\.sheet-row__meta > em \{\n\s+flex: none;/);
   });
 
   /* 输入盒的纵向刻度是从首页抄来的同值副本（故意不跨文件引用变量）。

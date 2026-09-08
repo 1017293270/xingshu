@@ -1,0 +1,235 @@
+/* 当前看板的页头与控件；大屏内容继续使用用户配置的布局与配色。 */
+.xs-shell__main:has(.dashboard-current) {
+  background: var(--xs-bg);
+}
+
+.dashboard-current,
+.dashboard-workspace-popup,
+.dashboard-workspace-dialog {
+  --xs-control-height: 32px;
+  --xs-text: #1a1c1f;
+  --xs-text-2: #62676e;
+  --xs-text-3: #6b7077;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  font-weight: 430;
+  line-height: 1.5;
+  color: #1a1c1f;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dashboard-current {
+  width: min(100%, var(--xs-dashboard-track));
+  gap: 16px;
+}
+
+.dashboard-current .xs-page__head {
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--xs-border);
+}
+
+.dashboard-current .xs-page__title h1 {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+}
+
+.dashboard-current .xs-page__actions {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.dashboard-current__toolbar {
+  gap: 8px;
+}
+
+.dashboard-current .ant-btn,
+.dashboard-workspace-dialog .ant-btn {
+  min-height: 32px;
+  height: 32px;
+  padding-inline: 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.dashboard-current .ant-btn.ant-btn-icon-only {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.dashboard-current .ant-btn-default:not(.ant-btn-dangerous),
+.dashboard-workspace-dialog .ant-btn-default:not(.ant-btn-dangerous) {
+  border-color: var(--xs-border);
+  color: #1a1c1f;
+  background: #fff;
+}
+
+.dashboard-current .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover,
+.dashboard-workspace-dialog .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
+  border-color: var(--xs-border-strong);
+  color: #1a1c1f;
+  background: var(--xs-surface-soft);
+}
+
+.dashboard-current .dashboard-current__switch.ant-select {
+  min-width: 200px;
+  max-width: 240px;
+  height: 32px;
+}
+
+.dashboard-current .dashboard-current__switch .ant-select-selector {
+  min-height: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border-color: var(--xs-border);
+}
+
+.dashboard-current__switch .ant-select-selection-item {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dashboard-current .dashboard-current__meta {
+  gap: 4px 12px;
+  color: #6b7077;
+  font-size: 12px;
+}
+
+.dashboard-current .dashboard-current__status {
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #62676e;
+  font-weight: 400;
+}
+
+.dashboard-current .dashboard-current__status::before {
+  width: 5px;
+  height: 5px;
+}
+
+.dashboard-current .dashboard-current__fact + .dashboard-current__fact::before,
+.dashboard-current .dashboard-current__fact + .dashboard-current__share::before {
+  margin-right: 12px;
+  color: #a8adb4;
+}
+
+.dashboard-current .dashboard-current__stage {
+  border-color: var(--xs-border);
+  border-radius: 12px;
+  padding: 0;
+  background: var(--xs-surface-soft);
+}
+
+.dashboard-current .dashboard-current__stage--loading {
+  min-height: 320px;
+}
+
+.dashboard-current .xs-page-enter {
+  animation: none;
+}
+
+.dashboard-workspace-popup .ant-select-item,
+.dashboard-workspace-popup .ant-dropdown-menu-item {
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.dashboard-workspace-popup .ant-dropdown-menu {
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--xs-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(26, 28, 31, 0.1);
+}
+
+.dashboard-workspace-popup .ant-dropdown-menu-item {
+  border-radius: 5px;
+}
+
+.dashboard-workspace-dialog .ant-modal-content {
+  border: 1px solid var(--xs-border);
+  border-radius: 12px;
+}
+
+.dashboard-workspace-dialog .ant-modal-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+}
+
+.dashboard-workspace-dialog .dashboard-list__create-label {
+  color: #62676e;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.dashboard-workspace-dialog .ant-modal-body,
+.dashboard-workspace-dialog .ant-input {
+  color: #62676e;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.dashboard-workspace-dialog .dashboard-card__version-list li {
+  border-color: var(--xs-border);
+  background: var(--xs-surface-soft);
+}
+
+.dashboard-workspace-dialog .dashboard-card__version-list button {
+  border-color: var(--xs-border-strong);
+  color: #1a1c1f;
+  background: #fff;
+  font-size: 13px;
+}
+
+@media (max-width: 1000px) {
+  .dashboard-current .xs-page__head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .dashboard-current .xs-page__actions,
+  .dashboard-current__toolbar {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-current {
+    gap: 12px;
+  }
+
+  .dashboard-current .xs-page__title h1 {
+    font-size: 18px;
+  }
+
+  .dashboard-current__toolbar {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .dashboard-current .dashboard-current__switch.ant-select {
+    flex-basis: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .dashboard-current .dashboard-current__stage {
+    padding: 0;
+    border-radius: 10px;
+  }
+}

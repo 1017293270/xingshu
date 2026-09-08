@@ -27,7 +27,11 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
         analysis: {
           structureProfile: {
             sections: Array.from({ length: index % 3 + 1 }, (_, section) => ({ index: section })),
-            paragraphs: [{ index: 0, text: name, format: { styleName: "Title" }, runs: [] }],
+            paragraphs: [
+              { index: 0, text: name, format: { styleName: "Title" }, runs: [] },
+              { index: 1, text: index === 0 ? "一、合同基本情况" : "一、XXXXXXXX（一级标题）", format: { styleName: "Heading 1", outlineLevel: 0 }, runs: [] },
+              { index: 2, text: index === 0 ? "二、合作事项及服务要求" : "（一）XXXXXXXX（二级标题）", format: { styleName: "Heading 2", outlineLevel: 1 }, runs: [] }
+            ],
             tables: [], headersAndFooters: [], warnings: []
           },
           engineCapabilityReport: { available: true, warnings: [], blockingReasons: [] }
@@ -46,12 +50,17 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/writing/templates");
   await expect(page.locator(".official-document-template-card")).toHaveCount(17);
-  for (const [width, height] of [[1440, 1000], [1672, 1080], [1920, 1080], [2200, 1200], [390, 844]]) {
+  const icons = page.locator(".official-document-template-card__glyph img");
+  await expect(icons).toHaveCount(17);
+  await expect.poll(() => icons.evaluateAll((images) => images.every((image) =>
+    image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0))).toBe(true);
+  expect(await icons.evaluateAll((images) => new Set(images.map((image) => image.getAttribute("src"))).size)).toBe(8);
+  for (const [width, height] of [[1440, 1000], [1672, 1080], [1920, 1080], [2200, 1200], [1024, 900], [768, 1024], [390, 844]]) {
     await page.setViewportSize({ width, height });
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
     const card = page.locator(".official-document-template-card").first();
     expect(await card.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `outputs/template-library-neutral/library-${width}.png` });
+    await page.screenshot({ path: `outputs/template-library-svg/library-${width}.png` });
   }
   await page.getByRole("button", { name: /待处理/ }).click();
   await expect(page.locator(".official-document-template-card")).toHaveCount(2);
@@ -66,7 +75,7 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
   await page.getByRole("option", { name: /模板库/ }).click();
   const gallery = page.getByRole("region", { name: "模板库", exact: true });
   await expect(gallery).toBeVisible();
-  for (const [width, height] of [[1440, 1000], [1512, 1312], [1672, 1080], [1920, 1080], [2200, 1200], [390, 844]]) {
+  for (const [width, height] of [[1440, 1000], [1512, 1312], [1672, 1080], [1920, 1080], [2200, 1200], [1024, 900], [768, 1024], [390, 844]]) {
     await page.setViewportSize({ width, height });
     expect(await gallery.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
     const header = await gallery.locator(".official-document-templates__head").boundingBox();
@@ -80,8 +89,14 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
     }
     const columns = await gallery.locator(".official-document-templates__grid").evaluate((element) =>
       getComputedStyle(element).gridTemplateColumns.split(" ").length);
-    expect(columns).toBe(width <= 900 ? 1 : 2);
-    await page.screenshot({ path: `outputs/template-library-neutral/overlay-${width}.png` });
+    expect(columns).toBe(width >= 1840 ? 4 : width >= 1200 ? 3 : width > 640 ? 2 : 1);
+    await expect(gallery.locator(".official-document-template-card__text strong").first()).toHaveCSS("font-size", "16px");
+    if (width > 900) {
+      const heights = await gallery.locator(".official-document-template-card").evaluateAll((cards) =>
+        cards.map((card) => Math.round(card.getBoundingClientRect().height)));
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+    }
+    await page.screenshot({ path: `outputs/template-library-svg/overlay-${width}.png` });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect(await page.locator(".official-document-template-card").first().evaluate((element) =>

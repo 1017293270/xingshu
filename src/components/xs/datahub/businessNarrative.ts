@@ -38,6 +38,31 @@ function factRows(rows: BusinessNarrativeRow[]) {
     .filter((row) => row.values.length > 0);
 }
 
+function queryTitle(query: DataHubBusinessQuery) {
+  const table = meaningful([query.table])[0];
+  const shortTable = table && table.length <= 28 ? table : "";
+  const dimensions = meaningful(query.dimensions);
+  const measures = query.measures.filter((measure) => meaningful([measure.label]).length && meaningful([measure.aggregation]).length);
+  if (query.rowKind !== "list" && measures.length) {
+    if (dimensions.length <= 1 && measures.length === 1) {
+      const { label, aggregation } = measures[0];
+      let action = "";
+      switch (aggregation.toLowerCase()) {
+        case "count": case "计数": action = `统计${/^(记录数|数量|条数|计数|总数|行数|count)$/i.test(label) ? "记录数" : label}`; break;
+        case "sum": case "求和": action = `汇总${label}`; break;
+        case "avg": case "计算平均值": action = `计算${label}平均值`; break;
+        case "countdistinct": case "count_distinct": case "去重计数": action = `对${label}去重计数`; break;
+        case "max": case "取最大值": action = `统计${label}最大值`; break;
+        case "min": case "取最小值": action = `统计${label}最小值`; break;
+      }
+      const title = `${dimensions.length ? `按${dimensions[0]}` : ""}${action}`;
+      if (action && title.length <= 32) return title;
+    }
+    return `${shortTable}汇总统计`;
+  }
+  return shortTable ? `查询${shortTable}` : "查询数据";
+}
+
 function querySteps(query: DataHubBusinessQuery, sorts: string[], status: BusinessNarrativeStatus): BusinessNarrativeStep[] {
   const steps: BusinessNarrativeStep[] = [];
   const source = meaningful([query.dataSource])[0];
@@ -95,7 +120,8 @@ export function buildBusinessNarrative({ trace, kind, status }: {
     const queries = trace.queries ?? [];
     queries.forEach((query, index) => {
       const key = `query-${index}`;
-      const title = meaningful([query.table])[0] || `查询 ${index + 1}`;
+      const processTitle = queryTitle(query);
+      const title = meaningful([query.table])[0] || (processTitle === "查询数据" ? "查询结果" : processTitle);
       const rows = factRows([
         { label: "数据源", values: meaningful([query.dataSource]) },
         { label: "数据表", values: meaningful([query.table]) },
@@ -108,7 +134,7 @@ export function buildBusinessNarrative({ trace, kind, status }: {
         ...(queries.length === 1 ? [{ label: "排序", values: trace.calculations.filter((value) => /[升降]序排列$/.test(value)) }] : [])
       ]);
       const steps = querySteps(query, queries.length === 1 ? meaningful(trace.calculations) : [], status);
-      if (rows.length || steps.length) process.push({ key, title: `查询 ${index + 1}`, rows, steps });
+      if (rows.length || steps.length) process.push({ key, title: processTitle, rows, steps });
       const preview = query.preview?.filter((item) => item.label.trim() && item.value.trim());
       const hasRows = query.rows != null && Number.isInteger(query.rows) && query.rows >= 0;
       if (hasRows || preview?.length) {

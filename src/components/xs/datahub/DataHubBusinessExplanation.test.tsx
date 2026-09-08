@@ -118,12 +118,26 @@ describe("DataHubBusinessExplanation", () => {
     const { rerender } = render(<DataHubBusinessExplanation kind="ASK_KNOWLEDGE" intent="付款条件" status="running" trace={emptyTrace} />);
     expect(screen.getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("等待查询结果")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "查询结果" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("等待查询结果")).toHaveClass("datahub-query-waiting-text");
+    expect(document.querySelector(".datahub-query-waiting-icon")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "查询条件" })).not.toBeInTheDocument();
     rerender(<DataHubBusinessExplanation kind="ASK_KNOWLEDGE" intent="付款条件" status="running" trace={{ ...emptyTrace,
       documents: [{ kbName: "合同库", docName: "采购合同.pdf", fragments: [] }] }} />);
     expect(screen.getByRole("region", { name: "查询条件" })).toHaveTextContent("合同库");
     expect(screen.getByRole("region", { name: "查询结果" })).toHaveTextContent("采购合同.pdf");
+    expect(document.querySelector(".datahub-query-waiting-text")).not.toBeInTheDocument();
     expect(screen.queryByText(/已复核|全文检索|混合检索/)).not.toBeInTheDocument();
+  });
+
+  it.each(["done", "error", "cancelled"] as const)("stops result waiting indicators in %s", (status) => {
+    const { rerender } = render(<DataHubBusinessExplanation kind="ASK_DATA" intent="查询发票" status="running" trace={emptyTrace} />);
+    rerender(<DataHubBusinessExplanation kind="ASK_DATA" intent="查询发票" status={status} trace={emptyTrace} />);
+    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
+    expect(screen.getByRole("region", { name: "查询结果" })).toHaveAttribute("aria-busy", "false");
+    expect(document.querySelector(".datahub-query-waiting-text")).not.toBeInTheDocument();
+    expect(document.querySelector(".datahub-query-waiting-icon")).not.toBeInTheDocument();
+    expect(screen.queryByText("等待查询结果")).not.toBeInTheDocument();
   });
 
   it("keeps unavailable information honest and real definitions collapsed", async () => {

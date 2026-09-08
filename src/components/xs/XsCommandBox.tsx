@@ -69,7 +69,7 @@ export function XsCommandBox({
 
   return (
     <section
-      className={["xs-command-box", className].filter(Boolean).join(" ")}
+      className={["xs-command-box xs-prompt-surface", className].filter(Boolean).join(" ")}
       data-state={busy ? "generating" : "idle"}
       data-voice-state={voiceState}
       aria-label="星数命令输入区"

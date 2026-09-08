@@ -34,53 +34,80 @@ export type OfficialDocumentGeneratedDataAsset = Pick<
   "summary" | "table" | "chart" | "querySource" | "citations"
 >;
 
-function runResearchQuestion(need: ResearchNeed, chatMode?: "ask_table") {
+function researchAbortError() {
+  return new DOMException("已停止资料研究", "AbortError");
+}
+
+function checkResearchAbort(signal?: AbortSignal) {
+  if (signal?.aborted) throw researchAbortError();
+}
+
+/** Existing asset/chart APIs cannot all abort transport yet; stop waiting and never advance on a late response. */
+function awaitResearch<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => { signal.removeEventListener("abort", abort); reject(researchAbortError()); };
+    signal.addEventListener("abort", abort, { once: true });
+    work.then((value) => { signal.removeEventListener("abort", abort); resolve(value); },
+      (error) => { signal.removeEventListener("abort", abort); reject(error); });
+    if (signal.aborted) abort();
+  });
+}
+
+function runResearchQuestion(need: ResearchNeed, chatMode?: "ask_table", signal?: AbortSignal) {
+  checkResearchAbort(signal);
   const sessionId = createDataHubClientId("session");
   const chatId = createDataHubClientId("chat");
   const events: DataHubStreamEvent[] = [];
 
   return new Promise<DataHubAskTurn>((resolve, reject) => {
     let settled = false;
+    let controller: AbortController | undefined;
+    let stopTransport = false;
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      stopTransport = true;
+      signal?.removeEventListener("abort", abort);
+      controller?.abort();
+      reject(researchAbortError());
+    };
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
-      const turn = createDataHubAskTurn(
-        need.question,
-        events,
-        error ? "error" : "done",
-        error?.message ?? "",
-        { sessionId, chatId }
-      );
-      if (error || turn.error) {
-        reject(error ?? new Error(turn.error?.message || "资料查询失败"));
+      signal?.removeEventListener("abort", abort);
+      const turn = createDataHubAskTurn(need.question, events, error ? "error" : "done",
+        error?.message ?? "", { sessionId, chatId });
+      if (error || turn.error || turn.done?.failed) {
+        stopTransport = true;
+        controller?.abort();
+        reject(error ?? new Error(turn.error?.message || turn.done?.summary || "资料查询失败"));
       } else {
         resolve(turn);
       }
     };
-
-    streamDataHubAskData(
-      {
-        message: need.question,
-        sessionId,
-        globalSessionId: sessionId,
-        chatId,
-        chatMode: chatMode ?? (need.kind === "ASK_DATA" ? "ask" : "rag")
-      },
-      {
-        onEvent: (event) => {
-          events.push(event);
-          if (event.type === "error" && !event.parentSessionId) {
-            const message = typeof event.data === "object" && event.data
-              && "message" in event.data
-              ? String((event.data as { message: unknown }).message)
-              : "资料查询失败";
-            finish(new Error(message));
-          }
-        },
-        onDone: () => finish(),
-        onError: (error) => finish(error)
-      }
-    );
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
+    try {
+      controller = streamDataHubAskData(
+        { message: need.question, sessionId, globalSessionId: sessionId, chatId,
+          chatMode: chatMode ?? (need.kind === "ASK_DATA" ? "ask" : "rag") },
+        {
+          onEvent: (event) => {
+            if (settled) return;
+            events.push(event);
+            if (event.type === "error" && !event.parentSessionId) {
+              const message = typeof event.data === "object" && event.data && "message" in event.data
+                ? String((event.data as { message: unknown }).message) : "资料查询失败";
+              finish(new Error(message));
+            }
+          },
+          onDone: () => finish(),
+          onError: (error) => finish(error)
+        }
+      );
+      if (stopTransport) controller.abort();
+    } catch (error) { finish(error instanceof Error ? error : new Error("资料查询失败")); }
   });
 }
 
@@ -115,10 +142,12 @@ function outputAsChartTable(output: QueryExecutionOutput): DataHubTableResult {
 
 async function renderChartPng(
   question: string,
-  output: QueryExecutionOutput
+  output: QueryExecutionOutput,
+  signal?: AbortSignal
 ): Promise<OfficialDocumentResearchResult["chart"] | undefined> {
   const table = outputAsChartTable(output);
-  const plan = await planAiChart({ question, tables: [table] });
+  const plan = await awaitResearch(planAiChart({ question, tables: [table] }), signal);
+  checkResearchAbort(signal);
   const spec = buildGeneratedChartSpec(plan, [table]);
   if (!spec) return undefined;
 
@@ -128,7 +157,8 @@ async function renderChartPng(
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${widthPx}px;height:${heightPx}px;background:#fff`;
   document.body.append(host);
   try {
-    const echarts = await import("@/services/echartsRuntime");
+    const echarts = await awaitResearch(import("@/services/echartsRuntime"), signal);
+    checkResearchAbort(signal);
     const chart = echarts.init(host, null, { renderer: "canvas", width: widthPx, height: heightPx });
     try {
       chart.setOption({
@@ -136,7 +166,8 @@ async function renderChartPng(
         animation: false,
         backgroundColor: "#fff"
       });
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await awaitResearch(new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))), signal);
+      checkResearchAbort(signal);
       const dataUrl = chart.getDataURL({ type: "png", pixelRatio: 1, backgroundColor: "#fff" });
       return {
         mimeType: "image/png",
@@ -156,9 +187,11 @@ async function renderChartPng(
 export async function executeOfficialDocumentResearch(
   need: ResearchNeed,
   chartAllowed: boolean,
-  chatMode?: "ask_table"
+  chatMode?: "ask_table",
+  signal?: AbortSignal
 ): Promise<OfficialDocumentGeneratedDataAsset> {
-  const turn = await runResearchQuestion(need, chatMode);
+  const turn = await runResearchQuestion(need, chatMode, signal);
+  checkResearchAbort(signal);
   const summary = resolveDataHubFinalAnswer(turn.done?.summary, turn.assistantContent, false, {
     keepRicherStreamedAnswer: true
   });
@@ -177,12 +210,15 @@ export async function executeOfficialDocumentResearch(
 
   const artifact = turn.artifact?.canFavorite
     ? turn.artifact
-    : await ensureAskArtifact(turn.sessionId || "", turn.chatId || "");
+    : await awaitResearch(ensureAskArtifact(turn.sessionId || "", turn.chatId || ""), signal);
+  checkResearchAbort(signal);
   if (!artifact.canFavorite) throw new Error("问数未形成可冻结的结构化查询");
-  const asset = await favoriteAskArtifact(artifact, need.question);
+  const asset = await awaitResearch(favoriteAskArtifact(artifact, need.question), signal);
+  checkResearchAbort(signal);
   const versionId = asset.stableVersionId || asset.stableVersion?.id;
   if (!versionId) throw new Error("问数资产没有稳定版本");
-  const execution = await previewQueryAsset(asset.id, { versionId, force: true });
+  const execution = await awaitResearch(previewQueryAsset(asset.id, { versionId, force: true }), signal);
+  checkResearchAbort(signal);
   if (execution.status !== "SUCCESS") {
     throw new Error(execution.errorMessage || "问数资产执行失败");
   }
@@ -200,8 +236,9 @@ export async function executeOfficialDocumentResearch(
   let chart: OfficialDocumentResearchResult["chart"];
   if (chartAllowed) {
     try {
-      chart = await renderChartPng(need.question, output);
+      chart = await renderChartPng(need.question, output, signal);
     } catch {
+      checkResearchAbort(signal);
       chart = undefined;
     }
   }
@@ -232,44 +269,43 @@ export async function executeOfficialDocumentResearchPlan(
   options: {
     existingChartCount?: number;
     onProgress?: (progress: OfficialDocumentResearchProgress) => void;
+    onResult?: (result: OfficialDocumentResearchResult) => void;
+    signal?: AbortSignal;
   } = {}
 ): Promise<OfficialDocumentResearchResult[]> {
   const results: OfficialDocumentResearchResult[] = [];
   let chartCount = options.existingChartCount ?? 0;
+  checkResearchAbort(options.signal);
 
   for (const [index, need] of needs.entries()) {
+    checkResearchAbort(options.signal);
     options.onProgress?.({ need, index, total: needs.length, status: "running" });
-    const base = {
-      taskId: need.id,
-      sectionId: need.sectionId,
-      kind: need.kind,
-      question: need.question,
-      required: need.required,
-      preferredOutput: need.preferredOutput
-    };
+    const base = { taskId: need.id, sectionId: need.sectionId, kind: need.kind,
+      question: need.question, required: need.required, preferredOutput: need.preferredOutput };
+    let result: OfficialDocumentResearchResult;
     try {
-      const asset = await executeOfficialDocumentResearch(
-        need,
-        chartCount < MAX_OFFICIAL_DOCUMENT_CHARTS
-      );
-      if (asset.chart) {
-        chartCount += 1;
-      }
-      results.push({
-        ...base,
-        status: asset.summary || asset.table ? "SUCCESS" : "NO_RESULT",
-        summary: asset.summary,
-        table: asset.table,
-        chart: asset.chart,
-        querySource: asset.querySource,
+      const asset = await executeOfficialDocumentResearch(need, chartCount < MAX_OFFICIAL_DOCUMENT_CHARTS, undefined, options.signal);
+      checkResearchAbort(options.signal);
+      if (asset.chart) chartCount += 1;
+      const hasResult = Boolean(asset.summary.trim() || asset.table);
+      result = {
+        ...base, ...asset, status: hasResult ? "SUCCESS" : "NO_RESULT",
+        summary: hasResult ? asset.summary : "未返回可写入的资料内容",
         citations: asset.citations ?? []
-      });
-      options.onProgress?.({ need, index, total: needs.length, status: "success" });
+      };
     } catch (caught) {
+      checkResearchAbort(options.signal);
+      if (caught instanceof Error && caught.name === "AbortError") throw caught;
       const message = caught instanceof Error ? caught.message : "资料查询失败";
-      results.push({ ...base, status: "FAILED", summary: "", citations: [] });
-      options.onProgress?.({ need, index, total: needs.length, status: "failed", error: message });
+      result = { ...base, status: "FAILED", summary: message, citations: [] };
     }
+    checkResearchAbort(options.signal);
+    results.push(result);
+    options.onResult?.(result);
+    checkResearchAbort(options.signal);
+    options.onProgress?.({ need, index, total: needs.length,
+      status: result.status === "SUCCESS" ? "success" : "failed",
+      ...(result.status === "SUCCESS" ? {} : { error: result.summary }) });
   }
 
   return results;
@@ -277,7 +313,8 @@ export async function executeOfficialDocumentResearchPlan(
 
 export async function executeOfficialDocumentDataTable(
   question: string,
-  chartAllowed: boolean
+  chartAllowed: boolean,
+  signal?: AbortSignal
 ): Promise<OfficialDocumentGeneratedDataAsset> {
   const value = question.trim();
   if (!value) throw new Error("请输入需要查询的数据问题");
@@ -289,7 +326,7 @@ export async function executeOfficialDocumentDataTable(
     reason: "智写助手临时数据表",
     required: false,
     preferredOutput: "TABLE"
-  }, chartAllowed, "ask_table");
+  }, chartAllowed, "ask_table", signal);
   if (!result.table?.rows.length || !result.querySource) {
     throw new Error("问数没有返回可回填的表格数据");
   }

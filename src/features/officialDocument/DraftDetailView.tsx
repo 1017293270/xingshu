@@ -1,5 +1,6 @@
 import {
   FileText,
+  FloppyDisk,
   LinkSimple,
   ListChecks,
   Sparkle
@@ -17,18 +18,21 @@ import {
   exportOfficialDocumentDraft,
   getOfficialDocumentContentProfile,
   loadOfficialDocumentWorkspace,
-  refreshOfficialDocumentBindings
+  refreshOfficialDocumentBindings,
+  updateOfficialDocumentDraftContent
 } from "@/services/officialDocumentService";
 import type {
   DraftDataBinding,
   OfficialDocumentContentProfile,
   OfficialDocumentDraftContent,
+  OfficialDocumentDraftContentVersion,
   OfficialDocumentExportFormat,
   OfficialDocumentExportRecord
 } from "@/types/officialDocument";
 import {
   buildOfficialDocumentWritingContext,
   parseOfficialDocumentFullDraft,
+  reviewOfficialDocumentDraftFacts,
   type OfficialDocumentFullDraftPreview,
   type OfficialDocumentWritingAction
 } from "@/services/officialDocumentFullDraft";
@@ -42,6 +46,8 @@ import {
   type StructuredDraftSaveState
 } from "./StructuredDraftEditor";
 import { WritingChatPanel } from "./WritingChatPanel";
+import { DraftHistoryPanel } from "./DraftHistoryPanel";
+import { officialDocumentContentText } from "@/services/officialDocumentFactReview";
 import { DraftResearchPanel } from "./DraftResearchPanel";
 import { ContentProfileWorkspace } from "./ContentProfileWorkspace";
 import {
@@ -81,12 +87,16 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const [isRefreshingBindings, setIsRefreshingBindings] = useState(false);
   const [detachingBindingId, setDetachingBindingId] = useState<string>();
   const [isExporting, setIsExporting] = useState<OfficialDocumentExportFormat>();
+  const [isSaving, setIsSaving] = useState(false);
   const [latestExports, setLatestExports] = useState<Record<string, OfficialDocumentExportRecord>>({});
   const [inspectorOpen, setInspectorOpen] = useState(false);
   /* 窄屏没有第三栏的位置，智写折成抽屉；宽屏常驻。 */
   const [chatOpen, setChatOpen] = useState(false);
   const [contentProfileOpen, setContentProfileOpen] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [factReviewOpen, setFactReviewOpen] = useState(false);
+  const [isReviewingFacts, setIsReviewingFacts] = useState(false);
   const [draftContent, setDraftContent] = useState<OfficialDocumentDraftContent>();
   const [generationRequest, setGenerationRequest] = useState(0);
   const [fullDraftPreview, setFullDraftPreview] = useState<OfficialDocumentFullDraftPreview>();
@@ -131,12 +141,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
   useOfficialDocumentAppChrome({
     stage: "draft",
-    context: draft
-      ? `结构模板：${structureTemplateName} · ${structureVersionNo ? `v${structureVersionNo}` : "版本不可用"}`
-      : "结构化起草",
-    contextTo: draft ? `/writing/templates/${draft.templateId}` : undefined,
+    context: draft?.title ?? "编辑草稿",
     contextDetail: draft
-      ? `当前草稿：${draft.title} · 文稿版本 v${draft.currentFileVersionNo}`
+      ? `格式模板：${structureTemplateName} · ${structureVersionNo ? `v${structureVersionNo}` : "版本不可用"}`
       : undefined
   });
 
@@ -226,6 +233,57 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const announce = (tone: XsStatusTone, message: string) => {
     setOperationTone(tone);
     setOperationStatus(message);
+  };
+
+  const handleSave = async () => {
+    if (!editorRef.current || isSaving) return;
+    setIsSaving(true);
+    try {
+      await editorRef.current.save();
+      announce("success", "草稿已保存");
+      void workspaceQuery.refetch();
+    } catch (error) {
+      announce("error", `保存失败：${operationErrorMessage(error)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const restoreHistoricalContent = async (version: OfficialDocumentDraftContentVersion) => {
+    const editor = editorRef.current;
+    if (!editor || !draft) throw new Error("草稿编辑器尚未就绪");
+    await editor.save();
+    const current = editor.getContent();
+    if (!current) throw new Error("当前正文尚未加载");
+    const restored = await updateOfficialDocumentDraftContent(draft.id, {
+      expectedRevision: current.revision, restoreRevision: version.revision,
+      fixedValues: version.content.fixedValues, blocks: version.content.blocks
+    });
+    await editor.reload();
+    setDraftContent(editor.getContent() ?? restored);
+    await workspaceQuery.refetch();
+  };
+
+  const reviewFacts = async (confirm: boolean) => {
+    const editor = editorRef.current;
+    if (!editor || isReviewingFacts) return;
+    setIsReviewingFacts(true);
+    try {
+      await editor.save();
+      const content = editor.getContent();
+      if (!content) throw new Error("当前正文尚未加载");
+      const textSnapshot = officialDocumentContentText(content);
+      const context = resolveWritingContext("FULL_DRAFT") ?? {
+        sourceBlocks: contentProfile?.profile.source?.blocks ?? [], researchResults: content.researchResults ?? []
+      };
+      const reviewedAt = new Date().toISOString();
+      await editor.saveFactReview({ reviewedAt, textSnapshot,
+        issues: reviewOfficialDocumentDraftFacts(textSnapshot, context),
+        ...(confirm ? { confirmedAt: reviewedAt } : {})
+      });
+      announce("success", confirm ? "已记录你对当前正文来源的核对。" : "已更新事实校对提示；请结合原始来源判断。" );
+    } catch (error) { announce("error", operationErrorMessage(error)); }
+    finally { setIsReviewingFacts(false); }
   };
 
   const handleInsertFromChat = (text: string) => {
@@ -496,6 +554,13 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
             <OfficialDocumentAppActions>
               <Button
+                type="primary"
+                icon={<FloppyDisk size={16} />}
+                loading={isSaving}
+                disabled={contentSaveState === "loading" || Boolean(isExporting)}
+                onClick={() => void handleSave()}
+              >保存草稿</Button>
+              <Button
                 className="official-document-app__chat-toggle"
                 icon={<Sparkle size={16} />}
                 type={chatOpen ? "primary" : "default"}
@@ -523,6 +588,8 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                   刷新绑定快照
                 </Button>
               ) : null}
+              <Button onClick={() => setHistoryOpen(true)}>正文与导出历史</Button>
+              <Button onClick={() => setFactReviewOpen(true)}>事实校对</Button>
               <Button icon={<ListChecks size={16} />} onClick={() => setInspectorOpen(true)}>
                 导出检查
                 {draft.bindings.length ? <span className="official-document-app__action-count">{draft.bindings.length}</span> : null}
@@ -543,6 +610,29 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
           </>
         )}
       </XsAsyncPanel>
+
+      {draft && historyOpen ? <DraftHistoryPanel key={draft.id} draftId={draft.id} title={draft.title}
+        open={historyOpen} currentContent={draftContent} onClose={() => setHistoryOpen(false)} onRestore={restoreHistoricalContent} /> : null}
+
+      <Drawer title="事实校对" width={620} open={factReviewOpen} onClose={() => setFactReviewOpen(false)}>
+        <p>校对提示用于发现需核对的数字、日期和执行要求，不影响保存或导出。</p>
+        {!draftContent ? <p>正在加载正文…</p> : <>
+          {draftContent.factReview ? <>
+            <XsStatusBar tone={draftContent.factReview.textSnapshot !== officialDocumentContentText(draftContent) ? "warning" : "info"}
+              message={draftContent.factReview.textSnapshot !== officialDocumentContentText(draftContent)
+                ? "正文已修改，需重新核对；下方为上次校对记录。"
+                : draftContent.factReview.confirmedAt ? "当前正文的来源已由你标记为核对完成。" : "当前正文尚未标记为人工核对完成。"} />
+            <p>上次校对：{formatDate(draftContent.factReview.reviewedAt)}{draftContent.factReview.confirmedAt ? ` · 人工核对：${formatDate(draftContent.factReview.confirmedAt)}` : ""}</p>
+            {draftContent.factReview.issues.length ? <ul>{draftContent.factReview.issues.map((issue, index) => <li key={index}>
+              <p>{issue.sentence}</p><small>建议核对：{issue.additions.join("、")}</small>
+            </li>)}</ul> : <p>本次自动校对未发现上述类型的新增事实，仍需结合原始来源判断。</p>}
+          </> : <p>此草稿尚无保存的事实校对记录。</p>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <Button aria-label="重新校对" aria-busy={isReviewingFacts} loading={isReviewingFacts} onClick={() => void reviewFacts(false)}>重新校对</Button>
+            <Button aria-label="我已核对当前正文来源" aria-busy={isReviewingFacts} loading={isReviewingFacts} onClick={() => void reviewFacts(true)}>我已核对当前正文来源</Button>
+          </div>
+        </>}
+      </Drawer>
 
       {draft ? (
         <Drawer

@@ -98,11 +98,15 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
 .xs-confirm-dialog {
   width: min(420px, 100%);
   padding: 24px;
-  border: 1px solid #d9e5f5;
+  border: 1px solid #e3e6ea;
   border-radius: 14px;
-  color: #102a4c;
+  color: #1a1c1f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
   background: #fff;
-  box-shadow: var(--xs-shadow-modal);
+  box-shadow: 0 16px 48px rgba(26, 28, 31, .14);
   animation: xs-confirm-dialog-enter 200ms var(--xs-motion-ease-out) backwards;
 }
 
@@ -136,12 +140,15 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
 
 .xs-confirm-dialog h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .xs-confirm-dialog p {
   margin: 12px 0 0;
-  color: #526985;
+  color: #61656b;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -153,13 +160,15 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
 }
 
 .xs-confirm-dialog__actions button {
-  min-height: 40px;
-  padding: 0 18px;
-  border: 1px solid #cddbef;
-  border-radius: 10px;
-  color: #294b74;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  color: #1a1c1f;
   background: #fff;
-  font-weight: 700;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -169,13 +178,22 @@ onBeforeUnmount(() => previouslyFocused?.focus({ preventScroll: true }));
 }
 
 .xs-confirm-dialog__confirm {
-  border-color: #1468e8 !important;
+  border-color: #2563eb !important;
   color: #fff !important;
-  background: #1468e8 !important;
+  background: #2563eb !important;
+}
+
+.xs-confirm-dialog__confirm:hover {
+  border-color: #1d4ed8 !important;
+  background: #1d4ed8 !important;
 }
 
 .xs-confirm-dialog__confirm[data-tone="danger"] {
   border-color: #c9343f !important;
   background: #c9343f !important;
+}
+.xs-confirm-dialog__confirm[data-tone="danger"]:hover {
+  border-color: #ad2933 !important;
+  background: #ad2933 !important;
 }
 </style>

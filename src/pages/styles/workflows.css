@@ -94,6 +94,43 @@
   margin: 4px auto 12px;
 }
 
+.table-home-tabs .ant-segmented {
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.table-home-tabs .ant-segmented-item {
+  border-radius: 9px;
+  color: #707070;
+}
+
+.table-home-tabs .ant-segmented-item-label {
+  min-height: 30px;
+  padding-inline: 12px;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+  line-height: 30px;
+}
+
+.table-home-tabs .ant-segmented-item-selected,
+.table-home-tabs .ant-segmented-thumb {
+  border-radius: 9px;
+  color: var(--xs-interactive-text);
+  background: var(--xs-info-soft);
+  box-shadow: none;
+}
+
+.table-home-tabs .ant-segmented-item-selected .ant-segmented-item-label {
+  font-weight: var(--xs-fw-text);
+}
+
+.table-home-tabs .ant-segmented-item:has(input:focus-visible) {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: -2px;
+}
+
 .table-home-tabs__tail {
   display: flex;
   align-items: center;
@@ -106,6 +143,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #707070;
+}
+
+.table-home-tabs__tail .ant-btn-primary {
+  border-color: var(--xs-primary-2);
+  border-radius: 8px;
+  background: var(--xs-primary-2);
+  box-shadow: none;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-text);
+}
+
+.table-home-tabs__tail .ant-btn-primary:not(:disabled):hover {
+  border-color: var(--xs-interactive-text);
+  background: var(--xs-interactive-text);
 }
 
 .table-recent {
@@ -118,9 +170,9 @@
   grid-template-columns: minmax(0, 1fr);
   padding: 6px;
   border: 1px solid var(--xs-border);
-  border-radius: var(--xs-radius-card);
+  border-radius: 14px;
   background: var(--xs-surface);
-  box-shadow: var(--xs-shadow-soft);
+  box-shadow: none;
 }
 
 .sheet-row {
@@ -130,7 +182,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  border-radius: var(--xs-radius-control);
+  border-radius: 8px;
   transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
@@ -140,15 +192,15 @@
   position: absolute;
   top: 0;
   right: 8px;
-  left: 54px;
+  left: 42px;
   height: 1px;
-  background: var(--xs-table-grid);
+  background: var(--xs-border);
   transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
 .sheet-row:hover,
 .sheet-row:focus-within {
-  background: var(--xs-surface-soft);
+  background: var(--xs-surface-hover);
 }
 
 .sheet-row:hover::before,
@@ -160,11 +212,11 @@
 
 .sheet-row__main {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 9px 0;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 0;
   color: inherit;
   text-decoration: none;
 }
@@ -187,31 +239,33 @@ button.sheet-row__main {
 
 .sheet-row__main:focus-visible {
   outline: 2px solid var(--xs-primary-2);
-  outline-offset: 1px;
+  outline-offset: -2px;
   border-radius: var(--xs-radius-small);
 }
 
 .sheet-row__text {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   min-width: 0;
 }
 
 .sheet-list .sheet-row__title {
+  flex: 1;
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--xs-text);
+  color: #3a3a3a;
   font-size: var(--xs-fs-control);
-  font-weight: var(--xs-fw-medium);
-  line-height: 1.4;
+  font-weight: var(--xs-fw-regular);
+  line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sheet-row:hover .sheet-row__title,
 .sheet-row:focus-within .sheet-row__title {
-  color: var(--xs-interactive-text);
+  color: #202020;
 }
 
 .sheet-row__meta {
@@ -219,7 +273,9 @@ button.sheet-row__main {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: var(--xs-text-3);
+  max-width: 45%;
+  flex: none;
+  color: #707070;
   font-size: var(--xs-fs-caption);
   line-height: 1.35;
 }
@@ -230,24 +286,43 @@ button.sheet-row__main {
 }
 
 .sheet-row__type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 时间沿用结果表的数值字体：同一套数字语言贯穿列表与结果 */
+/* 时间沿用界面字族，等宽数字只负责对齐。 */
 .sheet-row__time {
-  font-family: var(--xs-font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.sheet-row__time,
+.sheet-row__cols,
+.sheet-row__meta > em {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* 模板带较长用途说明，保留副行；普通记录的时间与标题横向对齐。 */
+.sheet-row:has(.sheet-row__actions) .sheet-row__text {
+  display: grid;
+  gap: 3px;
+}
+
+.sheet-row:has(.sheet-row__actions) .sheet-row__meta {
+  max-width: 100%;
 }
 
 .sheet-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  color: var(--xs-primary-2);
-  border-radius: var(--xs-radius-control);
-  background: var(--xs-info-soft);
+  width: 24px;
+  height: 24px;
+  color: #707070;
+  border-radius: 6px;
+  background: transparent;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
     background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
@@ -255,8 +330,8 @@ button.sheet-row__main {
 
 .sheet-row:hover .sheet-icon,
 .sheet-row:focus-within .sheet-icon {
-  color: var(--xs-primary);
-  background: #DBEAFF;
+  color: #303030;
+  background: transparent;
 }
 
 /* 一行只有一个动作：常驻文字按钮会把八行都压成按钮列，收成图标后行首的表名才是入口 */
@@ -267,7 +342,7 @@ button.sheet-row__main {
   height: 32px;
   padding: 0;
   border-radius: var(--xs-radius-control);
-  color: var(--xs-text-3);
+  color: #707070;
   opacity: 0;
   transition:
     color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -284,8 +359,8 @@ button.sheet-row__main {
 
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):hover,
 .sheet-list .sheet-row__copy.ant-btn:not(:disabled):focus-visible {
-  color: var(--xs-primary-2);
-  background: var(--xs-info-soft);
+  color: #303030;
+  background: var(--xs-surface-hover);
 }
 
 .sheet-list .sheet-row__copy.ant-btn[data-copied="true"] {
@@ -303,84 +378,23 @@ button.sheet-row__main {
   }
 }
 
-/* ---------- 一排两条：760 轨道装得下两张 366px 的记录卡 ---------- */
-/* 一列时每条记录靠一条横线断句就够了；两列以后横线会在中缝两侧各断一次，
-   读起来像一张没有表头的网格，所以这一档改成「每条记录自己成卡」：
-   1px 描边定边界，hover 才上底色。760px 以下（窄桌面与移动端）退回单列横线版。 */
-
-@media (min-width: 761px) {
-  .sheet-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .sheet-row {
-    padding: 0 6px 0 10px;
-    border: 1px solid var(--xs-border);
-    border-radius: var(--xs-radius-card);
-    background: var(--xs-surface);
-    transition:
-      border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
-      background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
-  }
-
-  /* 卡片自带边界，横线退场 */
-  .sheet-row + .sheet-row::before {
-    content: none;
-  }
-
-  .sheet-row:hover,
-  .sheet-row:focus-within {
-    border-color: var(--xs-border-strong);
-    background: var(--xs-surface-soft);
-  }
-
-  .sheet-row__main {
-    min-height: 58px;
-    padding: 8px 0;
-  }
-
-  /* 卡宽只有整行的一半，副行必须能截：类型先截，时间是定位锚点，整着留 */
-  .sheet-row__meta {
-    flex-wrap: nowrap;
-  }
-
-  .sheet-row__type {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* 时间、列数、分隔点是定长锚点，压不得；被挤没的应该是上面那段长提示词 */
-  .sheet-row__time,
-  .sheet-row__cols,
-  .sheet-row__meta > em {
-    flex: none;
-    white-space: nowrap;
-  }
-
-  /* 模板卡的编辑/删除收到和复制钮同一档：44px 的页面主动作放进半幅卡，
-     会把表名挤成两个字。 */
-  .sheet-list .sheet-row__actions .ant-btn {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
-    padding: 0;
-    color: var(--xs-text-3);
-    border-radius: var(--xs-radius-control);
-  }
-
-  .sheet-list .sheet-row__actions .ant-btn:not(:disabled):hover,
-  .sheet-list .sheet-row__actions .ant-btn:not(:disabled):focus-visible {
-    color: var(--xs-primary-2);
-    background: var(--xs-info-soft);
-  }
+.sheet-list .sheet-row__actions .ant-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  color: #707070;
+  border-radius: 8px;
 }
 
-/* 触屏上这两颗钮仍要够大按 */
-@media (min-width: 761px) and (pointer: coarse) {
+.sheet-list .sheet-row__actions .ant-btn:not(:disabled):hover,
+.sheet-list .sheet-row__actions .ant-btn:not(:disabled):focus-visible {
+  color: #303030;
+  background: var(--xs-surface-hover);
+}
+
+@media (pointer: coarse) {
   .sheet-list .sheet-row__actions .ant-btn {
     width: 40px;
     min-width: 40px;
@@ -396,7 +410,16 @@ button.sheet-row__main {
 
   .sheet-row + .sheet-row::before {
     right: 4px;
-    left: 50px;
+    left: 38px;
+  }
+
+  .sheet-row__text {
+    display: grid;
+    gap: 3px;
+  }
+
+  .sheet-row__meta {
+    max-width: 100%;
   }
 
   .sheet-row__main {
@@ -768,29 +791,24 @@ button.sheet-row__main {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   text-align: center;
 }
 
-/* 星标与标题同尺寸（28px = --xs-fs-hero）：CJK 字面接近满 em，1:1 的图标读起来像一枚行内字符，
-   而不是压在标题旁边的徽标。TSX 里写死的 size={40} 由这条覆盖，不改组件。 */
-.table-hero__head svg {
+.table-hero__head img {
   flex: none;
-  width: var(--xs-fs-hero);
-  height: var(--xs-fs-hero);
-  color: var(--xs-primary);
+  width: 24px;
+  height: 24px;
 }
 
-/* 与首页问候语同一套排版（见 src/features/home/home.css 的 .home-page__hero h1）：
-   同字族（继承 --xs-font-family）、同字号、同字重、同字距、同行高、同墨色。
-   三个入口 hero 是一份约定，不是三处各自的品味。 */
+/* 与输入框及列表的中性灰阶、轻字重保持一致。 */
 .table-hero .table-hero__head h1 {
   margin: 0;
-  color: var(--xs-text);
-  font-size: var(--xs-fs-hero);
-  font-weight: var(--xs-fw-medium);
-  letter-spacing: 0;
-  line-height: 1.3;
+  color: #303030;
+  font-size: var(--xs-fs-title);
+  font-weight: var(--xs-fw-text);
+  letter-spacing: var(--xs-ls-title);
+  line-height: 1.35;
 }
 
 /* footnote 是绝对定位的，压在盒子下方；这里留出它的高度，别让它贴到快捷示例上 */
@@ -868,11 +886,7 @@ button.sheet-row__main {
     flex-direction: column;
   }
 
-  /* hero 原来顶部留 7vh 的死白，现在整段交给上面那条负截距斜率。
-     字号不再跟视口高度走：标题定在 --xs-fs-hero（28px），与首页问候语同值。
-     抬头本来就靠 69.6px 的 min-height 定高（28×1.3 = 36.4px 远够不着它），
-     所以字号常量化不动输入盒的顶边——vh 缩放只是当年为了塞进矮屏的补丁，
-     现在字更小，补丁没有存在的理由了。 */
+  /* 保留首页同源的留白刻度与标题槽位，调整字形时输入框位置仍稳定。 */
   .table-page .table-hero {
     flex: 0 0 auto;
     gap: var(--table-hero-gap);

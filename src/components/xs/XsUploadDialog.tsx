@@ -195,6 +195,7 @@ export function XsUploadDialog({
   return (
     <Modal
       className="xs-upload-dialog"
+      rootClassName="xs-upload-dialog-root"
       open={open}
       centered
       destroyOnHidden
@@ -208,13 +209,8 @@ export function XsUploadDialog({
       maskTransitionName={import.meta.env.MODE === "test" ? "" : undefined}
       title={
         <div className="xs-upload-dialog__head">
-          <span className="xs-upload-dialog__head-glyph" aria-hidden="true">
-            <Icon size={22} />
-          </span>
-          <span className="xs-upload-dialog__head-copy">
-            <span className="xs-upload-dialog__title">{title}</span>
-            {description ? <span className="xs-upload-dialog__description">{description}</span> : null}
-          </span>
+          <span className="xs-upload-dialog__title">{title}</span>
+          {description ? <span className="xs-upload-dialog__description">{description}</span> : null}
         </div>
       }
     >
@@ -229,9 +225,9 @@ export function XsUploadDialog({
         {file ? (
           <div className="xs-upload-dialog__file">
             <span className="xs-upload-dialog__file-glyph" aria-hidden="true">
-              <FileArrowUp size={26} />
+              <FileArrowUp size={24} />
               <span className="xs-upload-dialog__file-badge">
-                <Check size={11} weight="bold" />
+                <Check size={10} weight="bold" />
               </span>
             </span>
             <span className="xs-upload-dialog__file-name" title={file.name}>{file.name}</span>
@@ -276,7 +272,7 @@ export function XsUploadDialog({
             onClick={() => inputRef.current?.click()}
           >
             <span className="xs-upload-dialog__plate" aria-hidden="true">
-              <Icon size={26} />
+              <Icon size={24} />
             </span>
             <span className="xs-upload-dialog__headline">把文件拖到这里</span>
             <span className="xs-upload-dialog__sub">

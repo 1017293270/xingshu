@@ -1,9 +1,10 @@
-import { Clock, FileText, MagnifyingGlass, Plus, WarningCircle } from "@phosphor-icons/react";
+import { Clock, MagnifyingGlass, Plus, WarningCircle } from "@phosphor-icons/react";
 import { Button, Input } from "antd";
 import { useState, type ReactNode } from "react";
 import { summarizeOfficialDocumentTemplate } from "@/services/officialDocumentFullDraft";
 import type { OfficialDocumentTemplate } from "@/types/officialDocument";
 import { formatDate, templateIsUsable, templateStatusLabel } from "./officialDocumentMeta";
+import { templateIconForName } from "./templateIcons";
 import "./official-document-templates.css";
 
 function templateGallerySummary(template: OfficialDocumentTemplate) {
@@ -25,11 +26,10 @@ export function TemplateGalleryCard({
 }) {
   const usable = templateIsUsable(template.status);
   const headings = summarizeOfficialDocumentTemplate(template.currentVersion.analysis?.structureNodes ?? [])
-    .filter((node) => node.role.startsWith("HEADING_"))
-    .map((node) => node.preview.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-  const description = headings.join(" · ") || template.currentVersion.fileName;
+    .filter((node) => node.role.startsWith("HEADING_"));
+  const description = headings.some((node) => /[XＸ×_]{3,}/i.test(node.preview))
+    ? `包含${[...new Set(headings.map((node) => node.roleLabel))].join("、")}结构`
+    : headings.slice(0, 3).map((node) => node.preview.trim()).join(" · ") || template.currentVersion.fileName;
   return (
     <article className="official-document-template-card" data-status={template.status}>
       <button
@@ -41,7 +41,7 @@ export function TemplateGalleryCard({
       >
         <span className="official-document-template-card__identity">
           <span className="official-document-template-card__glyph">
-            <FileText size={30} weight="light" aria-hidden="true" />
+            <img src={templateIconForName(template.name)} width={28} height={28} alt="" aria-hidden="true" draggable={false} />
           </span>
           <span className="official-document-template-card__text">
             <strong title={template.name}>{template.name}</strong>

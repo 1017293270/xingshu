@@ -50,7 +50,7 @@ describe("OfficialDocumentAppShell", () => {
     expect(html).not.toContain("official-document-app__actions--inline");
   });
 
-  it("gives the writing stage no navigation rail and no page header", () => {
+  it("exposes templates and draft management from the writing stage", () => {
     render(
       <MemoryRouter initialEntries={["/writing"]}>
         <OfficialDocumentAppShell>
@@ -59,23 +59,22 @@ describe("OfficialDocumentAppShell", () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", { name: "公文导航" });
+    expect(within(navigation).getByRole("link", { name: "公文写作" })).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getByRole("link", { name: "格式模板" })).toHaveAttribute("href", "/writing/templates");
+    expect(within(navigation).getByRole("link", { name: "草稿管理" })).toHaveAttribute("href", "/writing/drafts");
     expect(screen.queryByRole("heading", { name: "报告智写" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("报告智写工作台")).toBeInTheDocument();
   });
 
-  it("gives list and detail stages a slim header that leads back to writing", async () => {
+  it("keeps the active list discoverable in the shared writing navigation", () => {
     renderShell("/writing/templates");
 
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    const navigation = screen.getByRole("navigation", { name: "公文导航" });
+    expect(within(navigation).getByRole("link", { name: "公文写作" })).toHaveAttribute("href", "/writing");
+    expect(within(navigation).getByRole("link", { name: "格式模板" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("模板库");
-    });
   });
 
   it("updates the slim header context for template structure and draft canvas", async () => {
@@ -91,6 +90,7 @@ describe("OfficialDocumentAppShell", () => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("季度工作通知");
     });
     expect(screen.getByText("版本 v2")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回格式模板" })).toHaveAttribute("href", "/writing/templates");
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__actions")).toContainElement(
         screen.getByRole("button", { name: "按模板新建草稿" })
@@ -108,7 +108,7 @@ describe("OfficialDocumentAppShell", () => {
     await waitFor(() => {
       expect(document.querySelector(".official-document-app__context-title")).toHaveTextContent("关于联调进展的通报");
     });
-    expect(within(screen.getByRole("banner")).getByRole("link", { name: "返回公文写作" })).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "返回草稿管理" })).toHaveAttribute("href", "/writing/drafts");
     expect(screen.getByText("通知模板 · 文件版本 v1")).toBeInTheDocument();
   });
 

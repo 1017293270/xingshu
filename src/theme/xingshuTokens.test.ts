@@ -16,7 +16,7 @@ describe("xingshuTokens", () => {
   });
 
   it("uses accessible tertiary and interactive text colors", () => {
-    expect(xingshuTokens.colorTextTertiary).toBe("#536987");
+    expect(xingshuTokens.colorTextTertiary).toBe("#707070");
     expect(xingshuTokens.colorInteractiveText).toBe("#1D4ED8");
   });
 
