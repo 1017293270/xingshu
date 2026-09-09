@@ -1,0 +1,12 @@
+/* 常驻写作台：被页面收养时要把槽位撑满，回到停放区时不占位、不可聚焦。 */
+.official-document-compose-host {
+  display: contents;
+}
+
+.official-document-compose-parking {
+  display: none;
+}
+
+.official-document-compose-slot {
+  display: contents;
+}

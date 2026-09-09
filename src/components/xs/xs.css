@@ -509,6 +509,48 @@
   margin-inline-start: 0;
 }
 
+/* 图标要能挂一枚状态点，所以自己当定位上下文，尺寸仍按图标那 18px 走 */
+.xs-sidebar__icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 生成进度只用一个点说话：不占位、不推挤文字，侧栏收起时也还在图标右上角 */
+.xs-sidebar__job {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--xs-surface);
+  pointer-events: none;
+}
+
+.xs-sidebar__job[data-state="running"] {
+  width: 8px;
+  height: 8px;
+  background: var(--xs-primary);
+  animation: xs-sidebar-job-pulse var(--xs-motion-ambient) var(--xs-motion-ease-out) infinite;
+}
+
+.xs-sidebar__job[data-state="unseen"] {
+  width: 6px;
+  height: 6px;
+  background: var(--xs-success);
+}
+
+@keyframes xs-sidebar-job-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.78); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xs-sidebar__job[data-state="running"] {
+    animation: none;
+  }
+}
+
 .xs-sidebar__user {
   display: flex;
   align-items: center;

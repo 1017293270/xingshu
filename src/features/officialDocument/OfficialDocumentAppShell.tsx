@@ -1,25 +1,17 @@
 import { ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
+import {
+  releaseOfficialDocumentActionsHost,
+  useOfficialDocumentShellStore,
+  type OfficialDocumentAppChrome,
+  type OfficialDocumentAppStage
+} from "./officialDocumentShellStore";
 import "./official-document.css";
 import "./official-document-workspace.css";
 
-export type OfficialDocumentAppStage = "compose" | "library" | "drafts" | "template" | "draft";
-
-export type OfficialDocumentAppChrome = {
-  stage: OfficialDocumentAppStage;
-  context: string;
-  contextDetail?: string;
-  contextTo?: string;
-};
+export type { OfficialDocumentAppChrome, OfficialDocumentAppStage };
 
 export const OFFICIAL_DOCUMENT_TEMPLATES_PATH = "/writing/templates";
 export const OFFICIAL_DOCUMENT_DRAFTS_PATH = "/writing/drafts";
@@ -42,48 +34,61 @@ const stageContext: Record<OfficialDocumentAppStage, string> = {
   draft: "结构化起草"
 };
 
-type OfficialDocumentAppContextValue = {
-  actionsHost: HTMLDivElement | null;
-  setChrome: (chrome: OfficialDocumentAppChrome) => void;
-};
-
-const OfficialDocumentAppContext = createContext<OfficialDocumentAppContextValue | null>(null);
+/** 壳层在场与否决定动作是进页头还是就地渲染，所以这层标记仍走 context。 */
+const OfficialDocumentAppContext = createContext(false);
 
 export function useOfficialDocumentAppChrome(chrome: OfficialDocumentAppChrome) {
-  const context = useContext(OfficialDocumentAppContext);
-  const setChrome = context?.setChrome;
+  const setChrome = useOfficialDocumentShellStore((state) => state.setChrome);
+  const { pathname } = useLocation();
+  /* 路径只记不订阅：写作台常驻，路由一变就重报文案会盖掉当前页面自己的声明。 */
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
-    if (!setChrome) return;
-    setChrome({ stage: chrome.stage, context: chrome.context, contextDetail: chrome.contextDetail, contextTo: chrome.contextTo });
+    setChrome({
+      stage: chrome.stage,
+      context: chrome.context,
+      contextDetail: chrome.contextDetail,
+      contextTo: chrome.contextTo,
+      path: pathnameRef.current
+    });
   }, [chrome.context, chrome.contextDetail, chrome.contextTo, chrome.stage, setChrome]);
 }
 
 export function OfficialDocumentAppActions({ children }: { children?: ReactNode }) {
-  const context = useContext(OfficialDocumentAppContext);
+  const insideShell = useContext(OfficialDocumentAppContext);
+  const actionsHost = useOfficialDocumentShellStore((state) => state.actionsHost);
   if (children == null) return null;
-  if (!context) {
+  if (!insideShell) {
     return <div className="official-document-app__actions official-document-app__actions--inline">{children}</div>;
   }
-  return context.actionsHost ? createPortal(children, context.actionsHost) : null;
+  return actionsHost ? createPortal(children, actionsHost) : null;
 }
 
 export function OfficialDocumentAppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [chrome, setChrome] = useState<OfficialDocumentAppChrome>(() => {
-    const stage = stageForPath(location.pathname);
-    return { stage, context: stageContext[stage] };
-  });
-  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
-  const value = useMemo(
-    () => ({ actionsHost, setChrome }),
-    [actionsHost]
-  );
+  const declaredChrome = useOfficialDocumentShellStore((state) => state.chrome);
+  const setActionsHost = useOfficialDocumentShellStore((state) => state.setActionsHost);
+  const stage = stageForPath(location.pathname);
+  /*
+   * 只采用为当前这个路径声明的文案。写作台常驻不再随路由重挂，它那次声明不会重放；
+   * 认路径就能保证从模板库退回写作台时页头跟着回到写作态，而不是留着上一页的标题。
+   */
+  const chrome: OfficialDocumentAppChrome = declaredChrome?.path === location.pathname
+    ? declaredChrome
+    : { stage, context: stageContext[stage] };
+
+  /* ref 回调返回清理函数（React 19）：卸载时只收回自己这一个宿主。 */
+  const attachActionsHost = useCallback((host: HTMLDivElement) => {
+    setActionsHost(host);
+    return () => releaseOfficialDocumentActionsHost(host);
+  }, [setActionsHost]);
+
   const detailStage = chrome.stage === "template" || chrome.stage === "draft";
   const parentPath = chrome.stage === "draft" ? OFFICIAL_DOCUMENT_DRAFTS_PATH : OFFICIAL_DOCUMENT_TEMPLATES_PATH;
 
   return (
-    <OfficialDocumentAppContext.Provider value={value}>
+    <OfficialDocumentAppContext.Provider value={true}>
       <div className="official-document-app" data-stage={chrome.stage}>
         <a className="xs-skip-link" href="#official-document-workspace">跳到报告工作区</a>
         <header className="official-document-app__bar" data-stage={chrome.stage}>
@@ -112,7 +117,7 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
               {chrome.contextDetail ? <small>{chrome.contextDetail}</small> : null}
             </div>
           ) : null}
-          <div className="official-document-app__actions" ref={setActionsHost} />
+          <div className="official-document-app__actions" ref={attachActionsHost} />
         </header>
         <section
           className="official-document-app__workspace"

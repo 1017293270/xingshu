@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import type { OfficialDocumentWorkspaceSnapshot } from "@/types/officialDocument";
 import { OfficialDocumentComposeView } from "./OfficialDocumentComposeView";
+import { useWritingJobStore } from "./writingJobStore";
 
 const FULL_DRAFT = [
   "[[XS_FIXED:title-slot]]",
@@ -343,6 +344,7 @@ describe("OfficialDocumentComposeView", () => {
   beforeEach(() => {
     chat.reset();
     send.mockClear();
+    useWritingJobStore.getState().reset();
     mocks.loadWorkspace.mockReset().mockResolvedValue(workspace);
     mocks.getDraftContent.mockReset().mockImplementation((draftId: string) => Promise.resolve(
       draftId === "draft-reference"
@@ -1445,6 +1447,64 @@ describe("OfficialDocumentComposeView", () => {
     expect(mocks.executeResearchPlan.mock.calls[1][0]).toEqual([expect.objectContaining({ id: "n1" })]);
     const secondContext = send.mock.calls[1][1]!.writingContext as { researchResults: Array<{ summary: string }> };
     expect(secondContext.researchResults.map((result) => result.summary)).toEqual(["新取得收入依据", "已完成资料"]);
+  });
+
+  it("生成中还能接着打字，只是发不出去", async () => {
+    chat.state.autoSettle = false;
+    const user = userEvent.setup();
+    renderView();
+
+    await pickReference(user);
+    const input = await submitRequirement(user, "撰写2026年安全检查通知");
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+
+    expect(input).toBeEnabled();
+    await user.clear(input);
+    await user.type(input, "顺便补一句检查范围");
+    expect(input).toHaveValue("顺便补一句检查范围");
+
+    /* 发送按钮换成停止，回车也不该抢跑一轮 */
+    expect(screen.queryByRole("button", { name: "生成完整公文" })).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("把进度和成稿报给侧栏与完成提醒", async () => {
+    chat.state.autoSettle = false;
+    const user = userEvent.setup();
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("writing"));
+    expect(useWritingJobStore.getState().lastResult).toBeNull();
+
+    act(() => chat.settle(chat.lastTurnId(), FULL_DRAFT));
+
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("idle"));
+    await waitFor(() => {
+      expect(useWritingJobStore.getState().lastResult).toMatchObject({
+        title: "关于开展2026年安全检查的通知",
+        seen: false,
+        notified: false
+      });
+    });
+  });
+
+  it("恢复出来的历史成稿不再当成刚写完的一份", async () => {
+    chat.state.turns = [{
+      id: "restored-turn",
+      question: "撰写2026年安全检查通知",
+      status: "done",
+      error: "",
+      purpose: "full-draft",
+      ask: { done: { summary: FULL_DRAFT }, assistantContent: FULL_DRAFT }
+    }];
+    renderView();
+
+    await screen.findByRole("textbox", { name: "公文写作要求" });
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("idle"));
+    expect(useWritingJobStore.getState().lastResult).toBeNull();
   });
 
 });

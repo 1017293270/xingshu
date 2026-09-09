@@ -108,6 +108,7 @@ import {
   type OfficialDocumentMentionItem
 } from "./officialDocumentMentions";
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
+import { useWritingJobStore, type WritingJobPhase } from "./writingJobStore";
 import { TemplateGallery } from "./TemplateGallery";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
 import { useWritingChat, type WritingChatSnapshot } from "./useWritingChat";
@@ -412,6 +413,45 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     || planning !== null;
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
+
+  /*
+   * 写作台常驻在壳层里，用户可以切走干别的。进度和成稿要主动报出去，
+   * 侧栏指示和完成通知才知道这边发生了什么。
+   */
+  const jobBusyRef = useRef(false);
+  const reportedTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    const phase: WritingJobPhase = analyzingSubmission
+      ? "analyzing"
+      : planning?.phase === "researching"
+        ? "researching"
+        : (pendingSubmission || writingBusy)
+          ? "writing"
+          : "idle";
+    const job = useWritingJobStore.getState();
+    job.setPhase(phase, phase === "researching" ? planning?.progressText : undefined);
+
+    if (phase !== "idle") {
+      jobBusyRef.current = true;
+      return;
+    }
+    const latest = messages[messages.length - 1];
+    if (!latest || latest.status !== "done") {
+      jobBusyRef.current = false;
+      return;
+    }
+    /* 只认这次挂载里真跑完的那一轮，恢复出来的历史成稿不该再弹一次提醒。 */
+    if (jobBusyRef.current) {
+      jobBusyRef.current = false;
+      reportedTurnRef.current = latest.id;
+    }
+    if (reportedTurnRef.current !== latest.id) return;
+    /* 标题要等正文解析完才准，这一轮还没落地就先不报，免得提醒里挂着用户自己那句要求。 */
+    const state = turnStates[latest.id];
+    if (state && !state.artifact && !state.parseError && !state.raw) return;
+    const title = state?.artifact?.title?.trim();
+    job.reportResult(latest.id, title || latest.question.slice(0, 30) || "未命名公文");
+  }, [analyzingSubmission, messages, pendingSubmission, planning, turnStates, writingBusy]);
 
   /* 能 @ 的必须真能出成稿：模板要已发布、编译文件还在，结构也已分析完。 */
   const usableTemplates = useMemo(
@@ -1617,7 +1657,6 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                 : "描述你想写的公文，输入 @ 选择模板或参考草稿"}
               maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
               busy={composerBusy}
-              disabled={composerBusy}
               textareaRef={inputRef}
               showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
               onScrollToBottom={conversation.scrollToBottom}
