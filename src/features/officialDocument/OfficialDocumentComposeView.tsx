@@ -79,6 +79,7 @@ import type {
 } from "@/types/officialDocument";
 import { ComposeAnalyzingCard, ComposeElapsed } from "./ComposeAnalyzingCard";
 import { ComposeOutlineCard } from "./ComposeOutlineCard";
+import { ComposeReviewPanel } from "./ComposeReviewPanel";
 import {
   classifyMaterialFile,
   composeMaterialPayload,
@@ -1380,35 +1381,17 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
           </p>
         ) : null}
 
-        {state?.factReview?.length ? (
-          <section aria-label="事实校对" className="official-document-compose__parse-note">
-            <div>
-              <strong>以下内容需核对来源</strong>
-              <p>未在已提供的需求与资料中匹配到这些时间、数量或执行要求；原文已保留，请确认后采用。</p>
-              <ul>{state.factReview.map((issue, index) => (
-                <li key={index}>核对“{issue.additions.join("、")}”：{issue.sentence}</li>
-              ))}</ul>
-              <Button type="text" size="small" onClick={() => patchTurn(message.id, {
-                factReviewConfirmedAt: state.factReviewConfirmedAt ? undefined : new Date().toISOString()
-              })}>
-                {state.factReviewConfirmedAt ? "已核对来源 · 撤销确认" : "我已核对来源"}
-              </Button>
-            </div>
-          </section>
-        ) : null}
-
-        {state?.research?.results.some((result) => result.status !== "SUCCESS") ? (
-          <section aria-label="未补齐的资料" className="official-document-compose__parse-note">
-            <div>
-              <strong>部分资料未补齐，可重试或继续使用当前成稿</strong>
-              <ul>{state.research.results.filter((result) => result.status !== "SUCCESS").map((result) => (
-                <li key={result.taskId}>{result.question}：{result.summary || "未取得可用结果"}</li>
-              ))}</ul>
-            </div>
-          </section>
-        ) : null}
-        {state?.research?.results.some((result) => result.kind === "ASK_KNOWLEDGE" && result.status === "SUCCESS" && !result.citations.length) ? (
-          <p className="official-document-compose__parse-note">部分资料未附来源链接，内容已保留供参考。</p>
+        {state ? (
+          <ComposeReviewPanel
+            factReview={state.factReview}
+            factReviewConfirmedAt={state.factReviewConfirmedAt}
+            researchResults={state.research?.results}
+            busy={composerBusy}
+            onConfirmFactReview={() => patchTurn(message.id, {
+              factReviewConfirmedAt: state.factReviewConfirmedAt ? undefined : new Date().toISOString()
+            })}
+            onRetryMissing={() => void regenerate(message.id)}
+          />
         ) : null}
 
         {state?.artifact ? renderArtifact(message.id, state) : null}
@@ -1426,9 +1409,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
             {state ? (
               <XsChatActionButton
                 icon={<ArrowsClockwise size={14} aria-hidden="true" />}
-                label={state.research?.results.some((result) => result.status !== "SUCCESS")
-                  ? "重试缺失资料并重新生成"
-                  : failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
+                label={failed ? "重试" : cancelled ? "继续生成" : state.parseError ? "重出完整版" : "重新生成"}
                 disabled={composerBusy}
                 onClick={() => void regenerate(message.id, state.parseError ? RETRY_HINT : "")}
               />

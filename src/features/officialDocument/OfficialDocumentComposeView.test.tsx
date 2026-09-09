@@ -1361,8 +1361,9 @@ describe("OfficialDocumentComposeView", () => {
       "[[XS_SECTION:reference-section-1]]", "# 一、会议安排",
       "会议定于2026年9月10日上午10:00召开，请参会人员提前十五分钟到场签到。"
     ].join("\n")));
-    const review = await screen.findByRole("region", { name: "事实校对" });
-    expect(review).toHaveTextContent("十五分钟、签到");
+    const review = await screen.findByRole("region", { name: "成稿核对" });
+    expect(within(review).getByText("十五分钟")).toBeInTheDocument();
+    expect(within(review).getByText("签到")).toBeInTheDocument();
     expect(review).toHaveTextContent("原文已保留");
     await user.click(within(review).getByRole("button", { name: "我已核对来源" }));
     expect(await screen.findByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
@@ -1437,10 +1438,13 @@ describe("OfficialDocumentComposeView", () => {
     await submitRequirement(user, "撰写年度报告");
     await user.click(await screen.findByRole("button", { name: "确认大纲，补资料并生成" }));
     await screen.findByRole("article", { name: "生成的公文文件" });
-    expect(screen.getByRole("region", { name: "未补齐的资料" })).toHaveTextContent("查询暂不可用");
+    expect(screen.getByRole("region", { name: "成稿核对" })).toHaveTextContent("查询暂不可用");
+    // 重试缺失资料只留面板里这一个入口，操作行不再重复同一件事
+    expect(screen.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试缺失资料并重新生成" })).not.toBeInTheDocument();
     const firstContext = send.mock.calls[0][1]!.writingContext as { researchResults: Array<{ status: string }> };
     expect(firstContext.researchResults.every((result) => result.status === "SUCCESS")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "重试缺失资料并重新生成" }));
+    await user.click(screen.getByRole("button", { name: "重试缺失资料" }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     expect(mocks.executeResearchPlan.mock.calls[1][0]).toEqual([expect.objectContaining({ id: "n1" })]);
     const secondContext = send.mock.calls[1][1]!.writingContext as { researchResults: Array<{ summary: string }> };

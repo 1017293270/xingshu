@@ -1,0 +1,184 @@
+/* 成稿核对面板：一块有边界的容器，颜色只留给需要动作的标记 */
+.compose-review {
+  display: grid;
+  gap: 12px;
+  box-sizing: border-box;
+  /* 与上方成稿流那块预览同宽，两者共用一条左右边界 */
+  width: min(640px, 100%);
+  margin: 4px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+}
+
+.compose-review__block + .compose-review__block,
+.compose-review__block + .compose-review__note {
+  padding-top: 12px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.compose-review__block {
+  display: grid;
+  gap: 6px;
+}
+
+.compose-review__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.compose-review__head .ant-btn {
+  margin-left: auto;
+}
+
+.compose-review__icon {
+  flex: none;
+  color: var(--xs-text-3);
+}
+
+.compose-review__icon[data-tone="warning"] {
+  color: var(--xs-warning-ink);
+}
+
+.compose-review__icon[data-tone="success"] {
+  color: var(--xs-success-ink);
+}
+
+.compose-review__title {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-body);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* 纯计数是灰字，不是状态条 */
+.compose-review__count {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: 400;
+}
+
+.compose-review__hint {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.compose-review__facts,
+.compose-review__missing {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-review__facts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.compose-review__tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--xs-warning-line);
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-warning-soft);
+  color: var(--xs-warning-ink);
+  font-size: var(--xs-fs-caption);
+  font-style: normal;
+  line-height: 1;
+}
+
+.compose-review__sentence {
+  display: -webkit-box;
+  flex: 1 1 240px;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--xs-text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.compose-review__missing li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 问题与状态词贴在一起：下面的原因再长也不该把状态词推开 */
+.compose-review__line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.compose-review__question {
+  overflow: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--xs-text);
+  font-size: 13px;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-review__state {
+  flex: none;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.compose-review__reason {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.compose-review__footnote {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
+
+.compose-review__more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--xs-primary);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.compose-review__more:hover {
+  text-decoration: underline;
+}
+
+.compose-review__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.6;
+}
