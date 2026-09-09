@@ -1,10 +1,12 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { OfficialDocumentWorkspaceSnapshot } from "@/types/officialDocument";
 import { OfficialDocumentComposeView } from "./OfficialDocumentComposeView";
+import { useWritingJobStore } from "./writingJobStore";
 
 const FULL_DRAFT = [
   "[[XS_FIXED:title-slot]]",
@@ -306,14 +308,37 @@ const unusableWorkspace: OfficialDocumentWorkspaceSnapshot = {
   ]
 };
 
+/*
+ * 会话和成稿都在 /writing/session，写作本身的用例默认落在那一页；
+ * /writing 是入口首页，只有入口分层那一组用例才从那里进。
+ */
 function renderView() {
   return render(
     <AppProviders>
-      <MemoryRouter initialEntries={["/writing"]}>
+      <MemoryRouter initialEntries={["/writing/session"]}>
         <Routes>
           <Route path="/writing" element={<OfficialDocumentComposeView />} />
+          <Route path="/writing/session" element={<OfficialDocumentComposeView />} />
           <Route path="/writing/drafts/:draftId" element={<div aria-label="生成公文成品页">成品页</div>} />
         </Routes>
+      </MemoryRouter>
+    </AppProviders>
+  );
+}
+
+function PathProbe() {
+  const location = useLocation();
+  return <span data-testid="path">{location.pathname}</span>;
+}
+
+/* 真实结构里写作台常驻在壳层，首页和会话页只是槽位：这里也让它跨路由活着。 */
+function renderEntry(initialPath = "/writing") {
+  return render(
+    <AppProviders>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <PathProbe />
+        <Link to="/writing">回写作首页</Link>
+        <OfficialDocumentComposeView />
       </MemoryRouter>
     </AppProviders>
   );
@@ -343,6 +368,7 @@ describe("OfficialDocumentComposeView", () => {
   beforeEach(() => {
     chat.reset();
     send.mockClear();
+    useWritingJobStore.getState().reset();
     mocks.loadWorkspace.mockReset().mockResolvedValue(workspace);
     mocks.getDraftContent.mockReset().mockImplementation((draftId: string) => Promise.resolve(
       draftId === "draft-reference"
@@ -1449,6 +1475,189 @@ describe("OfficialDocumentComposeView", () => {
     expect(mocks.executeResearchPlan.mock.calls[1][0]).toEqual([expect.objectContaining({ id: "n1" })]);
     const secondContext = send.mock.calls[1][1]!.writingContext as { researchResults: Array<{ summary: string }> };
     expect(secondContext.researchResults.map((result) => result.summary)).toEqual(["新取得收入依据", "已完成资料"]);
+  });
+
+  it("生成中还能接着打字，只是发不出去", async () => {
+    chat.state.autoSettle = false;
+    const user = userEvent.setup();
+    renderView();
+
+    await pickReference(user);
+    const input = await submitRequirement(user, "撰写2026年安全检查通知");
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+
+    expect(input).toBeEnabled();
+    await user.clear(input);
+    await user.type(input, "顺便补一句检查范围");
+    expect(input).toHaveValue("顺便补一句检查范围");
+
+    /* 发送按钮换成停止，回车也不该抢跑一轮 */
+    expect(screen.queryByRole("button", { name: "生成完整公文" })).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("把进度和成稿报给侧栏与完成提醒", async () => {
+    chat.state.autoSettle = false;
+    const user = userEvent.setup();
+    renderView();
+
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("writing"));
+    expect(useWritingJobStore.getState().lastResult).toBeNull();
+
+    act(() => chat.settle(chat.lastTurnId(), FULL_DRAFT));
+
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("idle"));
+    await waitFor(() => {
+      expect(useWritingJobStore.getState().lastResult).toMatchObject({
+        title: "关于开展2026年安全检查的通知",
+        seen: false,
+        notified: false
+      });
+    });
+  });
+
+  it("恢复出来的历史成稿不再当成刚写完的一份", async () => {
+    chat.state.turns = [{
+      id: "restored-turn",
+      question: "撰写2026年安全检查通知",
+      status: "done",
+      error: "",
+      purpose: "full-draft",
+      ask: { done: { summary: FULL_DRAFT }, assistantContent: FULL_DRAFT }
+    }];
+    renderView();
+
+    await screen.findByRole("textbox", { name: "公文写作要求" });
+    await waitFor(() => expect(useWritingJobStore.getState().phase).toBe("idle"));
+    expect(useWritingJobStore.getState().lastResult).toBeNull();
+  });
+
+  /*
+   * 入口分层：点侧栏进来永远先落在首页，会话和成稿都在会话页。
+   * 首页只认「有没有别的事在跑」，靠一条提示条把人送过去。
+   */
+  describe("入口分层", () => {
+    it("首页有会话也保持 hero，只在输入框下面加一条提示", async () => {
+      const user = userEvent.setup();
+      chat.state.turns = [{
+        id: "turn-1",
+        question: "撰写2026年安全检查通知",
+        status: "done",
+        error: "",
+        purpose: "full-draft",
+        ask: { done: { summary: FULL_DRAFT }, assistantContent: FULL_DRAFT }
+      }];
+      useWritingJobStore.getState().reportResult("turn-1", "关于开展2026年安全检查的通知");
+      useWritingJobStore.getState().markSeen();
+      renderEntry("/writing");
+
+      expect(await screen.findByRole("heading", { name: "想写一篇什么公文？" })).toBeInTheDocument();
+      /* 会话没有被展开：上一轮的问题和成稿都留在会话页 */
+      expect(screen.queryByText("撰写2026年安全检查通知")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "公文生成对话" })).not.toBeInTheDocument();
+
+      const notice = screen.getByRole("button", { name: /上次成稿《关于开展2026年安全检查的通知》/ });
+      await user.click(notice);
+
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing/session"));
+      expect(await screen.findByText("撰写2026年安全检查通知")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "想写一篇什么公文？" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /上次成稿/ })).not.toBeInTheDocument();
+    });
+
+    it("首页提交先进会话页，再在同一个会话里接着写", async () => {
+      const user = userEvent.setup();
+      chat.state.turns = [{
+        id: "turn-1",
+        question: "先写一份季度通报",
+        status: "done",
+        error: "",
+        purpose: "full-draft",
+        ask: { done: { summary: FULL_DRAFT }, assistantContent: FULL_DRAFT }
+      }];
+      renderEntry("/writing");
+
+      await pickReference(user);
+      await submitRequirement(user, "撰写2026年安全检查通知");
+
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing/session"));
+      /* 续写：旧的一轮还在，不清空会话 */
+      expect(await screen.findByText("先写一份季度通报")).toBeInTheDocument();
+      expect(screen.getByText("撰写2026年安全检查通知")).toBeInTheDocument();
+    });
+
+    it("首页在生成中不给「停止」，只说清楚为什么发不出去", async () => {
+      chat.state.autoSettle = false;
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      await pickReference(user);
+      await submitRequirement(user, "撰写2026年安全检查通知");
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument());
+
+      await user.click(screen.getByRole("link", { name: "回写作首页" }));
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing"));
+
+      /* 首页只是入口：停止属于会话页，这里给一句灰字说明 */
+      expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "生成完整公文" })).toBeDisabled();
+      expect(screen.getByText("正在生成中，完成后可继续提交。")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /正在生成：撰写2026年安全检查通知/ })).toBeInTheDocument();
+    });
+
+    it("刷新后把认回来的成稿补给首页提示条，但不当成刚写完的一份", async () => {
+      useDataHubAuthStore.getState().setSession(
+        { token: "token-1", userId: 1, username: "qa", isAdmin: false },
+        7
+      );
+      sessionStorage.setItem("xingshu:writing:1:7", JSON.stringify({
+        version: 1,
+        value: "",
+        selection: null,
+        materials: [],
+        planning: null,
+        turnStates: {
+          "recovered-turn": {
+            requirement: "撰写2026年安全检查通知",
+            reference: { kind: "template", template: workspace.templates[0] },
+            version: 0,
+            plan: { sections: [], fixedFields: [] },
+            templateNodes: [],
+            startedAt: Date.now() - 120_000,
+            artifact: { title: "关于开展2026年安全检查的通知", templateName: "通知模板", sections: [], fixedFields: [] }
+          }
+        },
+        chat: {
+          sessionId: "session-1",
+          turns: [{
+            id: "recovered-turn",
+            question: "撰写2026年安全检查通知",
+            status: "done",
+            error: "",
+            purpose: "full-draft",
+            events: []
+          }]
+        }
+      }));
+
+      renderEntry("/writing");
+
+      await screen.findByRole("heading", { name: "想写一篇什么公文？" });
+      /* 已看过、已提醒：不弹提醒也不亮未读圆点，只让首页有东西可点 */
+      await waitFor(() => expect(useWritingJobStore.getState().lastResult).toMatchObject({
+        turnId: "recovered-turn",
+        title: "关于开展2026年安全检查的通知",
+        seen: true,
+        notified: true
+      }));
+      expect(screen.getByRole("button", { name: /上次成稿《关于开展2026年安全检查的通知》/ })).toBeInTheDocument();
+
+      useDataHubAuthStore.getState().clearAuthState();
+    });
   });
 
 });

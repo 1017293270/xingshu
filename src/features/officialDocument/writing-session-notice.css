@@ -1,0 +1,108 @@
+/* 首页提示条：写作台那边还有一篇在跑或已经写完，这里是回去的唯一入口。 */
+
+.writing-session-notice {
+  display: flex;
+  width: 100%;
+  /* 与输入盒同宽，见 components/xs/composer-surface.css 的 760 上限 */
+  max-width: 760px;
+  min-height: var(--xs-control-height-lg);
+  align-items: center;
+  gap: 10px;
+  margin-inline: auto;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-control);
+  background: var(--xs-surface);
+  color: var(--xs-text);
+  box-shadow: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
+    background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.writing-session-notice:hover {
+  border-color: var(--xs-border-strong);
+  background: var(--xs-surface-hover);
+}
+
+.writing-session-notice:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: 2px;
+}
+
+.writing-session-notice > svg {
+  flex: none;
+  color: var(--xs-text-3);
+}
+
+/* 语义同侧栏的 running 点：同一件事在两处只用一种说法。 */
+.writing-session-notice__dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--xs-primary);
+  animation: writing-session-notice-pulse var(--xs-motion-ambient) var(--xs-motion-ease-out) infinite;
+}
+
+.writing-session-notice__text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.writing-session-notice__title {
+  overflow: hidden;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writing-session-notice__text small {
+  overflow: hidden;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writing-session-notice__action {
+  display: inline-flex;
+  height: var(--xs-control-height-sm);
+  flex: none;
+  align-items: center;
+  margin-inline-start: auto;
+  padding-inline: 10px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-primary-2);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+}
+
+.writing-session-notice:hover .writing-session-notice__action {
+  background: var(--xs-info-soft);
+}
+
+@keyframes writing-session-notice-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.78); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .writing-session-notice__dot {
+    animation: none;
+  }
+}
+
+/* 首页的输入盒和提示条是一组：脚注留在两者中间那一档里。 */
+.official-document-compose__composer-block {
+  display: grid;
+  gap: 10px;
+}

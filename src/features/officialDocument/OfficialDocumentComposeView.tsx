@@ -109,6 +109,9 @@ import {
   type OfficialDocumentMentionItem
 } from "./officialDocumentMentions";
 import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
+import { WRITING_HOME_PATH, WRITING_SESSION_PATH } from "./writingComposeNode";
+import { useWritingJobStore, type WritingJobPhase } from "./writingJobStore";
+import { WritingSessionNotice } from "./WritingSessionNotice";
 import { TemplateGallery } from "./TemplateGallery";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
 import { useWritingChat, type WritingChatSnapshot } from "./useWritingChat";
@@ -407,12 +410,82 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     || Boolean(pendingSubmission)
     || Boolean(analyzingSubmission)
     || planning !== null;
-  const conversationVisible = messages.length > 0
+  /*
+   * 两张脸由路径决定：/writing 永远是入口首页，会话与成稿只在 /writing/session。
+   * 被收进停放区（用户切去别的模块）时保持上一张脸，别在看不见的地方把会话拆了又搭。
+   */
+  const faceRef = useRef<"home" | "session">(location.pathname === WRITING_SESSION_PATH ? "session" : "home");
+  if (location.pathname === WRITING_SESSION_PATH) faceRef.current = "session";
+  else if (location.pathname === WRITING_HOME_PATH) faceRef.current = "home";
+  const onSessionPage = faceRef.current === "session";
+  const hasSession = messages.length > 0
     || Boolean(pendingSubmission)
     || Boolean(analyzingSubmission)
     || planning !== null;
+  const conversationVisible = onSessionPage && hasSession;
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
+
+  /*
+   * 写作台常驻在壳层里，用户可以切走干别的。进度和成稿要主动报出去，
+   * 侧栏指示和完成通知才知道这边发生了什么。
+   */
+  const jobBusyRef = useRef(false);
+  const reportedTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    const phase: WritingJobPhase = analyzingSubmission
+      ? "analyzing"
+      : planning?.phase === "researching"
+        ? "researching"
+        : (pendingSubmission || writingBusy)
+          ? "writing"
+          : "idle";
+    const job = useWritingJobStore.getState();
+    /* 首页提示条只有需求摘录能让人认出这是哪一篇，所以进度里顺带带上它。 */
+    const requirement = analyzingSubmission?.requirement
+      ?? (planning?.phase === "researching" ? planning.requirement : undefined)
+      ?? pendingSubmission?.requirement
+      ?? (writingBusy ? messages[messages.length - 1]?.question : undefined);
+    job.setPhase(phase, phase === "researching" ? planning?.progressText : undefined, phase === "idle" ? undefined : requirement);
+
+    if (phase !== "idle") {
+      jobBusyRef.current = true;
+      return;
+    }
+    const latest = messages[messages.length - 1];
+    if (!latest || latest.status !== "done") {
+      jobBusyRef.current = false;
+      return;
+    }
+    /* 只认这次挂载里真跑完的那一轮，恢复出来的历史成稿不该再弹一次提醒。 */
+    if (jobBusyRef.current) {
+      jobBusyRef.current = false;
+      reportedTurnRef.current = latest.id;
+    }
+    if (reportedTurnRef.current !== latest.id) return;
+    /* 标题要等正文解析完才准，这一轮还没落地就先不报，免得提醒里挂着用户自己那句要求。 */
+    const state = turnStates[latest.id];
+    if (state && !state.artifact && !state.parseError && !state.raw) return;
+    const title = state?.artifact?.title?.trim();
+    job.reportResult(latest.id, title || latest.question.slice(0, 30) || "未命名公文");
+  }, [analyzingSubmission, messages, pendingSubmission, planning, turnStates, writingBusy]);
+
+  /*
+   * 刷新后会话是从 sessionStorage 认回来的，store 却是空的：首页会以为什么都没发生过。
+   * 把最后那一份已完成的成稿补进 store，只为让提示条有东西可点——
+   * 记成已提醒、已看过，所以不弹提醒也不亮未读圆点。
+   */
+  useEffect(() => {
+    const turns = recovered?.chat.turns ?? [];
+    const latest = turns[turns.length - 1];
+    if (!latest || latest.status !== "done") return;
+    const state = recovered?.turnStates[latest.id];
+    if (!state) return;
+    /* 只认真落地过的那一份：解析失败或半截的文本不算成稿。 */
+    if (!state.artifact && !(state.raw && !state.parseError)) return;
+    const title = state.artifact?.title?.trim();
+    useWritingJobStore.getState().restoreResult(latest.id, title || latest.question.slice(0, 30) || "未命名公文");
+  }, [recovered]);
 
   /* 能 @ 的必须真能出成稿：模板要已发布、编译文件还在，结构也已分析完。 */
   const usableTemplates = useMemo(
@@ -769,6 +842,8 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     setComposerError("");
     setValue("");
     setMention(null);
+    /* 首页只管开头：一提交就进会话页看过程，已有的会话在那边接着往下写。 */
+    if (!onSessionPage) navigate(WRITING_SESSION_PATH);
     const turnReference = reference;
     const structureNodes = turnReference.template.currentVersion.analysis!.structureNodes;
     const token = ++analyzeTokenRef.current;
@@ -1588,86 +1663,91 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
           ) : null}
 
           {templates.length || drafts.length ? (
-            <OfficialDocumentComposer
-              mode={conversationVisible ? "chat" : "hero"}
-              label="公文写作输入"
-              value={value}
-              ariaLabel="公文写作要求"
-              placeholder={conversationVisible
-                ? "继续描述，输入 @ 更换模板或参考草稿"
-                : "描述你想写的公文，输入 @ 选择模板或参考草稿"}
-              maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
-              busy={composerBusy}
-              disabled={composerBusy}
-              textareaRef={inputRef}
-              showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
-              onScrollToBottom={conversation.scrollToBottom}
-              overlay={mention ? (
-                <OfficialDocumentMentionMenu
-                  groups={visibleMentionGroups}
-                  activeKey={activeMentionKey}
-                  emptyText="没有匹配的模板或草稿"
-                  onHover={setActiveMentionKey}
-                  onSelect={selectMention}
-                />
-              ) : null}
-              lead={(
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: [
-                      { key: "material", label: "上传参考资料" },
-                      { key: "template", label: "上传结构 DOCX" },
-                      { key: "library", label: "模板库" }
-                    ],
-                    onClick: ({ key }) => {
-                      if (key === "material") openMaterialPicker();
-                      if (key === "template") setUploadOpen(true);
-                      if (key === "library") setGalleryOpen(true);
-                    }
-                  }}
-                >
+            <div className="official-document-compose__composer-block">
+              <OfficialDocumentComposer
+                mode={conversationVisible ? "chat" : "hero"}
+                label="公文写作输入"
+                value={value}
+                ariaLabel="公文写作要求"
+                placeholder={conversationVisible
+                  ? "继续描述，输入 @ 更换模板或参考草稿"
+                  : "描述你想写的公文，输入 @ 选择模板或参考草稿"}
+                maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
+                busy={composerBusy}
+                textareaRef={inputRef}
+                showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
+                onScrollToBottom={conversation.scrollToBottom}
+                overlay={mention ? (
+                  <OfficialDocumentMentionMenu
+                    groups={visibleMentionGroups}
+                    activeKey={activeMentionKey}
+                    emptyText="没有匹配的模板或草稿"
+                    onHover={setActiveMentionKey}
+                    onSelect={selectMention}
+                  />
+                ) : null}
+                lead={(
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                      items: [
+                        { key: "material", label: "上传参考资料" },
+                        { key: "template", label: "上传结构 DOCX" },
+                        { key: "library", label: "模板库" }
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "material") openMaterialPicker();
+                        if (key === "template") setUploadOpen(true);
+                        if (key === "library") setGalleryOpen(true);
+                      }
+                    }}
+                  >
+                    <Button
+                      className="official-document-composer__plus"
+                      type="text"
+                      shape="circle"
+                      aria-label="添加模板或参考资料"
+                      disabled={composerBusy}
+                      icon={<Plus size={16} aria-hidden="true" />}
+                    />
+                  </Dropdown>
+                )}
+                chips={composerChips}
+                tail={onSessionPage && (writingBusy || planning?.phase === "researching" || pendingSubmission) ? (
                   <Button
-                    className="official-document-composer__plus"
+                    className="official-document-composer__stop"
                     type="text"
                     shape="circle"
-                    aria-label="添加模板或参考资料"
-                    disabled={composerBusy}
-                    icon={<Plus size={16} aria-hidden="true" />}
+                    aria-label="停止"
+                    title="停止"
+                    icon={<Square size={12} weight="fill" aria-hidden="true" />}
+                    onClick={cancel}
                   />
-                </Dropdown>
-              )}
-              chips={composerChips}
-              tail={writingBusy || planning?.phase === "researching" || pendingSubmission ? (
-                <Button
-                  className="official-document-composer__stop"
-                  type="text"
-                  shape="circle"
-                  aria-label="停止"
-                  title="停止"
-                  icon={<Square size={12} weight="fill" aria-hidden="true" />}
-                  onClick={cancel}
-                />
-              ) : (
-                <Button
-                  className="official-document-composer__send"
-                  type="primary"
-                  shape="circle"
-                  aria-label="生成完整公文"
-                  disabled={composerBusy || !reference || !value.trim()}
-                  icon={<ArrowUp size={18} weight="bold" />}
-                  onClick={() => void submit()}
-                />
-              )}
-              footnote="写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。"
-              onChange={(next) => {
-                setValue(next);
-                syncMention(next);
-              }}
-              onKeyDown={handleComposerKeyDown}
-              onSelectionChange={() => syncMention(inputRef.current?.value ?? "")}
-              onBlur={() => setMention(null)}
-            />
+                ) : (
+                  <Button
+                    className="official-document-composer__send"
+                    type="primary"
+                    shape="circle"
+                    aria-label="生成完整公文"
+                    disabled={composerBusy || !reference || !value.trim()}
+                    icon={<ArrowUp size={18} weight="bold" />}
+                    onClick={() => void submit()}
+                  />
+                )}
+                footnote={!onSessionPage && composerBusy
+                  ? "正在生成中，完成后可继续提交。"
+                  : "写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。"}
+                onChange={(next) => {
+                  setValue(next);
+                  syncMention(next);
+                }}
+                onKeyDown={handleComposerKeyDown}
+                onSelectionChange={() => syncMention(inputRef.current?.value ?? "")}
+                onBlur={() => setMention(null)}
+              />
+              {/* 首页不展开会话，那边有活在跑或有成稿就在这里给一条回去的路。 */}
+              {!onSessionPage ? <WritingSessionNotice onOpen={() => navigate(WRITING_SESSION_PATH)} /> : null}
+            </div>
           ) : (
             <div className="official-document-compose__empty">
               <FileDoc size={28} aria-hidden="true" />

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router";
 import { XsRouteFallback } from "@/components/xs/XsRouteFallback";
 import { XsShell } from "@/components/xs/XsShell";
 import { DashboardOnboarding } from "@/features/dashboard/DashboardOnboarding";
+import { WritingComposeHost } from "@/features/officialDocument/WritingComposeHost";
 import { HomeOnboarding } from "@/features/home/HomeOnboarding";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -56,6 +57,8 @@ export function AppLayout() {
           <Outlet />
         </div>
       </Suspense>
+      {/* 写作台挂在按路径重挂的 route-view 之外，离开 /writing 也不打断生成。 */}
+      <WritingComposeHost />
       <HomeOnboarding />
       <DashboardOnboarding />
     </XsShell>
