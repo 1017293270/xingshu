@@ -16,6 +16,7 @@ export type { OfficialDocumentAppChrome, OfficialDocumentAppStage };
 export const OFFICIAL_DOCUMENT_TEMPLATES_PATH = "/writing/templates";
 export const OFFICIAL_DOCUMENT_DRAFTS_PATH = "/writing/drafts";
 export const OFFICIAL_DOCUMENT_COMPOSE_PATH = "/writing";
+export const OFFICIAL_DOCUMENT_SESSION_PATH = "/writing/session";
 
 /** 首屏就是写作台，路径决定初始形态，避免刷新详情页时先闪一帧写作态页头。 */
 function stageForPath(pathname: string): OfficialDocumentAppStage {
@@ -23,7 +24,13 @@ function stageForPath(pathname: string): OfficialDocumentAppStage {
   if (pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)) return "library";
   if (pathname.startsWith(`${OFFICIAL_DOCUMENT_DRAFTS_PATH}/`)) return "draft";
   if (pathname.startsWith(OFFICIAL_DOCUMENT_DRAFTS_PATH)) return "drafts";
+  /* 入口首页和会话页是同一件事的两页，页头都停在写作态。 */
   return "compose";
+}
+
+/** 写作是「首页 + 会话页」两页，导航要一起亮；模板库和草稿管理各归各的。 */
+function composeNavActive(pathname: string) {
+  return pathname === OFFICIAL_DOCUMENT_COMPOSE_PATH || pathname.startsWith(OFFICIAL_DOCUMENT_SESSION_PATH);
 }
 
 const stageContext: Record<OfficialDocumentAppStage, string> = {
@@ -99,7 +106,11 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
             </Link>
           ) : (
             <nav className="official-document-app__nav" aria-label="公文导航">
-              <NavLink to={OFFICIAL_DOCUMENT_COMPOSE_PATH} end>公文写作</NavLink>
+              {/* NavLink 只会认一条路径，写作有两页，激活态自己算 */}
+              <Link
+                to={OFFICIAL_DOCUMENT_COMPOSE_PATH}
+                aria-current={composeNavActive(location.pathname) ? "page" : undefined}
+              >公文写作</Link>
               <NavLink to={OFFICIAL_DOCUMENT_TEMPLATES_PATH}>格式模板</NavLink>
               <NavLink to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>草稿管理</NavLink>
             </nav>

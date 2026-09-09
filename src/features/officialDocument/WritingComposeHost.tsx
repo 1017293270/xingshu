@@ -1,113 +1,55 @@
 import { Button, notification } from "antd";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import { create } from "zustand";
-import { OfficialDocumentComposeView } from "./OfficialDocumentComposeView";
+import {
+  ensureWritingComposeNode,
+  releaseWritingComposeParking,
+  setWritingComposeParking,
+  useWritingComposeHostStore,
+  WRITING_SESSION_PATH
+} from "./writingComposeNode";
 import { useWritingJobStore } from "./writingJobStore";
 import "./writing-compose-host.css";
 
-export const WRITING_COMPOSE_PATH = "/writing";
+/*
+ * 写作台按需加载：没进过报告智写的人不该在首屏背上整套写作台代码，
+ * 而常驻宿主本身又必须随 AppLayout 一起在场，否则没人替生成过程守着。
+ */
+const OfficialDocumentComposeView = lazy(() => import("./OfficialDocumentComposeView")
+  .then((module) => ({ default: module.OfficialDocumentComposeView })));
 
 /** 等路由切换这一拍落定再判断写作台还在不在眼前。 */
 const NOTIFY_SETTLE_MS = 400;
 
-type WritingComposeHostState = {
-  /** 用户第一次进写作台之前不挂管线，省掉一整套模板/草稿请求。 */
-  started: boolean;
-  /**
-   * 写作台此刻是不是真的显示在页面上——由槽位自己开合。
-   * 不看路由：成稿落地那一下是 store 触发的渲染，宿主读到的 location 可能还停在上一页。
-   */
-  visible: boolean;
-  start: () => void;
-  stop: () => void;
-  setVisible: (visible: boolean) => void;
-};
-
-export const useWritingComposeHostStore = create<WritingComposeHostState>((set) => ({
-  started: false,
-  visible: false,
-  start: () => set((state) => (state.started ? state : { started: true })),
-  stop: () => set((state) => (state.started || state.visible ? { started: false, visible: false } : state)),
-  setVisible: (visible) => set((state) => (state.visible === visible ? state : { visible }))
-}));
-
-/**
- * 写作台的真实 DOM 落点。路由一变 `.xs-route-view` 就整块重挂，所以生成过程要活下来，
- * 承载它的节点必须由模块自己拿着，在页面槽位和隐藏容器之间搬来搬去，而不跟着路由生灭。
- */
-let composeNode: HTMLDivElement | null = null;
-let hiddenParent: HTMLElement | null = null;
-
-function ensureComposeNode() {
-  if (!composeNode) {
-    composeNode = document.createElement("div");
-    composeNode.className = "official-document-compose-host";
-  }
-  return composeNode;
-}
-
-export function getWritingComposeNode() {
-  return composeNode;
-}
-
-/** 把常驻节点搬进页面槽位。重复调用无副作用，StrictMode 里来回挂载也不会出错。 */
-export function adoptWritingComposeNode(container: HTMLElement) {
-  const node = ensureComposeNode();
-  if (node.parentElement !== container) {
-    container.appendChild(node);
-  }
-  return node;
-}
-
-/** 离开写作台时把节点收回隐藏容器，React 子树不卸载，SSE 继续跑。 */
-export function releaseWritingComposeNode() {
-  const node = composeNode;
-  if (!node || !hiddenParent || node.parentElement === hiddenParent) return;
-  hiddenParent.appendChild(node);
-}
-
-/** 仅供测试重置模块级 DOM。 */
-export function resetWritingComposeNodeForTests() {
-  composeNode?.remove();
-  composeNode = null;
-  hiddenParent = null;
-}
-
 export function WritingComposeHost() {
   const started = useWritingComposeHostStore((state) => state.started);
-  const onComposePage = useWritingComposeHostStore((state) => state.visible);
+  const face = useWritingComposeHostStore((state) => state.face);
   const lastResult = useWritingJobStore((state) => state.lastResult);
   const navigate = useNavigate();
   const [api, contextHolder] = notification.useNotification();
   const hiddenRef = useRef<HTMLDivElement | null>(null);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  const node = started ? ensureComposeNode() : null;
+  const node = started ? ensureWritingComposeNode() : null;
 
   useEffect(() => {
     const parking = hiddenRef.current;
-    hiddenParent = parking;
     /* 还没被页面收养的节点先停在隐藏容器里，别飘在 document 之外。 */
-    if (composeNode && !composeNode.parentElement && parking) {
-      parking.appendChild(composeNode);
-    }
-    return () => {
-      if (hiddenParent === parking) hiddenParent = null;
-    };
+    setWritingComposeParking(parking);
+    return () => releaseWritingComposeParking(parking);
   }, [started]);
 
   /* 宿主随 AppLayout 卸载只发生在退出登录：别把上一个人的未读提示留给下一个人。 */
   useEffect(() => () => useWritingJobStore.getState().reset(), []);
 
   /*
-   * 人回到写作台就当看过了，未读圆点跟着消失。
+   * 人回到会话页就当看过了，未读圆点跟着消失。首页只有一条提示条，看不到成稿，不算看过。
    * 只管已经决定过的那一份：还没决定的交给下面那一拍，别在路由切换途中提前判成「看过」。
    */
   useEffect(() => {
-    if (onComposePage && lastResult?.notified) useWritingJobStore.getState().markSeen();
-  }, [onComposePage, lastResult]);
+    if (face === "session" && lastResult?.notified) useWritingJobStore.getState().markSeen();
+  }, [face, lastResult]);
 
   useEffect(() => {
     if (!lastResult || lastResult.notified) return;
@@ -121,10 +63,14 @@ export function WritingComposeHost() {
       const result = job.lastResult;
       if (!result || result.notified) return;
       job.markNotified();
-      if (useWritingComposeHostStore.getState().visible) {
+      const settledFace = useWritingComposeHostStore.getState().face;
+      /* 成稿就摆在眼前，不用再说一遍。 */
+      if (settledFace === "session") {
         job.markSeen();
         return;
       }
+      /* 首页那条提示条自己会变成「已生成」，不额外弹窗；但没看过就还是没看过。 */
+      if (settledFace === "home") return;
       const key = `writing-result-${result.turnId}`;
       api.open({
         key,
@@ -132,13 +78,13 @@ export function WritingComposeHost() {
         description: `《${result.title}》已经写好，回写作台查看或保存到草稿箱。`,
         placement: "bottomRight",
         duration: 8,
-        btn: (
+        actions: (
           <Button
             type="primary"
             size="small"
             onClick={() => {
               api.destroy(key);
-              navigateRef.current(WRITING_COMPOSE_PATH);
+              navigateRef.current(WRITING_SESSION_PATH);
             }}
           >
             查看
@@ -153,7 +99,10 @@ export function WritingComposeHost() {
     <>
       {contextHolder}
       <div className="official-document-compose-parking" ref={hiddenRef} hidden aria-hidden="true" />
-      {node ? createPortal(<OfficialDocumentComposeView />, node) : null}
+      {node ? createPortal(
+        <Suspense fallback={null}><OfficialDocumentComposeView /></Suspense>,
+        node
+      ) : null}
     </>
   );
 }

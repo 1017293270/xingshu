@@ -16,13 +16,20 @@ type WritingJobState = {
   phase: WritingJobPhase;
   progressText?: string;
   startedAt?: number;
+  /** 正在写的这一篇要什么，首页提示条要把它摘出来给用户认。 */
+  requirement?: string;
   lastResult: WritingJobResult | null;
 };
 
 type WritingJobActions = {
-  setPhase: (phase: WritingJobPhase, progressText?: string) => void;
+  setPhase: (phase: WritingJobPhase, progressText?: string, requirement?: string) => void;
   /** 同一轮重复上报只刷新标题：标题要等正文解析完才拿得到，不能因此当成第二份成稿。 */
   reportResult: (turnId: string, title: string) => void;
+  /**
+   * 刷新后从 sessionStorage 认回来的历史成稿：只为让首页提示条有东西可显示。
+   * 直接记成已提醒、已看过，既不弹提醒也不亮未读圆点。
+   */
+  restoreResult: (turnId: string, title: string) => void;
   markSeen: () => void;
   markNotified: () => void;
   reset: () => void;
@@ -32,18 +39,20 @@ const initialState: WritingJobState = {
   phase: "idle",
   progressText: undefined,
   startedAt: undefined,
+  requirement: undefined,
   lastResult: null
 };
 
 export const useWritingJobStore = create<WritingJobState & WritingJobActions>((set) => ({
   ...initialState,
-  setPhase: (phase, progressText) => set((state) => {
+  setPhase: (phase, progressText, requirement) => set((state) => {
     /* 原样返回 state 才真的不惊动订阅者；返回 {} 仍会合并出新对象并广播一轮。 */
-    if (state.phase === phase && state.progressText === progressText) return state;
-    if (phase === "idle") return { phase, progressText: undefined, startedAt: undefined };
+    if (state.phase === phase && state.progressText === progressText && state.requirement === requirement) return state;
+    if (phase === "idle") return { phase, progressText: undefined, startedAt: undefined, requirement: undefined };
     return {
       phase,
       progressText,
+      requirement,
       startedAt: state.phase === "idle" ? Date.now() : state.startedAt
     };
   }),
@@ -54,6 +63,11 @@ export const useWritingJobStore = create<WritingJobState & WritingJobActions>((s
     }
     return { lastResult: { turnId, title, finishedAt: Date.now(), seen: false, notified: false } };
   }),
+  restoreResult: (turnId, title) => set((state) => (
+    state.lastResult?.turnId === turnId
+      ? state
+      : { lastResult: { turnId, title, finishedAt: Date.now(), seen: true, notified: true } }
+  )),
   markSeen: () => set((state) => (
     state.lastResult && !state.lastResult.seen
       ? { lastResult: { ...state.lastResult, seen: true } }

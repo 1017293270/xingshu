@@ -88,4 +88,48 @@ describe("writingJobStore", () => {
     job().setPhase("writing");
     expect(selectWritingJobIndicator(useWritingJobStore.getState())).toBe("running");
   });
+
+  it("carries the requirement of the running turn and drops it when the run ends", () => {
+    job().setPhase("analyzing", undefined, "撰写2026年安全检查通知");
+    expect(job().requirement).toBe("撰写2026年安全检查通知");
+
+    /* 同一轮里换阶段，需求还是那一句，首页提示条不该闪 */
+    job().setPhase("writing", undefined, "撰写2026年安全检查通知");
+    expect(job().requirement).toBe("撰写2026年安全检查通知");
+
+    job().setPhase("idle");
+    expect(job().requirement).toBeUndefined();
+  });
+
+  it("does not wake subscribers when only the same requirement is reported again", () => {
+    job().setPhase("writing", undefined, "撰写2026年安全检查通知");
+    let notifications = 0;
+    const unsubscribe = useWritingJobStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    job().setPhase("writing", undefined, "撰写2026年安全检查通知");
+    expect(notifications).toBe(0);
+    unsubscribe();
+  });
+
+  /* 刷新后认回来的成稿只为让首页提示条有东西可点：不提醒、不亮未读圆点。 */
+  it("restores a recovered result as already seen and already announced", () => {
+    job().restoreResult("turn-1", "关于开展安全检查的通知");
+
+    expect(job().lastResult).toMatchObject({
+      turnId: "turn-1",
+      title: "关于开展安全检查的通知",
+      seen: true,
+      notified: true
+    });
+    expect(selectWritingJobIndicator(useWritingJobStore.getState())).toBeNull();
+  });
+
+  it("never lets a restore overwrite the result of the turn it already holds", () => {
+    job().reportResult("turn-1", "刚写完的一份");
+    job().restoreResult("turn-1", "sessionStorage 里的旧标题");
+
+    expect(job().lastResult).toMatchObject({ title: "刚写完的一份", seen: false, notified: false });
+  });
 });

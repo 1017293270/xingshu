@@ -77,9 +77,28 @@ describe("OfficialDocumentAppShell", () => {
     renderShell("/writing/templates");
 
     const navigation = screen.getByRole("navigation", { name: "公文导航" });
-    expect(within(navigation).getByRole("link", { name: "公文写作" })).toHaveAttribute("href", "/writing");
+    const compose = within(navigation).getByRole("link", { name: "公文写作" });
+    expect(compose).toHaveAttribute("href", "/writing");
+    /* 模板库不该把写作那一项也点亮 */
+    expect(compose).not.toHaveAttribute("aria-current");
     expect(within(navigation).getByRole("link", { name: "格式模板" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "返回星数" })).not.toBeInTheDocument();
+  });
+
+  /* 入口首页和会话页是写作的两页：页头一致，导航一起亮。 */
+  it("keeps the writing navigation lit on the session page", () => {
+    render(
+      <MemoryRouter initialEntries={["/writing/session"]}>
+        <OfficialDocumentAppShell>
+          <ChromeProbe stage="compose" context="公文写作" />
+        </OfficialDocumentAppShell>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector(".official-document-app")).toHaveAttribute("data-stage", "compose");
+    const navigation = screen.getByRole("navigation", { name: "公文导航" });
+    expect(within(navigation).getByRole("link", { name: "公文写作" })).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getByRole("link", { name: "格式模板" })).not.toHaveAttribute("aria-current");
   });
 
   it("updates the slim header context for template structure and draft canvas", async () => {
