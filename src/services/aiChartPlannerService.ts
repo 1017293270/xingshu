@@ -27,6 +27,10 @@ const emptyDominatedShare = 0.5;
 const emptyDimensionPattern = /^(?:[-—–−]|未知|空值|空|null|none|n\/a)$/i;
 // 合计行是其余各行的加总，画进图里就重复计了一遍（饼图里恰好占掉一半）。
 const totalDimensionPattern = /^(?:合计|总计|小计|共计|总数|全部|汇总|total)$/i;
+// 名称本身就是指标（合同金额、累计开票、未收款余额、办结率）时，各项互相包含或推算，
+// 不是同一维度下的并列项，画成柱状或饼图都会误导。
+const metricNameSuffixPattern = /(?:额|额度|(?<!质)量|数|率|占比|比例|比重|同比|环比|值)$/;
+const metricNamePrefixPattern = /^(?:累计|合计|总计|共计|平均|人均|户均|日均|月均|年均|最高|最低)/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -91,6 +95,16 @@ function isTotalDimension(value: unknown): boolean {
 function isNonComparableDimension(value: unknown): boolean {
   const label = bareDimensionLabel(value);
   return !label || emptyDimensionPattern.test(label) || totalDimensionPattern.test(label);
+}
+
+function isMetricName(value: unknown): boolean {
+  const name = bareDimensionLabel(value);
+  return metricNameSuffixPattern.test(name) || metricNamePrefixPattern.test(name);
+}
+
+/** 过半的项本身就是指标名：这是一组指标汇总，不是可以放在一张图里对比的分类。 */
+function isMetricSummary(names: unknown[]): boolean {
+  return names.filter(isMetricName).length * 2 > names.length;
 }
 
 function isRankLikeColumn(column: Pick<AiChartColumnSummary, "key" | "title">): boolean {
@@ -299,6 +313,10 @@ function extractMarkdownRankingTables(markdown: string): DataHubTableResult[] {
     if (!hasDimension || !hasMetric) {
       continue;
     }
+    const category = inferred.find((column) => column.type === "dimension" && !isRankLikeColumn(column));
+    if (category && isMetricSummary(mappedRows.map((row) => row[category.key]))) {
+      continue;
+    }
 
     tables.push({
       columns: inferred,
@@ -416,7 +434,7 @@ function buildAnswerRankingTable(
   }
 
   const names = entries.map((entry) => entry.name);
-  if (new Set(names.map(normalizeRankingName)).size !== names.length) {
+  if (new Set(names.map(normalizeRankingName)).size !== names.length || isMetricSummary(names)) {
     return null;
   }
 

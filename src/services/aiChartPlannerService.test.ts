@@ -522,6 +522,68 @@ describe("aiChartPlannerService", () => {
     ]);
   });
 
+  it("does not chart an answer summary whose items are themselves metrics", () => {
+    const question = "四川才子软件的合同开票和收款情况";
+    const answer = [
+      "三、汇总（截至 2026-09-10）",
+      "",
+      "- 合同金额：**10,200,000.00 元**",
+      "- 累计开票：**10,200,000.00 元**（已 100% 开完，未开票余额 0 元）",
+      "- 累计收款：**8,650,000.00 元**",
+      "- **未收款余额：1,550,000.00 元**（对应 2025-12-17 开出的尾款 155 万元，目前尚未入账）",
+      "",
+      "回答依据：本回答依据已验证的数据查询结果。"
+    ].join("\n");
+    const receiptTable = table(
+      [
+        { key: "pay_date", title: "收款日期", type: "time" },
+        { key: "amount", title: "收款金额", type: "number" }
+      ],
+      [
+        { pay_date: "2024-12-18", amount: 3950000 },
+        { pay_date: "2025-03-15", amount: 3600000 },
+        { pay_date: "2025-09-29", amount: 1100000 }
+      ]
+    );
+    const chartTables = resolveAiChartTables({ question, tables: [receiptTable], answer });
+
+    expect(extractAnswerRankingList(answer)).toEqual([]);
+    expect(chartTables).toEqual([receiptTable]);
+    const spec = buildGeneratedChartSpec(
+      {
+        chartable: true,
+        reason: "收款按日期排列，适合柱状图。",
+        chartType: "bar",
+        allowedTypes: ["bar", "line"],
+        title: "合同开票及收款汇总",
+        tableIndex: 0,
+        dimensionKey: "pay_date",
+        metricKeys: ["amount"]
+      },
+      chartTables
+    );
+    expect(spec).toMatchObject({ tableTitle: "结果表 1", dimensionKey: "pay_date", metricKeys: ["amount"] });
+
+    const metricTable = [
+      "| 项目 | 金额（元） |",
+      "| --- | --- |",
+      "| 合同金额 | 10,200,000.00 |",
+      "| 累计开票 | 10,200,000.00 |",
+      "| 累计收款 | 8,650,000.00 |",
+      "| 未收款余额 | 1,550,000.00 |"
+    ].join("\n");
+    expect(resolveAiChartTables({ question, tables: [receiptTable], answer: metricTable })).toEqual([receiptTable]);
+  });
+
+  it("still charts a two-part split when only one side is named as a metric", () => {
+    const [split] = extractAnswerRankingList("- 已收款：8,650,000.00 元\n- 未收款余额：1,550,000.00 元");
+
+    expect(split?.rows).toEqual([
+      { name: "已收款", value: 8650000 },
+      { name: "未收款余额", value: 1550000 }
+    ]);
+  });
+
   it("prefers a compact ranking table over an empty-dominated raw category table", async () => {
     const rawTypeTable = table(
       [
