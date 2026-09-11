@@ -1,4 +1,4 @@
-import { formatDataHubColumnTitle, formatDataHubTableTitle } from "@/services/dataHubFormat";
+import { formatDataHubColumnTitle, formatDataHubDateTime, formatDataHubTableTitle } from "@/services/dataHubFormat";
 import type { DataHubTableResult } from "@/types/dataHub";
 
 export function formatDataHubTableCell(value: unknown): string {
@@ -10,7 +10,7 @@ export function formatDataHubTableCell(value: unknown): string {
     return JSON.stringify(value);
   }
 
-  return String(value);
+  return typeof value === "string" ? formatDataHubDateTime(value) : String(value);
 }
 
 export function countDataHubTableRows(tables: DataHubTableResult[]) {

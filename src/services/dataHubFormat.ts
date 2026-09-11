@@ -185,6 +185,26 @@ export function formatDataHubColumnTitle(title: string, key = title) {
   );
 }
 
+const dataHubLocalDateTimePattern = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)(\.\d+)?$/;
+
+/**
+ * Cube 查询把时间写成 `2026-09-10T17:37:03.000`：去掉 T 和全零毫秒，零点整只留日期。
+ * 带时区的值要先定换算口径，这里原样返回。
+ */
+export function formatDataHubDateTime(value: string) {
+  const matched = value.trim().match(dataHubLocalDateTimePattern);
+  if (!matched) {
+    return value;
+  }
+
+  const [, date, time, fraction = ""] = matched;
+  const wholeSecond = /^\.?0*$/.test(fraction);
+  if (wholeSecond && /^00:00(?::00)?$/.test(time)) {
+    return date;
+  }
+  return `${date} ${time}${wholeSecond ? "" : fraction}`;
+}
+
 export function getDataHubColumnMinWidth(column: DataHubTableResult["columns"][number]) {
   const title = formatDataHubColumnTitle(column.title, column.key);
   const key = column.key.toLowerCase();

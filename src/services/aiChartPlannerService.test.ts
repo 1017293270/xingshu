@@ -1076,6 +1076,21 @@ describe("year rankings and chronological rendering", () => {
   });
 });
 
+describe("chart axis labels", () => {
+  it("shows Cube timestamps on the axis without the ISO T", () => {
+    const visits = table([{ key: "day", title: "拜访日期" }, { key: "count", title: "拜访次数", type: "number" }], [
+      { day: "2026-09-10T00:00:00.000", count: 1 },
+      { day: "2026-09-08T00:00:00.000", count: 2 },
+      { day: "2026-09-09T15:30:00.000", count: 1 }
+    ]);
+    const spec = buildGeneratedChartSpec({ chartable: true, reason: "按日趋势", chartType: "line",
+      tableIndex: 0, dimensionKey: "day", metricKeys: ["count"] }, [visits]);
+    const xAxis = buildGeneratedChartOption(spec!, "line").xAxis as { data?: unknown[] };
+
+    expect(xAxis.data).toEqual(["2026-09-08", "2026-09-09 15:30:00", "2026-09-10"]);
+  });
+});
+
 describe("interactive horizontal bar windows", () => {
   it("renders an eight-record window without grouping, preserving nulls and stable metric colors", () => {
     const source = table([

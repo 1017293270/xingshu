@@ -37,6 +37,25 @@ describe("dataHubTableExport", () => {
     expect(formatDataHubTableCell(262)).toBe("262");
   });
 
+  it("shows Cube timestamps as readable local date times", () => {
+    expect(formatDataHubTableCell("2026-09-10T17:37:03.000")).toBe("2026-09-10 17:37:03");
+    expect(formatDataHubTableCell("2026-09-10T00:00:00.000")).toBe("2026-09-10");
+    expect(formatDataHubTableCell("2026-09-10 00:00:00")).toBe("2026-09-10");
+    expect(formatDataHubTableCell("2026-09-10T17:37")).toBe("2026-09-10 17:37");
+    expect(formatDataHubTableCell("2026-09-10T17:37:03.120")).toBe("2026-09-10 17:37:03.120");
+    // 带时区的时间换算口径未定，不能丢掉时区只改格式。
+    expect(formatDataHubTableCell("2026-09-10T09:37:03Z")).toBe("2026-09-10T09:37:03Z");
+    expect(formatDataHubTableCell("2026-09-10")).toBe("2026-09-10");
+    expect(formatDataHubTableCell("TOP3 项目")).toBe("TOP3 项目");
+    expect(buildDataHubTablesCsv([{
+      columns: [{ key: "created_at", title: "创建时间" }],
+      rows: [{ created_at: "2026-09-10T17:37:03.000" }],
+      totalRows: 1,
+      source: "cube",
+      tableIndex: 0
+    }])).toContain("2026-09-10 17:37:03");
+  });
+
   it("builds csv with localized headers and counts exported rows", () => {
     const csv = buildDataHubTablesCsv([sampleTable]);
 

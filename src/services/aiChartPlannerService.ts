@@ -14,7 +14,7 @@ import {
   requestDataHubAiChartPlan,
   type DataHubAiChartPlanner
 } from "@/services/dataHubAiChartService";
-import { formatDataHubColumnTitle, formatDataHubTableTitle } from "@/services/dataHubFormat";
+import { formatDataHubColumnTitle, formatDataHubDateTime, formatDataHubTableTitle } from "@/services/dataHubFormat";
 
 type PlanAiChartOptions = {
   dataHubPlanner?: DataHubAiChartPlanner;
@@ -1089,7 +1089,7 @@ export function buildGeneratedChartOption(
     ? [...spec.table.rows].sort((left, right) => String(left[spec.dimensionKey] ?? "").localeCompare(
       String(right[spec.dimensionKey] ?? ""), "zh-CN", { numeric: true }))
     : spec.table.rows;
-  const categories = rows.map((row) => String(row[spec.dimensionKey] ?? "-"));
+  const categories = rows.map((row) => formatDataHubDateTime(String(row[spec.dimensionKey] ?? "-")));
   const metrics = spec.metricKeys.map((key) => ({
     key,
     name: metricTitle(spec.table, key),
