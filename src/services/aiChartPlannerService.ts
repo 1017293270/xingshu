@@ -24,7 +24,9 @@ const supportedChartTypes: AiChartType[] = ["bar", "line", "pie"];
 const sampleRowLimit = 3;
 const chartPlanTableLimit = 8;
 const emptyDominatedShare = 0.5;
-const nonComparableDimensionPattern = /^(?:[-—–−]|未知|空值|空|null|none|n\/a|合计|总计|小计|全部|汇总|total)$/i;
+const emptyDimensionPattern = /^(?:[-—–−]|未知|空值|空|null|none|n\/a)$/i;
+// 合计行是其余各行的加总，画进图里就重复计了一遍（饼图里恰好占掉一半）。
+const totalDimensionPattern = /^(?:合计|总计|小计|共计|总数|全部|汇总|total)$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,6 +63,19 @@ function dimensionLabel(value: unknown): string {
   return String(value).trim();
 }
 
+/** 按读者看到的文字取值：去掉加粗/斜体、行内代码和删除线标记。 */
+function plainMarkdownText(text: string): string {
+  return text.replace(/[*`]|~~/g, "").replace(/^__(.+)__$/, "$1").trim();
+}
+
+/** 判定前还原成裸词：`**合计**`、`合 计`、`总计：`、`合计（3 类）` 都按「合计」认。 */
+function bareDimensionLabel(value: unknown): string {
+  return plainMarkdownText(dimensionLabel(value))
+    .replace(/[\s\u3000]+/g, "")
+    .replace(/[：:]+$/, "")
+    .replace(/^(.+?)[（(][^（()）]*[)）]$/, "$1");
+}
+
 /** 名称对齐用：忽略空白、标点和大小写，让「广州思迈特软件有限公司」能匹配回答里的写法。 */
 function normalizeRankingName(value: unknown): string {
   return dimensionLabel(value)
@@ -69,9 +84,13 @@ function normalizeRankingName(value: unknown): string {
     .replace(/[，,。.、；;：:！!？?（）()【】[\]「」『』“”"'`~·\-—–_/\\|]/g, "");
 }
 
+function isTotalDimension(value: unknown): boolean {
+  return totalDimensionPattern.test(bareDimensionLabel(value));
+}
+
 function isNonComparableDimension(value: unknown): boolean {
-  const label = dimensionLabel(value);
-  return !label || nonComparableDimensionPattern.test(label);
+  const label = bareDimensionLabel(value);
+  return !label || emptyDimensionPattern.test(label) || totalDimensionPattern.test(label);
 }
 
 function isRankLikeColumn(column: Pick<AiChartColumnSummary, "key" | "title">): boolean {
@@ -99,10 +118,13 @@ function isEmptyDominatedTable(
     return false;
   }
 
-  const totals = table.rows.map((row) => ({
-    row,
-    value: rowMetricTotal(row, metricKeys)
-  }));
+  // 合计行本来就比每一项都大，它不是空桶，也不该算进分母。
+  const totals = table.rows
+    .filter((row) => !isTotalDimension(row[dimensionKey]))
+    .map((row) => ({
+      row,
+      value: rowMetricTotal(row, metricKeys)
+    }));
   const total = totals.reduce((sum, item) => sum + item.value, 0);
   if (total <= 0) {
     return false;
@@ -243,11 +265,12 @@ function extractMarkdownRankingTables(markdown: string): DataHubTableResult[] {
       continue;
     }
 
-    const headers = splitMarkdownRow(line);
+    // 单元格按渲染后的文字取值，`**260**` 才能当数值，`**合计**` 才认得出是合计行。
+    const headers = splitMarkdownRow(line).map(plainMarkdownText);
     const rows: string[][] = [];
     index += 2;
     while (index < lines.length && isMarkdownTableRow(lines[index] ?? "")) {
-      rows.push(splitMarkdownRow(lines[index] ?? ""));
+      rows.push(splitMarkdownRow(lines[index] ?? "").map(plainMarkdownText));
       index += 1;
     }
     index -= 1;

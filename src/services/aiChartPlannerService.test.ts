@@ -436,6 +436,92 @@ describe("aiChartPlannerService", () => {
     expect(series[0]?.data).toEqual([493, 492, 174]);
   });
 
+  it("keeps a bold total row of an answer table out of the share pie", async () => {
+    const question = "红星社区上月各类事件占比";
+    const eventTable = table(
+      [
+        { key: "event_type", title: "eventType" },
+        { key: "count", title: "记录数", type: "number" }
+      ],
+      [
+        { event_type: "设施维修", count: 145 },
+        { event_type: "环境保洁", count: 65 },
+        { event_type: "秩序安保（矛盾纠纷）", count: 50 }
+      ]
+    );
+    const pieOf = async (totalRow: string) => {
+      const tables = resolveAiChartTables({
+        question,
+        tables: [eventTable],
+        answer: [
+          "三、事件类型分布",
+          "",
+          "| 事件类型 | 上报量（条） | 占比 |",
+          "| --- | --- | --- |",
+          "| 设施维修 | 145 | 55.8% |",
+          "| 环境保洁 | 65 | 25.0% |",
+          "| 秩序安保（矛盾纠纷） | 50 | 19.2% |",
+          totalRow
+        ].join("\n")
+      });
+      const dataHubPlanner = vi.fn(async () => ({
+        chartable: true,
+        reason: "三类事件占比适合饼图。",
+        chartType: "pie" as const,
+        allowedTypes: ["pie" as const, "bar" as const],
+        title: "红星社区上月事件类型分布",
+        tableIndex: 1,
+        dimensionKey: "事件类型",
+        metricKeys: ["占比"]
+      }));
+      const plan = await planAiChart({ question, tables }, { dataHubPlanner });
+      const spec = buildGeneratedChartSpec(plan, tables);
+      const series = buildGeneratedChartOption(spec!, "pie").series as Array<{ data?: unknown[] }>;
+      return { spec, data: series[0]?.data };
+    };
+
+    for (const totalRow of [
+      "| **合计** | 260 | 100% |",
+      "| **合计** | **260** | **100%** |",
+      "| 合 计 | 260 | 100% |",
+      "| 总计： | 260 | 100% |",
+      "| 合计（3 类） | 260 | 100% |"
+    ]) {
+      const { spec, data } = await pieOf(totalRow);
+      expect(spec?.tableTitle, totalRow).toBe("回答中的排名");
+      expect(data, totalRow).toEqual([
+        { name: "设施维修", value: 55.8 },
+        { name: "环境保洁", value: 25 },
+        { name: "秩序安保（矛盾纠纷）", value: 19.2 }
+      ]);
+    }
+  });
+
+  it("reads bold answer table cells as plain labels and numbers", () => {
+    const [answerTable] = resolveAiChartTables({
+      question: "各社区上报量",
+      tables: [table([{ key: "name", title: "社区" }, { key: "count", title: "记录数", type: "number" }], [
+        { name: "红星社区", count: 260 },
+        { name: "向阳社区", count: 188 }
+      ])],
+      answer: [
+        "| **社区** | **上报量** |",
+        "| --- | --- |",
+        "| **红星社区** | **260** |",
+        "| `向阳社区` | 188 |"
+      ].join("\n")
+    }).filter((candidate) => candidate.source === "answer");
+
+    expect(answerTable?.columns.map((column) => [column.key, column.type])).toEqual([
+      ["社区", "dimension"],
+      ["上报量", "number"]
+    ]);
+    expect(answerTable?.rows).toEqual([
+      { 社区: "红星社区", 上报量: "260" },
+      { 社区: "向阳社区", 上报量: "188" }
+    ]);
+  });
+
   it("prefers a compact ranking table over an empty-dominated raw category table", async () => {
     const rawTypeTable = table(
       [
