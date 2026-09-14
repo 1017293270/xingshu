@@ -51,6 +51,16 @@ describe("officialDocumentService HTTP client", () => {
     await expect(service.getDraftContent("draft-1")).resolves.toEqual(content);
   });
 
+  it("preserves composition source identifiers and file names when saving a content profile", async () => {
+    const sourceBlocks = [{ id: "reference-material-1", order: 0, kind: "PARAGRAPH" as const,
+      text: "第一行\n第二行", headingHint: "参考资料.txt", columns: [], rows: [] }];
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "profile-1", status: "EXTRACTED" })));
+    vi.stubGlobal("fetch", fetchMock);
+    await service.createTextContentProfile("template/1", "version/1", { name: " 本次方案 ", text: "", sourceBlocks });
+    expect(fetchMock.mock.calls[0][0]).toContain("/templates/template%2F1/versions/version%2F1/content-profiles");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ name: "本次方案", text: "", sourceBlocks });
+  });
+
   it("preserves fact review and research snapshots and maps revision-linked export history", async () => {
     const factReview = { reviewedAt: "2026-09-07T00:00:00Z", issues: [{ sentence: "增长三成", additions: ["三成"] }], textSnapshot: "增长三成", confirmedAt: "2026-09-07T00:01:00Z" };
     const content = { revision: 2, fixedValues: [], blocks: [], researchResults: [], factReview };
@@ -264,6 +274,18 @@ describe("officialDocumentService HTTP client", () => {
       "/v1/drafts/draft-1/bindings/bind-1:detach"
     );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+  });
+
+  it("preserves the previous frozen value and provenance when a binding refresh reports schema drift", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{
+      id: "bind-frozen", slotId: "slot-title", kind: "SCALAR", queryAssetId: "asset-1",
+      queryVersionId: "version-old", outputKey: "result", status: "SCHEMA_DRIFT",
+      resolvedValue: 0, executionId: "execution-old", snapshotId: "snapshot-old", dataAsOf: "2026-09-08T00:00:00Z"
+    }]))));
+    await expect(service.refreshBindings("draft-1")).resolves.toEqual([expect.objectContaining({
+      status: "SCHEMA_DRIFT", resolvedValue: 0, executionId: "execution-old", snapshotId: "snapshot-old",
+      queryVersionId: "version-old", cutoffAt: "2026-09-08T00:00:00Z"
+    })]);
   });
 
   it("exports a PDF with the requested format", async () => {

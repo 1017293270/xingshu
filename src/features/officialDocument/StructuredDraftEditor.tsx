@@ -349,7 +349,6 @@ export function StructuredDraftEditor({
   const savingRef = useRef(false);
   const activeSaveRef = useRef<Promise<void> | undefined>(undefined);
   const pendingSaveRef = useRef(false);
-  const applyingRef = useRef(false);
   const mountedRef = useRef(true);
   const previewUrlRef = useRef<string | undefined>(undefined);
   const performSaveRef = useRef<() => Promise<void>>(async () => undefined);
@@ -379,7 +378,7 @@ export function StructuredDraftEditor({
   };
 
   const commit = (mutate: (current: OfficialDocumentDraftContent) => OfficialDocumentDraftContent) => {
-    if (applyingRef.current || recoveryKey !== structuredDraftRecoveryKey(draft.id)) return;
+    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) return;
     const current = contentRef.current;
     if (!current) return;
     const changed = mutate(current);
@@ -719,37 +718,12 @@ export function StructuredDraftEditor({
   };
 
   const applyBlocks = async (blocks: OfficialDocumentDraftContent["blocks"]) => {
+    if (!contentRef.current || !mountedRef.current) throw new Error("草稿内容尚未加载或编辑器已关闭");
+    if (serverConflictRef.current) throw new Error("服务器已有新版本，本地修改已保留，可先对照再保存");
+    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开草稿");
+    // 与键盘编辑共用同步提交和串行保存，等待服务器期间的新输入也会保留。
+    commit((current) => ({ ...current, blocks: normalizeOrders(blocks) }));
     await flushPendingSave();
-    const snapshot = contentRef.current;
-    if (!snapshot) throw new Error("草稿内容尚未加载");
-    applyingRef.current = true;
-    savingRef.current = true;
-    setSaveState("saving");
-    try {
-      const saved = await updateOfficialDocumentDraftContent(draft.id, {
-        expectedRevision: revisionRef.current,
-        fixedValues: snapshot.fixedValues,
-        blocks: normalizeOrders(blocks),
-        researchResults: snapshot.researchResults,
-        factReview: snapshot.factReview && officialDocumentContentText({ ...snapshot, blocks }) !== officialDocumentContentText(snapshot)
-          ? { ...snapshot.factReview, confirmedAt: undefined } : snapshot.factReview
-      });
-      const normalized = { ...saved, blocks: normalizeOrders(saved.blocks) };
-      revisionRef.current = normalized.revision;
-      generationRef.current += 1;
-      contentRef.current = normalized;
-      setContent(normalized);
-      onContentChange?.(normalized);
-      setSaveError("");
-      setSaveState("saved");
-    } catch (error) {
-      setSaveState("failed");
-      setSaveError(errorMessage(error));
-      throw error;
-    } finally {
-      savingRef.current = false;
-      applyingRef.current = false;
-    }
   };
 
   const normalizeForExport = async () => {

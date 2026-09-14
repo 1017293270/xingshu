@@ -4,7 +4,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
-import type { OfficialDocumentWorkspaceSnapshot } from "@/types/officialDocument";
+import type { OfficialDocumentContentProfile, OfficialDocumentWorkspaceSnapshot } from "@/types/officialDocument";
 import { OfficialDocumentComposeView } from "./OfficialDocumentComposeView";
 import { useWritingJobStore } from "./writingJobStore";
 
@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
   analyzeContent: vi.fn(),
   executeResearchPlan: vi.fn(),
   uploadContentProfile: vi.fn(),
+  createTextContentProfile: vi.fn(),
+  saveContentProfileAnalysis: vi.fn(),
+  confirmContentProfile: vi.fn(),
+  bindContentProfile: vi.fn(),
   getContentProfile: vi.fn(),
   uploadTemplate: vi.fn(),
   stop: vi.fn(),
@@ -121,6 +125,10 @@ vi.mock("@/services/officialDocumentService", () => ({
   exportOfficialDocumentTransient: mocks.exportTransient,
   downloadOfficialDocumentExport: mocks.downloadExport,
   uploadOfficialDocumentContentProfile: mocks.uploadContentProfile,
+  createOfficialDocumentTextContentProfile: mocks.createTextContentProfile,
+  saveOfficialDocumentContentProfileAnalysis: mocks.saveContentProfileAnalysis,
+  confirmOfficialDocumentContentProfile: mocks.confirmContentProfile,
+  bindOfficialDocumentContentProfile: mocks.bindContentProfile,
   getOfficialDocumentContentProfile: mocks.getContentProfile,
   uploadOfficialDocumentTemplate: mocks.uploadTemplate
 }));
@@ -380,7 +388,7 @@ describe("OfficialDocumentComposeView", () => {
             { id: "b1", order: 1, role: "BODY", variantId: "body-v1", text: "旧文风格样本。" }
           ]
         }
-        : { revision: 0, fixedValues: [{ slotId: "title-slot", value: "" }], blocks: [] }
+        : { revision: 0, contentProfileId: "compose-profile", fixedValues: [{ slotId: "title-slot", value: "" }], blocks: [] }
     ));
     mocks.createDraft.mockReset().mockResolvedValue({
       id: "draft-generated",
@@ -410,7 +418,24 @@ describe("OfficialDocumentComposeView", () => {
     mocks.analyzeContent.mockReset().mockRejectedValue(new Error("analysis unavailable"))
     mocks.executeResearchPlan.mockReset().mockResolvedValue([]);
     mocks.uploadContentProfile.mockReset();
-    mocks.getContentProfile.mockReset();
+    let profile: OfficialDocumentContentProfile;
+    mocks.createTextContentProfile.mockReset().mockImplementation(async (templateId, templateVersionId, input) => {
+      profile = { id: "compose-profile", templateId, templateVersionId, name: input.name,
+        originalFileName: "writing-requirements.txt", originalSize: 100, status: "EXTRACTED",
+        profile: { source: { sourceSha256: "source-hash", blocks: input.sourceBlocks, warnings: [] } },
+        createdBy: "test-user", createdAt: "2026-09-09T00:00:00Z", updatedAt: "2026-09-09T00:00:00Z" };
+      return profile;
+    });
+    mocks.saveContentProfileAnalysis.mockReset().mockImplementation(async (_id, analysis) => {
+      profile = { ...profile, status: "READY_FOR_REVIEW", profile: { ...profile.profile, analysis } };
+      return profile;
+    });
+    mocks.confirmContentProfile.mockReset().mockImplementation(async (_id, confirmedPlan) => {
+      profile = { ...profile, status: "CONFIRMED", profile: { ...profile.profile, confirmedPlan } };
+      return profile;
+    });
+    mocks.getContentProfile.mockReset().mockImplementation(async () => profile);
+    mocks.bindContentProfile.mockReset();
     mocks.uploadTemplate.mockReset();
     mocks.stop.mockReset();
     mocks.reset.mockReset();
@@ -469,6 +494,7 @@ describe("OfficialDocumentComposeView", () => {
       purpose: "full-draft"
     }));
     expect(mocks.createDraft).not.toHaveBeenCalled();
+    expect(mocks.createTextContentProfile).not.toHaveBeenCalled();
     expect(mocks.updateDraftContent).not.toHaveBeenCalled();
 
     const saveButton = screen.getByRole("button", { name: "保存到草稿箱" });
@@ -479,6 +505,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(mocks.createDraft).toHaveBeenCalledWith({
       templateId: "template-1",
       templateVersionId: "version-1",
+      contentProfileId: "compose-profile",
       title: "关于开展2026年安全检查的通知"
     });
     await waitFor(() => {
@@ -1135,6 +1162,8 @@ describe("OfficialDocumentComposeView", () => {
     renderView();
 
     await pickReference(user);
+    await user.upload(screen.getByTestId("official-document-material-file"),
+      new File(["上季度检查共发现隐患 18 处。"], "隐患台账.md", { type: "text/markdown" }));
     await submitRequirement(user, "撰写2026年安全检查通知");
 
     const outline = await screen.findByRole("region", { name: "写作大纲确认" });
@@ -1146,6 +1175,41 @@ describe("OfficialDocumentComposeView", () => {
     await waitFor(() => expect(mocks.updateDraftContent).toHaveBeenCalledTimes(1));
     // 图表 base64 与失败项都原样留在草稿里：资料面板要列全量任务，再生成要拿得到出处
     expect(mocks.updateDraftContent.mock.calls[0][1].researchResults).toEqual(roundResults);
+    expect(mocks.createTextContentProfile).toHaveBeenCalledWith("template-1", "version-1", expect.objectContaining({
+      sourceBlocks: [
+        expect.objectContaining({ id: "user-requirement", text: "撰写2026年安全检查通知", headingHint: "USER_REQUIREMENT" }),
+        expect.objectContaining({ id: "reference-material-1", text: "上季度检查共发现隐患 18 处。", headingHint: "隐患台账.md" })
+      ]
+    }));
+    expect(mocks.confirmContentProfile).toHaveBeenCalledWith("compose-profile", expect.objectContaining({
+      sections: [expect.objectContaining({ id: "s1", purpose: "交代检查安排",
+        sourceBlockIds: ["user-requirement", "reference-material-1"] })],
+      researchNeeds: expect.arrayContaining([expect.objectContaining({ id: "n1" }), expect.objectContaining({ id: "n2" })]),
+      unassignedSourceBlockIds: []
+    }));
+    expect(mocks.createDraft.mock.calls[0][0].contentProfileId).toBe("compose-profile");
+    expect(mocks.confirmContentProfile.mock.invocationCallOrder[0]).toBeLessThan(mocks.createDraft.mock.invocationCallOrder[0]);
+  });
+
+  it("方案确认或正文保存失败后重试，复用方案与草稿并保留临时成稿", async () => {
+    const user = userEvent.setup();
+    mocks.confirmContentProfile.mockRejectedValueOnce(new Error("方案确认暂时失败"));
+    mocks.updateDraftContent.mockRejectedValueOnce(new Error("正文保存暂时失败"));
+    renderView();
+    await pickReference(user);
+    await submitRequirement(user, "撰写2026年安全检查通知");
+    await screen.findByRole("article", { name: "生成的公文文件" });
+    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+    await screen.findByText("保存失败：方案确认暂时失败");
+    expect(mocks.createDraft).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+    await screen.findByText("草稿已创建，但正文保存失败：正文保存暂时失败");
+    await user.click(screen.getByRole("button", { name: "重试保存到草稿箱" }));
+    await screen.findByLabelText("生成公文成品页");
+    expect(mocks.createTextContentProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.createDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.updateDraftContent).toHaveBeenCalledTimes(2);
+    expect(mocks.updateDraftContent.mock.calls[1][1].blocks).toEqual(mocks.updateDraftContent.mock.calls[0][1].blocks);
   });
 
   it("跳过大纲的轮次保存时不带 researchResults", async () => {

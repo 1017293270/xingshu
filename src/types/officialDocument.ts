@@ -218,6 +218,7 @@ export type DraftDataBinding = {
   snapshotId?: string;
   executionId?: string;
   cutoffAt?: string;
+  resolvedValue?: unknown;
   persisted: boolean;
 };
 

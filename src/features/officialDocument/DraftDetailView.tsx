@@ -53,8 +53,6 @@ import { ContentProfileWorkspace } from "./ContentProfileWorkspace";
 import {
   bindingsAreExportable,
   draftStatusAllowsExport,
-  draftStatusColor,
-  draftStatusLabel,
   formatDate,
   operationErrorMessage,
   useOfficialDocumentWorkspaceKey,
@@ -66,6 +64,11 @@ import {
   useOfficialDocumentAppChrome
 } from "./OfficialDocumentAppShell";
 import "./official-document.css";
+
+function canDetachBinding(binding: DraftDataBinding) {
+  return binding.status !== "MANUAL" && Boolean(binding.snapshotId?.trim())
+    && binding.resolvedValue !== undefined && binding.resolvedValue !== null;
+}
 
 function DraftNotFound() {
   return (
@@ -163,7 +166,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
       : !statusAllowsExport
         ? "草稿通过服务端校验后才能导出"
         : !bindingsReady
-          ? "问数绑定刷新成功后才能导出"
+          ? "请在导出检查中处理未就绪的问数绑定"
           : draft.source !== "LIVE"
             ? "正式服务不可用，不能导出"
             : undefined;
@@ -420,7 +423,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   };
 
   const handleDetachBinding = async (binding: DraftDataBinding) => {
-    if (!draft || detachingBindingId) return;
+    if (!draft || detachingBindingId || !canDetachBinding(binding)) return;
     setDetachingBindingId(binding.id);
     try {
       const detached = await detachOfficialDocumentBinding(draft.id, binding.id);
@@ -459,7 +462,8 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
       }));
       const unresolved = bindings.filter((binding) => binding.status !== "ACTIVE" && binding.status !== "MANUAL");
       announce(unresolved.length ? "warning" : "success", unresolved.length
-        ? `${unresolved.length} 个绑定未刷新成功，请检查 Schema 或数据权限。`
+        ? `${unresolved.length} 个绑定未刷新成功，可稍后重试。${unresolved.some(canDetachBinding)
+          ? "已保留的上次有效值可在“导出检查”中转为普通文本继续使用。" : "请检查查询结果或数据访问权限。"}`
         : "全部问数绑定已刷新并冻结为新快照。"
       );
     } catch (error) {
@@ -642,7 +646,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
           destroyOnHidden={false}
           extra={(
             <div className="official-document-inspector-drawer__tags">
-              <Tag bordered={false} color={draftStatusColor[draft.status]}>{draftStatusLabel[draft.status]}</Tag>
+              <Tag bordered={false} color={canExportDocx ? "success" : "warning"}>
+                {canExportDocx ? "可导出" : "暂不可导出"}
+              </Tag>
               <Tag bordered={false} color="blue">{draft.bindings.length} 个历史绑定</Tag>
             </div>
           )}
@@ -679,9 +685,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                         <div className="official-document-binding__actions">
                           <Button
                             size="small"
-                            disabled={binding.status !== "ACTIVE" || Boolean(detachingBindingId)}
+                            disabled={!canDetachBinding(binding) || Boolean(detachingBindingId)}
                             loading={detachingBindingId === binding.id}
-                            title={binding.status === "ACTIVE" ? undefined : "只有已经冻结有效快照的绑定才能转为普通文本"}
+                            title={canDetachBinding(binding) ? undefined : "尚无可保留的有效快照，请先成功刷新绑定"}
                             onClick={() => void handleDetachBinding(binding)}
                           >
                             转为普通文本

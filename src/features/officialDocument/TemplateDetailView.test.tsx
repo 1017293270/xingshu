@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useParams } from "react-router";
@@ -103,6 +104,11 @@ const reviewTemplate: OfficialDocumentTemplate = {
   }
 };
 
+function RefreshWorkspace() {
+  const client = useQueryClient();
+  return <button onClick={() => void client.invalidateQueries()}>测试刷新工作区</button>;
+}
+
 function TemplateDetailRoute() {
   const { templateId = "" } = useParams();
   return <TemplateDetailView templateId={templateId} />;
@@ -111,6 +117,7 @@ function TemplateDetailRoute() {
 function renderTemplateDetail(templateId: string) {
   return render(
     <AppProviders>
+      <RefreshWorkspace />
       <MemoryRouter initialEntries={[`/writing/templates/${templateId}`]}>
         <Routes>
           <Route path="/writing/templates/:templateId" element={<TemplateDetailRoute />} />
@@ -128,6 +135,25 @@ describe("TemplateDetailView", () => {
     mocks.publishOfficialDocumentTemplate.mockReset();
     mocks.createOfficialDocumentDraft.mockReset();
     mocks.loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
+  });
+
+  it("keeps unpublished calibration when a background workspace refresh returns new analysis", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue({ ...emptyWorkspace, templates: [reviewTemplate] });
+    renderTemplateDetail(reviewTemplate.id);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "校准结构" }));
+    const required = screen.getByRole("checkbox", { name: "必填槽位" });
+    await user.click(required);
+    expect(required).toBeChecked();
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue({ ...emptyWorkspace, templates: [{
+      ...reviewTemplate, currentVersion: { ...reviewTemplate.currentVersion, analysis: {
+        ...reviewTemplate.currentVersion.analysis!, analyzedAt: "2026-09-09T00:00:00Z"
+      } }
+    }] });
+    await user.click(screen.getByRole("button", { name: "测试刷新工作区" }));
+    await waitFor(() => expect(mocks.loadOfficialDocumentWorkspace).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "校准结构" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("checkbox", { name: "必填槽位" })).toBeChecked();
   });
 
   it("does not invent a demo template when the live workspace is empty", async () => {
@@ -173,7 +199,10 @@ describe("TemplateDetailView", () => {
       mappings: [],
       createdAt: "2026-08-16T15:52:00Z"
     });
-    mocks.publishOfficialDocumentTemplate.mockResolvedValue(reviewTemplate.currentVersion);
+    mocks.publishOfficialDocumentTemplate.mockResolvedValue({ ...reviewTemplate.currentVersion, analysis: {
+      ...reviewTemplate.currentVersion.analysis!, structureNodes: reviewTemplate.currentVersion.analysis!.structureNodes.map(
+        (node) => node.role === "TITLE" ? { ...node, preview: "服务端发布后的标题" } : node)
+    } });
     mocks.createOfficialDocumentDraft.mockResolvedValue({
       id: "draft-1",
       title: "请示 - 新草稿",
@@ -204,6 +233,7 @@ describe("TemplateDetailView", () => {
       );
     });
 
+    expect((await screen.findAllByText("服务端发布后的标题")).length).toBeGreaterThan(0);
     const createButton = await screen.findByRole("button", { name: "按此结构新建草稿" });
     await user.click(createButton);
     expect(await screen.findByRole("dialog", { name: "按结构创建报告草稿" })).toBeInTheDocument();

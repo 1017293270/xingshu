@@ -134,3 +134,60 @@ test("模板详情和校准视图保留定位、只读状态及小屏滚动", as
   await page.getByRole("button", { name: "取消", exact: true }).click();
   expect(pageErrors).toEqual([]);
 });
+
+test("其他模板分析轮询保留未发布校准，发布后使用服务端映射", async ({ page }) => {
+  let templateReads = 0;
+  const review = fixtureTemplate("codex-review", "READY_FOR_MAPPING");
+  let mappings = review.versions[0].mappingProfile.mappings;
+  await page.route("**/api/**", (route) => route.fulfill({ json: { code: 200, data: [] } }));
+  await page.route("**/api/analytics/**", (route) => route.fulfill({ status: 503, json: { message: "isolated visual fixture" } }));
+  await page.route("**/api/official-document/v1/capabilities", (route) => route.fulfill({ json: {
+    wordEngine: { available: true, licensed: true }, queryAssets: { available: false },
+    limits: { exportFormats: ["DOCX", "PDF"] }
+  } }));
+  await page.route("**/api/official-document/v1/templates", (route) => {
+    templateReads++;
+    return route.fulfill({ json: { items: [review, fixtureTemplate("other-upload", "ANALYZING")] } });
+  });
+  await page.route("**/api/official-document/v1/drafts", (route) => route.fulfill({ json: { items: [] } }));
+  await page.route("**/versions/codex-review-v1/mapping", async (route) => {
+    mappings = route.request().postDataJSON().mappings;
+    await route.fulfill({ json: { mappings } });
+  });
+  await page.route("**/versions/codex-review-v1:publish", async (route) => {
+    review.versions[0].status = "PUBLISHED";
+    review.versions[0].mappingProfile.mappings = mappings;
+    await route.fulfill({ json: review.versions[0] });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("xingshu_datahub_token", "isolated-calibration-qa");
+    localStorage.setItem("xingshu_datahub_user", JSON.stringify({ userId: 1, username: "calibration-qa", isAdmin: false }));
+    localStorage.setItem("xingshu_datahub_space_id", "7");
+    localStorage.setItem("xingshu_onboarding_v1", "done");
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/writing/templates/codex-review");
+  await page.getByRole("button", { name: "校准结构", exact: true }).click();
+  await page.getByRole("button", { name: /一级标题 一、总体经营情况/ }).click();
+  const picker = page.getByRole("combobox", { name: "段落 5 段落角色", exact: true });
+  await picker.locator("xpath=ancestor::*[contains(@class, 'ant-select ')][1]").click();
+  await page.locator(".ant-select-dropdown:visible .ant-select-item-option-content").filter({ hasText: /^二级标题$/ }).click();
+  await page.getByRole("checkbox", { name: "必填槽位" }).check();
+  const heading = page.locator('.template-document [data-node-id="paragraph:4"]');
+  await expect(heading).toHaveAttribute("data-role", "HEADING_2");
+  const before = templateReads;
+  await expect.poll(() => templateReads).toBeGreaterThan(before);
+  await expect(page.locator(".official-document-calibration-inspector")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "必填槽位" })).toBeChecked();
+  await expect(heading).toHaveAttribute("data-role", "HEADING_2");
+  await page.screenshot({ path: "outputs/template-detail-codex/calibration-poll-preserved.png" });
+  await page.getByRole("button", { name: "发布结构", exact: true }).click();
+  await expect(page.getByRole("button", { name: "按此结构新建草稿" })).toBeVisible();
+  expect(await heading.getAttribute("data-role")).toBe("HEADING_2");
+  await page.getByRole("button", { name: /二级标题 一、总体经营情况/ }).click();
+  await expect(picker).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "必填槽位" })).toBeChecked();
+  expect(mappings.find((mapping) => mapping.nodeId === "paragraph:4")).toMatchObject({ role: "HEADING_2", required: true });
+  await page.screenshot({ path: "outputs/template-detail-codex/published-mapping-preserved.png" });
+});

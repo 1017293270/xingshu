@@ -40,6 +40,9 @@ import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { copyText } from "@/services/clipboard";
 import { resolveDataHubFinalAnswer } from "@/services/dataHubAskDataPresenter";
 import {
+  bindOfficialDocumentContentProfile,
+  confirmOfficialDocumentContentProfile,
+  createOfficialDocumentTextContentProfile,
   createOfficialDocumentDraft,
   downloadOfficialDocumentExport,
   exportOfficialDocumentDraft,
@@ -49,6 +52,7 @@ import {
   getOfficialDocumentDraftPreview,
   getOfficialDocumentTransientPreview,
   type OfficialDocumentTransientArtifactInput,
+  saveOfficialDocumentContentProfileAnalysis,
   updateOfficialDocumentDraftContent,
   uploadOfficialDocumentContentProfile,
   uploadOfficialDocumentTemplate
@@ -70,6 +74,7 @@ import { executeOfficialDocumentResearchPlan } from "@/services/officialDocument
 import { officialDocumentContentText } from "@/services/officialDocumentFactReview";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type {
+  OfficialDocumentContentSourceBlock,
   OfficialDocumentDraft,
   OfficialDocumentExportFormat,
   OfficialDocumentResearchResult,
@@ -170,6 +175,8 @@ type ComposeTurnState = {
   /** 这一轮带的参考资料，重新生成时同样原样复用。 */
   materials?: ReferenceMaterialPayload;
   artifact?: GeneratedArtifact;
+  /** 保存中断后复用已创建的方案，避免重试生成重复记录。 */
+  contentProfileId?: string;
   savedDraft?: OfficialDocumentDraft;
   recoveryDraft?: OfficialDocumentDraft;
   parseError?: string;
@@ -184,6 +191,38 @@ type ComposeTurnState = {
   previewLoading?: boolean;
   previewError?: string;
 };
+
+function contentProfileForTurn(state: ComposeTurnState) {
+  const sourceBlocks: OfficialDocumentContentSourceBlock[] = [
+    { id: "user-requirement", order: 0, kind: "PARAGRAPH", text: state.requirement,
+      headingHint: "USER_REQUIREMENT", columns: [], rows: [] },
+    ...(state.materials ?? []).map((material, index) => ({
+      id: `reference-material-${index + 1}`, order: index + 1, kind: "PARAGRAPH" as const,
+      text: material.content, headingHint: material.name, columns: [], rows: []
+    }))
+  ];
+  const plan: OfficialDocumentWritingLogicPlan = state.research?.plan ?? {
+    summary: state.requirement,
+    sections: state.plan.sections.map((section) => ({
+      id: section.id, order: section.order, headingRole: section.headingRole ?? "HEADING_1",
+      title: section.title, purpose: section.purpose ?? "", keyPoints: section.keyPoints ?? [], sourceBlockIds: []
+    })),
+    researchNeeds: [], unassignedSourceBlockIds: [], warnings: []
+  };
+  const sourceIds = new Set(sourceBlocks.map((block) => block.id));
+  const assigned = new Set<string>();
+  const sections = plan.sections.map((section) => ({
+    ...section,
+    sourceBlockIds: (section.sourceBlockIds ?? []).filter((id) => {
+      if (!sourceIds.has(id) || assigned.has(id)) return false;
+      assigned.add(id);
+      return true;
+    })
+  }));
+  // 大纲确认没有逐块分配步骤；共享资料挂到首节，全文上下文仍保留所有原文。
+  if (sections.length) sections[0].sourceBlockIds.push(...[...sourceIds].filter((id) => !assigned.has(id)));
+  return { sourceBlocks, plan: { ...plan, sections, unassignedSourceBlockIds: [] } };
+}
 
 type BusyAction = {
   turnId: string;
@@ -809,6 +848,10 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
           templateNodes,
           startedAt,
           research,
+          ...(plan.writingContext.contextTruncation ? { status: {
+            tone: "success" as const,
+            message: "材料较长，本次生成采用部分节选；本轮资料和大纲仍会随草稿保存。"
+          } } : {}),
           ...(materialPayload.length ? { materials: materialPayload } : {})
         }
       }));
@@ -1180,26 +1223,46 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
 
   const saveGeneratedArtifact = async (turnId: string) => {
     const state = turnStates[turnId];
-    if (!state?.artifact || state.savedDraft || state.recoveryDraft || busyAction) return;
-    let created: OfficialDocumentDraft | undefined;
+    if (!state?.artifact || state.savedDraft || busyAction) return;
+    let created = state.recoveryDraft;
     setBusyAction({ turnId, kind: "saving" });
     patchTurn(turnId, { status: undefined });
     try {
-      const snapshot = await createOfficialDocumentDraft({
+      const source = contentProfileForTurn(state);
+      const profile = state.contentProfileId
+        ? await getOfficialDocumentContentProfile(state.contentProfileId)
+        : await createOfficialDocumentTextContentProfile(state.artifact.templateId, state.artifact.templateVersionId, {
+            name: state.artifact.title.slice(0, 200), text: "", sourceBlocks: source.sourceBlocks
+          });
+      patchTurn(turnId, { contentProfileId: profile.id });
+      if (profile.status !== "CONFIRMED") {
+        await saveOfficialDocumentContentProfileAnalysis(profile.id, source.plan);
+        await confirmOfficialDocumentContentProfile(profile.id, source.plan);
+      }
+      const snapshot = created ?? await createOfficialDocumentDraft({
         templateId: state.artifact.templateId,
         templateVersionId: state.artifact.templateVersionId,
+        contentProfileId: profile.id,
         title: state.artifact.title
       });
-      created = { ...snapshot, templateName: state.artifact.templateName };
+      created = { ...snapshot, contentProfileId: profile.id, templateName: state.artifact.templateName };
       updateWorkspaceCache((workspace) => ({
         ...workspace,
         drafts: [created!, ...workspace.drafts.filter((draft) => draft.id !== created!.id)]
       }));
-      const initial = await getOfficialDocumentDraftContent(created.id);
+      let initial = await getOfficialDocumentDraftContent(created.id);
+      // 兼容此前正文保存失败留下的空草稿；服务端会保护已有正文不被重新绑定覆盖。
+      if (state.recoveryDraft && !initial.contentProfileId) {
+        initial = await bindOfficialDocumentContentProfile(created.id, {
+          expectedRevision: initial.revision, contentProfileId: profile.id
+        });
+      }
       const generatedFixedValues = new Map(state.artifact.fixedValues.map((item) => [item.slotId, item.value]));
       /* 这一轮的问数/问知原样跟着落库：草稿里再走 FULL_DRAFT 才有出处和材料可用，
          口径与草稿编辑器一致——失败项也留着，资料面板要按状态列全量任务。 */
-      const roundResearch = state.research?.results ?? [];
+      const completed = new Map((state.research?.results ?? []).map((result) => [result.taskId, result]));
+      const roundResearch = initial.researchResults?.map((result) => ({ ...result, ...completed.get(result.taskId) }))
+        ?? state.research?.results ?? [];
       const fixedValues = initial.fixedValues.map((item) => ({
         ...item, value: generatedFixedValues.get(item.slotId) ?? ""
       }));
@@ -1217,6 +1280,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
       });
       patchTurn(turnId, {
         savedDraft: created,
+        recoveryDraft: undefined,
         status: { tone: "success", message: "已保存到草稿箱" }
       });
       // 成稿可编辑是主路径：保存成功直接进入草稿编辑页继续加工
@@ -1366,10 +1430,11 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                 className="xs-artifact-card__action"
                 type="text"
                 shape="circle"
-                aria-label="打开保存失败的草稿"
-                title="草稿已创建，点击继续修复"
+                aria-label="重试保存到草稿箱"
+                title="复用已创建的草稿，重试保存完整正文"
+                loading={saving}
                 icon={<Star size={20} aria-hidden="true" />}
-                onClick={() => navigate(`/writing/drafts/${state.recoveryDraft!.id}`)}
+                onClick={() => void saveGeneratedArtifact(turnId)}
               />
             ) : (
               <Button

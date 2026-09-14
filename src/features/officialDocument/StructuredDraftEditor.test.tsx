@@ -115,6 +115,41 @@ describe("StructuredDraftEditor", () => {
     setReducedMotion(false);
   });
 
+  it.each([false, true])("preserves typing during block application (autosave in flight: %s)", async (autosaveInFlight) => {
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
+      revision: 4, fixedValues: [],
+      blocks: [{ id: "body-1", order: 0, role: "BODY", variantId: "body-main", text: "原正文" }]
+    });
+    let finish!: (value: OfficialDocumentDraftContent) => void;
+    const save = vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent")
+      .mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }))
+      .mockImplementation(async (_id, input) => ({ ...input, revision: input.expectedRevision + 1 }));
+    const ref = createRef<StructuredDraftEditorHandle>();
+    vi.useFakeTimers();
+    render(<StructuredDraftEditor ref={ref} draft={draft} templateNodes={nodes} onStatus={vi.fn()} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    if (autosaveInFlight) {
+      fireEvent.change(screen.getByLabelText("正文节点 1"), { target: { value: "点击回填时的正文" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    }
+    const captured = [...ref.current!.getContent()!.blocks, {
+      id: "table-added", order: 1, role: "TABLE" as const, variantId: "", text: "回填表",
+      table: { columns: ["金额"], rows: [["100"]], totalRows: 1 }
+    }];
+    let applying!: Promise<void>;
+    await act(async () => { applying = ref.current!.applyBlocks(captured); await Promise.resolve(); });
+    fireEvent.change(screen.getByLabelText("正文节点 1"), { target: { value: "保存等待期间的新输入" } });
+    expect(ref.current!.getContent()!.blocks[0].text).toBe("保存等待期间的新输入");
+    await act(async () => {
+      finish({ ...save.mock.calls[0][1], revision: 5 });
+      await vi.advanceTimersByTimeAsync(1200);
+      await applying;
+    });
+    expect(ref.current!.getContent()!.blocks.at(-1)?.id).toBe("table-added");
+    expect(save.mock.calls.at(-1)![1].blocks[0].text).toBe("保存等待期间的新输入");
+    expect(ref.current!.getContent()!.blocks[0].text).toBe("保存等待期间的新输入");
+  });
+
   it("loads authoritative content and saves the complete revision after 600ms", async () => {
     vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockResolvedValue({
       revision: 4,
@@ -673,6 +708,27 @@ describe("structured draft recovery and current preview", () => {
     expect(screen.queryByLabelText("当前稿 PDF · 内容修订 5")).not.toBeInTheDocument();
     expect(pdf).toHaveBeenCalledOnce();
     expect(revoke).toHaveBeenCalledWith("blob:current-draft");
+  });
+
+  it("invalidates the current PDF when a full draft is applied through the shared save path", async () => {
+    let server = initial();
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftContent").mockImplementation(async () => server);
+    vi.spyOn(officialDocumentService, "updateOfficialDocumentDraftContent").mockImplementation(async (_id, input) => {
+      server = { ...input, revision: input.expectedRevision + 1 }; return server;
+    });
+    vi.spyOn(officialDocumentService, "getOfficialDocumentDraftPreview").mockResolvedValue(new NodeBlob(["%PDF-1.7 fixture"]) as unknown as Blob);
+    const originalUrl = URL;
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", class extends originalUrl { static createObjectURL = vi.fn(() => "blob:old-draft"); static revokeObjectURL = revoke; });
+    const ref = createRef<StructuredDraftEditorHandle>();
+    render(<MemoryRouter><OfficialDocumentAppShell><StructuredDraftEditor ref={ref} draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "预览当前稿" }));
+    await waitFor(() => expect(screen.getByLabelText("当前稿 PDF · 内容修订 4")).toBeInTheDocument());
+    await act(async () => { await ref.current!.applyBlocks([{ ...server.blocks[0], text: "应用后的完整正文" }]); });
+    expect(ref.current!.getContent()!.blocks[0].text).toBe("应用后的完整正文");
+    expect(screen.queryByLabelText("当前稿 PDF · 内容修订 4")).not.toBeInTheDocument();
+    expect(revoke).toHaveBeenCalledWith("blob:old-draft");
   });
 
   it("preserves the factual review but expires its confirmation when text changes", async () => {

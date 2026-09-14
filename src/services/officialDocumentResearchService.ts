@@ -233,8 +233,9 @@ export async function executeOfficialDocumentResearch(
     snapshotId: execution.snapshotId,
     dataAsOf: output.updatedAt || execution.createdAt
   };
+  const table = outputAsTable(output);
   let chart: OfficialDocumentResearchResult["chart"];
-  if (chartAllowed) {
+  if (chartAllowed && table.rows.length) {
     try {
       chart = await renderChartPng(need.question, output, signal);
     } catch {
@@ -243,8 +244,11 @@ export async function executeOfficialDocumentResearch(
     }
   }
   return {
-    summary,
-    table: outputAsTable(output),
+    // The first answer predates this forced execution. Only the frozen output is evidence now.
+    summary: table.rows.length
+      ? `本次冻结查询返回 ${output.totalRows} 行，正文请以随附表格中的完整数值为准。`
+      : "查询执行成功，但未返回数据行",
+    table,
     chart,
     querySource,
     citations: []
@@ -287,10 +291,12 @@ export async function executeOfficialDocumentResearchPlan(
       const asset = await executeOfficialDocumentResearch(need, chartCount < MAX_OFFICIAL_DOCUMENT_CHARTS, undefined, options.signal);
       checkResearchAbort(options.signal);
       if (asset.chart) chartCount += 1;
-      const hasResult = Boolean(asset.summary.trim() || asset.table);
+      const hasResult = need.kind === "ASK_DATA"
+        ? Boolean(asset.table?.rows.length)
+        : Boolean(asset.summary.trim());
       result = {
         ...base, ...asset, status: hasResult ? "SUCCESS" : "NO_RESULT",
-        summary: hasResult ? asset.summary : "未返回可写入的资料内容",
+        summary: hasResult ? asset.summary : need.kind === "ASK_DATA" ? "查询执行成功，但未返回数据行" : "未返回可写入的资料内容",
         citations: asset.citations ?? []
       };
     } catch (caught) {

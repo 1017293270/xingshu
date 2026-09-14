@@ -388,7 +388,9 @@ export function ContentProfileWorkspace({
                   <div className="content-profile-source-list">
                     {sourceBlocks.map((block) => (
                       <article key={block.id} data-unassigned={plan.unassignedSourceBlockIds.includes(block.id) || undefined}>
-                        <small>{block.headingHint === "USER_REQUIREMENT" ? "要求" : block.kind === "TABLE" ? "表格" : "段落"} {block.order + 1}</small>
+                        <small>{block.id.startsWith("reference-material-") && block.headingHint
+                          ? block.headingHint
+                          : `${block.headingHint === "USER_REQUIREMENT" ? "要求" : block.kind === "TABLE" ? "表格" : "段落"} ${block.order + 1}`}</small>
                         <p>{block.text || "（无文本）"}</p>
                       </article>
                     ))}

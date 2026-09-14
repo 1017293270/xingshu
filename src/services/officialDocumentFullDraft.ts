@@ -1,3 +1,4 @@
+import { budgetOfficialDocumentWritingContext } from "@/services/officialDocumentContextBudget";
 import { MAX_OFFICIAL_DOCUMENT_CHARTS } from "@/services/officialDocumentResearchService";
 import type {
   OfficialDocumentContentProfile,
@@ -75,7 +76,7 @@ export function officialDocumentResearchPendingText(result: OfficialDocumentRese
 export const MAX_REFERENCE_REQUIREMENT_CHARS = 20_000;
 const MAX_REFERENCE_STYLE_CHARS = 6_000;
 const MAX_REFERENCE_STYLE_SAMPLES = 8;
-/* 用户上传的参考资料整段原样进提示词，两道上限一起把 writingContext 压在 DataHub 的 100k 闸门之下。 */
+/* 资料芯片与请求共用单文件/总量上限；完整上下文另由共享出口按序列化长度预算。 */
 export const MAX_REFERENCE_MATERIAL_CHARS = 10_000;
 export const MAX_REFERENCE_MATERIALS_CHARS = 30_000;
 
@@ -318,7 +319,7 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
   return {
     sections,
     fixedFields,
-    writingContext: {
+    writingContext: budgetOfficialDocumentWritingContext({
       action: "REFERENCE_DRAFT",
       referenceDraft: input.referenceDraft,
       referenceSections: sections,
@@ -368,7 +369,7 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         missingFactRule: "不能为了凑字数、套用通知惯例或补齐章节而编造安排；尤其不得自行增加提前签到、提前十五分钟到场、提交材料、缴费等要求。未给出的必要事实标为【待确认：具体事项】或省略，不以肯定口吻写入正文。正常措辞调整不得改变事实或增加义务。",
         allowResearch: researchResults.length > 0
       }
-    }
+    })
   };
 }
 
@@ -970,7 +971,7 @@ export function buildOfficialDocumentWritingContext(input: {
     throw new Error("内容方案尚未确认或原始内容不可用");
   }
   const templateOutline = summarizeOfficialDocumentTemplate(input.templateNodes);
-  return {
+  return budgetOfficialDocumentWritingContext({
     action,
     document: input.document,
     contentProfileId: input.profile?.id,
@@ -1003,7 +1004,7 @@ export function buildOfficialDocumentWritingContext(input: {
           answerRequestedTaskOnly: true,
           privateSourcesOnly: true
         }
-  };
+  });
 }
 
 export function parseOfficialDocumentFullDraft(input: {

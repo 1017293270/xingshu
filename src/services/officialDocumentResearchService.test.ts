@@ -113,3 +113,34 @@ it("keeps a successful nonempty summary without citations as usable research", a
   finish("已确认的非空资料摘要");
   expect(await task).toEqual([expect.objectContaining({ status: "SUCCESS", summary: "已确认的非空资料摘要", citations: [] })]);
 });
+
+it("uses only the new frozen execution, never the earlier answer, as writing evidence", async () => {
+  const { previewQueryAsset } = await import("./queryAssetService");
+  vi.mocked(ensureAskArtifact).mockResolvedValue({ canFavorite: true, askRunId: "run-1", resolvedQuestion: "收入" });
+  vi.mocked(favoriteAskArtifact).mockResolvedValue({ id: "asset-1", stableVersionId: "v1" } as never);
+  vi.mocked(previewQueryAsset).mockResolvedValue({ id: "execution-2", status: "SUCCESS", snapshotId: "snapshot-2",
+    outputs: [{ outputKey: "out", columns: [{ key: "revenue", title: "收入" }], rows: [{ revenue: 120 }], totalRows: 1 }] } as never);
+  const pending = executeOfficialDocumentResearch({ ...need, kind: "ASK_DATA" }, false);
+  finish("收入100万元");
+  const result = await pending;
+  expect(previewQueryAsset).toHaveBeenCalledWith("asset-1", { versionId: "v1", force: true });
+  expect(result.summary).not.toContain("100");
+  expect(result.summary).toContain("本次冻结查询");
+  expect(result.table?.rows).toEqual([["120"]]);
+  expect(result.querySource).toMatchObject({ executionId: "execution-2", snapshotId: "snapshot-2" });
+});
+
+it("records zero frozen rows as NO_RESULT and continues the next research task", async () => {
+  const { previewQueryAsset } = await import("./queryAssetService");
+  vi.mocked(ensureAskArtifact).mockResolvedValue({ canFavorite: true, askRunId: "run-1", resolvedQuestion: "收入" });
+  vi.mocked(favoriteAskArtifact).mockResolvedValue({ id: "asset-1", stableVersionId: "v1" } as never);
+  vi.mocked(previewQueryAsset).mockResolvedValue({ id: "execution-2", status: "SUCCESS",
+    outputs: [{ outputKey: "out", columns: [{ key: "revenue" }], rows: [], totalRows: 0 }] } as never);
+  const pending = executeOfficialDocumentResearchPlan([{ ...need, kind: "ASK_DATA" }, { ...need, id: "next" }]);
+  finish("收入100万元");
+  await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(2));
+  finish("制度要求留存凭据");
+  const results = await pending;
+  expect(results[0]).toMatchObject({ status: "NO_RESULT", summary: "查询执行成功，但未返回数据行", table: { rows: [] } });
+  expect(results[1].status).toBe("SUCCESS");
+});

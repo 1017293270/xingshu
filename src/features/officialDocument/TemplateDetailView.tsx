@@ -83,6 +83,7 @@ function CalibrationPanel({
 }) {
   const blockingCount = countBlockingRisks(analysis);
   const canEditStructure = template.source === "LIVE" && template.status === "NEEDS_REVIEW";
+  const calibrationDirty = useRef(false);
   const [calibrationNodes, setCalibrationNodes] = useState<OfficialDocumentStructureNode[]>([]);
   const [bodyRegionStart, setBodyRegionStart] = useState<number>();
   const [bodyRegionEnd, setBodyRegionEnd] = useState<number>();
@@ -93,6 +94,8 @@ function CalibrationPanel({
   const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
+    if (calibrationDirty.current && canEditStructure) return;
+    calibrationDirty.current = false;
     const nextNodes = (analysis?.structureNodes ?? []).map((node) => {
       if (node.paragraphIndex === undefined) return node;
       const role = node.role === "UNKNOWN" ? "PRESERVE" : node.role as OfficialDocumentMappingRole;
@@ -120,7 +123,7 @@ function CalibrationPanel({
     const lastBlock = blockNodes.at(-1);
     setBodyRegionStart(storedBodyRegion?.paragraphIndex ?? firstBody?.paragraphIndex);
     setBodyRegionEnd(storedBodyRegion?.endParagraphIndex ?? lastBlock?.paragraphIndex ?? firstBody?.paragraphIndex);
-  }, [analysis, template.currentVersion.id]);
+  }, [analysis, template.currentVersion.id, canEditStructure]);
 
   const mappedParagraphs = calibrationNodes.filter((node) => node.paragraphIndex !== undefined);
   const mappedTables = calibrationNodes.filter((node) => node.tableIndex !== undefined
@@ -168,6 +171,7 @@ function CalibrationPanel({
   }, [bodyRegionEnd, bodyRegionNodes, bodyRegionStart, bodyRegionStartOptions]);
 
   const updateNodeRole = (nodeId: string, role: OfficialDocumentMappingRole) => {
+    calibrationDirty.current = true;
     setCalibrationNodes((current) => current.map((node) => node.id === nodeId
       ? {
           ...node,
@@ -183,6 +187,7 @@ function CalibrationPanel({
   };
 
   const updateNodeFlag = (nodeId: string, flag: "dataBinding" | "required", checked: boolean) => {
+    calibrationDirty.current = true;
     setCalibrationNodes((current) => current.map((node) => node.id === nodeId ? { ...node, [flag]: checked } : node));
   };
 
@@ -190,6 +195,7 @@ function CalibrationPanel({
     nodeId: string,
     mode: "PRESERVE" | "TABLE_TEXT" | "ISSUING_AUTHORITY" | "DATA_TABLE"
   ) => {
+    calibrationDirty.current = true;
     setCalibrationNodes((current) => {
       const target = current.find((node) => node.id === nodeId);
       if (!target) return current;
@@ -223,6 +229,7 @@ function CalibrationPanel({
   };
 
   const updateHeaderFooterMode = (nodeId: string, editable: boolean) => {
+    calibrationDirty.current = true;
     setCalibrationNodes((current) => current.map((node) => node.id === nodeId ? {
       ...node,
       role: editable ? "HEADER_FOOTER" : "PRESERVE",
@@ -355,8 +362,8 @@ function CalibrationPanel({
             {bodyRegionNodes.length ? (
               <div className="official-document-body-region" aria-label="正文区域范围">
                 <div><strong>正文区域</strong><small>范围内标题和正文会初始化为草稿节点。</small></div>
-                <label><span>起点</span><Select aria-label="正文区域起点" value={bodyRegionStart} options={bodyRegionStartOptions} disabled={!canEditStructure} onChange={(value) => { setBodyRegionStart(value); if (bodyRegionEnd === undefined || bodyRegionEnd < value) setBodyRegionEnd(value); }} /></label>
-                <label><span>终点</span><Select aria-label="正文区域终点" value={bodyRegionEnd} options={bodyRegionEndOptions} disabled={!canEditStructure} onChange={(value) => { setBodyRegionEnd(value); }} /></label>
+                <label><span>起点</span><Select aria-label="正文区域起点" value={bodyRegionStart} options={bodyRegionStartOptions} disabled={!canEditStructure} onChange={(value) => { calibrationDirty.current = true; setBodyRegionStart(value); if (bodyRegionEnd === undefined || bodyRegionEnd < value) setBodyRegionEnd(value); }} /></label>
+                <label><span>终点</span><Select aria-label="正文区域终点" value={bodyRegionEnd} options={bodyRegionEndOptions} disabled={!canEditStructure} onChange={(value) => { calibrationDirty.current = true; setBodyRegionEnd(value); }} /></label>
               </div>
             ) : null}
             {selectedNode ? (
@@ -572,11 +579,11 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
         templateVersionId: template.currentVersion.id,
         mappings
       });
-      await publishOfficialDocumentTemplate(template.id, template.currentVersion.id);
+      const publishedVersion = await publishOfficialDocumentTemplate(template.id, template.currentVersion.id);
       updateWorkspaceCache((current) => ({
         ...current,
         templates: current.templates.map((item) => item.id === template.id
-          ? { ...item, status: "PUBLISHED" as const }
+          ? { ...item, currentVersion: publishedVersion, status: "PUBLISHED" as const }
           : item)
       }));
       announce("success", "结构版本已发布，可以按此结构新建草稿。");
@@ -635,7 +642,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
         error={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "无法加载报告模板。"}
         onRetry={() => void workspaceQuery.refetch()}
         loadingVariant="cards"
-        contentKey={workspaceQuery.dataUpdatedAt}
+        contentKey={`${templateId}:${template?.currentVersion.id ?? "loading"}`}
       >
         {!template ? <TemplateNotFound /> : (
           <div className="official-document-template-detail-scroll">

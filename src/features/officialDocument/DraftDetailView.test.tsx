@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getOfficialDocumentDraftContent: vi.fn(),
   updateOfficialDocumentDraftContent: vi.fn(),
   detachOfficialDocumentBinding: vi.fn(),
+  refreshOfficialDocumentBindings: vi.fn(),
   listOfficialDocumentDraftContentVersions: vi.fn(),
   listOfficialDocumentDraftExports: vi.fn()
 }));
@@ -27,6 +28,7 @@ vi.mock("@/services/officialDocumentService", async (importOriginal) => ({
   getOfficialDocumentDraftContent: mocks.getOfficialDocumentDraftContent,
   updateOfficialDocumentDraftContent: mocks.updateOfficialDocumentDraftContent,
   detachOfficialDocumentBinding: mocks.detachOfficialDocumentBinding,
+  refreshOfficialDocumentBindings: mocks.refreshOfficialDocumentBindings,
   listOfficialDocumentDraftContentVersions: mocks.listOfficialDocumentDraftContentVersions,
   listOfficialDocumentDraftExports: mocks.listOfficialDocumentDraftExports
 }));
@@ -89,6 +91,7 @@ describe("DraftDetailView", () => {
     mocks.getOfficialDocumentDraftContent.mockReset();
     mocks.updateOfficialDocumentDraftContent.mockReset();
     mocks.detachOfficialDocumentBinding.mockReset();
+    mocks.refreshOfficialDocumentBindings.mockReset();
     mocks.listOfficialDocumentDraftContentVersions.mockResolvedValue([]);
     mocks.listOfficialDocumentDraftExports.mockResolvedValue([]);
     mocks.loadOfficialDocumentWorkspace.mockResolvedValue(emptyWorkspace);
@@ -149,7 +152,7 @@ describe("DraftDetailView", () => {
     expect(screen.queryByText(/示例/)).not.toBeInTheDocument();
   });
 
-  it("disables DOCX and PDF export while a binding is STALE", async () => {
+  it("disables export and detach when a stale binding has no frozen snapshot", async () => {
     mocks.loadOfficialDocumentWorkspace.mockResolvedValue(workspaceWithDraft(liveDraft([{
       id: "bind-stale",
       queryAssetId: "asset-1",
@@ -159,6 +162,7 @@ describe("DraftDetailView", () => {
       targetSlotTag: "xs:binding:slot-1",
       rendering: "SCALAR",
       status: "STALE",
+      resolvedValue: 42,
       persisted: true
     }])));
 
@@ -182,6 +186,8 @@ describe("DraftDetailView", () => {
       targetSlotTag: "xs:binding:slot-1",
       rendering: "SCALAR",
       status: "ACTIVE",
+      snapshotId: "snapshot-1",
+      resolvedValue: 42,
       persisted: true
     }])));
 
@@ -195,6 +201,76 @@ describe("DraftDetailView", () => {
     expect(screen.getByRole("button", { name: "导出 PDF" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /导出检查/ }));
     expect(await screen.findByRole("button", { name: "转为普通文本" })).toBeEnabled();
+  });
+
+  it.each([42, 0, false])("keeps a frozen value %s usable after refresh fails and the user detaches it", async (value) => {
+    const binding: OfficialDocumentDraft["bindings"][number] = {
+      id: "bind-frozen", queryAssetId: "asset-1", queryAssetName: "订单汇总",
+      queryVersionId: "version-1", outputKey: "result", targetSlotTag: "xs:binding:slot-1",
+      rendering: "SCALAR", status: "ACTIVE", persisted: true,
+      executionId: "execution-old", snapshotId: "snapshot-old", cutoffAt: "2026-09-08T00:00:00Z", resolvedValue: value
+    };
+    const failed = { ...binding, status: "SCHEMA_DRIFT" as const };
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue(workspaceWithDraft(liveDraft([binding])));
+    mocks.getOfficialDocumentDraftContent.mockResolvedValue({ revision: 1, fixedValues: [],
+      blocks: [{ id: "body-frozen", order: 0, role: "BODY", variantId: "body", text: `保留的原文 ${value}` }] });
+    mocks.refreshOfficialDocumentBindings.mockResolvedValue([failed]);
+    mocks.detachOfficialDocumentBinding.mockResolvedValue({ ...failed, status: "MANUAL" });
+    const user = userEvent.setup();
+    renderDraftDetail("draft-ready");
+    await screen.findByDisplayValue(`保留的原文 ${value}`);
+    await user.click(screen.getByRole("button", { name: "刷新绑定快照" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeDisabled());
+    await user.click(screen.getByRole("button", { name: /导出检查/ }));
+    const detach = await screen.findByRole("button", { name: "转为普通文本" });
+    expect(detach).toBeEnabled();
+    expect(screen.getByText("暂不可导出")).toBeInTheDocument();
+    await user.click(detach);
+    await waitFor(() => expect(mocks.detachOfficialDocumentBinding).toHaveBeenCalledWith("draft-ready", "bind-frozen"));
+    expect(await screen.findByText("MANUAL")).toBeInTheDocument();
+    expect(screen.getByText("snapshot-old")).toBeInTheDocument();
+    expect(screen.getByText("execution-old")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(`保留的原文 ${value}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "导出 PDF" })).toBeEnabled();
+    expect(screen.getByText("可导出", { exact: true })).toBeInTheDocument();
+  });
+
+  it("does not detach a failed binding with a snapshot ID but no preserved value", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue(workspaceWithDraft(liveDraft([{
+      id: "bind-empty", queryAssetId: "asset-1", queryVersionId: "version-1", outputKey: "result",
+      targetSlotTag: "xs:binding:slot-1", rendering: "SCALAR", status: "SCHEMA_DRIFT", persisted: true,
+      snapshotId: "snapshot-empty", resolvedValue: null
+    }])));
+    const user = userEvent.setup();
+    renderDraftDetail("draft-ready");
+    await screen.findByText("已保存");
+    await user.click(screen.getByRole("button", { name: /导出检查/ }));
+    expect(await screen.findByRole("button", { name: "转为普通文本" })).toBeDisabled();
+    expect(mocks.detachOfficialDocumentBinding).not.toHaveBeenCalled();
+  });
+
+  it("keeps the failed binding and export restriction when detach is rejected", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue(workspaceWithDraft(liveDraft([{
+      id: "bind-conflict", queryAssetId: "asset-1", queryVersionId: "version-1", outputKey: "result",
+      targetSlotTag: "xs:binding:slot-1", rendering: "SCALAR", status: "SCHEMA_DRIFT", persisted: true,
+      snapshotId: "snapshot-old", resolvedValue: 42
+    }])));
+    mocks.detachOfficialDocumentBinding.mockRejectedValue(new Error("绑定已发生变化，请重新打开草稿"));
+    const user = userEvent.setup();
+    renderDraftDetail("draft-ready");
+    await screen.findByText("已保存");
+    await user.click(screen.getByRole("button", { name: /导出检查/ }));
+    await user.click(await screen.findByRole("button", { name: "转为普通文本" }));
+    expect(await screen.findByText("绑定已发生变化，请重新打开草稿")).toBeInTheDocument();
+    expect(screen.getByText("SCHEMA_DRIFT")).toBeInTheDocument();
+    expect(screen.getByText("snapshot-old")).toBeInTheDocument();
+    expect(screen.queryByText("MANUAL")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeDisabled();
+    const retryDetach = screen.getByRole("button", { name: /转为普通文本/ });
+    expect(retryDetach).toBeEnabled();
+    await user.click(retryDetach);
+    await waitFor(() => expect(mocks.detachOfficialDocumentBinding).toHaveBeenCalledTimes(2));
   });
 
   it("allows Word export while a structured draft is still marked editing", async () => {

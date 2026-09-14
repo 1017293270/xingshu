@@ -8,6 +8,7 @@ import type {
   DraftDataBinding,
   OfficialDocumentAnalysis,
   OfficialDocumentContentProfile,
+  OfficialDocumentContentSourceBlock,
   OfficialDocumentWritingLogicPlan,
   OfficialDocumentDraft,
   OfficialDocumentDraftContent,
@@ -81,7 +82,7 @@ export type OfficialDocumentService = {
   createTextContentProfile(
     templateId: string,
     versionId: string,
-    input: { name?: string; text: string }
+    input: { name?: string; text: string; sourceBlocks?: OfficialDocumentContentSourceBlock[] }
   ): Promise<OfficialDocumentContentProfile>;
   saveContentProfileAnalysis(
     profileId: string,
@@ -242,6 +243,7 @@ type ApiDraftBinding = {
   executionId?: string;
   snapshotId?: string;
   dataAsOf?: string;
+  resolvedValue?: unknown;
   status: DraftDataBinding["status"];
 };
 
@@ -1084,6 +1086,7 @@ function mapBinding(binding: ApiDraftBinding): DraftDataBinding {
     snapshotId: binding.snapshotId,
     executionId: binding.executionId,
     cutoffAt: binding.dataAsOf,
+    resolvedValue: binding.resolvedValue,
     persisted: true
   };
 }
@@ -1243,7 +1246,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
         `/v1/templates/${encodeURIComponent(templateId)}/versions/${encodeURIComponent(versionId)}/content-profiles`,
         {
           method: "POST",
-          body: JSON.stringify({ name: input.name?.trim() || undefined, text: input.text.trim() }),
+          body: JSON.stringify({ name: input.name?.trim() || undefined, text: input.text.trim(), sourceBlocks: input.sourceBlocks }),
           timeoutMs: 60_000
         }
       );
@@ -1526,7 +1529,7 @@ export const uploadOfficialDocumentContentProfile = (
 export const createOfficialDocumentTextContentProfile = (
   templateId: string,
   versionId: string,
-  input: { name?: string; text: string }
+  input: { name?: string; text: string; sourceBlocks?: OfficialDocumentContentSourceBlock[] }
 ) => officialDocumentService.createTextContentProfile(templateId, versionId, input);
 export const saveOfficialDocumentContentProfileAnalysis = (
   profileId: string,
