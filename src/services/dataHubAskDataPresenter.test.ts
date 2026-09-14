@@ -8,6 +8,17 @@ import {
 import type { DataHubStreamEvent } from "@/types/dataHub";
 
 describe("dataHubAskDataPresenter", () => {
+  it("preserves explicit totals and table provenance while allowing genuine zero-row responses", () => {
+    expect(normalizeDataHubTableResult({})).toBeNull();
+    expect(normalizeDataHubTableResult({ data: [] })).toMatchObject({ rows: [], totalRows: 0, totalRowsKnown: false });
+    expect(normalizeDataHubTableResult({ rows: "[]", totalRows: 0 })).toMatchObject({ rows: [], totalRows: 0, totalRowsKnown: true });
+    expect(normalizeDataHubTableResult({ rows: [], totalRows: 0, datasourceId: "2", title: "合同", usedAssets: [
+      { assetId: "dps-table:2:contract", assetName: "contract", assetType: "TABLE" }
+    ] })).toMatchObject({ totalRowsKnown: true, datasourceId: "2", title: "合同", usedAssets: [{ assetName: "contract" }] });
+    expect(normalizeDataHubTableResult({ rows: [{ a: 1 }], totalRows: -1 })).toMatchObject({ totalRows: 1, totalRowsKnown: false });
+    expect(normalizeDataHubTableResult({ datasourceId: 2, title: "合同", result: { data: [] }, query: { measures: ["Contract.count"] } }))
+      .toMatchObject({ datasourceId: 2, title: "合同", rows: [], business: { fields: ["记录数"] } });
+  });
   it("backfills a complete public thinking snapshot after an initial streamed introduction", () => {
     const turn = createDataHubAskTurn("合同排名", [
       { type: "thinking", content: "我来查询合同排名。", replyId: "planning", modelCallIndex: 1 },

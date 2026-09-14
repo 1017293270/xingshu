@@ -555,6 +555,7 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
       columns,
       rows: normalizeRows(parsedCandidate, columns),
       totalRows: parsedCandidate.length,
+      totalRowsKnown: false,
       tableIndex
     };
   }
@@ -565,11 +566,15 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
 
   const nested = parsedCandidate.result ?? parsedCandidate.payload;
   if (!("columns" in parsedCandidate) && !("rows" in parsedCandidate) && nested) {
-    return normalizeDataHubTableResult(nested, tableIndex);
+    const parsedNested = parseJsonMaybe(nested);
+    return normalizeDataHubTableResult(isRecord(parsedNested) || Array.isArray(parsedNested)
+      ? { ...parsedCandidate, result: undefined, payload: undefined,
+          ...(isRecord(parsedNested) ? parsedNested : { data: parsedNested }) }
+      : parsedNested, tableIndex);
   }
 
   const rawRows =
-    parsedCandidate.rows ?? parsedCandidate.records ?? parsedCandidate.values ?? parsedCandidate.data ?? [];
+    parsedCandidate.rows ?? parsedCandidate.records ?? parsedCandidate.values ?? parsedCandidate.data;
   const columns = normalizeColumns(
     parsedCandidate.columns ?? columnsFromAnnotation(parsedCandidate.annotation),
     rawRows,
@@ -578,21 +583,24 @@ export function normalizeDataHubTableResult(input: unknown, tableIndex = 0): Dat
   const rows = normalizeRows(rawRows, columns);
   const annotatedTableComment = tableCommentFromAnnotation(parsedCandidate.annotation);
 
-  if (columns.length === 0 && rows.length === 0) {
+  if (columns.length === 0 && rows.length === 0 && !Array.isArray(parseJsonMaybe(rawRows))) {
     return null;
   }
+
+  const total = [parsedCandidate.totalRows, parsedCandidate.total, parsedCandidate.rowCount]
+    .find((value): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0);
 
   return {
     columns,
     rows,
-    totalRows:
-      typeof parsedCandidate.totalRows === "number"
-        ? parsedCandidate.totalRows
-        : typeof parsedCandidate.total === "number"
-          ? parsedCandidate.total
-          : typeof parsedCandidate.rowCount === "number"
-            ? parsedCandidate.rowCount
-            : rows.length,
+    totalRows: total ?? rows.length,
+    totalRowsKnown: parsedCandidate.totalRowsKnown === false ? false : total !== undefined,
+    datasourceId: typeof parsedCandidate.datasourceId === "string" || typeof parsedCandidate.datasourceId === "number"
+      ? parsedCandidate.datasourceId : undefined,
+    title: asString(parsedCandidate.title).trim() || undefined,
+    usedAssets: Array.isArray(parsedCandidate.usedAssets) ? parsedCandidate.usedAssets.filter(isRecord).map((asset) => ({
+      assetId: asString(asset.assetId), assetName: asString(asset.assetName), assetType: asString(asset.assetType)
+    })).filter((asset) => asset.assetId && asset.assetName) : undefined,
     groupIndex: typeof parsedCandidate.groupIndex === "number" ? parsedCandidate.groupIndex : undefined,
     groupLabel:
       [
@@ -781,7 +789,7 @@ export function normalizeDataHubCitationEvidence(data: unknown): DataHubCitation
   return evidence.length ? evidence : undefined;
 }
 
-function normalizeCitationDocument(data: unknown): DataHubCitationDocument | undefined {
+export function normalizeCitationDocument(data: unknown): DataHubCitationDocument | undefined {
   const record = unwrapEventData(data);
   if (!isRecord(record)) {
     return undefined;
@@ -800,7 +808,7 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
     docKey: docKey || undefined,
     kbId,
     kbName: asString(record.kbName).trim() || undefined,
-    docName: asString(record.docName).trim() || undefined,
+    docName: asString(record.docName).trim() || asString(record.title).trim() || undefined,
     fileName: asString(record.fileName).trim() || undefined,
     chapter:
       asString(record.chapter).trim() ||
@@ -818,7 +826,7 @@ function normalizeCitationDocument(data: unknown): DataHubCitationDocument | und
       typeof record.markdownAvailable === "boolean" ? record.markdownAvailable : undefined,
     evidenceFragments: normalizeDataHubCitationEvidence(record.evidenceFragments),
     fragments: Array.isArray(record.fragments)
-      ? record.fragments.map(asString).map(formatDataHubCitationFragment).filter(Boolean).slice(0, 3)
+      ? record.fragments.map(asString).map(formatDataHubCitationFragment).filter(Boolean)
       : []
   };
 }

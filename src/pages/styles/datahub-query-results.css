@@ -1,0 +1,126 @@
+.datahub-business-explanation__heading { margin: 0; font: inherit; }
+
+.datahub-business-explanation--compact .datahub-business-explanation__summary {
+  min-height: var(--xs-control-height);
+  gap: 8px;
+  border-radius: var(--xs-radius-small);
+  color: var(--xs-text-2);
+  font-weight: var(--xs-fw-medium);
+}
+
+.datahub-business-explanation--compact .datahub-business-explanation__summary small {
+  margin-left: 0;
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+}
+
+.datahub-query-process__icon { display: inline-flex; color: var(--xs-text-3); }
+.datahub-business-explanation--compact[data-status="running"] .datahub-query-process__icon { color: var(--xs-primary); }
+.datahub-business-explanation--compact .datahub-business-explanation__body { padding: 4px 0 12px 24px; }
+.datahub-business-explanation--compact > .xs-datahub-collapse { transition-duration: var(--xs-motion-base); }
+
+.datahub-query-results, .datahub-query-results__list, .datahub-query-result { min-width: 0; }
+.datahub-query-results__status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+  line-height: var(--xs-lh-body);
+  overflow-wrap: anywhere;
+}
+.datahub-query-results__status > :first-child { color: var(--xs-text-2); }
+.datahub-query-results__introduction { flex-basis: 100%; color: var(--xs-text-2); font-size: var(--xs-fs-body); }
+.datahub-query-results__status > :last-child:empty { display: none; }
+.datahub-query-results__list { display: grid; gap: var(--xs-module-gap); list-style: none; padding: 0; margin: 0; }
+.datahub-query-results__list > li { min-width: 0; }
+.datahub-query-result {
+  padding: 14px 16px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+  animation: analysis-state-in var(--xs-motion-base) var(--xs-motion-ease-out);
+}
+.datahub-query-result__head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.datahub-query-result__head > svg { flex: none; margin-top: 3px; color: var(--xs-text-3); }
+.datahub-query-result__head h3 {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-medium);
+  line-height: var(--xs-lh-body);
+  overflow-wrap: anywhere;
+}
+.datahub-query-result__kind { flex: none; margin-top: 2px; color: var(--xs-text-3); font-size: var(--xs-fs-caption); white-space: nowrap; }
+.datahub-query-result__source { margin: 4px 0 0; color: var(--xs-text-3); font-size: var(--xs-fs-caption); line-height: var(--xs-lh-body); overflow-wrap: anywhere; }
+.datahub-query-result__source:empty { display: none; }
+.datahub-query-result__conditions { margin-top: 8px; }
+.datahub-query-result__conditions > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--xs-control-height-sm);
+  color: var(--xs-text-2);
+  cursor: pointer;
+  font-size: var(--xs-fs-label);
+  list-style: none;
+}
+.datahub-query-result__conditions > summary::-webkit-details-marker { display: none; }
+.datahub-query-result__conditions > summary > svg { flex: none; transition: transform var(--xs-motion-base) var(--xs-motion-ease-out); }
+.datahub-query-result__conditions[open] > summary > svg { transform: rotate(90deg); }
+.datahub-query-result__conditions > summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.datahub-query-result__conditions > summary > small { flex: none; margin-left: auto; color: var(--xs-text-3); font-size: var(--xs-fs-caption); }
+.datahub-query-result__conditions dl { display: grid; gap: 6px; margin: 8px 0 12px; padding: 10px 12px; border-radius: var(--xs-radius-small); background: var(--xs-surface-soft); font-size: var(--xs-fs-label); }
+.datahub-query-result__conditions dl > div { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
+.datahub-query-result__conditions dt { color: var(--xs-text-3); }
+.datahub-query-result__conditions dd { margin: 0; color: var(--xs-text-2); overflow-wrap: anywhere; }
+.datahub-query-result__scalar { display: flex; align-items: baseline; gap: 16px; margin: 12px 0 2px; }
+.datahub-query-result__scalar dt { color: var(--xs-text-2); font-size: var(--xs-fs-label); }
+.datahub-query-result__scalar dd { margin: 0; color: var(--xs-text); font-size: var(--xs-fs-metric-sm); font-weight: var(--xs-fw-medium); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.datahub-query-result__excerpt { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--xs-border); color: var(--xs-text-2); font-size: var(--xs-fs-body); overflow: hidden; overflow-wrap: anywhere; }
+.datahub-query-result__excerpt :is(p, h1, h2, h3, h4) { margin: 0; font: inherit; }
+.datahub-query-result__excerpt table { font-size: var(--xs-fs-label); }
+.datahub-query-result__actions { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+.datahub-query-result__actions button, .datahub-query-results__more, .datahub-table-card__expand {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--xs-control-height-sm); padding: 2px 0;
+  border: 0; border-radius: 4px; background: transparent; color: var(--xs-interactive-text); font-size: var(--xs-fs-label); cursor: pointer;
+}
+.datahub-query-result__actions button span { color: var(--xs-text-3); font-size: var(--xs-fs-caption); }
+.datahub-query-result__actions button:disabled { color: var(--xs-text-3); cursor: default; }
+.datahub-query-result__actions button:not(:disabled):hover, .datahub-query-results__more:hover, .datahub-table-card__expand:hover { text-decoration: underline; text-underline-offset: 3px; }
+.datahub-query-results__more { margin-top: 8px; }
+.datahub-query-results__more[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.datahub-query-result__missing, .datahub-query-result__incomplete { margin: 10px 0 0; color: var(--xs-text-3); font-size: var(--xs-fs-label); }
+.datahub-query-result__incomplete { color: var(--xs-warning-ink); }
+.datahub-query-result__fragment { padding-top: 12px; }
+.datahub-query-result__fragment + .datahub-query-result__fragment { margin-top: 12px; border-top: 1px solid var(--xs-border); }
+
+.datahub-query-result .datahub-table-card--compact { min-width: 0; margin-top: 8px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.datahub-query-result .datahub-table-card--compact .datahub-result-head { display: flex; align-items: center; gap: 8px; padding: 0 0 8px; margin: 0; border: 0; }
+.datahub-table-card--compact .datahub-table-card__toolbar-summary { flex: 1; min-width: 0; color: var(--xs-text-3); font-size: var(--xs-fs-caption); font-weight: var(--xs-fw-regular); font-variant-numeric: tabular-nums; }
+.datahub-table-card--compact .datahub-table-card__actions { margin-left: auto; }
+.datahub-table-card--compact .analysis-icon-button { color: var(--xs-text-3); }
+.datahub-table-card--compact .analysis-icon-button:hover { color: var(--xs-primary-2); }
+.datahub-table-card--compact .datahub-table-scroll { border: 1px solid var(--xs-table-grid); border-radius: var(--xs-radius-small); }
+.datahub-table-card--compact .xs-table { font-size: var(--xs-fs-label); }
+.datahub-table-card--compact .xs-table :is(th, td) { padding: 8px 12px; }
+.datahub-table-card--compact .datahub-table-card__note { margin: 8px 0 0; padding: 0; border: 0; background: transparent; color: var(--xs-text-3); font-size: var(--xs-fs-caption); font-weight: var(--xs-fw-regular); }
+.datahub-table-card__pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+
+@media (max-width: 600px) {
+  .datahub-business-explanation--compact .datahub-business-explanation__body { padding-left: 0; }
+  .datahub-query-result { padding: 12px; }
+  .datahub-query-result__kind { display: none; }
+  .datahub-query-result__actions button, .datahub-query-results__more, .datahub-table-card__expand,
+  .datahub-business-explanation--compact .datahub-business-explanation__summary,
+  .datahub-table-card--compact .analysis-icon-button { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .datahub-query-result { animation: none; }
+  .datahub-query-result__conditions > summary > svg { transition: none; }
+}

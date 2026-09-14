@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { readFileSync } from "node:fs";
@@ -154,13 +154,22 @@ describe("workflow refinements", () => {
     await user.click(screen.getByRole("button", { name: "生成表格" }));
 
     expect(await screen.findByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /继续制表/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "继续制表" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "继续制表" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent("正在生成结果表");
+    const traceToggle = screen.getByRole("button", { name: /执行过程/ });
+    expect(traceToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(traceToggle);
+    expect(traceToggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("经营分析库", { exact: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "停止生成" })).toBeEnabled();
 
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "继续追问" }), { key: "Enter", code: "Enter" });
+    const followUp = screen.getByRole("textbox", { name: "继续追问" });
+    expect(followUp).toBeEnabled();
+    await user.type(followUp, "按季度汇总");
+    fireEvent.keyDown(followUp, { key: "Enter", code: "Enter" });
+    fireEvent.keyDown(followUp, { key: "Enter", code: "Enter" });
+    expect(followUp).toHaveValue("按季度汇总");
     expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -191,10 +200,20 @@ describe("workflow refinements", () => {
     await user.click(screen.getByRole("button", { name: "生成表格" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent("未生成结果表，请补充字段、时间或统计口径");
+      expect(screen.getByRole("status")).toHaveTextContent("本轮处理已结束");
     });
+    const emptyResult = screen.getByRole("region", { name: "本次制表结果" });
+    expect(emptyResult).toBeVisible();
+    expect(emptyResult).toHaveTextContent("这次没有生成结果表。");
+    expect(emptyResult).toHaveTextContent("可以重试生成，或调整要求后继续。");
     expect(screen.getByText("当前空间没有可汇总的费用明细。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试生成" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "继续制表" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "调整要求" }));
+    expect(screen.getByRole("textbox", { name: "继续追问" })).toHaveValue("月度费用统计报表");
+    expect(screen.getByRole("button", { name: "继续制表" })).toBeEnabled();
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
   });
 
   it("shows an error state when table generation cannot be queued", async () => {
@@ -207,8 +226,18 @@ describe("workflow refinements", () => {
     await user.type(screen.getByRole("textbox", { name: "制表需求" }), "生成库存表");
     await user.click(screen.getByRole("button", { name: "生成表格" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("offline");
+    });
+    const conversation = within(screen.getByRole("region", { name: "制表对话" }));
+    expect(conversation.getByText("offline", { exact: true })).toBeVisible();
+    expect(conversation.getByText("可以调整需求后重新提交，或点下面的重试再跑一次")).toBeVisible();
+    expect(screen.getByRole("button", { name: "重试" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续制表" })).toBeDisabled();
+    await user.type(screen.getByRole("textbox", { name: "继续追问" }), "只统计本月库存");
+    expect(screen.getByRole("button", { name: "继续制表" })).toBeEnabled();
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledTimes(1);
   });
 
   it("opens a recent table record into the restored result workspace", async () => {

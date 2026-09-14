@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
@@ -157,7 +157,7 @@ describe("AI chart actions", () => {
     expect(option().series[0].data).toEqual([48000, 49000]);
     expect(within(card).getByRole("button", { name: "下一组" })).toBeDisabled();
     await user.click(within(card).getByText("表格", { exact: true }));
-    expect(card).toHaveTextContent("全部 50 行");
+    expect(card).toHaveTextContent("已返回 50 行");
     expect(within(card).getByRole("columnheader", { name: "合同乙方" })).toHaveAttribute("scope", "col");
   });
 
@@ -420,7 +420,7 @@ describe("AI chart actions", () => {
     expect(within(chartCard).queryByText("合同咨询")).not.toBeInTheDocument();
   });
 
-  it("keeps all original query tables in the dropdown including the table used by the chart", async () => {
+  it("keeps all original query tables visible including the table used by the chart", async () => {
     vi.spyOn(window, "fetch").mockResolvedValue(new Response(JSON.stringify({
       code: 200, message: "ok", data: {
         chartable: true, chartType: "bar", allowedTypes: ["bar"], title: "咨询对象分布",
@@ -439,12 +439,8 @@ describe("AI chart actions", () => {
     expect(result.queryByRole("table")).not.toBeInTheDocument();
     const query = screen.getByRole("region", { name: "查询过程" });
     const queryToggle = within(query).getByRole("button", { name: /查询过程/ });
-    expect(queryToggle).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(queryToggle);
-    const tableToggle = within(query).getByRole("button", { name: "展开结果表，共 2 张表、4 行" });
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(tableToggle);
-    const tables = within(within(query).getByRole("region", { name: "查询结果表" }));
+    expect(queryToggle).toHaveAttribute("aria-expanded", "true");
+    const tables = within(within(query).getByRole("region", { name: "查询结果" }));
     expect(tables.getAllByRole("table")).toHaveLength(2);
     expect(tables.getByRole("cell", { name: "合同咨询" })).toBeVisible();
     expect(tables.getByRole("cell", { name: "32" })).toBeVisible();

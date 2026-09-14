@@ -5,6 +5,8 @@ import remarkGfm from "remark-gfm";
 type XsSafeMarkdownProps = {
   content: string;
   className?: string;
+  /** Evidence previews display image descriptions without loading remote media. */
+  renderImages?: boolean;
   resolveImage?: (src: string, signal: AbortSignal) => Promise<{ url: string; revoke?: () => void } | null>;
   references?: Record<string, { label: string; onClick: () => void }>;
 };
@@ -140,7 +142,7 @@ function XsSafeMarkdownImage({ src, alt, title, resolveImage }: {
   );
 }
 
-export function XsSafeMarkdown({ content, className = "", references, resolveImage }: XsSafeMarkdownProps) {
+export function XsSafeMarkdown({ content, className = "", references, resolveImage, renderImages = true }: XsSafeMarkdownProps) {
   return (
     <div className={`xs-safe-markdown${className ? ` ${className}` : ""}`}>
       <ReactMarkdown
@@ -160,9 +162,9 @@ export function XsSafeMarkdown({ content, className = "", references, resolveIma
               {children}
             </a>
           ),
-          img: ({ node: _node, src, alt, title }) => (
-            <XsSafeMarkdownImage src={src} alt={alt} title={title} resolveImage={resolveImage} />
-          )
+          img: ({ node: _node, src, alt, title }) => renderImages
+            ? <XsSafeMarkdownImage src={src} alt={alt} title={title} resolveImage={resolveImage} />
+            : alt ? <span>{alt}</span> : null
         }}
       >
         {content}

@@ -440,6 +440,11 @@ export type DataHubTableResult = {
   columns: DataHubTableColumn[];
   rows: Record<string, unknown>[];
   totalRows: number;
+  /** Whether the backend explicitly supplied a total rather than only returned rows. */
+  totalRowsKnown?: boolean;
+  datasourceId?: string | number;
+  title?: string;
+  usedAssets?: Array<{ assetId: string; assetName: string; assetType?: string }>;
   groupIndex?: number;
   groupLabel?: string;
   source?: string;

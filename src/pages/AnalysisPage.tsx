@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ArrowSquareOut,
   Brain,
-  CaretDown,
   ChartLineUp,
   ChartPieSlice,
   CopySimple,
@@ -14,10 +13,9 @@ import {
   MapPin,
   PresentationChart,
   Star,
-  Table,
   TrendUp
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   TouchEvent as ReactTouchEvent,
@@ -51,7 +49,6 @@ import {
   buildGeneratedChartOption,
   buildGeneratedChartSpec,
   canAutoGenerateAiChart,
-  isDataHubScalarResult,
   planAiChart,
   resolveAiChartTables
 } from "@/services/aiChartPlannerService";
@@ -87,6 +84,7 @@ import { citationKnowledgeBaseLabel, citationDisplayTitle, citationLocationText 
 import { formatDataHubCitationFragment, formatDataHubColumnTitle } from "@/services/dataHubFormat";
 import { getDataHubResponsePhases } from "@/services/dataHubResponsePhases";
 import { getDataHubThinkingSections } from "@/services/dataHubThinkingSections";
+import { buildDataHubQueryProcess } from "@/services/dataHubQueryProcessPresenter";
 import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
 import type {
@@ -575,58 +573,6 @@ function DataHubAnswer({
           onOpen={(citation) => { setReferenceId(undefined); onOpenCitation(citation); }} /> : null}
       </Modal>
     </div>
-  );
-}
-
-function AnalysisResultTables({
-  tables,
-  onStatus
-}: {
-  tables: DataHubTableResult[];
-  onStatus: (message: string) => void;
-}) {
-  const bodyId = useId();
-  const [expanded, setExpanded] = useState(false);
-  const bodyMountedRef = useRef(expanded);
-  if (expanded) bodyMountedRef.current = true;
-  const totalRows = tables.reduce((total, table) => total + table.totalRows, 0);
-
-  return (
-    <section className="analysis-result-tables" data-expanded={expanded || undefined} aria-label="查询结果表">
-      <button
-        type="button"
-        className="analysis-result-tables__toggle"
-        aria-controls={bodyId}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? "收起" : "展开"}结果表，共 ${tables.length} 张表、${totalRows} 行`}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <span className="analysis-result-tables__icon"><Table size={18} aria-hidden="true" /></span>
-        <span className="analysis-result-tables__copy">
-          <strong>结果表 <span className="analysis-result-tables__count">{tables.length} 张</span></strong>
-          <small>共 {totalRows} 行数据</small>
-        </span>
-        <span className="analysis-result-tables__action">
-          {expanded ? "收起" : "查看数据"}
-          <CaretDown size={16} aria-hidden="true" />
-        </span>
-      </button>
-      <div
-        id={bodyId}
-        className={`xs-datahub-collapse${expanded ? " xs-datahub-collapse--open" : ""}`}
-        aria-hidden={!expanded}
-      >
-        <div className="xs-datahub-collapse__inner">
-          {bodyMountedRef.current ? (
-            <div className="analysis-output__tables analysis-result-tables__body">
-              {tables.map((table) => (
-                <DataHubResultTable table={table} key={table.tableIndex} onStatus={onStatus} />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -1810,8 +1756,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                   .filter(Boolean)
                   .join("\n\n")
               );
-              const nonScalarTables = supportsTables ? visibleTables.filter((table) => !isDataHubScalarResult(table)) : [];
-              const queryTables = nonScalarTables;
+              const queryProcess = buildDataHubQueryProcess(executionProjection, turn.events);
               const businessKind = isAgentMode
                 ? "AGENT"
                 : isDocumentLookupMode
@@ -1921,17 +1866,17 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           showPlaceholder
                         />
                       ) : null}
-                      {!isHistoryLoadingTurn && (phases.showQuery || queryTables.length > 0) ? (
+                      {!isHistoryLoadingTurn && (phases.showQuery || queryProcess.results.length > 0) ? (
                         <DataHubBusinessExplanation
                           kind={businessKind}
                           intent={turn.question}
                           trace={businessTrace}
-                          status={phases.queryStatus}
+                          status={displayStatus === "streaming" || displayStatus === "idle" ? "running" : displayStatus}
                           startedAt={phases.queryStartedAt}
                           durationMs={phases.queryDurationMs}
-                          resultTables={queryTables.length > 0 ? (
-                            <AnalysisResultTables tables={queryTables} onStatus={setWorkflowStatus} />
-                          ) : undefined}
+                          queryProcess={queryProcess}
+                          onStatus={setWorkflowStatus}
+                          onOpenDocument={handleOpenCitation}
                         >
                         <DataHubExecutionPanel
                           projection={executionProjection}
@@ -2064,7 +2009,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               title={isHistoryLoadingTurn ? "正在加载历史对话" : undefined}
                               description={isHistoryLoadingTurn ? "历史内容加载完成后会在当前页面直接显示。" : undefined}
                             />
-                          ) : visibleAnswerBlocks.length || queryTables.length || aiChartState.status === "success" ||
+                          ) : visibleAnswerBlocks.length || queryProcess.results.length || aiChartState.status === "success" ||
                             visibleCitations.length || documentLookupResults.length || childDocumentResults.length ||
                             turnAsk.clarifications.length || displayStatus === "error" ? null : (
                             <div className="datahub-empty-state" role="status">

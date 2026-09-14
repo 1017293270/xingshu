@@ -32,10 +32,13 @@ function openResultTables(count = 1, rows = 1) {
   const query = screen.getByRole("region", { name: "查询过程" });
   const queryToggle = within(query).getByRole("button", { name: /查询过程/ });
   if (queryToggle.getAttribute("aria-expanded") === "false") fireEvent.click(queryToggle);
-  const toggle = within(query).getByRole("button", { name: `展开结果表，共 ${count} 张表、${rows} 行` });
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(toggle);
-  return within(within(query).getByRole("region", { name: "查询结果表" }));
+  const results = within(within(query).getByRole("region", { name: "查询结果" }));
+  const more = results.queryByRole("button", { name: /^查看其余/ });
+  if (more) fireEvent.click(more);
+  for (const button of results.queryAllByRole("button", { name: /^查看全部 \d+ 行$/ })) fireEvent.click(button);
+  expect(results.getAllByRole("table")).toHaveLength(count);
+  expect(results.getAllByRole("table").reduce((total, table) => total + within(table).getAllByRole("row").length - 1, 0)).toBe(rows);
+  return results;
 }
 
 function LocationProbe() {
@@ -160,7 +163,7 @@ describe("workflow page actions", () => {
     expect(screen.getByRole("region", { name: "分析结果" })).toHaveTextContent("已查到本月收入。");
   });
 
-  it("nests execution and the collapsed result table inside query", async () => {
+  it("nests execution and the visible result preview inside query", async () => {
     const user = userEvent.setup();
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("目前咨询数最多的社区是哪个社区");
@@ -223,7 +226,7 @@ describe("workflow page actions", () => {
     expect(screen.queryByText("已匹配事件域业务 Skill")).not.toBeInTheDocument();
 
     /* 查询过程收纳执行细节，逐层展开后才展示主智能体执行卡。 */
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    if (screen.getByRole("button", { name: /查询过程/ }).getAttribute("aria-expanded") === "false") await user.click(screen.getByRole("button", { name: /查询过程/ }));
     const executionPanel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(executionPanel).not.toBeNull();
     await user.click(
@@ -260,7 +263,7 @@ describe("workflow page actions", () => {
     });
     store.appendAskDataEvent(runId, {
       type: "table",
-      data: { columns: ["不应展示"], rows: [["问知表格"]] }
+      data: { columns: ["资料类型"], rows: [["问知表格"]] }
     });
     const citation = {
       docId: "doc-1",
@@ -311,16 +314,17 @@ describe("workflow page actions", () => {
     expect(screen.getAllByText("部门审核", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.queryByText("问数过程（5 步）")).not.toBeInTheDocument();
     expect(container.querySelector('img[src="x"]')).not.toBeInTheDocument();
-    expect(screen.queryByText("问知表格")).not.toBeInTheDocument();
+    // 四种模式统一显示真实结构化结果；问知仍不开放问数收藏/看板动作。
+    expect(within(screen.getByRole("region", { name: "查询结果" })).getByRole("cell", { name: "问知表格" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "收藏问数" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入看板" })).not.toBeInTheDocument();
 
     // 引用 chips 默认收合在结果底部；去重后只有一篇
-    expect(screen.queryByText("合同管理办法.pdf")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "引用文档" })).queryByText("合同管理办法.pdf")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
-    expect(screen.getAllByText("合同管理办法.pdf")).toHaveLength(1);
+    expect(within(screen.getByRole("region", { name: "引用文档" })).getAllByText("合同管理办法.pdf")).toHaveLength(1);
     expect(screen.queryByText("重复引用.pdf")).not.toBeInTheDocument();
 
     // 点击 chip 在站内弹窗预览（PDF 不可内嵌时回退 Markdown）
@@ -510,7 +514,7 @@ describe("workflow page actions", () => {
     expect(screen.getByText("单笔差旅费超过 5000 元需复核", { exact: false })).toBeInTheDocument();
     // 引用 chips 默认收合，点开后能看到引用文档
     await user.click(screen.getByRole("button", { name: "引用 1 篇文档" }));
-    expect(screen.getByText("财务报销制度（2026）")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "引用文档" })).getByText("财务报销制度（2026）")).toBeInTheDocument();
     expect(screen.queryByText("知识库中未找到足够信息。")).not.toBeInTheDocument();
   });
 
@@ -597,7 +601,7 @@ describe("workflow page actions", () => {
     expect(screen.getAllByText("差旅报销制度").length).toBeGreaterThan(0);
 
     /* 过程区：与编排同款的执行过程面板，展开是主智能体执行卡 */
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    if (screen.getByRole("button", { name: /查询过程/ }).getAttribute("aria-expanded") === "false") await user.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(panel).not.toBeNull();
     await user.click(
@@ -680,7 +684,7 @@ describe("workflow page actions", () => {
     );
     await user.click(screen.getByRole("button", { name: "关闭原文预览" }));
 
-    await user.click(screen.getByRole("button", { name: /查询过程/ }));
+    if (screen.getByRole("button", { name: /查询过程/ }).getAttribute("aria-expanded") === "false") await user.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen.getByText("执行细节").closest(".xs-datahub-execution");
     expect(panel).not.toBeNull();
     await user.click(
@@ -881,7 +885,7 @@ describe("workflow page actions", () => {
     renderPage(<AnalysisPage mode="agent" />);
 
     expect(screen.getByLabelText("查询过程")).toHaveAttribute("data-status", "done");
-    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
+    if (screen.getByRole("button", { name: /查询过程/ }).getAttribute("aria-expanded") === "false") fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -946,7 +950,7 @@ describe("workflow page actions", () => {
     await user.click(screen.getByRole("button", { name: "停止生成" }));
 
     expect(screen.getByLabelText("思考过程")).toHaveTextContent("已停止");
-    fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
+    if (screen.getByRole("button", { name: /查询过程/ }).getAttribute("aria-expanded") === "false") fireEvent.click(screen.getByRole("button", { name: /查询过程/ }));
     const panel = screen
       .getByText("智能编排执行")
       .closest(".xs-datahub-execution");
@@ -1793,7 +1797,7 @@ describe("workflow page actions", () => {
     ).toBeInTheDocument();
     expect(within(result).queryByText("数据与制度来源均已完成。")).not.toBeInTheDocument();
     expect(within(result).queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "true");
     const tables = openResultTables();
     expect(tables.getByRole("columnheader", { name: "设备名称" })).toBeInTheDocument();
     expect(tables.getByText("远程控制终端")).toBeInTheDocument();

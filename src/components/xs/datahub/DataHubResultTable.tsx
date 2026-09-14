@@ -1,3 +1,4 @@
+import { Pagination } from "antd";
 import { CopySimple, DownloadSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { copyText } from "@/services/clipboard";
@@ -15,6 +16,7 @@ type DataHubResultTableProps = {
   onStatus?: (message: string) => void;
   /** 预览行数上限。默认按对话流里的紧凑预览给 20；整块侧栏在看表时可以放宽。 */
   rowLimit?: number;
+  compact?: boolean;
 };
 
 const PREVIEW_ROW_LIMIT = 20;
@@ -37,13 +39,22 @@ function isNumericColumn(column: DataHubTableColumn, rows: Record<string, unknow
 export function DataHubResultTable({
   table,
   onStatus,
-  rowLimit = PREVIEW_ROW_LIMIT
+  rowLimit = PREVIEW_ROW_LIMIT,
+  compact = false
 }: DataHubResultTableProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollEdge, setScrollEdge] = useState<"none" | "start" | "end" | "both">("none");
-  const previewRows = table.rows.slice(0, rowLimit);
-  const hiddenRowCount = Math.max(0, table.totalRows - previewRows.length);
-  const tableTitle = formatDataHubTableTitle(table);
+  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(1);
+  const returnedRows = table.rows.length;
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(returnedRows / PREVIEW_ROW_LIMIT)));
+  const offset = compact && expanded ? (currentPage - 1) * PREVIEW_ROW_LIMIT : 0;
+  const previewRows = table.rows.slice(offset, offset + (compact ? expanded ? PREVIEW_ROW_LIMIT : 5 : rowLimit));
+  const hiddenRowCount = Math.max(0, returnedRows - previewRows.length);
+  const totalRowsKnown = table.totalRowsKnown !== false && Number.isFinite(table.totalRows) && table.totalRows >= returnedRows;
+  const partial = totalRowsKnown && table.totalRows > returnedRows;
+  const rowSummary = `已返回 ${returnedRows} 行${partial ? `，结果共 ${table.totalRows} 行` : ""}`;
+  const tableTitle = table.title?.trim() || formatDataHubTableTitle(table);
   const numericColumnKeys = new Set(
     table.columns.filter((column) => isNumericColumn(column, previewRows)).map((column) => column.key)
   );
@@ -85,12 +96,14 @@ export function DataHubResultTable({
       element.removeEventListener("scroll", syncEdge);
       observer.disconnect();
     };
-  }, [table]);
+  }, [table, compact, expanded, currentPage]);
 
   return (
-    <article className="datahub-table-card">
+    <article className={`datahub-table-card${compact ? " datahub-table-card--compact" : ""}`}>
       <div className="datahub-result-head">
-        <h3 title={tableTitle}>{tableTitle}</h3>
+        {compact ? <span className="datahub-table-card__toolbar-summary">
+          {rowSummary}{expanded && returnedRows > 0 ? ` · 当前 ${offset + 1}–${offset + previewRows.length} 行` : ""}
+        </span> : <h3 title={tableTitle}>{tableTitle}</h3>}
         <div className="datahub-table-card__actions">
           <button
             type="button"
@@ -117,19 +130,20 @@ export function DataHubResultTable({
           </button>
         </div>
         {/* 口径条：字段数、行数 */}
-        <dl className="datahub-result-meta">
+        {!compact ? <dl className="datahub-result-meta">
           <div>
             <dt>字段</dt>
             <dd data-numeric="true">{table.columns.length}</dd>
           </div>
           <div>
-            <dt>行数</dt>
-            <dd data-numeric="true">{table.totalRows}</dd>
+            <dt>已返回</dt>
+            <dd data-numeric="true">{returnedRows}</dd>
           </div>
-        </dl>
+        </dl> : null}
       </div>
       <div className="datahub-table-scroll" data-edge={scrollEdge} ref={scrollRef} tabIndex={0}>
         <table className="xs-table xs-table--data">
+          <caption className="sr-only">{tableTitle}</caption>
           <thead>
             <tr>
               <th className="xs-table__gutter" scope="col">
@@ -156,7 +170,7 @@ export function DataHubResultTable({
           <tbody>
             {previewRows.map((row, rowIndex) => (
               <tr key={`${table.tableIndex}-${rowIndex}`}>
-                <td className="xs-table__gutter">{rowIndex + 1}</td>
+                <td className="xs-table__gutter">{offset + rowIndex + 1}</td>
                 {table.columns.map((column) => {
                   const cellText = formatDataHubTableCell(row[column.key]);
                   const numeric = numericColumnKeys.has(column.key);
@@ -177,9 +191,20 @@ export function DataHubResultTable({
           </tbody>
         </table>
       </div>
-      {hiddenRowCount > 0 ? (
+      {returnedRows === 0 ? <p className="datahub-table-card__note">本次返回 0 行数据。</p> : null}
+      {compact && returnedRows > 5 ? <div className="datahub-table-card__pagination">
+        <button type="button" className="datahub-table-card__expand" aria-expanded={expanded}
+          onClick={() => { setExpanded(!expanded); setPage(1); }}>
+          {expanded ? "收起结果表" : `查看全部 ${returnedRows} 行`}
+        </button>
+        {expanded && returnedRows > PREVIEW_ROW_LIMIT ? <Pagination size="small" current={currentPage}
+          pageSize={PREVIEW_ROW_LIMIT} total={returnedRows} showSizeChanger={false} onChange={setPage} /> : null}
+      </div> : null}
+      {partial || hiddenRowCount > 0 ? (
         <p className="datahub-table-card__note">
-          预览前 {previewRows.length} 行，导出可获得全部 {table.totalRows} 行
+          {!compact ? `${rowSummary}。` : ""}
+          {compact && expanded ? `每页展示最多 ${PREVIEW_ROW_LIMIT} 行。` : `预览前 ${previewRows.length} 行。`}
+          复制和导出包含已返回的 {returnedRows} 行{partial ? "，不含尚未返回的数据" : ""}。
         </p>
       ) : null}
     </article>

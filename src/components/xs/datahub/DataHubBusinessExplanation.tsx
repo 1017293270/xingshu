@@ -18,7 +18,9 @@ import {
   type BusinessNarrativeStatus
 } from "@/components/xs/datahub/businessNarrative";
 import { formatDataHubCitationFragment } from "@/services/dataHubFormat";
-import type { DataHubBusinessDocument, DataHubBusinessTrace } from "@/types/dataHub";
+import type { DataHubBusinessDocument, DataHubBusinessTrace, DataHubCitationDocument } from "@/types/dataHub";
+import type { DataHubQueryProcess } from "@/services/dataHubQueryProcessPresenter";
+import { DataHubQueryResults } from "./DataHubQueryResults";
 import { useNow } from "./useNow";
 import "../../../pages/styles/datahub-execution.css";
 
@@ -37,6 +39,9 @@ export type DataHubBusinessExplanationProps = {
   startedAt?: number;
   /** 数据结果以完整表格下拉展示，替代重复的表格摘要卡；文档来源仍保留。 */
   resultTables?: ReactNode;
+  queryProcess?: DataHubQueryProcess;
+  onStatus?: (message: string) => void;
+  onOpenDocument?: (document: DataHubCitationDocument, group: DataHubCitationDocument[]) => void;
   children?: ReactNode;
 };
 
@@ -96,17 +101,23 @@ export function DataHubBusinessExplanation({
   durationMs,
   startedAt,
   resultTables,
+  queryProcess,
+  onStatus,
+  onOpenDocument,
   children
 }: DataHubBusinessExplanationProps) {
   const bodyId = useId();
   const now = useNow(1000, status === "running" && startedAt != null);
   const elapsedMs = status === "running" && startedAt != null ? Math.max(0, now - startedAt) : durationMs;
-  const [expanded, setExpanded] = useState(status === "running");
+  const compact = queryProcess !== undefined;
+  const [expanded, setExpanded] = useState(compact || status === "running");
   const [selectedDocument, setSelectedDocument] = useState<DataHubBusinessDocument>();
   /* running 自动展开、结束自动收成一行；用户点过折叠头后交还控制权（有粘性）。 */
   const userPinnedRef = useRef(false);
   const prevStatusRef = useRef(status);
   useEffect(() => {
+    // 查询结果一旦可见就保留，折叠由用户控制；智写的旧过程调用保持原行为。
+    if (compact) return;
     if (prevStatusRef.current === status) {
       return;
     }
@@ -114,7 +125,7 @@ export function DataHubBusinessExplanation({
     if (!userPinnedRef.current) {
       setExpanded(status === "running");
     }
-  }, [status]);
+  }, [status, compact]);
   const bodyMountedRef = useRef(expanded);
   if (expanded) bodyMountedRef.current = true;
   const content = trace ?? basicTrace({
@@ -139,10 +150,12 @@ export function DataHubBusinessExplanation({
   const detailRows = scopeDetailRows(content);
   const stateText = [stateLabel, elapsedMs != null ? `${Math.max(0, Math.round(elapsedMs / 1000))}秒` : ""]
     .filter(Boolean);
+  const Heading = compact ? "h2" : "div";
 
   return (
-    <section className="datahub-business-explanation" aria-label="查询过程" data-status={status}>
+    <section className={`datahub-business-explanation${compact ? " datahub-business-explanation--compact" : ""}`} aria-label="查询过程" data-status={status}>
       <header className="datahub-business-explanation__header">
+        <Heading className="datahub-business-explanation__heading">
         <button
           type="button"
           className="datahub-business-explanation__summary"
@@ -154,10 +167,16 @@ export function DataHubBusinessExplanation({
             setExpanded((value) => !value);
           }}
         >
-          <CaretRight size={12} aria-hidden="true" />
+          {compact ? <span className="datahub-query-process__icon" aria-hidden="true">
+            {status === "running" ? <CircleNotch className="datahub-query-waiting-icon" size={16} />
+              : status === "error" ? <WarningCircle size={16} />
+                : status === "cancelled" ? <MinusCircle size={16} /> : <CheckCircle size={16} />}
+          </span> : <CaretRight size={12} aria-hidden="true" />}
           <span className="datahub-phase-title">查询过程</span>
           <small>{stateText.join(" · ") || "进行中"}</small>
+          {compact ? <CaretRight size={12} aria-hidden="true" /> : null}
         </button>
+        </Heading>
       </header>
       <div
         id={bodyId}
@@ -166,6 +185,7 @@ export function DataHubBusinessExplanation({
       >
         <div className="xs-datahub-collapse__inner">
           {bodyMountedRef.current ? <div className="datahub-business-explanation__body">
+            {queryProcess ? <DataHubQueryResults process={queryProcess} kind={kind} status={status} onStatus={onStatus} onOpenDocument={onOpenDocument} /> : <>
             {process.length > 0 ? (
               <section className="datahub-business-explanation__query-rules" aria-label="查询条件">
                 {process.map((group) => {
@@ -279,6 +299,7 @@ export function DataHubBusinessExplanation({
                 </dl>
               </details>
             ) : null}
+            </>}
             {children}
           </div> : null}
         </div>

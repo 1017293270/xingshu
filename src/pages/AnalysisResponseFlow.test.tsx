@@ -20,14 +20,11 @@ function openResultTables(count: number, rows: number) {
   expect(within(result).queryByRole("table")).not.toBeInTheDocument();
   const query = screen.getByRole("region", { name: "查询过程" });
   const queryToggle = within(query).getByRole("button", { name: /查询过程/ });
-  expect(queryToggle).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(queryToggle);
-  const toggle = within(query).getByRole("button", { name: `展开结果表，共 ${count} 张表、${rows} 行` });
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
-  expect(within(query).queryByRole("table")).not.toBeInTheDocument();
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
-  return within(within(query).getByRole("region", { name: "查询结果表" }));
+  expect(queryToggle).toHaveAttribute("aria-expanded", "true");
+  const tables = within(query).getByRole("region", { name: "查询结果" });
+  expect(within(tables).getAllByRole("table")).toHaveLength(count);
+  expect(within(tables).getAllByRole("row")).toHaveLength(count + rows);
+  return within(tables);
 }
 
 describe("analysis response phases", () => {
@@ -146,8 +143,8 @@ describe("analysis response phases", () => {
     expect(within(answer).getByRole("heading", { name: "结果表" }).nextElementSibling).toHaveTextContent("合同年度");
     expect(within(answer).getAllByRole("row")).toHaveLength(4);
     const query = screen.getByRole("region", { name: "查询过程" });
-    fireEvent.click(within(query).getByRole("button", { name: /查询过程/ }));
-    expect(within(query).getByRole("button", { name: "展开结果表，共 1 张表、3 行" })).toBeVisible();
+    expect(within(query).getAllByRole("table")).toHaveLength(1);
+    expect(within(query).getByText("已返回 3 行")).toBeVisible();
     expect(query).not.toHaveTextContent("共 6 行");
   });
 
@@ -347,7 +344,7 @@ describe("analysis response phases", () => {
     { mode: "ask" as const, child: false, count: 2 },
     { mode: "agent" as const, child: true, count: 1 },
     { mode: "agent" as const, child: true, count: 2 }
-  ])("keeps $count returned tables in the collapsed query dropdown in $mode", ({ mode, child, count }) => {
+  ])("keeps $count returned tables directly visible in query process in $mode", ({ mode, child, count }) => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询合同明细", null, mode);
     const turn = useUiStore.getState().analysisTurns[0];
@@ -370,7 +367,7 @@ describe("analysis response phases", () => {
     expect(result.getByRole("cell", { name: `采购合同 ${count}` })).toBeVisible();
     expect(result.getAllByRole("button", { name: "下载表格" })).toHaveLength(count);
     expect(result.getAllByRole("button", { name: "复制表格" })).toHaveLength(count);
-    const collapse = screen.getByRole("button", { name: `收起结果表，共 ${count} 张表、${count} 行` });
+    const collapse = screen.getByRole("button", { name: /查询过程/ });
     fireEvent.click(collapse);
     expect(collapse).toHaveAttribute("aria-expanded", "false");
     expect(result.queryByRole("table")).not.toBeInTheDocument();
@@ -415,7 +412,7 @@ describe("analysis response phases", () => {
       store.completeAskDataRun(runId);
     });
     expect(query).toHaveAttribute("data-status", "done");
-    expect(within(query).getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(query).getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("region", { name: "分析结果" })).toBeInTheDocument();
     if (mode !== "document_lookup") expect(screen.getByLabelText("正式回答")).toHaveTextContent("合同共 12 份。");
     expect(screen.queryByText("任务动态")).not.toBeInTheDocument();
