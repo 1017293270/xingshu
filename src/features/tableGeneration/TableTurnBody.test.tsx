@@ -22,6 +22,16 @@ it("renders every public answer block while streaming", () => {
   expect(screen.getByText("统计口径为合同记录数。")).toBeInTheDocument();
 });
 
+it("does not let an old clarification error override resumed or completed replies", () => {
+  const resumed = { ...turn, error: { message: "旧的澄清错误" }, done: { failed: true } };
+  const { rerender } = render(<TableTurnBody {...props} turn={resumed} />);
+  expect(screen.getByText("统计口径为合同记录数。")).toBeInTheDocument();
+  expect(screen.queryByText("旧的澄清错误")).not.toBeInTheDocument();
+  rerender(<TableTurnBody {...props} turn={{ ...resumed, status: "done", done: { failed: false } }} busy={false} />);
+  expect(screen.getByText("统计口径为合同记录数。")).toBeInTheDocument();
+  expect(screen.queryByText("旧的澄清错误")).not.toBeInTheDocument();
+});
+
 it("explains a long-running generation without claiming a result and clears it on cancellation", () => {
   vi.useFakeTimers();
   const { rerender } = render(<TableTurnBody {...props} />);

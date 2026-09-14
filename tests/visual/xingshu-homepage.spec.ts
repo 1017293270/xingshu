@@ -1,4 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 type AnalyticsRecord = {
   id: string;
@@ -754,6 +755,76 @@ test("renders a generated table result on the workbench", async ({ page }) => {
     animations: "disabled",
     fullPage: true
   });
+});
+
+test("table session offers clear empty-result recovery and a draftable composer", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  type Request = { message: string; chatMode: string; sessionId: string; globalSessionId: string; chatId: string };
+  const requests: Request[] = [];
+  let releaseRetry: (() => void) | undefined;
+  await page.route("**/api/agentScore/chat/completions/stream", async (route) => {
+    const request = route.request().postDataJSON() as Request;
+    requests.push(request);
+    const retry = requests.length > 1;
+    if (retry) await new Promise<void>((resolve) => { releaseRetry = resolve; });
+    const root = { sessionId: request.sessionId, globalSessionId: request.globalSessionId, chatId: request.chatId, agentName: "问表智能体" };
+    const events = [
+      { ...root, type: "agent_start", content: {} },
+      { ...root, type: "activity", content: { activityId: "query", kind: "tool", action: "load_data", label: "查询合同数据", status: "success",
+        startedAt: "2026-09-08T00:00:00Z", completedAt: "2026-09-08T00:00:07Z", durationMs: 7000 } },
+      ...(retry ? [{ ...root, type: "table", content: { title: "合同年度数量", columns: ["合同年度", "合同数量"], rows: [[2023, 12], [2024, 18], [2025, 24]], totalRows: 3 } }] : []),
+      { ...root, type: "done", finished: true, content: { mode: "ask_table", totalDurationMs: 7000 } }
+    ];
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n" });
+  });
+  const question = "2023、2024、2025年各有多少合同？请使用合同数据源，按年份升序输出合同年度和合同数量两列表格。";
+  await page.goto("/table");
+  await page.getByRole("textbox", { name: "制表需求" }).fill(question);
+  await page.getByRole("button", { name: "生成表格", exact: true }).click();
+  await expect(page.getByText("这次没有生成结果表。", { exact: true })).toHaveCount(1);
+  await expect(page.locator(".tgs__status")).toHaveCount(0);
+  const retry = page.getByRole("button", { name: "重试生成", exact: true });
+  await expect(retry).toBeEnabled();
+  await expect(retry.locator("..")).toHaveCSS("opacity", "1");
+  const trace = page.locator(".tgs-trace__toggle");
+  await expect(trace).toHaveAttribute("aria-expanded", "false");
+  for (const width of [1440, 1672, 1920, 2200, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 900 : 1000 });
+    await expectNoHorizontalOverflow(page);
+    await expect(page.locator(".tgs-composer")).toHaveCSS("border-radius", "12px");
+    await page.screenshot({ path: `outputs/table-session-codex/empty-${width}.png`, fullPage: true, animations: "disabled" });
+  }
+  await page.setViewportSize({ width: 1672, height: 1000 });
+  expect((await new AxeBuilder({ page }).include(".tgs").analyze()).violations).toEqual([]);
+  await trace.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tgs-trace__panel")).toHaveCSS("visibility", "visible");
+  await expect(page.locator(".tgs-trace__steps")).toContainText("查询合同数据");
+  await page.screenshot({ path: "outputs/table-session-codex/process-1672.png", fullPage: true, animations: "disabled" });
+  await expect(page.locator(".tgs-trace__panel")).toHaveCSS("transition-duration", "0s");
+  await page.getByRole("button", { name: "调整要求", exact: true }).click();
+  const input = page.getByRole("textbox", { name: "继续追问" });
+  await expect(input).toHaveValue(question);
+  await expect(input).toBeFocused();
+  expect(requests).toHaveLength(1);
+  await retry.click();
+  await expect(page.getByRole("button", { name: "停止生成", exact: true })).toBeEnabled();
+  await expect(input).toBeEnabled();
+  await input.fill("下一轮再按季度拆分");
+  await page.getByRole("button", { name: "调整要求", exact: true }).click();
+  await expect(input).toHaveValue("下一轮再按季度拆分");
+  await input.press("Enter");
+  await expect(input).toHaveValue("下一轮再按季度拆分");
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({ message: question, chatMode: "ask_table", sessionId: requests[0].sessionId });
+  releaseRetry?.();
+  const panel = page.getByRole("complementary", { name: "结果表预览" });
+  await expect(panel.getByRole("cell", { name: "2025", exact: true })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "合同年度数量", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "收起结果表预览", exact: true }).click();
+  await expect(input).toHaveValue("下一轮再按季度拆分");
+  await expect(page.getByRole("button", { name: "继续制表", exact: true })).toBeEnabled();
+  await page.screenshot({ path: "outputs/table-session-codex/recovered-1672.png", fullPage: true, animations: "disabled" });
 });
 
 test("renders the knowledge-base document table with parse status", async ({ page }) => {

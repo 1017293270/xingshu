@@ -1,5 +1,7 @@
-import { ArrowDown, PaperPlaneTilt, StopCircle } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, Square } from "@phosphor-icons/react";
 import { Button, Input } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
+import type { Ref } from "react";
 
 type TableComposerProps = {
   value: string;
@@ -9,14 +11,14 @@ type TableComposerProps = {
   onChange: (value: string) => void;
   onSubmit: () => void;
   onStop: () => void;
+  inputRef?: Ref<TextAreaRef>;
   /** 用户上滚脱离后才出现，贴在输入条正上方居中。 */
   showScrollToBottom?: boolean;
   onScrollToBottom?: () => void;
 };
 
 /**
- * 贴底的细输入条：单行起步，随内容最多长到约六行。
- * 发送是内嵌在右侧的图标钮，没有独立工具条——这一页的动作都在工件卡和结果台上。
+ * 两行起步的制表编辑区；可以在生成时起草下一轮，停止与发送共用右下角位置。
  */
 export function TableComposer({
   value,
@@ -26,6 +28,7 @@ export function TableComposer({
   onChange,
   onSubmit,
   onStop,
+  inputRef,
   showScrollToBottom,
   onScrollToBottom
 }: TableComposerProps) {
@@ -42,42 +45,42 @@ export function TableComposer({
         />
       ) : null}
       <Input.TextArea
+        ref={inputRef}
         aria-label="继续追问"
+        enterKeyHint="send"
         variant="borderless"
-        autoSize={{ minRows: 1, maxRows: 6 }}
+        autoSize={{ minRows: 2, maxRows: 6 }}
         placeholder={placeholder}
         value={value}
-        disabled={busy}
+        disabled={busy && !streaming}
         onChange={(event) => onChange(event.target.value)}
         onPressEnter={(event) => {
-          if (event.shiftKey) {
+          if (event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) {
             return;
           }
           event.preventDefault();
-          onSubmit();
+          if (!busy && value.trim()) onSubmit();
         }}
       />
       <div className="tgs-composer__tail">
+        <span className="tgs-composer__hint">{streaming ? "可以先写好下一轮要求" : "Enter 发送 · Shift+Enter 换行"}</span>
         {streaming ? (
           <Button
             className="tgs-composer__stop"
-            danger
-            type="text"
-            size="small"
-            icon={<StopCircle size={15} weight="fill" aria-hidden="true" />}
+            aria-label="停止生成"
+            title="停止生成"
+            icon={<Square size={14} weight="fill" aria-hidden="true" />}
             onClick={onStop}
-          >
-            停止生成
-          </Button>
-        ) : null}
-        <Button
+          />
+        ) : <Button
           className="tgs-composer__send"
           type="primary"
           aria-label="继续制表"
+          title="发送制表要求"
           disabled={busy || !value.trim()}
-          icon={<PaperPlaneTilt size={16} weight="fill" aria-hidden="true" />}
+          icon={<ArrowUp size={17} weight="bold" aria-hidden="true" />}
           onClick={onSubmit}
-        />
+        />}
       </div>
     </section>
   );

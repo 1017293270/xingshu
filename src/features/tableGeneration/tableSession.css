@@ -1,5 +1,5 @@
 /* 问表智能体会话页（/table/:sessionId）。
-   基调：克制、中性、密度高。纯白底、1px 描边、8-10px 圆角、至多一层极轻阴影，
+   基调：克制、中性、密度高。纯白底、1px 描边、12px 结果与输入容器、极轻阴影，
    主色只出现在主按钮、激活态和链接上。这一层只服务这一页，
    不复用会话外壳（xs-chat / xs-composer / xs-side-panel）的气泡与浮起卡片语言。 */
 
@@ -185,10 +185,10 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 9px;
+  gap: 18px;
 }
 
-/* 用户消息：右对齐小灰 pill，不是大卡片。序号是信息，留在 pill 外做灰字 */
+/* 用户消息沿阅读轨道右对齐；轮次保留给读屏和结果表定位。 */
 .tgs-turn__ask {
   display: flex;
   align-items: baseline;
@@ -206,11 +206,11 @@
 .tgs-turn__ask p {
   max-width: min(78%, 60ch);
   margin: 0;
-  padding: 5px 11px;
-  border-radius: var(--xs-radius-small);
+  padding: 10px 14px;
+  border-radius: var(--xs-radius-card);
   background: var(--tgs-soft);
   color: var(--tgs-ink-2);
-  font-size: 13px;
+  font-size: var(--xs-fs-body);
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -222,13 +222,13 @@
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
 }
 
 .tgs-turn__reply > p {
   margin: 0;
   color: var(--tgs-ink);
-  font-size: 14px;
+  font-size: var(--xs-fs-body);
   line-height: 1.72;
   overflow-wrap: anywhere;
 }
@@ -293,14 +293,14 @@
   max-width: 100%;
   align-items: center;
   gap: 6px;
-  margin-left: -6px;
-  padding: 3px 7px;
+  min-height: var(--xs-control-height);
+  padding: 4px 0;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--tgs-ink-3);
   cursor: pointer;
-  font-size: var(--xs-fs-caption);
+  font-size: var(--xs-fs-body);
   line-height: 1.5;
 }
 
@@ -325,6 +325,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--xs-fs-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 .tgs-trace__caret {
@@ -337,22 +339,31 @@
 }
 
 .tgs-trace[data-streaming="true"] .tgs-trace__label {
-  color: var(--xs-primary-2);
+  color: var(--tgs-ink-2);
 }
 
+.tgs-trace__status-icon { display: inline-flex; flex: none; color: var(--tgs-ink-3); }
+.tgs-trace[data-streaming="true"] .tgs-trace__status-icon { color: var(--xs-primary); animation: tgs-spin 900ms linear infinite; }
+
 .tgs-trace__panel {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--tgs-line);
-  border-radius: var(--xs-radius-small);
-  background: var(--tgs-soft-2);
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows var(--xs-motion-base) var(--xs-motion-ease-out),
+    opacity var(--xs-motion-base) var(--xs-motion-ease-out), visibility 0s linear var(--xs-motion-base);
 }
+
+.tgs-trace__panel[data-expanded="true"] { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
+.tgs-trace__inner { min-height: 0; overflow: hidden; }
+.tgs-trace__progress { margin: 6px 0 10px 24px; color: var(--tgs-ink-3); font-size: var(--xs-fs-label); }
 
 .tgs-trace__steps {
   display: grid;
-  margin: 0;
-  padding: 0;
-  gap: 2px;
+  margin: 6px 0 10px 7px;
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--tgs-line);
+  gap: 6px;
   list-style: none;
 }
 
@@ -362,7 +373,7 @@
   align-items: baseline;
   gap: 2px 8px;
   padding: 3px 0;
-  font-size: var(--xs-fs-caption);
+  font-size: var(--xs-fs-label);
   line-height: 1.6;
 }
 
@@ -448,7 +459,7 @@
   /* 行的 hover 底色与激活条要被外框的圆角裁住 */
   overflow: hidden;
   border: 1px solid var(--tgs-line);
-  border-radius: 10px;
+  border-radius: var(--xs-radius-card);
   background: var(--xs-surface);
 }
 
@@ -666,8 +677,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
-  opacity: 0.5;
+  gap: 8px;
   transition: opacity var(--xs-motion-fast) var(--xs-motion-ease-out);
 }
 
@@ -680,13 +690,22 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 7px;
+  min-height: var(--xs-control-height-sm);
+  padding: 4px 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--tgs-ink-3);
   cursor: pointer;
-  font-size: var(--xs-fs-caption);
+  font-size: var(--xs-fs-label);
+}
+
+.tgs-turn__empty { display: grid; gap: 6px; padding: 6px 0 2px; }
+.tgs-turn__empty p { margin: 0; color: var(--tgs-ink); font-size: var(--xs-fs-body); font-weight: var(--xs-fw-medium); }
+.tgs-turn__empty > span { color: var(--tgs-ink-3); font-size: var(--xs-fs-label); }
+.tgs-turn__actions[data-recovery] .tgs-turn__retry {
+  min-height: 32px; padding: 4px 12px; border: 1px solid var(--xs-border-strong);
+  border-radius: var(--xs-radius-control); color: var(--tgs-ink); background: var(--xs-surface);
 }
 
 .tgs-turn__actions button:hover:not(:disabled) {
@@ -794,24 +813,25 @@
 
 .tgs__foot {
   flex: none;
-  padding: 0 var(--tgs-gutter) 12px;
+  padding: 12px var(--tgs-gutter) 20px;
 }
 
 .tgs__foot-inner {
   position: relative;
-  width: min(var(--tgs-column), 100%);
+  width: min(calc(var(--tgs-column) - 2 * var(--tgs-gutter)), 100%);
   margin-inline: auto;
 }
 
 .tgs-composer {
   position: relative;
   display: flex;
-  min-height: 44px;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 6px 8px 6px 16px;
+  min-height: 96px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--tgs-line);
-  border-radius: 24px;
+  border-radius: var(--xs-radius-card);
   background: var(--xs-surface);
   transition:
     border-color var(--xs-motion-fast) var(--xs-motion-ease-out),
@@ -819,29 +839,28 @@
 }
 
 .tgs-composer:focus-within {
-  border-color: var(--xs-border-strong);
-  box-shadow: var(--xs-shadow-soft);
+  border-color: var(--xs-primary);
+  box-shadow: 0 0 0 2px var(--xs-info-soft);
 }
 
 .tgs-composer .ant-input,
 .tgs-composer .ant-input-outlined {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: none;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-/* autoSize 会把算出来的 height/min-height 写成行内样式，所以单行高度由
-   padding + line-height 决定：12 + 21.7 ≈ 34px，加上外框的 4+4+2 正好 44px。 */
+/* autoSize 管理两到六行高度；输入与底部动作各占一行。 */
 .tgs-composer textarea {
   display: block;
   width: 100%;
   min-height: 32px;
   /* 单行起步，最多长到约 6 行，再多就自己滚 */
   max-height: 140px;
-  padding: 6px 0;
+  padding: 0;
   border: 0;
   outline: 0;
   box-shadow: none;
@@ -858,10 +877,14 @@
 .tgs-composer__tail {
   display: flex;
   flex: none;
+  width: 100%;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 1px;
 }
+
+.tgs-composer__hint { color: var(--tgs-ink-3); font-size: var(--xs-fs-caption); line-height: 1.5; }
 
 /* 页面层有 `.xs-page .ant-btn { min-height: 44px }`，同特异度压不过它，
    发送钮会被拉成 32×44 的竖条、纸飞机跟着偏。这里补一层 .xs-page 把方形焊死。 */
@@ -876,7 +899,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 50%;
+  border-radius: var(--xs-radius-control);
   box-shadow: none;
 }
 
@@ -897,10 +920,9 @@
 }
 
 .xs-page .tgs-composer__stop.ant-btn {
-  height: 30px;
-  min-height: 30px;
-  padding: 0 9px;
-  font-size: var(--xs-fs-caption);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0;
+  border-radius: var(--xs-radius-control); color: var(--tgs-ink); border-color: var(--xs-border-strong);
 }
 
 /* 同上：不加 .xs-page 这颗圆钮会被 min-height 拉成椭圆 */
@@ -1270,6 +1292,13 @@
     padding: 14px var(--tgs-gutter) 8px;
   }
 
+  .tgs__foot { padding-bottom: 12px; }
+  .tgs__foot-inner { width: 100%; }
+  .tgs-turn__actions button, .tgs-trace__toggle { min-height: 40px; }
+  .xs-page .tgs-composer__send.ant-btn, .xs-page .tgs-composer__stop.ant-btn {
+    width: 40px; min-width: 40px; max-width: 40px; height: 40px; min-height: 40px; max-height: 40px;
+  }
+
   .tgs-turn__ask p {
     max-width: 88%;
   }
@@ -1277,6 +1306,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tgs-spin,
+  .tgs-trace__status-icon,
   .tgs-placeholder[data-state="loading"] .tgs-placeholder__row > span::after,
   .tgs-trace__step[data-pending="true"] .tgs-trace__index {
     animation: none;
@@ -1293,6 +1323,8 @@
   }
 
   .tgs-composer,
+  .tgs-trace__panel,
+  .tgs-trace__caret,
   .tgs-dock__collapse,
   .tgs-group__row,
   .tgs-group__export,

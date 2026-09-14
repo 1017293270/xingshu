@@ -54,7 +54,7 @@ export function TableResultDock({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [exiting, onClose]);
 
-  const title = formatDataHubTableTitle(active.table);
+  const title = active.table.title?.trim() || formatDataHubTableTitle(active.table);
   const datasourceName = active.turn.dataSources.at(-1)?.datasourceName ?? "";
   const previewRows = Math.min(active.table.rows.length, rowLimit);
   const truncated = active.table.totalRows > previewRows;
@@ -152,10 +152,9 @@ export function TableResultDock({
       <footer className="tgs-dock__foot">
         <span>
           {truncated
-            ? <>预览前 <b>{previewRows}</b> 行，导出可获得全部 <b>{active.table.totalRows}</b> 行</>
-            : <>已显示全部 <b>{active.table.totalRows}</b> 行</>}
+            ? <>预览前 <b>{previewRows}</b> 行，可导出已返回的 <b>{active.table.rows.length}</b> 行</>
+            : <>已显示本次返回的 <b>{previewRows}</b> 行</>}
         </span>
-        {active.table.source ? <span>{active.table.source}</span> : null}
       </footer>
     </aside>
   );

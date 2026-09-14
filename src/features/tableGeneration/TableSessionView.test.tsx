@@ -346,7 +346,7 @@ describe("TableSessionView", () => {
     expect(within(card).getByText("区域按哪个口径？")).toBeInTheDocument();
     // 挂起的一轮不是"没出结果"，那句空态必须让路
     expect(screen.queryByText("未生成结果表，请补充字段、时间或统计口径")).not.toBeInTheDocument();
-    expect(await screen.findByText("问表智能体在等你确认")).toBeInTheDocument();
+    expect(await screen.findByText("等待你补充信息")).toBeInTheDocument();
 
     await user.click(within(card).getByRole("button", { name: "客户区域" }));
 
@@ -576,5 +576,48 @@ describe("TableSessionView", () => {
       expect.any(Object)
     );
     expect(within(composer).getByRole("textbox", { name: "继续追问" })).toHaveValue("");
+  });
+
+  it("uses the actual result title and describes only the received rows as exportable", async () => {
+    const replay = replayWithTable();
+    const partial: DataHubStreamEvent = { type: "table", data: { title: "合同年度数量", columns: ["合同年度"], rows: [[2025]], totalRows: 99 } };
+    replay.events = [partial];
+    replay.turns[0].events = [partial];
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replay);
+    renderSession();
+    const panel = await screen.findByRole("complementary", { name: "结果表预览" });
+    expect(within(panel).getByRole("heading", { name: "合同年度数量", level: 2 })).toBeInTheDocument();
+    expect(panel).toHaveTextContent("可导出已返回的 1 行");
+    expect(panel).not.toHaveTextContent("导出可获得全部 99 行");
+  });
+
+  it("explains an empty turn once and makes editing and retry available", async () => {
+    const user = userEvent.setup();
+    const question = "统计2023、2024、2025年的合同数量";
+    const replay = replayWithTable(question);
+    replay.events = [];
+    replay.turns[0].events = [];
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replay);
+    mockStream(() => undefined);
+    renderSession();
+    await screen.findByText("这次没有生成结果表。");
+    expect(screen.getAllByText("这次没有生成结果表。")).toHaveLength(1);
+    expect(document.querySelector(".tgs__status")).toBeNull();
+    expect(screen.queryByText(/请补充字段、时间或统计口径/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "调整要求" }));
+    const input = screen.getByRole("textbox", { name: "继续追问" });
+    expect(input).toHaveValue(question);
+    await waitFor(() => expect(input).toHaveFocus());
+    const retry = screen.getByRole("button", { name: "重试生成" });
+    expect(retry).toBeEnabled();
+    await user.click(retry);
+    expect(serviceMocks.streamAgentMessage).toHaveBeenCalledWith(expect.objectContaining({ content: question, chatMode: "ask_table" }), expect.any(Object));
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeEnabled();
+    expect(input).toBeEnabled();
+    await user.clear(input);
+    await user.type(input, "下一轮按季度拆分");
+    await user.click(screen.getByRole("button", { name: "调整要求" }));
+    expect(input).toHaveValue("下一轮按季度拆分");
+    expect(screen.getByText("已保留输入框中未发送的要求。")).toBeInTheDocument();
   });
 });

@@ -1,11 +1,11 @@
 import { Check } from "@phosphor-icons/react";
 import type { MenuProps } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { useClarifyDock, XsClarifyPanel } from "@/components/xs/conversation";
-import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { TableComposer } from "@/features/tableGeneration/TableComposer";
 import { TablePlaceholder } from "@/features/tableGeneration/TablePlaceholder";
 import { TableResultDock, type TableViewerItem } from "@/features/tableGeneration/TableResultDock";
@@ -33,7 +33,7 @@ import {
   type TableTemplateInput
 } from "@/services/tableTemplateService";
 import { listRecentTables } from "@/services/tableService";
-import type { DataHubAskDataStatus, DataHubAskTurn, DataHubTableResult } from "@/types/dataHub";
+import type { DataHubAskTurn, DataHubTableResult } from "@/types/dataHub";
 import { PageFrame } from "@/pages/PageFrame";
 import "@/pages/styles/workflows.css";
 import "@/features/tableGeneration/tableSession.css";
@@ -44,26 +44,8 @@ const PANEL_ROW_LIMIT = 100;
 /** 结果台滑出的时长，比 CSS 里的 --xs-motion-state(180ms) 多留一点余量再卸载。 */
 const DOCK_EXIT_MS = 220;
 
-const followUpPlaceholder = "继续追问字段、筛选条件或统计口径…";
+const followUpPlaceholder = "继续补充制表要求…";
 const clarifyPlaceholder = "选择上面的选项，或直接说明你的情况…";
-
-function statusToneFor(
-  message: string,
-  isBusy: boolean,
-  status: DataHubAskDataStatus,
-  restoreError: string
-): XsStatusTone {
-  if (status === "error" || restoreError || message.includes("失败")) {
-    return "error";
-  }
-  if (isBusy || message.startsWith("正在")) {
-    return "loading";
-  }
-  if (message.startsWith("已")) {
-    return "success";
-  }
-  return "info";
-}
 
 function turnKeyOf(turn: DataHubAskTurn) {
   return turn.chatId || turn.question;
@@ -78,6 +60,7 @@ export function TableSessionView() {
   const queryClient = useQueryClient();
   const launchPrompt = (location.state as TableSessionLaunchState | null)?.prompt?.trim() ?? "";
   const [followUp, setFollowUp] = useState("");
+  const composerRef = useRef<TextAreaRef>(null);
   const [viewerKey, setViewerKey] = useState("");
   const [turnStatus, setTurnStatus] = useState<TableTurnStatus & { turnId: string }>();
   /* 结果台「存为模板」的草稿：带上正在看的表结构快照 */
@@ -135,12 +118,12 @@ export function TableSessionView() {
             : generation.status === "done" && tableCount > 0
               ? `${generation.didRestore ? "已还原" : "已生成"} ${tableCount} 张结果表`
               : generation.status === "done"
-                ? "未生成结果表，请补充字段、时间或统计口径"
-                : "问表智能体已就绪，可继续追问";
+                ? "本轮处理已结束"
+                : "可以继续补充制表要求";
   const statusMessage = dock.submittedKey && generation.isStreaming
     ? "正在按你的选择继续"
     : awaitingClarification && !isBusy
-      ? "问表智能体在等你确认"
+      ? "等待你补充信息"
       : baseStatusMessage;
 
   const conversationSignature = generation.turns
@@ -202,8 +185,7 @@ export function TableSessionView() {
       return;
     }
 
-    generation.generate(followUp, sessionId);
-    setFollowUp("");
+    if (generation.generate(followUp, sessionId)) setFollowUp("");
   };
 
   const exportTables = (tables: DataHubTableResult[], turn: DataHubAskTurn, format: "csv" | "xlsx") => {
@@ -310,6 +292,9 @@ export function TableSessionView() {
                 <div className="tgs-turn__reply" data-error="true">
                   <p>{generation.restoreError}</p>
                   <small data-error="true">可以刷新重试，或回到最近制表换一个会话</small>
+                  <div className="tgs-turn__actions" data-recovery="true">
+                    <button type="button" onClick={() => void generation.restore(sessionId)}>重新加载</button>
+                  </div>
                 </div>
               ) : null}
               {!generation.restoreError && generation.turns.length === 0 ? (
@@ -332,7 +317,7 @@ export function TableSessionView() {
                     <article className="tgs-turn" key={key}>
                       {/* 追问是有序的：第 N 轮的口径继承自第 N-1 轮，序号是信息不是装饰 */}
                       <div className="tgs-turn__ask">
-                        <span className="tgs-turn__round">{`第 ${index + 1} 轮`}</span>
+                        <span className="tgs-turn__round sr-only">{`第 ${index + 1} 轮`}</span>
                         <p>{item.question}</p>
                       </div>
                       <TableTurnBody
@@ -349,6 +334,15 @@ export function TableSessionView() {
                         onExpandClarify={dock.expand}
                         onCopyAnswer={() => void handleCopyAnswer(item)}
                         onRegenerate={() => generation.generate(item.question, sessionId)}
+                        onEditRequest={() => {
+                          if (followUp.trim() && followUp !== item.question) {
+                            setTurnStatus({ turnId: key, tone: "success", message: "已保留输入框中未发送的要求。" });
+                          } else {
+                            setFollowUp(item.question);
+                            setTurnStatus(undefined);
+                          }
+                          window.requestAnimationFrame(() => composerRef.current?.focus({ cursor: "end", preventScroll: true }));
+                        }}
                         onExport={(format) => exportTables(item.tableResults, item, format)}
                         onExportTable={(position, format) => {
                           const table = item.tableResults[position];
@@ -383,6 +377,7 @@ export function TableSessionView() {
                 />
               ) : null}
               <TableComposer
+                inputRef={composerRef}
                 value={followUp}
                 placeholder={awaitingClarification ? clarifyPlaceholder : followUpPlaceholder}
                 busy={isBusy}
@@ -395,15 +390,7 @@ export function TableSessionView() {
               />
             </div>
 
-            <div className="tgs__status">
-              <XsStatusBar
-                tone={statusToneFor(statusMessage, isBusy, generation.status, generation.restoreError)}
-                spinner={false}
-                message={statusMessage}
-                transitionKey={`${generation.status}:${statusMessage}`}
-                reserveSpace
-              />
-            </div>
+            <div className="sr-only" role="status">{statusMessage}</div>
           </div>
         </div>
 

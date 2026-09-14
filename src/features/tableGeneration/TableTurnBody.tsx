@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowsClockwise, CircleNotch, Copy } from "@phosphor-icons/react";
+import { ArrowsClockwise, Copy, PencilSimple } from "@phosphor-icons/react";
 import { XsClarifyCard } from "@/components/xs/conversation";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { TableAgentTrace } from "@/features/tableGeneration/TableAgentTrace";
@@ -34,6 +34,7 @@ type TableTurnBodyProps = {
   onExpandClarify: (key: string) => void;
   onCopyAnswer: () => void;
   onRegenerate: () => void;
+  onEditRequest?: () => void;
   onExport: (format: "csv" | "xlsx") => void;
   onExportTable: (position: number, format: "csv" | "xlsx") => void;
 };
@@ -65,6 +66,7 @@ export function TableTurnBody({
   onExpandClarify,
   onCopyAnswer,
   onRegenerate,
+  onEditRequest,
   onExport,
   onExportTable
 }: TableTurnBodyProps) {
@@ -85,11 +87,12 @@ export function TableTurnBody({
   const canExport = hasTables && (isDone || isCancelled);
   /* 挂在 ask_user 上的这一轮虽然是 done，但其实在等用户选，不能按"跑完了"处理。 */
   const pendingClarification = hasPendingClarification(turn);
-  const retryLabel = isError ? "重试" : isCancelled ? "继续生成" : "重新生成";
+  const needsRecovery = !hasTables && !pendingClarification && (isDone || isError || isCancelled);
+  const retryLabel = isError ? "重试" : isCancelled ? "继续生成" : needsRecovery ? "重试生成" : "重新生成";
 
   return (
-    <div className="tgs-turn__reply" data-error={isError || undefined} aria-live="polite">
-      <TableAgentTrace trace={trace} isStreaming={isStreaming} progress={progress} />
+    <div className="tgs-turn__reply" data-error={isError || undefined}>
+      <TableAgentTrace trace={trace} isStreaming={isStreaming} status={isError ? "error" : turn.status} progress={progress} />
 
       {/* 错误与提示就是一行正文加一行灰色小字，不做红色横幅 */}
       {isError ? (
@@ -111,13 +114,12 @@ export function TableTurnBody({
         <>
           <p>正在生成结果表…</p>
           <small>
-            <CircleNotch className="tgs-spin" size={14} aria-hidden="true" />
             结果表就绪后会出现在这里
           </small>
         </>
       ) : null}
 
-      {longRunning && isStreaming ? (
+      {longRunning && isStreaming && !hasTables ? (
         <p role="status">生成时间较长，结果表尚未生成完成。你可以继续等待，或停止后调整需求重试。</p>
       ) : null}
       {answer && !isError ? <XsSafeMarkdown content={answer} /> : null}
@@ -144,7 +146,7 @@ export function TableTurnBody({
         <TableArtifactGroup
           rows={turn.tableResults.map((table, position) => ({
             key: tableViewerKey(turn, position),
-            title: formatDataHubTableTitle(table),
+            title: table.title?.trim() || formatDataHubTableTitle(table),
             meta: `字段 ${table.columns.length} · 行 ${table.totalRows}`
           }))}
           activeKey={activeTableKey}
@@ -155,12 +157,15 @@ export function TableTurnBody({
         />
       ) : null}
 
-      {isDone && !hasTables && !pendingClarification ? (
-        <p>未生成结果表，请补充字段、时间或统计口径</p>
+      {isDone && !isError && !hasTables && !pendingClarification ? (
+        <section className="tgs-turn__empty" aria-label="本次制表结果">
+          <p>这次没有生成结果表。</p>
+          <span>可以重试生成，或调整要求后继续。</span>
+        </section>
       ) : null}
 
       {isStreaming ? null : (
-        <div className="tgs-turn__actions">
+        <div className="tgs-turn__actions" data-recovery={needsRecovery || undefined}>
           {answer ? (
             <button type="button" aria-label="复制回答" onClick={onCopyAnswer}>
               <Copy size={13} aria-hidden="true" />
@@ -170,12 +175,17 @@ export function TableTurnBody({
           <button
             type="button"
             aria-label={retryLabel}
+            className="tgs-turn__retry"
+            title={pendingClarification ? "请先完成本轮选择" : busy ? "当前生成结束后可重试" : retryLabel}
             disabled={busy || pendingClarification}
             onClick={onRegenerate}
           >
             <ArrowsClockwise size={13} aria-hidden="true" />
             {retryLabel}
           </button>
+          {needsRecovery && onEditRequest ? <button type="button" onClick={onEditRequest}>
+            <PencilSimple size={14} aria-hidden="true" />调整要求
+          </button> : null}
           {/* 整轮导出已经挪进工件组头部，跟"这轮出了几张表"待在一起更合读法 */}
         </div>
       )}
