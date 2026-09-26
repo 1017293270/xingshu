@@ -129,6 +129,57 @@
   font-size: 13px;
 }
 
+/* 数据源 / 数据表 / 指标页签：编辑页都在 DataHub，这里只讲清要核对什么并给出入口，
+   版式沿用知识库卡的「图标底板 + 标题 + 说明」 */
+.asset-review {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.asset-review__body {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.asset-review__body h2 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-card);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.5;
+}
+
+/* 说明是要照着做的步骤，行长收在约 50 个汉字，宽屏上不至于一眼扫不完 */
+.asset-review__description {
+  max-width: 50em;
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-body);
+  font-weight: var(--xs-fw-regular);
+  line-height: var(--xs-lh-body);
+}
+
+.asset-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.asset-review__note {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.5;
+}
+
 .data-dashboard-page time {
   transition:
     color var(--xs-motion-state) var(--xs-motion-ease-out),
@@ -181,6 +232,11 @@
   .data-dashboard-page .xs-stat-card {
     gap: 8px;
     padding: 14px;
+  }
+
+  .asset-review {
+    gap: 12px;
+    padding: 16px;
   }
 
   .data-dashboard-page .xs-stat-card .xs-icon-tile {

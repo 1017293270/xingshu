@@ -150,17 +150,18 @@ describe("data asset actions", () => {
     expect(screen.queryByText("客户基础信息表")).not.toBeInTheDocument();
   });
 
-  it("lists the space's real knowledge bases and keeps unimplemented asset categories disabled", async () => {
+  it("lists the space's real knowledge bases and keeps only data interfaces as a placeholder", async () => {
     renderRoute("/data-management");
 
     await screen.findByRole("heading", { name: "数据资产管理" }, { timeout: ROUTE_LOAD_TIMEOUT_MS });
     const assetTabs = screen.getByRole("radiogroup", { name: "资产管理类型" });
     expect(within(assetTabs).getByRole("radio", { name: "知识库管理" })).toBeChecked();
-    expect(within(assetTabs).getByRole("radio", { name: "数据源管理" })).toBeDisabled();
-    expect(within(assetTabs).getByRole("radio", { name: "数据表管理" })).toBeDisabled();
+    // 数据源、数据表、指标是去 DataHub 核对的入口（见 DataManagementPage.test），DataHub 没有数据接口页面
+    expect(within(assetTabs).getByRole("radio", { name: "数据源管理" })).toBeEnabled();
+    expect(within(assetTabs).getByRole("radio", { name: "数据表管理" })).toBeEnabled();
     expect(within(assetTabs).getByRole("radio", { name: "数据接口管理" })).toBeDisabled();
-    expect(within(assetTabs).getByRole("radio", { name: "指标管理" })).toBeDisabled();
-    expect(screen.getByText(/当前仅开放知识库管理.*即将开放/)).toBeInTheDocument();
+    expect(within(assetTabs).getByRole("radio", { name: "指标管理" })).toBeEnabled();
+    expect(screen.getByText("数据接口管理即将开放。")).toBeInTheDocument();
 
     // 知识库来自 DataHub，而不是演示数据
     expect(await screen.findByText("企业制度知识库")).toBeInTheDocument();

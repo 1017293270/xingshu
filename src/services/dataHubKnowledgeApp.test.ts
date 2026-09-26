@@ -9,7 +9,8 @@ import {
   buildDataHubKnowledgeManageUrl,
   openDataHubUrl,
   resolveDataHubAppOrigin,
-  resolveDataHubKnowledgeAppLinks
+  resolveDataHubKnowledgeAppLinks,
+  resolveDataHubWorkspaceLink
 } from "./dataHubKnowledgeApp";
 import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
 
@@ -164,6 +165,71 @@ describe("dataHubKnowledgeApp URLs", () => {
       canAdd: true,
       usesSameOriginUi: true,
       manageUrl: "http://127.0.0.1:5175/platform/knowledge?space_id=7"
+    });
+  });
+
+  it("points the review entries at DataHub's list-level workspace pages by default", () => {
+    const env = { VITE_DATAHUB_APP_URL: "https://datahub.example.test" };
+
+    expect(resolveDataHubWorkspaceLink(env, "datasources", 7)).toEqual({
+      url: "https://datahub.example.test/platform/datasources?space_id=7"
+    });
+    expect(resolveDataHubWorkspaceLink(env, "metrics", 7)).toEqual({
+      url: "https://datahub.example.test/platform/metrics?space_id=7"
+    });
+    expect(resolveDataHubWorkspaceLink(env, "glossary", 7)).toEqual({
+      url: "https://datahub.example.test/platform/glossary?space_id=7"
+    });
+    // 同样复用登录配置推出的 DataHub 源站，URL 里不带任何凭证
+    expect(resolveDataHubWorkspaceLink({
+      VITE_DATAHUB_PROXY_TARGET: "http://127.0.0.1:8090"
+    }, "datasources", 7).url).toBe("http://127.0.0.1:8090/platform/datasources?space_id=7");
+    expect(resolveDataHubWorkspaceLink(env, "datasources", 7).url).not.toContain("token");
+  });
+
+  it("honors review path overrides only for a separately hosted DataHub UI", () => {
+    const env = {
+      VITE_DATAHUB_APP_URL: "https://datahub.example.test",
+      VITE_DATAHUB_DATASOURCE_PATH: "/dh/datasources",
+      VITE_DATAHUB_METRICS_PATH: "dh/metrics",
+      VITE_DATAHUB_GLOSSARY_PATH: " /dh/glossary "
+    };
+
+    expect(resolveDataHubWorkspaceLink(env, "datasources", 3).url).toBe(
+      "https://datahub.example.test/dh/datasources?space_id=3"
+    );
+    expect(resolveDataHubWorkspaceLink(env, "metrics", 3).url).toBe(
+      "https://datahub.example.test/dh/metrics?space_id=3"
+    );
+    expect(resolveDataHubWorkspaceLink(env, "glossary", 3).url).toBe(
+      "https://datahub.example.test/dh/glossary?space_id=3"
+    );
+
+    // 同源只反代 /platform，自定义路径会落进星数自己的路由，所以同源固定走 DataHub 真实路径
+    const sameOrigin = { currentOrigin: "http://127.0.0.1:5175", sameOriginUi: true };
+    expect(resolveDataHubWorkspaceLink(env, "datasources", 3, sameOrigin)).toEqual({
+      url: "http://127.0.0.1:5175/platform/datasources?space_id=3"
+    });
+    expect(resolveDataHubWorkspaceLink(env, "glossary", 3, sameOrigin)).toEqual({
+      url: "http://127.0.0.1:5175/platform/glossary?space_id=3"
+    });
+  });
+
+  it("explains why a review entry is unavailable instead of building a broken link", () => {
+    expect(resolveDataHubWorkspaceLink({}, "datasources", 7)).toEqual({
+      url: null,
+      unavailableReason: "无法从当前登录配置确定 DataHub 地址"
+    });
+    expect(resolveDataHubWorkspaceLink({ VITE_DATAHUB_APP_URL: "javascript:alert(1)" }, "metrics", 7)).toEqual({
+      url: null,
+      unavailableReason: "DataHub 地址无效"
+    });
+    expect(resolveDataHubWorkspaceLink({
+      VITE_DATAHUB_APP_URL: "https://datahub.example.test",
+      VITE_DATAHUB_GLOSSARY_PATH: "//evil.example/glossary"
+    }, "glossary", 7)).toEqual({
+      url: null,
+      unavailableReason: "DataHub 地址无效"
     });
   });
 
