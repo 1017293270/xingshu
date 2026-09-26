@@ -4,6 +4,12 @@ import type { QueryAsset, QueryColumnDefinition, QueryExecution, QueryExecutionO
 import type { DashboardDesignAssetData } from "@/types/dashboardDesign";
 import type { DashboardSchema, DashboardWidget, DashboardWidgetType } from "@/types/dashboardStudio";
 import {
+  PROJECT_CUBE,
+  favoriteExecution,
+  mustSignAsset,
+  salesAsset
+} from "../testing/favoriteAnswerFixtures";
+import {
   buildDashboardDesignCatalog,
   buildDashboardDesignRequest,
   inferDashboardDesignOutputShape,
@@ -117,6 +123,10 @@ describe("inferDashboardDesignOutputShape", () => {
     expect(inferDashboardDesignOutputShape(single)).toBe("scalar");
   });
 
+  it("0 行结果判为明细表，不给模型画空趋势的机会", () => {
+    expect(inferDashboardDesignOutputShape({ ...monthlyOutput, rows: [], totalRows: 0 })).toBe("table");
+  });
+
   it("多行纯数值判为明细表", () => {
     const numeric = output(
       "raw",
@@ -140,6 +150,28 @@ describe("summarizeDashboardDesignAsset", () => {
     expect(summary.outputs[0].totalRows).toBe(6);
     expect(summary.outputs[0].sampleRows).toHaveLength(3);
     expect(Object.keys(summary.outputs[0].sampleRows[0])).toEqual(["month", "revenue"]);
+  });
+});
+
+describe("summarizeDashboardDesignAsset · 收藏里的多次查询", () => {
+  it("答案排第一并点明，0 行结果不给模型，列名是短业务名", () => {
+    const summary = summarizeDashboardDesignAsset(salesAsset, favoriteExecution(salesAsset));
+
+    expect(summary.outputs.map((item) => item.outputKey)).toEqual(["output_003", "output_001"]);
+    expect(summary.outputs[0]?.label).toBe("结果表 3 · 签约金额（万元） · 最可能是问题的答案");
+    expect(summary.outputs[0]?.shape).toBe("scalar");
+    expect(summary.outputs[1]?.label).toBe("结果表 1 · 项目名称、客户名称");
+    const labels = summary.outputs.flatMap((item) => item.columns.map((column) => column.label));
+    expect(labels).toEqual(["签约金额（万元）", "项目名称", "客户名称", "项目数量"]);
+    expect(JSON.stringify(summary)).not.toContain(PROJECT_CUBE);
+  });
+
+  it("整份都是 0 行时只交一张明细形状的表", () => {
+    const summary = summarizeDashboardDesignAsset(mustSignAsset, favoriteExecution(mustSignAsset));
+
+    expect(summary.outputs).toHaveLength(1);
+    expect(summary.outputs[0]).toMatchObject({ outputKey: "output_002", shape: "table", totalRows: 0 });
+    expect(summary.outputs[0]?.label).toBe("结果表 2 · 合同金额（万元）");
   });
 });
 

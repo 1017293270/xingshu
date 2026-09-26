@@ -8,6 +8,8 @@ import { isLightDashboardSurface, resolveDashboardWidgetStyle } from "../../core
 const props = defineProps<{ widget: DashboardWidget; binding?: DashboardDataBinding }>();
 
 const loading = computed(() => props.binding?.status === "loading");
+/* 0 行结果如实说「暂无数据」，不补一个 0：分不清是真的为零，还是这条查询没有命中数据。 */
+const emptyText = computed(() => (props.binding && props.binding.table.rows.length === 0 ? "暂无数据" : "暂无指标数据"));
 const error = computed(() => props.binding?.status === "error" ? props.binding.error ?? "数据不可用" : "");
 const rawMetric = computed(() => resolveDashboardMetric(props.widget, props.binding));
 const displayedRawMetric = ref<number | null>(null);
@@ -102,7 +104,7 @@ const cardStyle = computed(() => ({
     </template>
     <template v-else>
       <p class="metric-card-renderer__label">{{ widget.title }}</p>
-      <p class="metric-card-renderer__state">暂无指标数据</p>
+      <p class="metric-card-renderer__state">{{ emptyText }}</p>
     </template>
   </section>
 </template>

@@ -33,42 +33,43 @@ export function DashboardCreateDialog({ library, className }: { library: Dashboa
 }
 
 /**
- * 归档确认：服务层只有 archiveDashboard（POST .../archive），没有真删除也没有恢复接口，
- * 所以这里只说"归档"，不再把它伪装成删除，也不许诺一个前端做不到的还原入口。
+ * 删除确认。删除是软删除：服务层调的是 archiveDashboard（POST .../archive），后端没有真删除也没有恢复接口，
+ * 归档后列表、运行态和分享链接都读不到，对用户就是删掉了，所以文案直说「无法恢复」，不许诺做不到的还原。
+ * 后端只允许作者归档，入口按 isOwnedByUser 只对作者显示。
  */
-export function DashboardArchiveDialog({
+export function DashboardDeleteDialog({
   library,
   className,
-  onArchived
+  onDeleted
 }: {
   library: DashboardLibrary;
   className?: string;
-  onArchived?: (id: string) => void;
+  onDeleted?: (id: string) => void;
 }) {
-  const { archiveCandidate, archiveMutation } = library;
+  const { deleteCandidate, deleteMutation } = library;
 
   return (
     <Modal
       className={className}
-      title="归档看板"
-      open={Boolean(archiveCandidate)}
-      okText="确认归档"
+      title="删除看板"
+      open={Boolean(deleteCandidate)}
+      okText="确认删除"
       cancelText="取消"
       okButtonProps={{ danger: true }}
-      confirmLoading={archiveMutation.isPending}
+      confirmLoading={deleteMutation.isPending}
       destroyOnHidden
-      onCancel={() => library.setArchiveCandidate(null)}
+      onCancel={() => library.setDeleteCandidate(null)}
       onOk={() => {
-        if (!archiveCandidate) return;
-        archiveMutation.mutate(archiveCandidate.id, {
+        if (!deleteCandidate) return;
+        deleteMutation.mutate(deleteCandidate.id, {
           onSuccess: () => {
-            onArchived?.(archiveCandidate.id);
-            library.setArchiveCandidate(null);
+            onDeleted?.(deleteCandidate.id);
+            library.setDeleteCandidate(null);
           }
         });
       }}
     >
-      <p>归档“{archiveCandidate?.schema.title}”？归档后它会从看板广场移除，当前版本没有自助恢复入口。</p>
+      <p>删除“{deleteCandidate?.schema.title}”？删除后无法恢复，已分享的链接也会失效。</p>
     </Modal>
   );
 }

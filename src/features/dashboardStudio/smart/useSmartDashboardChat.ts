@@ -5,6 +5,12 @@ import {
   resolveDashboardBoardThemeId
 } from "@/features/dashboardStudio/core/dashboardDesignApply";
 import {
+  dashboardAnswerCandidates,
+  dashboardAnswerIntent,
+  orderMetricsByQuestion
+} from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
+import { cleanDashboardQueryExecution } from "@/features/dashboardStudio/core/dashboardColumnLabels";
+import {
   classifyColumn,
   metricColumnPriority,
   numericMetricColumns
@@ -119,8 +125,9 @@ function pickDimension(columns: QueryColumnDefinition[], rows: Record<string, un
  * 本地兜底方案：模型崩了、JSON 坏了或一条组件都不合法时，按结果表形状搭一版规矩的板。
  * 宁可给一版平淡但正确的，也不让用户对着一条错误干等。
  *
- * 三条硬规矩：标题走 shortWidgetTitle（资产名往往是一整段资产描述，不能直接当标题）；
- * 指标只取解析得出数的列；同一份结果表最多出两种表达，不把 KPI/趋势/对比/占比全堆上去。
+ * 四条硬规矩：每份收藏只用最可能是答案的那张结果表，探查查询与 0 行结果不上板；
+ * 标题走 shortWidgetTitle（资产名往往是一整段资产描述，不能直接当标题）；
+ * 指标只取解析得出数的列、问题点名的指标在前；同一份结果表最多出两种表达，不把 KPI/趋势/对比/占比全堆上去。
  */
 export function buildLocalDesignSpec(
   schema: DashboardSchema,
@@ -133,10 +140,10 @@ export function buildLocalDesignSpec(
 
   for (const { asset, execution } of Object.values(data)) {
     const titleAsset = { name: asset.name, question: asset.resolvedQuestion || asset.originalQuestion };
-    for (const output of execution.outputs) {
+    for (const output of dashboardAnswerCandidates(asset, execution.outputs).slice(0, 1)) {
       const ref = `${asset.id}:${output.outputKey}`;
       const base = { assetId: asset.id, outputKey: output.outputKey };
-      const metrics = numericMetricColumns(output.columns, output.rows);
+      const metrics = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows));
       const metric = metrics[0];
       const time = output.columns.find((column) => classifyColumn(column, output.rows) === "time");
       const dimension = pickDimension(output.columns, output.rows);
@@ -170,6 +177,15 @@ export function buildLocalDesignSpec(
         })
       });
 
+      // 整份收藏都是 0 行：单值问题留一张指标卡如实显示「暂无数据」，其余只给明细表，不画空图。
+      if (output.rows.length === 0) {
+        if (dashboardAnswerIntent(asset) === "single") {
+          kpis.push({ widget: kpi("first"), priority: metricColumnPriority(metric) });
+        } else {
+          details.push(detail);
+        }
+        continue;
+      }
       if (shape === "scalar") {
         kpis.push({ widget: kpi("first"), priority: metricColumnPriority(metric) });
         continue;
@@ -378,7 +394,8 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
       if (execution.status !== "SUCCESS") {
         throw new Error(execution.errorMessage || `「${asset.name}」的查询预览未成功`);
       }
-      dataRef.current[id] = { asset, execution };
+      // 列名一进来就清洗，保持后端的调用顺序：上下文、兜底与落板各自按同一规则挑答案。
+      dataRef.current[id] = { asset, execution: cleanDashboardQueryExecution(execution) };
     }
     return dataRef.current;
   }, [previewAsset, refreshAssets]);

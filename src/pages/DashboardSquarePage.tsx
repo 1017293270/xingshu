@@ -8,15 +8,16 @@ import { xsEnterStep } from "@/components/xs/motion";
 import { queryAssetFeatureEnabled } from "@/config/features";
 import { DashboardCard } from "@/features/dashboard/DashboardCard";
 import {
-  DashboardArchiveDialog,
-  DashboardCreateDialog
+  DashboardCreateDialog,
+  DashboardDeleteDialog
 } from "@/features/dashboard/DashboardLibraryDialogs";
-import { writeCurrentDashboardId } from "@/features/dashboard/currentDashboard";
+import { isOwnedByUser, writeCurrentDashboardId } from "@/features/dashboard/currentDashboard";
 import {
   dashboardEditorPath,
   dashboardRuntimePath,
   useDashboardLibrary
 } from "@/features/dashboard/useDashboardLibrary";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type { DashboardRecord } from "@/types/dashboardStudio";
 import { PageFrame } from "./PageFrame";
 import "./styles/page-shell.css";
@@ -27,6 +28,7 @@ const pageSize = 9;
 export function DashboardSquarePage() {
   const navigate = useNavigate();
   const library = useDashboardLibrary();
+  const userId = useDataHubAuthStore((state) => state.user?.userId);
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | DashboardRecord["status"]>("all");
@@ -182,14 +184,14 @@ export function DashboardSquarePage() {
               shareLink={library.shareLinks[record.id]}
               versionsExpanded={Boolean(expandedVersions[record.id])}
               copying={library.copyMutation.isPending && library.copyMutation.variables?.id === record.id}
-              archiving={library.archiveMutation.isPending && library.archiveMutation.variables === record.id}
+              deleting={library.deleteMutation.isPending && library.deleteMutation.variables === record.id}
               rollingBack={library.rollbackMutation.isPending}
               onToggleVersions={() =>
                 setExpandedVersions((current) => ({ ...current, [record.id]: !current[record.id] }))}
               onSetCurrent={() => setAsCurrent(record)}
               onCopy={() => library.copyMutation.mutate(record)}
               onShare={() => void library.copyShareLink(record)}
-              onArchive={() => library.setArchiveCandidate(record)}
+              onDelete={isOwnedByUser(record, userId) ? () => library.setDeleteCandidate(record) : undefined}
               onRollback={(version) => library.rollbackMutation.mutate({ record, version })}
             />
           ))}
@@ -208,7 +210,7 @@ export function DashboardSquarePage() {
       )}
 
       <DashboardCreateDialog library={library} />
-      <DashboardArchiveDialog library={library} />
+      <DashboardDeleteDialog library={library} />
     </PageFrame>
   );
 }

@@ -20,14 +20,15 @@ type DashboardCardProps = {
   shareLink?: string;
   versionsExpanded: boolean;
   copying: boolean;
-  archiving: boolean;
+  deleting: boolean;
   rollingBack: boolean;
   onToggleVersions: () => void;
   /** 传入后菜单里出现「设为当前」：把这块看板写成「我的看板」的当前看板。 */
   onSetCurrent?: () => void;
   onCopy: () => void;
   onShare: () => void;
-  onArchive: () => void;
+  /** 只给作者传：后端删除（归档）只认作者，别人共享来的板不出现删除项。 */
+  onDelete?: () => void;
   onRollback: (version: DashboardVersion) => void;
 };
 
@@ -38,13 +39,13 @@ export function DashboardCard({
   shareLink,
   versionsExpanded,
   copying,
-  archiving,
+  deleting,
   rollingBack,
   onToggleVersions,
   onSetCurrent,
   onCopy,
   onShare,
-  onArchive,
+  onDelete,
   onRollback
 }: DashboardCardProps) {
   const published = record.status === "published";
@@ -89,8 +90,8 @@ export function DashboardCard({
 
   return (
     <article
-      className={`dashboard-card${archiving ? " is-archiving" : ""}${copying ? " is-copying" : ""}`}
-      aria-busy={archiving || copying}
+      className={`dashboard-card${deleting ? " is-archiving" : ""}${copying ? " is-copying" : ""}`}
+      aria-busy={deleting || copying}
     >
       <div className="dashboard-card__preview">
         <svg className="dashboard-card__orbit" viewBox="0 0 320 180" aria-hidden="true" focusable="false">
@@ -130,16 +131,20 @@ export function DashboardCard({
                 <li role="none"><button type="button" role="menuitem" disabled={copying} onClick={runMenuAction(onCopy)}>复制</button></li>
                 <li role="none"><button type="button" role="menuitem" onClick={runMenuAction(onToggleVersions)}>版本</button></li>
                 <li role="none"><button type="button" role="menuitem" disabled={!published} onClick={runMenuAction(onShare)}>分享</button></li>
-                <li role="none" className="dashboard-card__menu-separator" aria-hidden="true" />
-                <li role="none">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dashboard-card__menu-danger"
-                    disabled={archiving}
-                    onClick={runMenuAction(onArchive)}
-                  >归档</button>
-                </li>
+                {onDelete ? (
+                  <>
+                    <li role="none" className="dashboard-card__menu-separator" aria-hidden="true" />
+                    <li role="none">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="dashboard-card__menu-danger"
+                        disabled={deleting}
+                        onClick={runMenuAction(onDelete)}
+                      >删除</button>
+                    </li>
+                  </>
+                ) : null}
               </ul>
             ) : null}
           </div>

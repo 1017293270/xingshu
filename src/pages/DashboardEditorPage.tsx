@@ -9,12 +9,9 @@ import type { DashboardDesignerHandle } from "@/features/dashboardStudio/vue/mou
 import {
   createDashboard,
   getDashboardEditorData,
-  planDashboardLayout,
   publishDashboard,
   refreshDashboardModules,
-  saveDashboard,
-  saveRefreshSchedule,
-  upgradeDashboardModule
+  saveDashboard
 } from "@/services/dashboardAnalyticsService";
 import { createBlankDashboard, replanLegacyDashboardDraft } from "@/services/dashboardGenerationService";
 import {
@@ -57,7 +54,7 @@ export function DashboardEditorPage() {
     retry: false,
     queryFn: async () => {
       const record = await getDashboardEditorData(draftId!);
-      if (!record) throw new Error("找不到这份看板草稿，它可能已归档或不属于当前空间。");
+      if (!record) throw new Error("找不到这份看板草稿，它可能已被删除或不属于当前空间。");
       const replanned = import.meta.env.MODE === "test" ? replanLegacyDashboardDraft(record) : null;
       return replanned ? saveDashboard(replanned, record.revision, record.visibility) : record;
     }
@@ -113,33 +110,16 @@ export function DashboardEditorPage() {
       if (!refreshed) throw new Error("刷新后无法读取看板草稿");
       return updateRecord(refreshed);
     },
-    upgradeModule: async (
-      moduleId: string,
-      input: {
-        queryVersionId: string;
-        outputKey?: string;
-        confirmedSchemaChange: boolean;
-        columnMapping?: Record<string, string>;
-      }
-    ) => {
-      if (!draftId || !recordQuery.data) throw new Error("看板草稿尚未加载");
-      await upgradeDashboardModule(draftId, moduleId, {
-        ...input,
-        expectedRevision: recordQuery.data.revision
-      });
-      const refreshed = await getDashboardEditorData(draftId);
-      if (!refreshed) throw new Error("升级后无法读取看板草稿");
-      return updateRecord(refreshed);
+    // 后端还没有 upgrade / schedule / layout-plan 接口（见 dashboardAnalyticsService），界面不开放入口；
+    // 万一有路径调到，直接说暂未开放，别让用户看到一个 404。
+    upgradeModule: async () => {
+      throw new Error("查询版本升级暂未开放");
     },
-    saveSchedule: async (moduleId: string, input: Parameters<typeof saveRefreshSchedule>[2]) => {
-      if (!draftId) throw new Error("看板草稿尚未创建");
-      return saveRefreshSchedule(draftId, moduleId, input);
+    saveSchedule: async () => {
+      throw new Error("模块刷新计划暂未开放");
     },
-    planLayout: async (request: unknown) => {
-      if (!draftId) throw new Error("看板草稿尚未创建");
-      return planDashboardLayout(draftId, request);
-    }
-  }), [draftId, recordQuery.data, updateRecord]);
+    planLayout: async () => ({ source: "LOCAL" as const, intents: [], message: "使用本地排版" })
+  }), [draftId, updateRecord]);
 
   const recordSchema = recordQuery.data?.schema;
   const getSchema = useCallback(

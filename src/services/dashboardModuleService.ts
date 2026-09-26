@@ -1,4 +1,12 @@
 import {
+  dashboardAnswerIntent,
+  orderMetricsByQuestion
+} from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
+import {
+  cleanDashboardQueryOutput,
+  dashboardTableColumnsFromQuery
+} from "@/features/dashboardStudio/core/dashboardColumnLabels";
+import {
   classifyColumn,
   numericMetricColumns,
   parseNumericCell
@@ -41,6 +49,8 @@ type OutputAnalysis = {
   numericColumns: QueryColumnDefinition[];
   timeColumn?: QueryColumnDefinition;
   dimensionColumn?: QueryColumnDefinition;
+  /** 编号列与时间 / 分类列同在：一行是一条记录（联表明细），不是按期或按类汇总好的数。 */
+  rowLevel: boolean;
 };
 
 export type AppendQueryAssetChartResult = {
@@ -63,17 +73,19 @@ function toFiniteNumber(value: unknown) {
   return parseNumericCell(value);
 }
 
-function analyzeOutput(output: QueryExecutionOutput): OutputAnalysis {
+/** 列名必须先清洗再分类：表描述里的「年度」会把整张表的列都判成时间列。 */
+function analyzeOutput(asset: QueryAsset, output: QueryExecutionOutput): OutputAnalysis {
   const roleByColumnId = new Map(
     output.columns.map((column) => [column.columnId, classifyColumn(column, output.rows)])
   );
-  const numericColumns = numericMetricColumns(output.columns, output.rows);
+  const numericColumns = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows));
   const timeColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "time");
   // 真分类列优先，实在没有才退到编号列：拿「合同编号」当维度只会画出一排各不相同的柱子。
-  const dimensionColumn = timeColumn
-    ?? output.columns.find((column) => roleByColumnId.get(column.columnId) === "dimension")
-    ?? output.columns.find((column) => roleByColumnId.get(column.columnId) === "identifier");
-  return { numericColumns, timeColumn, dimensionColumn };
+  const categoryColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "dimension");
+  const identifierColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "identifier");
+  const dimensionColumn = timeColumn ?? categoryColumn ?? identifierColumn;
+  const rowLevel = Boolean(identifierColumn && (timeColumn || categoryColumn));
+  return { numericColumns, timeColumn, dimensionColumn, rowLevel };
 }
 
 function displayColumnTitle(column?: QueryColumnDefinition) {
@@ -121,7 +133,13 @@ function inferWidgetType(
   analysis: OutputAnalysis
 ): DashboardWidgetType {
   if (selectedOutputIntent(asset, output.outputKey) === "detail") return "table";
+  // 0 行结果画不出趋势或对比：单值问题落指标卡如实显示「暂无数据」，其余落空表，不再生成「0 个周期」的空图。
+  if (output.rows.length === 0) {
+    return dashboardAnswerIntent(asset) === "single" && analysis.numericColumns.length > 0 ? "metric" : "table";
+  }
   if (output.rows.length === 1 && analysis.numericColumns.length > 0) return "metric";
+  // 列名清洗后联表明细也认得出日期与金额了，但逐条记录按日期连线只会是一条锯齿线，仍按明细落表格。
+  if (analysis.rowLevel) return "table";
   if (analysis.timeColumn && analysis.numericColumns.length > 0) return "line";
   if (analysis.dimensionColumn && analysis.numericColumns.length > 0) {
     return analysis.numericColumns.some(isCompositionMetric) && output.rows.length <= 8 ? "pie" : "bar";
@@ -197,6 +215,25 @@ function createMapping(
     };
   }
   return {};
+}
+
+/**
+ * 收藏问数的指标卡按「metric」结果渲染，只认 props 里的精度与后缀，不看 mapping.displayUnit。
+ * 默认精度 0、无后缀时，「1286.5 万元」会显示成光秃秃的「1,287」，和问数给的答案对不上，
+ * 所以把列名里的单位带成后缀，小数最多保留两位。
+ */
+function createMetricProps(
+  defaults: DashboardWidget["props"],
+  output: QueryExecutionOutput,
+  analysis: OutputAnalysis
+): DashboardWidget["props"] {
+  const metric = analysis.numericColumns[0];
+  if (!metric) return defaults;
+  const value = toFiniteNumber(output.rows[0]?.[metric.key]);
+  const decimals = value === null || Number.isInteger(value)
+    ? 0
+    : Math.min(2, String(value).split(".")[1]?.length ?? 0);
+  return { ...defaults, valueSuffix: displayUnit(metric), precision: decimals };
 }
 
 function createSubtitle(
@@ -285,6 +322,23 @@ function createSourceRef(
   };
 }
 
+/**
+ * 数据截至时间取查询版本的创建（收藏）时刻：看板刷新只回放收藏时存下的行，
+ * 执行记录上的时间只是这次读取的时刻。
+ */
+function queryVersionCreatedAt(asset: QueryAsset, versionId: string) {
+  if (asset.stableVersion?.id === versionId) return asset.stableVersion.createdAt;
+  return asset.versions?.find((version) => version.id === versionId)?.createdAt;
+}
+
+/**
+ * 后端刷新接口按模块 id 过滤，认 binding 的方式是 modules 里第一个 bindingId 相同的模块
+ * （analytics DashboardService.moduleIdForBinding）；这里按同一顺序取，传过去的 id 才一定命中。
+ */
+export function moduleIdForBinding(schema: Pick<DashboardSchema, "modules">, bindingId: string) {
+  return Object.entries(schema.modules ?? {}).find(([, module]) => module.bindingId === bindingId)?.[0];
+}
+
 export function appendQueryAssetChart(
   current: DashboardSchema,
   asset: QueryAsset,
@@ -295,11 +349,12 @@ export function appendQueryAssetChart(
   if (execution.status !== "SUCCESS") {
     throw new Error(execution.errorMessage || "查询预览尚未成功，无法生成组件");
   }
-  const output = execution.outputs.find((item) => item.outputKey === outputKey);
-  if (!output) throw new Error("查询预览中没有选定的结果表");
-  if (output.columns.length === 0) throw new Error("该结果表没有可用字段，无法生成组件");
+  const selected = execution.outputs.find((item) => item.outputKey === outputKey);
+  if (!selected) throw new Error("查询预览中没有选定的结果表");
+  if (selected.columns.length === 0) throw new Error("该结果表没有可用字段，无法生成组件");
+  const output = cleanDashboardQueryOutput(selected);
 
-  const analysis = analyzeOutput(output);
+  const analysis = analyzeOutput(asset, output);
   const type = inferWidgetType(asset, output, analysis);
   const definition = getDashboardComponentDefinition(type);
   const bindingId = createId("binding");
@@ -307,12 +362,8 @@ export function appendQueryAssetChart(
   const widgetId = createId("widget");
   const sourceRef = createSourceRef(asset, execution, outputKey, parameters);
   const title = chartTitle(asset, analysis);
-  const tableColumns = output.columns.map((column) => ({
-    columnId: column.columnId,
-    key: column.key,
-    title: column.label || column.title || column.key,
-    type: column.type
-  }));
+  const tableColumns = dashboardTableColumnsFromQuery(output.columns);
+  const dataAsOf = queryVersionCreatedAt(asset, execution.versionId);
   const resultKind: DashboardDataBinding["resultKind"] = type === "metric"
     ? "metric"
     : type === "line"
@@ -332,6 +383,7 @@ export function appendQueryAssetChart(
     refreshPolicy: { mode: "manual" },
     refreshable: Boolean(asset.datasourceId),
     lastUpdatedAt: output.updatedAt ?? execution.createdAt,
+    ...(dataAsOf ? { dataAsOf } : {}),
     table: {
       columns: tableColumns,
       rows: clone(output.rows),
@@ -353,7 +405,9 @@ export function appendQueryAssetChart(
     name: definition.title,
     title,
     subtitle: createSubtitle(type, output, asset),
-    props: definition.defaultProps ? clone(definition.defaultProps) : undefined,
+    props: type === "metric"
+      ? createMetricProps(definition.defaultProps ? clone(definition.defaultProps) : undefined, output, analysis)
+      : definition.defaultProps ? clone(definition.defaultProps) : undefined,
     mapping: createMapping(type, output, analysis),
     position,
     style: createWidgetStyle(type, analysis.numericColumns.length, nextZIndex)

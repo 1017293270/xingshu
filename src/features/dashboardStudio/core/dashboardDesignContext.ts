@@ -17,11 +17,13 @@ import type {
 } from "@/types/dashboardDesign";
 import { dashboardDesignArchetypes } from "@/types/dashboardDesign";
 import type { DashboardSchema, DashboardWidget } from "@/types/dashboardStudio";
+import { dashboardAnswerCandidates } from "./dashboardAnswerOutputs";
 import { dashboardBoardThemes, getMatchingDashboardBoardThemeId } from "./dashboardBoardThemes";
 import { dashboardCanvasPresets, resolveDashboardCanvasPreset } from "./dashboardCanvas";
 import { dashboardChartVariants } from "./dashboardChartPresets";
 import { classifyColumn } from "./dashboardColumnSemantics";
 import { dashboardDesignArchetypeCatalog } from "./dashboardDesignArchetypes";
+import { dashboardOutputLabel } from "./dashboardDesignTitles";
 import { widgetSemanticRole } from "./dashboardLayoutSolver";
 
 /**
@@ -56,9 +58,10 @@ export function inferDashboardDesignColumnKind(
  * 结果表形状。
  * 单行且有数值列就是标量（不要求每一列都是数值——现实里的单值结果常常带一列口径说明）；
  * 时间序列要求至少两行，一行画不出趋势；剩下有分类列的算 category。
+ * 0 行结果一律算 table：它画不出趋势也比不了分类，只配一张如实写着「暂无数据」的卡。
  */
 export function inferDashboardDesignOutputShape(output: QueryExecutionOutput): DashboardDesignOutputShape {
-  if (output.columns.length === 0) return "table";
+  if (output.columns.length === 0 || output.rows.length === 0) return "table";
   const roles = output.columns.map((column) => classifyColumn(column, output.rows));
   if (output.rows.length === 1) return roles.includes("number") ? "scalar" : "table";
   if (roles.includes("time") && roles.includes("number")) return "time-series";
@@ -66,12 +69,19 @@ export function inferDashboardDesignOutputShape(output: QueryExecutionOutput): D
   return "table";
 }
 
-function outputLabel(asset: QueryAsset, outputKey: string) {
-  const defined = asset.stableVersion?.outputs.find((output) => output.outputKey === outputKey);
-  return defined?.label?.trim() || outputKey;
+/** 模型读得懂的结果表名：后端给的多是 output_003 这种键，换成「结果表 3 · 字段、字段」。 */
+function outputLabel(asset: QueryAsset, output: QueryExecutionOutput, likelyAnswer: boolean) {
+  const defined = asset.stableVersion?.outputs.find((item) => item.outputKey === output.outputKey);
+  const label = dashboardOutputLabel({ outputKey: output.outputKey, label: defined?.label, columns: output.columns });
+  return likelyAnswer ? `${label} · 最可能是问题的答案` : label;
 }
 
-function summarizeOutput(asset: QueryAsset, output: QueryExecutionOutput): DashboardDesignOutputSummary {
+/** output 须已清洗列名（dashboardAnswerCandidates 给出的就是）：列种类与形状都按短业务名判。 */
+function summarizeOutput(
+  asset: QueryAsset,
+  output: QueryExecutionOutput,
+  likelyAnswer: boolean
+): DashboardDesignOutputSummary {
   const columns = output.columns.map((column) => ({
     columnId: column.columnId,
     key: column.key,
@@ -81,7 +91,7 @@ function summarizeOutput(asset: QueryAsset, output: QueryExecutionOutput): Dashb
   const keys = columns.map((column) => column.key);
   return {
     outputKey: output.outputKey,
-    label: outputLabel(asset, output.outputKey),
+    label: outputLabel(asset, output, likelyAnswer),
     columns,
     totalRows: output.totalRows,
     sampleRows: output.rows.slice(0, MAX_SAMPLE_ROWS).map((row) =>
@@ -91,15 +101,20 @@ function summarizeOutput(asset: QueryAsset, output: QueryExecutionOutput): Dashb
   };
 }
 
+/**
+ * 收藏里存着整轮问数的每一次查询。给模型的只留非空结果，最可能是答案的那张排第一并在 label 里点明，
+ * 探查查询与 0 行结果不再挤占每份资产六张表的名额。
+ */
 export function summarizeDashboardDesignAsset(
   asset: QueryAsset,
   execution: QueryExecution
 ): DashboardDesignAssetSummary {
+  const outputs = dashboardAnswerCandidates(asset, execution.outputs);
   return {
     assetId: asset.id,
     name: asset.name,
     question: asset.resolvedQuestion || asset.originalQuestion,
-    outputs: execution.outputs.map((output) => summarizeOutput(asset, output))
+    outputs: outputs.map((output, index) => summarizeOutput(asset, output, index === 0 && outputs.length > 1))
   };
 }
 

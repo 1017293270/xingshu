@@ -9,6 +9,12 @@ import {
   type DashboardDesignerHandle
 } from "./vue/mountDashboardDesigner";
 import { dashboardBoardThemes } from "./core/dashboardBoardThemes";
+import {
+  favoriteExecution,
+  mustSignAsset,
+  PROJECT_CUBE,
+  salesAsset
+} from "./testing/favoriteAnswerFixtures";
 
 vi.mock("@/features/dashboardStudio/core/dashboardCanvasBackground", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/dashboardStudio/core/dashboardCanvasBackground")>();
@@ -400,7 +406,7 @@ describe("dashboard designer motion states", () => {
     expect(await screen.findByText("固定版本")).toBeInTheDocument();
   });
 
-  it("prefers the richest chartable output when orchestration returns an empty first result", async () => {
+  it("defaults a detail question to its last non-empty detail output instead of the empty or summary ones", async () => {
     const schema = createBlankDashboard({ title: "编排收藏输出选择测试" });
     const record: DashboardRecord = {
       id: schema.id,
@@ -560,6 +566,88 @@ describe("dashboard designer motion states", () => {
     expect(table?.querySelectorAll("tbody tr")).toHaveLength(24);
     expect(host.querySelector(".vue-echart")).not.toBeInTheDocument();
     expect(screen.getByText("已加入 1")).toBeInTheDocument();
+  });
+
+  function mountFavoriteDesigner(asset: QueryAsset) {
+    const schema = createBlankDashboard({ title: "收藏答案测试" });
+    const record: DashboardRecord = {
+      id: schema.id,
+      schema,
+      status: "draft",
+      revision: 1,
+      createdAt: schema.createdAt,
+      updatedAt: schema.updatedAt
+    };
+    const unavailable = async () => {
+      throw new Error("not used");
+    };
+    const dataActions: DashboardDesignerDataActions = {
+      listAssets: vi.fn(async () => [asset]),
+      previewAsset: vi.fn(async () => favoriteExecution(asset)),
+      reaskAsset: vi.fn(unavailable),
+      promoteVersion: vi.fn(unavailable),
+      changeAssetVisibility: vi.fn(unavailable),
+      refreshModule: vi.fn(unavailable),
+      upgradeModule: vi.fn(unavailable),
+      saveSchedule: vi.fn(unavailable),
+      planLayout: vi.fn(async () => ({ source: "LOCAL" as const, intents: [], message: "本地排版" }))
+    };
+    const onChange = vi.fn<(nextSchema: DashboardSchema) => void>();
+    host = document.createElement("div");
+    document.body.append(host);
+    handle = mountDashboardDesigner(host, {
+      record,
+      initialResourcePanel: "assets",
+      initialAssetId: asset.id,
+      saveDraft: vi.fn(async () => record),
+      publishDashboard: vi.fn(async () => record),
+      dataActions,
+      exit: vi.fn(),
+      onChange
+    });
+    return { onChange, host };
+  }
+
+  it("defaults a single-value favorite to its final total and marks it as recommended", async () => {
+    const { onChange, host: mounted } = mountFavoriteDesigner(salesAsset);
+
+    const outputSelect = await screen.findByRole("combobox", { name: "结果表" });
+    await waitFor(() => expect(outputSelect).toHaveValue("output_003"));
+    const options = Array.from(outputSelect.querySelectorAll("option")).map((option) => option.textContent?.trim());
+    // 下拉保留调用顺序，默认那张标「推荐」，表头都是短业务名。
+    expect(options).toEqual([
+      "结果表 1 · 项目名称、客户名称 · 1 行",
+      "结果表 2 · 项目状态 · 0 行",
+      "推荐 · 结果表 3 · 签约金额（万元） · 1 行"
+    ]);
+    expect(mounted.textContent).not.toContain(PROJECT_CUBE);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加到画布" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const nextSchema = onChange.mock.calls.at(-1)![0];
+    const binding = Object.values(nextSchema.dataBindings)[0];
+    expect(nextSchema.widgets[0]?.type).toBe("metric");
+    expect(binding?.sourceRef?.outputKey).toBe("output_003");
+    expect(binding?.dataAsOf).toBe("2026-09-20T06:30:00.000Z");
+    await waitFor(() => expect(mounted.querySelector(".dashboard-widget-card")).toBeInTheDocument());
+    expect(mounted.querySelector(".dashboard-widget-card")).toHaveTextContent("1,286.5万元");
+    expect(mounted.querySelector(".dashboard-widget-card")?.textContent).not.toContain("4");
+  });
+
+  it("puts an all-empty single-value favorite on the board as a no-data KPI instead of an empty trend", async () => {
+    const { onChange, host: mounted } = mountFavoriteDesigner(mustSignAsset);
+
+    const outputSelect = await screen.findByRole("combobox", { name: "结果表" });
+    await waitFor(() => expect(outputSelect).toHaveValue("output_002"));
+    fireEvent.click(screen.getByRole("button", { name: "添加到画布" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const nextSchema = onChange.mock.calls.at(-1)![0];
+    expect(nextSchema.widgets[0]?.type).toBe("metric");
+    await waitFor(() => expect(mounted.querySelector(".dashboard-widget-card")).toHaveTextContent("暂无数据"));
+    expect(mounted.textContent).not.toContain("0 个周期");
+    expect(mounted.textContent).not.toContain("还没选到可绘制的数值指标");
   });
 
   it("previews and applies a tidy AI layout from the toolbar", async () => {

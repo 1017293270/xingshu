@@ -28,7 +28,7 @@ export function dashboardRuntimePath(id: string) {
 }
 
 /**
- * 「我的看板」与「看板广场」共用的看板列表读写：两页的新建 / 复制 / 归档 /
+ * 「我的看板」与「看板广场」共用的看板列表读写：两页的新建 / 复制 / 删除 /
  * 版本回滚 / 分享必须是同一套语义，拆成两份实现迟早会走偏。
  */
 export function useDashboardLibrary() {
@@ -42,7 +42,7 @@ export function useDashboardLibrary() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createSource, setCreateSource] = useState<DashboardCreateSource>("blank");
-  const [archiveCandidate, setArchiveCandidate] = useState<DashboardRecord | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<DashboardRecord | null>(null);
 
   const dashboardsQuery = useQuery({
     queryKey: dashboardsKey,
@@ -71,15 +71,16 @@ export function useDashboardLibrary() {
     onError: (error) => setOperationError(error instanceof Error ? error.message : "复制看板失败")
   });
 
-  const archiveMutation = useMutation({
+  // 删除是软删除：后端只有归档接口，归档后列表、运行态与分享链接都读不到，也没有恢复入口。
+  const deleteMutation = useMutation({
     mutationFn: archiveDashboard,
     onSuccess: (_result, id) => {
       queryClient.setQueryData<DashboardRecord[]>(dashboardsKey, (current = []) =>
         current.filter((record) => record.id !== id));
-      // 归档掉的正好是当前看板时，清掉本地指针，让页面回退到最近更新的一块
+      // 删掉的正好是当前看板时，清掉本地指针，让页面回退到自己名下最近更新的一块
       if (readCurrentDashboardId() === id) clearCurrentDashboardId();
     },
-    onError: (error) => setOperationError(error instanceof Error ? error.message : "归档看板失败")
+    onError: (error) => setOperationError(error instanceof Error ? error.message : "删除看板失败")
   });
 
   const rollbackMutation = useMutation({
@@ -128,10 +129,10 @@ export function useDashboardLibrary() {
     submitCreate,
     createMutation,
     copyMutation,
-    archiveMutation,
+    deleteMutation,
     rollbackMutation,
-    archiveCandidate,
-    setArchiveCandidate
+    deleteCandidate,
+    setDeleteCandidate
   };
 }
 

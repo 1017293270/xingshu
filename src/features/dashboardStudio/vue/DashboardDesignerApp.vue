@@ -46,7 +46,6 @@ import type {
   LayoutPlan,
   QueryAsset,
   QueryExecution,
-  QueryExecutionOutput,
   QueryParameterDefinition,
   QueryVersion,
   RefreshPolicy,
@@ -79,6 +78,8 @@ import {
 } from "../core/dashboardDesignerGeometry";
 import { validateDashboardForPublish } from "../core/dashboardValidation";
 import { clampDashboardWidgetPosition } from "../core/dashboardFreeLayout";
+import { pickDashboardAnswerOutputKey } from "../core/dashboardAnswerOutputs";
+import { cleanDashboardQueryExecution } from "../core/dashboardColumnLabels";
 import {
   dashboardChartWidgetTypes,
   dashboardComponentDefinitions,
@@ -98,6 +99,7 @@ import {
 } from "../core/dashboardChartThemes";
 import {
   appendQueryAssetChart,
+  moduleIdForBinding,
   removeQueryAssetChart
 } from "@/services/dashboardModuleService";
 import { readDataHubSession } from "@/services/dataHubSession";
@@ -1390,53 +1392,65 @@ function inferRelativeBoundary(key: string): "START" | "END" {
   return /(end|to|until|max|stop|截止|结束)/i.test(key) ? "END" : "START";
 }
 
-function formatModuleUpdatedAt(value?: string) {
-  if (!value) return "尚无成功快照";
+function formatModuleTime(value?: string) {
+  if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
   }).format(date);
 }
 
+/**
+ * 模块数据的时间：看板刷新只回放收藏时存下的行，lastUpdatedAt 记的是回放时刻，拿它当「最近更新」会误导。
+ * 这里只报收藏时的查询版本时间；老模块没记下来时，从收藏问数列表里按版本补查。
+ */
+function moduleDataAsOf(binding?: DashboardDataBinding) {
+  if (!binding) return undefined;
+  if (binding.dataAsOf) return binding.dataAsOf;
+  const source = binding.sourceRef;
+  const asset = source ? queryAssets.value.find((item) => item.id === source.assetId) : undefined;
+  if (!asset || !source) return undefined;
+  return asset.stableVersion?.id === source.queryVersionId
+    ? asset.stableVersion.createdAt
+    : asset.versions?.find((version) => version.id === source.queryVersionId)?.createdAt;
+}
+
+function formatModuleDataAsOf(binding?: DashboardDataBinding) {
+  const time = formatModuleTime(moduleDataAsOf(binding));
+  return time ? `数据截至 ${time}` : "收藏时的数据快照";
+}
+
+const bindingStatusLabels: Record<NonNullable<DashboardDataBinding["status"]>, string> = {
+  idle: "等待加载",
+  loading: "加载中",
+  success: "已加载",
+  empty: "暂无数据",
+  error: "加载失败"
+};
+
+function bindingStatusLabel(binding: DashboardDataBinding) {
+  if (binding.error) return binding.error;
+  if (binding.status === "success" && binding.table.rows.length === 0) return bindingStatusLabels.empty;
+  return binding.status ? bindingStatusLabels[binding.status] : bindingStatusLabels.idle;
+}
+
+/** 收藏存着整轮问数的每一次查询；默认选最可能是答案的那张，而不是信息量最大的明细。 */
+const recommendedOutputKey = computed(() =>
+  selectedAsset.value && assetPreview.value
+    ? pickDashboardAnswerOutputKey(selectedAsset.value, assetPreview.value.outputs)
+    : ""
+);
+
+/**
+ * 下拉里保留调用顺序，附上行数，并标出默认选中的那张，方便用户自己改选。
+ * 「推荐」放在最前：左栏的下拉很窄，放在末尾会被截掉。
+ */
 function queryOutputLabel(outputKey: string) {
   const definition = selectedAsset.value?.stableVersion?.outputs.find((output) => output.outputKey === outputKey);
   const output = assetPreview.value?.outputs.find((item) => item.outputKey === outputKey);
-  return dashboardOutputLabel({ ...definition, ...output, label: definition?.label, outputKey });
-}
-
-function isNumericQueryOutputColumn(type?: string) {
-  return typeof type === "string"
-    && /^(number|numeric|decimal|integer|int|bigint|float|double|real|long|short)$/i.test(type.trim());
-}
-
-function defaultQueryOutputKey(outputs: QueryExecutionOutput[]) {
-  const ranked = outputs.map((output, index) => {
-    const rowCount = Math.max(output.totalRows ?? 0, output.rows.length);
-    const numericColumnCount = output.columns.filter((column) =>
-      isNumericQueryOutputColumn(column.type)
-    ).length;
-    return {
-      output,
-      index,
-      rowCount,
-      numericColumnCount,
-      informationScore: rowCount * Math.max(output.columns.length, 1)
-    };
-  });
-  const byRichness = (left: typeof ranked[number], right: typeof ranked[number]) =>
-    right.informationScore - left.informationScore
-    || right.numericColumnCount - left.numericColumnCount
-    || left.index - right.index;
-
-  return ranked
-    .filter((candidate) => candidate.rowCount > 0 && candidate.numericColumnCount > 0)
-    .sort(byRichness)[0]?.output.outputKey
-    ?? ranked
-      .filter((candidate) => candidate.rowCount > 0)
-      .sort(byRichness)[0]?.output.outputKey
-    ?? ranked.find((candidate) => candidate.output.columns.length > 0)?.output.outputKey
-    ?? outputs[0]?.outputKey
-    ?? "";
+  const label = dashboardOutputLabel({ ...definition, ...output, label: definition?.label, outputKey });
+  const rows = output ? ` · ${output.totalRows} 行` : "";
+  return `${outputKey === recommendedOutputKey.value ? "推荐 · " : ""}${label}${rows}`;
 }
 
 async function previewSelectedAsset(force = false) {
@@ -1445,13 +1459,14 @@ async function previewSelectedAsset(force = false) {
   assetAction.value = "preview";
   assetError.value = "";
   try {
-    assetPreview.value = await props.dataActions.previewAsset(asset.id, {
+    // 列名一进来就清洗：结果表下拉、默认选择与后面生成组件都用短业务名。
+    assetPreview.value = cleanDashboardQueryExecution(await props.dataActions.previewAsset(asset.id, {
       versionId: asset.stableVersionId,
       parameters: clone(toRaw(selectedAssetParameters)),
       force
-    });
+    }));
     if (!selectedOutputKey.value) {
-      selectedOutputKey.value = defaultQueryOutputKey(assetPreview.value.outputs);
+      selectedOutputKey.value = pickDashboardAnswerOutputKey(asset, assetPreview.value.outputs);
     }
   } catch (error) {
     assetError.value = error instanceof Error ? error.message : "查询预览失败";
@@ -1466,11 +1481,11 @@ async function addSelectedAsset() {
   assetAction.value = "add";
   assetError.value = "";
   try {
-    const preview = assetPreview.value ?? await props.dataActions.previewAsset(asset.id, {
+    const preview = assetPreview.value ?? cleanDashboardQueryExecution(await props.dataActions.previewAsset(asset.id, {
       versionId: asset.stableVersionId,
       parameters: clone(toRaw(selectedAssetParameters))
-    });
-    const outputKey = selectedOutputKey.value || defaultQueryOutputKey(preview.outputs);
+    }));
+    const outputKey = selectedOutputKey.value || pickDashboardAnswerOutputKey(asset, preview.outputs);
     if (!outputKey) throw new Error("该查询资产没有可用输出");
     const wasEmptyBoard = schema.widgets.length === 0;
     const result = appendQueryAssetChart(plainSchema(), asset, clone(toRaw(preview)), outputKey,
@@ -1505,16 +1520,26 @@ async function toggleSelectedAssetVisibility() {
   }
 }
 
+/**
+ * 刷新接口的契约是 moduleId，后端按模块过滤要刷新的绑定；binding 与 module 的 id 各自生成，
+ * 拿 bindingId 去刷永远落空。入口暂不开放：后端目前只回放收藏时存下的行，并不重查。
+ */
 async function refreshSelectedModule() {
   const binding = selectedBinding.value;
-  if (!binding?.sourceRef || !selectedWidget.value?.bindingId) return;
+  const bindingId = selectedWidget.value?.bindingId;
+  if (!binding?.sourceRef || !bindingId) return;
   if (lifecycle.value === "dirty") {
     errorMessage.value = "请先保存当前布局，再刷新固定查询版本";
     return;
   }
+  const moduleId = moduleIdForBinding(plainSchema(), bindingId);
+  if (!moduleId) {
+    errorMessage.value = "这个组件没有对应的数据模块，无法刷新";
+    return;
+  }
   moduleAction.value = "refresh";
   try {
-    const record = await props.dataActions.refreshModule(selectedWidget.value.bindingId);
+    const record = await props.dataActions.refreshModule(moduleId);
     await replaceSchema(record.schema);
     revision.value = record.revision;
     recordStatus.value = record.status;
@@ -1528,6 +1553,10 @@ async function refreshSelectedModule() {
   }
 }
 
+/*
+ * 重新问数、版本升级与刷新计划的入口都不开放：/reask 回 501，modules/{id}/upgrade 与 schedule
+ * 后端没有映射（见 dashboardAnalyticsService）。流程与对话框先留着，等后端补齐再接按钮。
+ */
 async function openReaskDialog() {
   const source = selectedBinding.value?.sourceRef;
   if (!source || source.kind !== "query-asset") return;
@@ -2288,7 +2317,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
                       <strong>{{ entry.widget.title }}</strong>
                       <small>
                         {{ getDashboardComponentDefinition(entry.widget.type).title }}
-                        · {{ formatModuleUpdatedAt(schema.dataBindings[entry.module.bindingId]?.lastUpdatedAt) }}
+                        · {{ formatModuleDataAsOf(schema.dataBindings[entry.module.bindingId]) }}
                       </small>
                     </span>
                   </button>
@@ -2518,20 +2547,20 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
                 <span>来源</span><strong>{{ selectedModuleAsset?.name ?? selectedBinding.label }}</strong>
                 <span>固定版本</span><strong>{{ selectedBinding.sourceRef.queryVersionId.slice(0, 8) }}</strong>
                 <span>输出</span><strong>{{ dashboardOutputLabel({ outputKey: selectedBinding.sourceRef.outputKey, columns: selectedBinding.table.columns }) }}</strong>
-                <span>最近更新</span><strong>{{ formatModuleUpdatedAt(selectedBinding.lastUpdatedAt) }}</strong>
-                <span>刷新状态</span><strong :data-status="selectedBinding.status">{{ selectedBinding.error ?? selectedBinding.status ?? '等待刷新' }}</strong>
+                <span>数据截至</span><strong>{{ formatModuleTime(moduleDataAsOf(selectedBinding)) || '收藏时（未记录时间）' }}</strong>
+                <span>数据状态</span><strong :data-status="selectedBinding.status">{{ bindingStatusLabel(selectedBinding) }}</strong>
               </div>
               <label v-if="dimensionColumns.length > 0" class="property-field">
                 <span>维度</span>
                 <select :value="selectedDimensionColumnId" :disabled="isPropertyEditingDisabled" @change="updateDimensionSelection">
                   <option value="">无维度</option>
-                  <option v-for="column in dimensionColumns" :key="column.columnId ?? column.key" :value="column.columnId">{{ column.title }}</option>
+                  <option v-for="column in dimensionColumns" :key="column.columnId ?? column.key" :value="column.columnId" :title="column.fullTitle || column.title">{{ column.title }}</option>
                 </select>
               </label>
               <label v-if="numericColumns.length > 0" class="property-field">
                 <span>指标</span>
                 <select :value="selectedMetricColumnIds" multiple :disabled="isPropertyEditingDisabled" @change="updateMetricSelection">
-                  <option v-for="column in numericColumns" :key="column.columnId ?? column.key" :value="column.columnId">{{ column.title }}</option>
+                  <option v-for="column in numericColumns" :key="column.columnId ?? column.key" :value="column.columnId" :title="column.fullTitle || column.title">{{ column.title }}</option>
                 </select>
               </label>
             </template>

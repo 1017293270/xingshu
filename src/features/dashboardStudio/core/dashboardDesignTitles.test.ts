@@ -96,4 +96,12 @@ describe("dashboardOutputLabel", () => {
     expect(dashboardOutputLabel({ outputKey: "output_003", label: "年度合同汇总" })).toBe("年度合同汇总");
     expect(dashboardOutputLabel({ outputKey: "raw" }, 1)).toBe("结果表 2");
   });
+
+  it("收藏存下的全称列名先清洗成短业务名，不让表描述占满一行", () => {
+    const cube = "交通银行账户交易流水明细，记录与合同相关的收付款流水";
+    expect(dashboardOutputLabel({ outputKey: "output_002", label: "output_002", columns: [
+      { key: "BankFlow.tradeDate.month", label: `${cube} 交易日期` },
+      { key: "BankFlow.amount", label: `${cube} 交易金额（元）` }
+    ] })).toBe("结果表 2 · 交易日期、交易金额（元）");
+  });
 });

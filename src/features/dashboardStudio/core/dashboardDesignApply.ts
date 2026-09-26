@@ -29,6 +29,7 @@ import {
 import { dashboardCanvasPresets } from "./dashboardCanvas";
 import { dashboardChartVariants } from "./dashboardChartPresets";
 import { fitDashboardCanvasHeight } from "./dashboardCompose";
+import { cleanDashboardQueryOutput } from "./dashboardColumnLabels";
 import { classifyColumn, numericMetricColumns } from "./dashboardColumnSemantics";
 import { getDashboardComponentDefinition } from "./dashboardComponentRegistry";
 import {
@@ -129,7 +130,8 @@ function resolveOutput(data: DashboardDesignAssetData, assetId?: string, outputK
   const entry = data[assetId] ?? Object.values(data).find((item) => item.asset.id === assetId);
   if (!entry) return null;
   const output = entry.execution.outputs.find((item) => item.outputKey === outputKey);
-  return output ? { asset: entry.asset, execution: entry.execution, output } : null;
+  // 判种类、取指标、写拒绝理由都按短业务名来，与收藏问数拖入面板同一口径。
+  return output ? { asset: entry.asset, execution: entry.execution, output: cleanDashboardQueryOutput(output) } : null;
 }
 
 function displayUnitOf(column?: QueryColumnDefinition) {

@@ -1,4 +1,4 @@
-import type { DataHubTableResult } from "./dataHub";
+import type { DataHubTableColumn, DataHubTableResult } from "./dataHub";
 
 export const dashboardWidgetTypes = [
   "metric",
@@ -96,6 +96,13 @@ export type DashboardRefreshPolicy = {
   timezone?: string;
 };
 
+/** 看板表格列：title 是清洗后的短业务名，fullTitle 保留问数产物里的完整列名，只作悬浮提示。 */
+export type DashboardTableColumn = DataHubTableColumn & { fullTitle?: string };
+
+export type DashboardBindingTable = Omit<DataHubTableResult, "columns"> & {
+  columns: DashboardTableColumn[];
+};
+
 export type DashboardDataBinding = {
   id: string;
   label: string;
@@ -113,9 +120,15 @@ export type DashboardDataBinding = {
   sourceRef?: DashboardDataSourceRef;
   refreshPolicy?: DashboardRefreshPolicy;
   refreshable?: boolean;
+  /** 本次加载的时刻。看板刷新只回放收藏时存下的行，这个时间不代表数据新旧，保存时会清掉。 */
   lastUpdatedAt?: string;
+  /**
+   * 收藏问数的数据截至时间：绑定的查询版本创建（收藏）时刻。行数据就是那一刻存下的快照，
+   * 随 schema 持久化；老看板没有这个字段。
+   */
+  dataAsOf?: string;
   tableIndex?: number;
-  table: DataHubTableResult;
+  table: DashboardBindingTable;
 };
 
 export type DashboardModule = {

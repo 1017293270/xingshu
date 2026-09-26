@@ -127,7 +127,9 @@ test("简洁页头使用品牌蓝按钮，展示保留已发布大屏的布局�
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "当前看板设置" }).click();
   await expect(page.getByRole("menuitem", { name: "编辑", exact: true })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "归档", exact: true })).toBeVisible();
+  // 作者本人（ownerUserId 与登录 userId 同为 1）才有删除；「归档」这个说法已经不再出现。
+  await expect(page.getByRole("menuitem", { name: "删除", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "归档", exact: true })).toHaveCount(0);
   await page.screenshot({ path: "outputs/dashboard-codex/configured-settings.png" });
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "新建看板", exact: true }).first().click();

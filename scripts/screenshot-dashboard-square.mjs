@@ -1,19 +1,23 @@
 import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
+import { baseUrl } from "./screenshot-dashboard-fixtures.mjs";
 
 // 用法：node scripts/screenshot-dashboard-square.mjs [输出名前缀]
 // 看板广场是卡片网格页，工具条（搜索 + 分段器 + 计数）是这里要看的重点。
 // 和 screenshot-dashboard-list.mjs 同一套 mock：种子派生记录 + 路由拦截 /api/analytics/dashboards。
+// 删除入口只给作者：登录用户 userId 1 名下的卡片菜单有「删除」，同事（userId 42）共享的没有。
+// 服务地址读 XS_QA_BASE_URL，缺省 http://127.0.0.1:5173。
 const prefix = process.argv[2] ?? "dashboard-square";
 const dir = "outputs/ui-audit";
 const seed = JSON.parse(readFileSync("outputs/dashboard-seed/seed-dashboard.json", "utf8"));
 const base = seed[0];
 
-function variant(id, title, status, daysAgo) {
+function variant(id, title, status, daysAgo, owner = { ownerUserId: 1, visibility: "PRIVATE" }) {
   const updated = new Date(Date.now() - daysAgo * 86400000).toISOString();
   const shape = (source) => ({ ...source, id: `dashboard-${id}`, title });
   return {
     ...base,
+    ...owner,
     id,
     status,
     updatedAt: updated,
@@ -27,7 +31,7 @@ const records = [
   variant("ops-monthly", "经营分析月报大屏", "published", 1),
   variant("sales-live", "实时销售监控", "published", 2),
   variant("finance-cost", "费用结构分析", "published", 3),
-  variant("market-funnel", "市场转化漏斗", "published", 4),
+  variant("market-funnel", "市场转化漏斗", "published", 4, { ownerUserId: 42, visibility: "SPACE" }),
   variant("service-sla", "客服时效看板", "published", 5),
   variant("draft-supply", "供应链库存草稿", "draft", 6),
   variant("draft-hr", "人力效能分析", "draft", 8),
@@ -51,7 +55,7 @@ async function shot(name, width, height, mockRecords, extra) {
   await page.route(/\/api\/analytics\/dashboards$/, (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify(mockRecords) })
   );
-  await page.goto("http://127.0.0.1:5173/dashboard/square", { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}/dashboard/square`, { waitUntil: "networkidle" });
   await page.waitForSelector(
     mockRecords.length > 0 ? ".dashboard-list__toolbar" : "[aria-label='看板广场空状态']",
     { timeout: 15000 }
@@ -70,6 +74,21 @@ await shot(`${prefix}-toolbar-1440`, 1440, 520, records);
 await shot(`${prefix}-draft-1440`, 1440, 900, records, async (page) => {
   // 分段项的 radio input 是视觉隐藏的，点 label
   await page.locator(".dashboard-list__toolbar .ant-segmented-item-label", { hasText: "草稿" }).click();
+  await page.waitForTimeout(400);
+});
+await shot(`${prefix}-card-menu-1440`, 1440, 900, records, async (page) => {
+  await page.getByRole("button", { name: "经营分析月报大屏 设置" }).click();
+  await page.waitForTimeout(400);
+});
+await shot(`${prefix}-card-menu-shared-1440`, 1440, 900, records, async (page) => {
+  await page.getByRole("button", { name: "市场转化漏斗 设置" }).click();
+  await page.waitForTimeout(400);
+});
+// 只截确认框，不点确认。
+await shot(`${prefix}-delete-confirm-1440`, 1440, 900, records, async (page) => {
+  await page.getByRole("button", { name: "经营分析月报大屏 设置" }).click();
+  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+  await page.getByRole("dialog", { name: "删除看板" }).waitFor({ timeout: 5000 });
   await page.waitForTimeout(400);
 });
 await shot(`${prefix}-820`, 820, 900, records);

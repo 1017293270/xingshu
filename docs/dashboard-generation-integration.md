@@ -35,6 +35,7 @@ await favoriteAskArtifact({ askRunId, resolvedQuestion, canFavorite: true }, nam
 5. 保存使用 `revision` 乐观锁；发布生成不可变版本并固定所有查询版本引用。
 6. `/dashboard-view?dashboard=<id>` 只读取当前登录人权限上下文中的实时快照。
 7. 查询资产默认仅自己可用，可在资源面板显式共享到空间；看板也可明确选择“仅自己/空间可用”，空间成员只能读取已发布版本，不能读取创建者草稿。
+8. 删除看板只对作者本人可见（`ownerUserId` 与当前登录人比较），入口在我的看板切换器、当前看板齿轮菜单和看板广场卡片菜单。后端只有归档接口 `POST /api/analytics/dashboards/{id}/archive`，删除即归档：看板从列表消失、分享链接失效，且没有恢复接口，确认弹窗写明「删除后无法恢复」。
 
 ## 智能编排 Agent 的收藏衔接
 
@@ -63,7 +64,10 @@ Vue Island 只接收 React 注入的异步回调，不直接请求后端。
 - 模块必须保存 `queryAssetId`、`queryVersionId`、`outputKey`、参数和刷新策略。
 - 输出使用稳定 `outputKey`，字段绑定使用稳定 `columnId`；`dimensionKey/metricKeys` 仅作为当前渲染键派生值。
 - Dashboard Schema 只保存结构与绑定，不保存真实结果行；数据行来自服务端压缩快照。
-- “刷新数据”执行固定版本；“重新问数”只创建候选版本，确认字段差异并晋升后，草稿模块才可显式升级。
+- “刷新数据”的设计目标是执行固定版本；当前 analytics-service 的 `/refresh`、`/runtime`、`/editor-data` 只回放收藏时存下的结果行（更新时间记为请求时刻），`/reask` 返回 501，`/modules/{id}/upgrade`、`/modules/{id}/schedule`、`/layout-plan` 尚未提供。前端因此不展示刷新、升级与定时入口，看板页头显示按查询版本创建时间计算的「数据截至」。
+- 收藏只提交 `askRunId`，产物包含该轮全部查询输出（含探查与 0 行结果），不记录哪一个是答案。前端按问题形状挑答案输出（`src/features/dashboardStudio/core/dashboardAnswerOutputs.ts`）：单值问题优先单行数值结果，明细、分组、排行、趋势问题优先多行结果，其余取调用顺序最后的非空结果，0 行结果垫底；设计器下拉保留全部输出供用户改选。
+- ai-service 记录的列名是 Cube 全称（「cube 描述 + 空格 + 字段名」）。前端在列分类与渲染前清洗为短业务名（`dashboardColumnLabels.ts`），完整原文只作悬浮提示；旧收藏同样生效，但已保存的 `outputKey` 不会自动迁移。
+- “重新问数”只创建候选版本，确认字段差异并晋升后，草稿模块才可显式升级。
 - 候选版本出现多个输出或原 `outputKey` 不再存在时，必须显式选择目标输出，再完成 `columnId` 映射。
 - 标题由完整问题、指标和维度生成，不存在固定“社区咨询数 TOP 5”默认标题。
 

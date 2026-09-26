@@ -1,3 +1,7 @@
+import {
+  cleanDashboardTableColumns,
+  dashboardTableColumnsFromQuery
+} from "@/features/dashboardStudio/core/dashboardColumnLabels";
 import { migrateDashboardSchemaToFreeLayout } from "@/features/dashboardStudio/core/dashboardFreeLayout";
 import { requestDataHub } from "./dataHubClient";
 import { getBrowserDashboardRepository } from "./dashboardRepositoryService";
@@ -38,7 +42,11 @@ function toPersistedSchema(schema: DashboardSchema) {
   return persisted;
 }
 
-function hydrateSchema(
+/**
+ * 服务端回放的行灌回 schema。列名在这里统一清洗：收藏时存下的是「cube 描述 + 字段名」全称，
+ * 已经收藏、已经上板的旧数据也靠这一步显示成短表头，并且在列分类之前完成。
+ */
+export function hydrateDashboardSchema(
   schema: DashboardSchema,
   datasets: DashboardRuntime["datasets"],
   statuses: DashboardRuntime["moduleStatuses"]
@@ -49,16 +57,13 @@ function hydrateSchema(
     const status = statuses[bindingId];
     if (output) {
       binding.table = {
-        columns: output.columns.map((column) => ({
-          columnId: column.columnId,
-          key: column.key,
-          title: column.label || column.title || column.key,
-          type: column.type
-        })),
+        columns: dashboardTableColumnsFromQuery(output.columns),
         rows: output.rows,
         totalRows: output.totalRows
       };
       binding.lastUpdatedAt = output.updatedAt;
+    } else {
+      binding.table = { ...binding.table, columns: cleanDashboardTableColumns(binding.table.columns) };
     }
     binding.status = status === "SUCCESS" || status === "LEGACY_SNAPSHOT"
       ? "success"
@@ -81,13 +86,13 @@ function hydrateSchema(
 function hydrateEditorRuntime(runtime: DashboardRuntime) {
   return {
     ...runtime.record,
-    schema: hydrateSchema(runtime.record.schema, runtime.datasets, runtime.moduleStatuses)
+    schema: hydrateDashboardSchema(runtime.record.schema, runtime.datasets, runtime.moduleStatuses)
   } satisfies DashboardRecord;
 }
 
 function hydratePublishedRuntime(runtime: DashboardRuntime) {
   const source = runtime.record.publishedSchema ?? runtime.record.schema;
-  const publishedSchema = hydrateSchema(source, runtime.datasets, runtime.moduleStatuses);
+  const publishedSchema = hydrateDashboardSchema(source, runtime.datasets, runtime.moduleStatuses);
   return { ...runtime.record, status: "published" as const, schema: publishedSchema, publishedSchema };
 }
 
@@ -173,6 +178,10 @@ export async function copyDashboard(record: DashboardRecord) {
   });
 }
 
+/**
+ * 界面上的「删除」就是它：后端只有归档（软删除），归档后列表、运行态与分享链接都读不到，也没有恢复接口。
+ * 仅作者可操作，非作者调用得到 404「看板不存在」，所以删除入口只对作者显示。
+ */
 export async function archiveDashboard(id: string) {
   if (useTestRepository) return getBrowserDashboardRepository().archive(id);
   await requestDataHub<void>(`/api/analytics/dashboards/${encodeURIComponent(id)}/archive`, { method: "POST" });
@@ -187,6 +196,10 @@ export async function rollbackDashboard(record: DashboardRecord, version: Dashbo
   });
 }
 
+/**
+ * moduleIds 必须是 schema.modules 的键，不是 bindingId：后端按模块过滤要刷新的绑定。
+ * 注意后端目前不重查，只回放收藏时存下的行，返回的 updatedAt 是回放时刻。
+ */
 export async function refreshDashboardModules(id: string, moduleIds: string[] = [], force = true) {
   return requestDataHub<DashboardRefreshResult>(`/api/analytics/dashboards/${encodeURIComponent(id)}/refresh`, {
     method: "POST",
@@ -195,6 +208,11 @@ export async function refreshDashboardModules(id: string, moduleIds: string[] = 
   });
 }
 
+/*
+ * 下面三个接口 analytics-service 还没有提供（没有 layout-plan、modules/{id}/schedule、modules/{id}/upgrade 映射，
+ * 调用只会 404）。适配层先留着方法名与入参，界面不开放入口：一键美化走本地构图器，
+ * 刷新计划与查询版本升级的入口隐藏，编辑页的 dataActions 也不再调用它们。
+ */
 export async function planDashboardLayout(id: string, request: unknown) {
   return requestDataHub<LayoutPlan>(`/api/analytics/dashboards/${encodeURIComponent(id)}/layout-plan`, {
     method: "POST",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardRecord } from "@/types/dashboardStudio";
-import { resolveCurrentDashboard } from "./currentDashboard";
+import { isOwnedByUser, resolveCurrentDashboard } from "./currentDashboard";
 
 /** 回退逻辑只看 id / updatedAt / ownerUserId / visibility，其余字段不参与判定 */
 function record(
@@ -84,5 +84,26 @@ describe("resolveCurrentDashboard", () => {
   it("returns null for an empty list so the page can render its empty state", () => {
     expect(resolveCurrentDashboard([], "anything", ME)).toBeNull();
     expect(resolveCurrentDashboard([], null, ME)).toBeNull();
+  });
+});
+
+describe("isOwnedByUser", () => {
+  it("有 ownerUserId 时只认作者本人，删除入口据此只给作者", () => {
+    const mineShared = record("mine", "2026-07-18T08:00:00.000Z", { ownerUserId: ME, visibility: "SPACE" });
+    const theirsPrivate = record("theirs", "2026-07-18T08:00:00.000Z", {
+      ownerUserId: SOMEONE_ELSE,
+      visibility: "PRIVATE"
+    });
+
+    expect(isOwnedByUser(mineShared, ME)).toBe(true);
+    expect(isOwnedByUser(theirsPrivate, ME)).toBe(false);
+    // 登录态还没回来时不认领任何一块，宁可先不给删除入口。
+    expect(isOwnedByUser(mineShared, undefined)).toBe(false);
+  });
+
+  it("老后端缺 ownerUserId 时只把 PRIVATE 板算作自己的", () => {
+    expect(isOwnedByUser(record("private", "2026-07-18T08:00:00.000Z", { visibility: "PRIVATE" }), ME)).toBe(true);
+    expect(isOwnedByUser(record("space", "2026-07-18T08:00:00.000Z", { visibility: "SPACE" }), ME)).toBe(false);
+    expect(isOwnedByUser(record("unknown", "2026-07-18T08:00:00.000Z"), ME)).toBe(false);
   });
 });

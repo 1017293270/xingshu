@@ -2,18 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import { getDashboardRuntime, getDashboardRuntimeInitialData } from "@/services/dashboardAnalyticsService";
 import { GearSix, MagicWand, Plus } from "@phosphor-icons/react";
-import { Button, ConfigProvider, Dropdown, Modal, Select, type MenuProps, type ThemeConfig } from "antd";
+import { Button, ConfigProvider, Dropdown, Modal, type MenuProps, type ThemeConfig } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { XsEmptyState } from "@/components/xs/XsEmptyState";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { xsEnterStep } from "@/components/xs/motion";
 import {
-  DashboardArchiveDialog,
-  DashboardCreateDialog
+  DashboardCreateDialog,
+  DashboardDeleteDialog
 } from "@/features/dashboard/DashboardLibraryDialogs";
 import { hasCompletedDashboardOnboarding } from "@/features/dashboard/DashboardOnboarding";
+import { DashboardSwitcher } from "@/features/dashboard/DashboardSwitcher";
 import {
+  isOwnedByUser,
   readCurrentDashboardId,
   resolveCurrentDashboard,
   writeCurrentDashboardId
@@ -25,6 +27,7 @@ import {
 import { DashboardRuntimeIsland } from "@/features/dashboardStudio/DashboardRuntimeIsland";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
+import type { DashboardRecord } from "@/types/dashboardStudio";
 import { PageFrame } from "./PageFrame";
 import "./styles/page-shell.css";
 import "./styles/dashboard-list.css";
@@ -62,6 +65,19 @@ function formatDateTime(value?: string) {
   }).format(date);
 }
 
+/**
+ * 页面级的「数据截至」：看板刷新只回放收藏时存下的行，「更新于」只说明布局哪天改过，
+ * 数据到底是哪天的要看各收藏模块的查询版本时间，取最早那一块，免得把旧数据说新了。
+ * 有任何一个收藏模块没记下这个时间（老看板）就不显示，宁缺毋错。
+ */
+function earliestDataAsOf(record: DashboardRecord) {
+  const times = Object.values((record.publishedSchema ?? record.schema).dataBindings)
+    .filter((binding) => binding.sourceRef?.kind === "query-asset")
+    .map((binding) => (binding.dataAsOf ? new Date(binding.dataAsOf).getTime() : Number.NaN));
+  if (times.length === 0 || times.some((time) => Number.isNaN(time))) return undefined;
+  return new Date(Math.min(...times)).toISOString();
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const library = useDashboardLibrary();
@@ -87,6 +103,8 @@ export function DashboardPage() {
   });
   const versions = [...(current?.versions ?? [])].sort((left, right) => right.version - left.version);
   const shareLink = current ? library.shareLinks[current.id] : undefined;
+  const ownsCurrent = current ? isOwnedByUser(current, userId) : false;
+  const dataAsOf = runtimeQuery.data ? earliestDataAsOf(runtimeQuery.data) : undefined;
 
   function selectCurrent(id: string) {
     setCurrentId(id);
@@ -126,8 +144,8 @@ export function DashboardPage() {
     { key: "copy", label: "复制", disabled: library.copyMutation.isPending },
     { key: "versions", label: "版本回滚" },
     { key: "share", label: "分享", disabled: current?.status !== "published" },
-    { type: "divider" },
-    { key: "archive", label: "归档", danger: true }
+    // 后端只允许作者删除（软删除，走归档接口），别人共享来的板不给这个入口。
+    ...(ownsCurrent ? [{ type: "divider" as const }, { key: "delete", label: "删除", danger: true }] : [])
   ];
 
   function handleSettingsClick({ key }: { key: string }) {
@@ -136,7 +154,7 @@ export function DashboardPage() {
     if (key === "copy") library.copyMutation.mutate(current);
     if (key === "versions") setVersionsOpen(true);
     if (key === "share") void library.copyShareLink(current);
-    if (key === "archive") library.setArchiveCandidate(current);
+    if (key === "delete") library.setDeleteCandidate(current);
   }
 
   const hasWorkbench = records.length > 0 && !dashboardsQuery.isLoading && !dashboardsQuery.isError;
@@ -151,14 +169,12 @@ export function DashboardPage() {
       actions={(
         <div className="dashboard-current__toolbar">
           {hasWorkbench && current ? (
-            <Select
-              className="dashboard-current__switch"
-              aria-label="切换当前看板"
-              value={current.id}
-              popupMatchSelectWidth={false}
-              classNames={{ popup: { root: "dashboard-workspace-popup" } }}
-              options={records.map((record) => ({ value: record.id, label: record.schema.title }))}
-              onChange={selectCurrent}
+            <DashboardSwitcher
+              records={records}
+              currentId={current.id}
+              userId={userId}
+              onSelect={selectCurrent}
+              onRequestDelete={library.setDeleteCandidate}
             />
           ) : null}
           <Button
@@ -241,6 +257,9 @@ export function DashboardPage() {
               {runtimeSource?.kind === "ask-data" ? "智能问数" : "手动配置"}
             </span>
             <span className="dashboard-current__fact">更新于 {formatDateTime(current.updatedAt)}</span>
+            {dataAsOf ? (
+              <span className="dashboard-current__fact">数据截至 {formatDateTime(dataAsOf)}</span>
+            ) : null}
             {shareLink ? (
               <a className="dashboard-current__share" href={shareLink} title={shareLink}>{shareLink}</a>
             ) : null}
@@ -268,7 +287,14 @@ export function DashboardPage() {
       )}
 
       <DashboardCreateDialog library={library} className="dashboard-workspace-dialog" />
-      <DashboardArchiveDialog library={library} className="dashboard-workspace-dialog" onArchived={() => setCurrentId(null)} />
+      <DashboardDeleteDialog
+        library={library}
+        className="dashboard-workspace-dialog"
+        onDeleted={(id) => {
+          // 从切换器里删的可能不是当前这块，只有删掉当前看板时才回退到自己名下最近更新的一块。
+          if (id === current?.id) setCurrentId(null);
+        }}
+      />
 
       <Modal
         className="dashboard-workspace-dialog"

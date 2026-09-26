@@ -50,7 +50,7 @@ const panelStyle = computed(() => ({
         <span class="table-renderer__notice-text">这张表暂时没有数据行</span>
       </span>
     </p>
-    <div v-else class="table-renderer__scroll" :tabindex="readonly ? 0 : undefined" :role="readonly ? 'region' : undefined" :aria-label="readonly ? `${widget.title}表格内容` : undefined"><table><thead><tr><th v-for="column in binding.table.columns" :key="column.key">{{ column.title }}</th></tr></thead><tbody><tr v-for="(row,rowIndex) in binding.table.rows" :key="rowIndex"><td v-for="column in binding.table.columns" :key="column.key">{{ row[column.key] ?? '' }}</td></tr></tbody></table></div>
+    <div v-else class="table-renderer__scroll" :tabindex="readonly ? 0 : undefined" :role="readonly ? 'region' : undefined" :aria-label="readonly ? `${widget.title}表格内容` : undefined"><table><thead><tr><th v-for="column in binding.table.columns" :key="column.key" :title="column.fullTitle || column.title">{{ column.title }}</th></tr></thead><tbody><tr v-for="(row,rowIndex) in binding.table.rows" :key="rowIndex"><td v-for="column in binding.table.columns" :key="column.key">{{ row[column.key] ?? '' }}</td></tr></tbody></table></div>
   </section>
 </template>
 <style scoped>

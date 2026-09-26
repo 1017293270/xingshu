@@ -6,8 +6,17 @@ import type {
   QueryExecutionOutput
 } from "@/types/analytics";
 import type { DashboardSchema, DashboardWidgetType } from "@/types/dashboardStudio";
+import { pickDashboardAnswerOutputKey } from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
+import {
+  CONTRACT_CUBE,
+  FLOW_CUBE,
+  favoriteExecution,
+  monthlyIncomeAsset,
+  mustSignAsset,
+  salesAsset
+} from "@/features/dashboardStudio/testing/favoriteAnswerFixtures";
 import { createBlankDashboard } from "./dashboardGenerationService";
-import { appendQueryAssetChart, removeQueryAssetChart } from "./dashboardModuleService";
+import { appendQueryAssetChart, moduleIdForBinding, removeQueryAssetChart } from "./dashboardModuleService";
 
 function createAsset(
   id: string,
@@ -589,5 +598,122 @@ describe("dashboardModuleService", () => {
       .toThrow("该结果表没有可用字段");
     expect(() => appendQueryAssetChart(blankDashboard(), asset, failedExecution, "empty"))
       .toThrow("执行失败");
+  });
+});
+
+describe("收藏问数落到看板（beta0.4 反馈的三张卡）", () => {
+  function addAnswer(asset: QueryAsset, outputKey?: string) {
+    const preview = favoriteExecution(asset);
+    const key = outputKey ?? pickDashboardAnswerOutputKey(asset, preview.outputs);
+    return appendQueryAssetChart(blankDashboard(), asset, preview, key);
+  }
+
+  it("「善治今年的销售额」指标卡取最后一次合计，不再显示探查结果里的 4", () => {
+    const added = addAnswer(salesAsset);
+    const widget = added.schema.widgets[0]!;
+    const binding = added.schema.dataBindings[added.bindingId]!;
+
+    expect(widget.type).toBe("metric");
+    expect(widget.mapping).toMatchObject({ metricKeys: ["ProjectSign.signAmount"], displayUnit: "万元" });
+    // 指标卡按 props 渲染：单位与小数跟着答案走，不再显示成光秃秃的「1,287」。
+    expect(widget.props).toMatchObject({ valueSuffix: "万元", precision: 1 });
+    expect(binding.sourceRef?.outputKey).toBe("output_003");
+    expect(binding.metricLabel).toBe("签约金额");
+    expect(binding.table.rows).toEqual([{ "ProjectSign.signAmount": 1286.5 }]);
+    expect(binding.table.columns).toEqual([{
+      columnId: "column-ProjectSign.signAmount",
+      key: "ProjectSign.signAmount",
+      title: "签约金额（万元）",
+      type: "number",
+      fullTitle: "项目签约台账，记录项目名称、客户与签约金额 签约金额（万元），含税"
+    }]);
+    expect(binding.dataAsOf).toBe("2026-09-20T06:30:00.000Z");
+  });
+
+  it("「善治今年的必签项目金额」全是 0 行时落成暂无数据的指标卡，不再是 0 个周期的趋势卡", () => {
+    for (const outputKey of ["output_001", "output_002"]) {
+      const added = addAnswer(mustSignAsset, outputKey);
+      const widget = added.schema.widgets[0]!;
+      const binding = added.schema.dataBindings[added.bindingId]!;
+
+      expect(widget.type).toBe("metric");
+      expect(widget.subtitle).not.toContain("个周期");
+      expect(widget.mapping.metricKeys).toEqual(["ContractList.contractAmount"]);
+      expect(binding.status).toBe("empty");
+      expect(binding.table.columns.map((item) => item.title)).not.toContain(expect.stringContaining(CONTRACT_CUBE));
+    }
+  });
+
+  it("不是单值问题的 0 行结果落成空表，也不画趋势", () => {
+    const empty = output(
+      "output_001",
+      [
+        column("month-id", "BankFlow.tradeDate.month", `${FLOW_CUBE} 交易日期`, "time"),
+        column("amount-id", "BankFlow.amount", `${FLOW_CUBE} 交易金额（元）`, "number")
+      ],
+      []
+    );
+    const asset = createAsset("asset-empty-trend", "善治每月收入", "善治每月收入", [empty]);
+    const added = appendQueryAssetChart(blankDashboard(), asset, execution(asset, [empty]), "output_001");
+
+    expect(added.schema.widgets[0]?.type).toBe("table");
+    expect(added.schema.widgets[0]?.subtitle).toBe("共 0 行 · 善治每月收入");
+  });
+
+  it("「善治每月收入」默认取按月汇总画趋势，列名是短业务名", () => {
+    const added = addAnswer(monthlyIncomeAsset);
+    const widget = added.schema.widgets[0]!;
+    const binding = added.schema.dataBindings[added.bindingId]!;
+
+    expect(binding.sourceRef?.outputKey).toBe("output_002");
+    expect(widget.type).toBe("line");
+    expect(widget.subtitle).toBe("趋势变化 · 9 个周期");
+    expect(widget.mapping).toMatchObject({
+      dimensionKey: "BankFlow.tradeDate.month",
+      metricKeys: ["BankFlow.amount"]
+    });
+    expect(binding.table.columns.map((item) => item.title)).toEqual(["交易日期", "交易金额（元）"]);
+  });
+
+  it("手动选中联表明细时表头也是短业务名，完整原文留作悬浮提示", () => {
+    const added = addAnswer(monthlyIncomeAsset, "output_001");
+    const binding = added.schema.dataBindings[added.bindingId]!;
+
+    expect(added.schema.widgets[0]?.type).toBe("table");
+    expect(binding.table.columns.map((item) => item.title)).toEqual([
+      "记录数",
+      "合同名称",
+      "合同编号",
+      "交易日期",
+      "对方户名",
+      "交易金额（元）"
+    ]);
+    expect(binding.table.columns[1]?.fullTitle).toBe(`${CONTRACT_CUBE} 合同名称，合同的中文全称`);
+    expect(binding.table.columns[4]?.fullTitle).toBe(`${FLOW_CUBE} 对方户名`);
+  });
+});
+
+describe("moduleIdForBinding", () => {
+  it("按后端同样的顺序从组件绑定找回模块 id，刷新接口要的是它而不是绑定 id", () => {
+    const first = appendQueryAssetChart(blankDashboard(), salesAsset, favoriteExecution(salesAsset), "output_003");
+    const second = appendQueryAssetChart(
+      first.schema,
+      monthlyIncomeAsset,
+      favoriteExecution(monthlyIncomeAsset),
+      "output_002"
+    );
+
+    expect(moduleIdForBinding(second.schema, first.bindingId)).toBe(first.moduleId);
+    expect(moduleIdForBinding(second.schema, second.bindingId)).toBe(second.moduleId);
+    expect(moduleIdForBinding(second.schema, "binding-missing")).toBeUndefined();
+    expect(moduleIdForBinding({ modules: undefined }, first.bindingId)).toBeUndefined();
+
+    const duplicated = {
+      modules: {
+        ...second.schema.modules,
+        "module-late": { ...second.schema.modules![first.moduleId]!, id: "module-late" }
+      }
+    };
+    expect(moduleIdForBinding(duplicated, first.bindingId)).toBe(first.moduleId);
   });
 });

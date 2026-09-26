@@ -1,3 +1,5 @@
+import { dashboardColumnDisplayLabels } from "./dashboardColumnLabels";
+
 /**
  * 大屏文案的短标题策略。
  *
@@ -155,16 +157,19 @@ export function boardTitle(brief: string, asset?: DashboardTitleAsset, fallback 
   return clip(fallback || subject, MAX_WIDGET_TITLE);
 }
 
-/** 保留正式名称；系统输出键仅作为标识，列表用实际字段说明各张结果表。 */
+/**
+ * 保留正式名称；系统输出键仅作为标识，列表用实际字段说明各张结果表。
+ * 字段名先清洗成短业务名，不然「结果表 3 · 合同主数据清单，记录…」一行就被表描述占满了。
+ */
 export function dashboardOutputLabel(output: {
   outputKey: string;
   label?: string;
-  columns?: { key: string; label?: string; title?: string }[];
+  columns?: { key: string; label?: string; title?: string; fullTitle?: string }[];
 }, index = 0) {
   const label = output.label?.trim();
   if (label && label !== output.outputKey && !/^output[_-]?\d+$/i.test(label)) return label;
   const number = /^output[_-]?(\d+)$/i.exec(output.outputKey)?.[1];
   const prefix = `结果表 ${number ? Number(number) : index + 1}`;
-  const fields = output.columns?.slice(0, 2).map((column) => column.label || column.title || column.key).filter(Boolean);
-  return fields?.length ? `${prefix} · ${fields.join("、")}` : prefix;
+  const fields = dashboardColumnDisplayLabels(output.columns ?? []).slice(0, 2).map((column) => column.label);
+  return fields.length ? `${prefix} · ${fields.join("、")}` : prefix;
 }

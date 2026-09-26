@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,8 @@ import { AppProviders } from "@/app/providers";
 import { CURRENT_DASHBOARD_STORAGE_KEY } from "@/features/dashboard/currentDashboard";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { createDashboardRepository } from "@/services/dashboardRepositoryService";
+import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
+import type { DashboardRecord } from "@/types/dashboardStudio";
 import { DashboardSquarePage } from "./DashboardSquarePage";
 
 /* 智享入口跳的是编辑器 + `smart=1`，桩把 search 单独挂出来才能断言面板会展开。 */
@@ -51,6 +53,16 @@ function createStoredDashboard(title: string, id: string, published = false, des
   return { record: repository.get(schema.id)!, repository };
 }
 
+/** 本地测试仓储不记归属：补写 ownerUserId，模拟服务端列表里自己的板与同事共享到空间的板。 */
+function setStoredDashboardOwners(owners: Record<string, number>) {
+  const storageKey = "xingshu.dashboard.records.v1";
+  const records = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as DashboardRecord[];
+  localStorage.setItem(
+    storageKey,
+    JSON.stringify(records.map((record) => ({ ...record, ownerUserId: owners[record.id], visibility: "SPACE" })))
+  );
+}
+
 function cardOf(title: string) {
   const card = screen.getByRole("link", { name: title }).closest("article");
   expect(card).not.toBeNull();
@@ -63,6 +75,7 @@ async function openCardMenu(user: ReturnType<typeof userEvent.setup>, title: str
 
 describe("DashboardSquarePage", () => {
   beforeEach(() => {
+    useDataHubAuthStore.getState().clearAuthState();
     localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -103,8 +116,10 @@ describe("DashboardSquarePage", () => {
 
   it("renders saved dashboards as management cards", async () => {
     const user = userEvent.setup();
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
     createStoredDashboard("运营草稿", "draft", false, "不应在大屏库中展示的问数摘要");
     createStoredDashboard("善治测试", "published", true);
+    setStoredDashboardOwners({ "dashboard-draft": 7, "dashboard-published": 7 });
 
     renderPage();
 
@@ -121,10 +136,22 @@ describe("DashboardSquarePage", () => {
     );
 
     await openCardMenu(user, "善治测试");
-    ["设为当前", "编辑", "复制", "版本", "分享", "归档"].forEach((action) => {
+    ["设为当前", "编辑", "复制", "版本", "分享", "删除"].forEach((action) => {
       expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
     });
-    // 服务层只有归档接口，没有真删除，卡片菜单不再把归档写成"删除"
+    expect(screen.queryByRole("menuitem", { name: "归档" })).not.toBeInTheDocument();
+  });
+
+  it("only lets the author delete a card", async () => {
+    const user = userEvent.setup();
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("同事共享的大屏", "shared", true);
+    setStoredDashboardOwners({ "dashboard-shared": 42 });
+    renderPage();
+
+    await openCardMenu(user, "同事共享的大屏");
+
+    expect(screen.getByRole("menuitem", { name: "复制" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
   });
 
@@ -168,19 +195,21 @@ describe("DashboardSquarePage", () => {
     expect(records.some((record) => record.schema.title === "销售大屏 副本" && record.status === "draft")).toBe(true);
   });
 
-  it("archives a dashboard after confirmation", async () => {
+  it("deletes a dashboard after a confirmation that says it cannot be undone", async () => {
     const user = userEvent.setup();
-    createStoredDashboard("待归档大屏", "archive");
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("待删除大屏", "remove");
+    setStoredDashboardOwners({ "dashboard-remove": 7 });
     renderPage();
 
-    await openCardMenu(user, "待归档大屏");
-    await user.click(screen.getByRole("menuitem", { name: "归档" }));
+    await openCardMenu(user, "待删除大屏");
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
 
-    expect(await screen.findByRole("dialog", { name: "归档看板" })).toHaveTextContent(
-      "归档“待归档大屏”？归档后它会从看板广场移除，当前版本没有自助恢复入口。"
+    expect(await screen.findByRole("dialog", { name: "删除看板" })).toHaveTextContent(
+      "删除“待删除大屏”？删除后无法恢复，已分享的链接也会失效。"
     );
-    await user.click(screen.getByRole("button", { name: "确认归档" }));
-    expect(screen.queryByText("待归档大屏")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(screen.queryByText("待删除大屏")).not.toBeInTheDocument());
     expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
   });
 

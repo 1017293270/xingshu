@@ -5,10 +5,23 @@ import {
   buildDashboardChartOption,
   resolveDashboardMetric
 } from "@/features/dashboardStudio/core/dashboardWidgetData";
+import {
+  CONTRACT_CUBE,
+  FLOW_CUBE,
+  PROJECT_CUBE,
+  favoriteExecution,
+  monthlyIncomeAsset,
+  mustSignAsset,
+  salesAsset
+} from "@/features/dashboardStudio/testing/favoriteAnswerFixtures";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { streamDashboardDesign } from "@/services/dashboardDesignService";
 import { contractDesignData, standardDesignData } from "@/test/dashboardDesignFixtures";
-import type { DashboardDesignSpec, DashboardDesignStreamEvent } from "@/types/dashboardDesign";
+import type {
+  DashboardDesignAssetData,
+  DashboardDesignSpec,
+  DashboardDesignStreamEvent
+} from "@/types/dashboardDesign";
 import type { DashboardSchema } from "@/types/dashboardStudio";
 import { boundAssetIds, buildLocalDesignSpec, useSmartDashboardChat } from "./useSmartDashboardChat";
 
@@ -17,6 +30,11 @@ vi.mock("@/services/dashboardDesignService", () => ({
 }));
 
 const streamMock = vi.mocked(streamDashboardDesign);
+const feedbackAssets = [salesAsset, mustSignAsset, monthlyIncomeAsset];
+/** beta0.4 反馈里的三份收藏：执行结果保持后端原样（调用顺序、全称列名、含 0 行）。 */
+function feedbackDesignData(): DashboardDesignAssetData {
+  return Object.fromEntries(feedbackAssets.map((asset) => [asset.id, { asset, execution: favoriteExecution(asset) }]));
+}
 const data = standardDesignData();
 const assets = Object.values(data).map((entry) => entry.asset);
 
@@ -115,6 +133,32 @@ describe("useSmartDashboardChat", () => {
     });
     expect(applySchema).toHaveBeenCalledWith(turn.candidate!.schema, "已应用智享方案，可撤销");
     expect(result.current.turns[0]?.status).toBe("applied");
+  });
+
+  it("给模型的上下文里答案排第一、没有 0 行结果，列名是短业务名", async () => {
+    scriptStream([{ type: "spec", spec }, { type: "done", modelId: "kimi" }]);
+    const { result } = renderHook(() => useSmartDashboardChat({
+      getSchema: () => createBlankDashboard({ title: "空板" }),
+      applySchema: vi.fn(async () => undefined),
+      listAssets: vi.fn(async () => feedbackAssets),
+      previewAsset: vi.fn(async (assetId: string) => favoriteExecution(feedbackAssets.find((asset) => asset.id === assetId)!)),
+      initialAssetIds: feedbackAssets.map((asset) => asset.id)
+    }));
+
+    await waitFor(() => expect(result.current.assets).toHaveLength(3));
+    act(() => {
+      result.current.send("做一块经营大屏");
+    });
+    await waitFor(() => expect(streamMock).toHaveBeenCalled());
+
+    const request = streamMock.mock.calls[0]![1];
+    const outputsOf = (assetId: string) => request.assets.find((asset) => asset.assetId === assetId)!.outputs;
+    expect(outputsOf("asset-sales").map((output) => output.outputKey)).toEqual(["output_003", "output_001"]);
+    expect(outputsOf("asset-sales")[0]!.label).toContain("最可能是问题的答案");
+    expect(outputsOf("asset-must-sign").map((output) => output.outputKey)).toEqual(["output_002"]);
+    expect(outputsOf("asset-monthly-income").map((output) => output.outputKey)).toEqual(["output_002", "output_001"]);
+    const serialized = JSON.stringify(request);
+    for (const cube of [PROJECT_CUBE, CONTRACT_CUBE, FLOW_CUBE]) expect(serialized).not.toContain(cube);
   });
 
   it("refuses to generate on an empty board without any selected asset", async () => {
@@ -300,6 +344,29 @@ describe("buildLocalDesignSpec", () => {
         buildDashboardChartOption(widget, applied.schema.dataBindings[widget.bindingId!], { animation: false })
       ).not.toBeNull();
     }
+  });
+});
+
+describe("buildLocalDesignSpec · 收藏里的多次查询", () => {
+  it("每份收藏只用答案那张表，全 0 行的单值问题留一张暂无数据的指标卡", () => {
+    const feedback = feedbackDesignData();
+    const local = buildLocalDesignSpec(createBlankDashboard({ title: "空板" }), feedback, "经营总览");
+    const widgetsOf = (assetId: string) => local.widgets.filter((widget) => widget.assetId === assetId);
+
+    expect(new Set(widgetsOf("asset-sales").map((widget) => widget.outputKey))).toEqual(new Set(["output_003"]));
+    expect(widgetsOf("asset-sales").find((widget) => widget.role === "kpi")?.metricKey).toBe("ProjectSign.signAmount");
+    expect(widgetsOf("asset-must-sign").map((widget) => [widget.role, widget.outputKey])).toEqual([["kpi", "output_002"]]);
+    expect(new Set(widgetsOf("asset-monthly-income").map((widget) => widget.outputKey))).toEqual(new Set(["output_002"]));
+    expect(widgetsOf("asset-monthly-income").map((widget) => widget.role)).toContain("trend");
+
+    const applied = applyDashboardDesignSpec(createBlankDashboard({ title: "空板" }), local, feedback);
+    expect(applied.rejected).toEqual([]);
+    const columnTitles = Object.values(applied.schema.dataBindings).flatMap((binding) =>
+      binding.table.columns.map((column) => column.title)
+    );
+    expect(columnTitles.length).toBeGreaterThan(0);
+    for (const title of columnTitles) expect(title).not.toMatch(/台账，|清单，|明细，/);
+    expect(applied.schema.widgets.some((widget) => widget.subtitle?.includes("0 个周期"))).toBe(false);
   });
 });
 

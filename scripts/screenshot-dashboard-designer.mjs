@@ -1,11 +1,21 @@
 import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
+import {
+  baseUrl,
+  emptyFeedbackBoard,
+  feedbackAssets,
+  feedbackPreview,
+  findFeedbackAssetId
+} from "./screenshot-dashboard-fixtures.mjs";
 
-// 用法：node scripts/screenshot-dashboard-designer.mjs
+// 用法：node scripts/screenshot-dashboard-designer.mjs [feedback]
 // 验收「添加即成型 + 一键美化」：mock 收藏问数接口，连加三个组件看自动排版，
 // 再打开一键美化对话框看四档主题色卡。
+// 最后一段用 beta0.4 反馈样例（多次查询、0 行、全称列名）看默认结果表、短表头与「暂无数据」；
+// 只传 feedback 时跳过前面几段，只跑这一段。服务地址读 XS_QA_BASE_URL，缺省 http://127.0.0.1:5173。
 const dir = "outputs/ui-audit";
-const seedRecords = JSON.parse(readFileSync("outputs/dashboard-seed/seed-dashboard.json", "utf8"));
+const feedbackOnly = process.argv[2] === "feedback";
+const seedRecords = feedbackOnly ? [emptyFeedbackBoard()] : JSON.parse(readFileSync("outputs/dashboard-seed/seed-dashboard.json", "utf8"));
 const base = seedRecords[0];
 // 从空板起步，才能看清「首添自动套主题 + 自动构图」
 const record = {
@@ -143,74 +153,134 @@ await page.route("**/api/analytics/**", async (route) => {
   return json({});
 });
 
-await page.goto(`http://127.0.0.1:5173/dashboard-editor?draft=${record.id}&source=favorites`, { waitUntil: "networkidle" });
-await page.waitForSelector(".query-asset-panel__list > button", { timeout: 20000 });
+if (!feedbackOnly) {
+  await page.goto(`${baseUrl}/dashboard-editor?draft=${record.id}&source=favorites`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".query-asset-panel__list > button", { timeout: 20000 });
 
-// 连续加三个组件：每次添加后都应自动收口成整齐版式，首个组件顺带套上默认主题
-const names = ["月度收入趋势", "各区域订单量排行", "渠道收入占比"];
-for (const [index, name] of names.entries()) {
-  await page.getByRole("button", { name: new RegExp(name) }).first().click();
-  await page.getByRole("button", { name: /添加到画布|再次添加/ }).click();
-  await page.waitForTimeout(900);
-  // 首个组件落板时应看到「自动排版并套用默认主题」的回执
-  if (index === 0) await page.screenshot({ path: `${dir}/designer-0-first-widget.png` });
+  // 连续加三个组件：每次添加后都应自动收口成整齐版式，首个组件顺带套上默认主题
+  const names = ["月度收入趋势", "各区域订单量排行", "渠道收入占比"];
+  for (const [index, name] of names.entries()) {
+    await page.getByRole("button", { name: new RegExp(name) }).first().click();
+    await page.getByRole("button", { name: /添加到画布|再次添加/ }).click();
+    await page.waitForTimeout(900);
+    // 首个组件落板时应看到「自动排版并套用默认主题」的回执
+    if (index === 0) await page.screenshot({ path: `${dir}/designer-0-first-widget.png` });
+  }
+
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${dir}/designer-1-auto-compose.png` });
+  await page.locator(".designer-palette").screenshot({ path: `${dir}/designer-2-palette.png` });
+
+  // 撤销一步应只退回这次自动排版，三个组件都还在
+  const positionsAfterCompose = await page.locator(".dashboard-widget-card").evaluateAll(
+    (nodes) => nodes.map((node) => `${node.style.left}/${node.style.top}`)
+  );
+  await page.getByRole("button", { name: "撤销" }).click();
+  await page.waitForTimeout(500);
+  const positionsAfterUndo = await page.locator(".dashboard-widget-card").evaluateAll(
+    (nodes) => nodes.map((node) => `${node.style.left}/${node.style.top}`)
+  );
+  console.log("撤销前", positionsAfterCompose.join(" | "));
+  console.log("撤销后", positionsAfterUndo.join(" | "));
+  if (positionsAfterUndo.length !== 3) throw new Error("撤销把组件也一起退掉了，应该只退自动排版");
+  if (positionsAfterCompose.join() === positionsAfterUndo.join()) throw new Error("撤销没有退回自动排版");
+  await page.getByRole("button", { name: "重做" }).click();
+  await page.waitForTimeout(500);
+
+  // 一键美化对话框：四档主题色卡 + 前后构图对比
+  await page.getByRole("button", { name: "一键美化" }).click();
+  await page.waitForSelector(".board-theme-picker", { timeout: 10000 });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${dir}/designer-3-beautify-dialog.png` });
+
+  await page.getByRole("radio", { name: /深空指挥/ }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${dir}/designer-4-beautify-dark.png` });
+
+  await page.getByRole("button", { name: "应用美化" }).click();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/designer-5-applied.png` });
+
+  // 空态降噪：换一块彻底空的板，加两个没有数据绑定的组件，浅色与深色档各看一次
+  editorRecord = { ...record, schema: { ...record.schema, widgets: [], dataBindings: {}, modules: {} } };
+  await page.goto(`${baseUrl}/dashboard-editor?draft=${record.id}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".designer-palette__list", { timeout: 20000 });
+
+  const palette = page.locator(".designer-palette__list");
+  await palette.getByRole("button", { name: /^折线图/ }).click();
+  await page.waitForTimeout(300);
+  await palette.getByRole("button", { name: /^数据表格/ }).click();
+  await page.waitForTimeout(600);
+  await page.locator(".designer-canvas").screenshot({ path: `${dir}/designer-6-empty-states-light.png` });
+
+  await page.getByRole("button", { name: "一键美化" }).click();
+  await page.waitForSelector(".board-theme-picker", { timeout: 10000 });
+  await page.getByRole("radio", { name: /深空指挥/ }).click();
+  await page.getByRole("button", { name: "应用美化" }).click();
+  await page.waitForTimeout(1000);
+  await page.locator(".designer-canvas").screenshot({ path: `${dir}/designer-7-empty-states-dark.png` });
+  // 提示卡贴脸看一眼，确认深色档下文字对比度过关
+  await page.locator(".chart-renderer__notice").screenshot({ path: `${dir}/designer-8-notice-chart-dark.png` });
+  await page.locator(".table-renderer__notice").screenshot({ path: `${dir}/designer-9-notice-table-dark.png` });
 }
 
-await page.waitForTimeout(700);
-await page.screenshot({ path: `${dir}/designer-1-auto-compose.png` });
-await page.locator(".designer-palette").screenshot({ path: `${dir}/designer-2-palette.png` });
+// beta0.4 反馈：收藏里存着整轮问数的每一次查询。默认结果表要落在作答那张上，表头是短业务名，
+// 全 0 行的单值问题落成「暂无数据」的指标卡，不再是「0 个周期」的趋势卡。
+const feedbackRecord = emptyFeedbackBoard();
+const feedbackPage = await browser.newPage({ viewport: { width: 1672, height: 1000 }, deviceScaleFactor: 2 });
+await feedbackPage.addInitScript(() => {
+  window.localStorage.setItem("xingshu_datahub_token", "visual-qa-token");
+  window.localStorage.setItem(
+    "xingshu_datahub_user",
+    JSON.stringify({ token: "visual-qa-token", userId: 1, username: "visual-qa", isAdmin: true })
+  );
+  window.localStorage.setItem("xingshu_datahub_space_id", "7");
+});
+await feedbackPage.route("**/api/analytics/**", async (route) => {
+  const url = route.request().url();
+  const json = (body) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+  if (url.includes("/editor-data")) return json({ record: feedbackRecord, datasets: {}, moduleStatuses: {} });
+  if (url.includes("/query-assets") && url.includes("/preview")) return json(feedbackPreview(findFeedbackAssetId(url)));
+  if (/\/api\/analytics\/query-assets(\?|$)/.test(url)) return json(feedbackAssets);
+  return json({});
+});
+await feedbackPage.goto(`${baseUrl}/dashboard-editor?draft=${feedbackRecord.id}&source=favorites`, { waitUntil: "networkidle" });
+await feedbackPage.waitForSelector(".query-asset-panel__list > button", { timeout: 20000 });
 
-// 撤销一步应只退回这次自动排版，三个组件都还在
-const positionsAfterCompose = await page.locator(".dashboard-widget-card").evaluateAll(
-  (nodes) => nodes.map((node) => `${node.style.left}/${node.style.top}`)
+const outputSelect = feedbackPage.getByRole("combobox", { name: "结果表" });
+async function pickFavorite(name) {
+  await feedbackPage.getByRole("button", { name: new RegExp(name) }).first().click();
+  await outputSelect.waitFor({ timeout: 10000 });
+  await feedbackPage.waitForTimeout(500);
+  const options = await outputSelect.locator("option").allTextContents();
+  console.log(`「${name}」默认 ${await outputSelect.inputValue()}：\n  ${options.map((text) => text.trim()).join("\n  ")}`);
+}
+
+await pickFavorite("善治今年的销售额");
+await feedbackPage.screenshot({ path: `${dir}/designer-feedback-1-default-output.png` });
+await feedbackPage.getByRole("button", { name: /添加到画布|再次添加/ }).click();
+await feedbackPage.waitForTimeout(900);
+for (const name of ["善治今年的项目预签金额", "善治今年的必签项目金额", "善治每月收入"]) {
+  await pickFavorite(name);
+  await feedbackPage.getByRole("button", { name: /添加到画布|再次添加/ }).click();
+  await feedbackPage.waitForTimeout(900);
+}
+// 用户手动改选联表明细：表头照样是短业务名。
+await pickFavorite("善治每月收入");
+await outputSelect.selectOption("output_001");
+await feedbackPage.waitForTimeout(400);
+await feedbackPage.getByRole("button", { name: /添加到画布|再次添加/ }).click();
+await feedbackPage.waitForTimeout(1200);
+await feedbackPage.screenshot({ path: `${dir}/designer-feedback-2-canvas.png` });
+
+// 选中全 0 行的那张指标卡，属性面板里看「数据截至」与「数据状态」。
+await feedbackPage.locator(".dashboard-widget-card", { hasText: "善治今年的必签项目金额" }).first().click();
+await feedbackPage.waitForTimeout(600);
+await feedbackPage.screenshot({ path: `${dir}/designer-feedback-3-properties.png` });
+const headers = await feedbackPage.locator(".designer-canvas .table-renderer th").evaluateAll((nodes) =>
+  nodes.map((node) => `${node.textContent?.trim()} ⇢ ${node.getAttribute("title")}`)
 );
-await page.getByRole("button", { name: "撤销" }).click();
-await page.waitForTimeout(500);
-const positionsAfterUndo = await page.locator(".dashboard-widget-card").evaluateAll(
-  (nodes) => nodes.map((node) => `${node.style.left}/${node.style.top}`)
-);
-console.log("撤销前", positionsAfterCompose.join(" | "));
-console.log("撤销后", positionsAfterUndo.join(" | "));
-if (positionsAfterUndo.length !== 3) throw new Error("撤销把组件也一起退掉了，应该只退自动排版");
-if (positionsAfterCompose.join() === positionsAfterUndo.join()) throw new Error("撤销没有退回自动排版");
-await page.getByRole("button", { name: "重做" }).click();
-await page.waitForTimeout(500);
-
-// 一键美化对话框：四档主题色卡 + 前后构图对比
-await page.getByRole("button", { name: "一键美化" }).click();
-await page.waitForSelector(".board-theme-picker", { timeout: 10000 });
-await page.waitForTimeout(400);
-await page.screenshot({ path: `${dir}/designer-3-beautify-dialog.png` });
-
-await page.getByRole("radio", { name: /深空指挥/ }).click();
-await page.waitForTimeout(400);
-await page.screenshot({ path: `${dir}/designer-4-beautify-dark.png` });
-
-await page.getByRole("button", { name: "应用美化" }).click();
-await page.waitForTimeout(1200);
-await page.screenshot({ path: `${dir}/designer-5-applied.png` });
-
-// 空态降噪：换一块彻底空的板，加两个没有数据绑定的组件，浅色与深色档各看一次
-editorRecord = { ...record, schema: { ...record.schema, widgets: [], dataBindings: {}, modules: {} } };
-await page.goto(`http://127.0.0.1:5173/dashboard-editor?draft=${record.id}`, { waitUntil: "networkidle" });
-await page.waitForSelector(".designer-palette__list", { timeout: 20000 });
-
-const palette = page.locator(".designer-palette__list");
-await palette.getByRole("button", { name: /^折线图/ }).click();
-await page.waitForTimeout(300);
-await palette.getByRole("button", { name: /^数据表格/ }).click();
-await page.waitForTimeout(600);
-await page.locator(".designer-canvas").screenshot({ path: `${dir}/designer-6-empty-states-light.png` });
-
-await page.getByRole("button", { name: "一键美化" }).click();
-await page.waitForSelector(".board-theme-picker", { timeout: 10000 });
-await page.getByRole("radio", { name: /深空指挥/ }).click();
-await page.getByRole("button", { name: "应用美化" }).click();
-await page.waitForTimeout(1000);
-await page.locator(".designer-canvas").screenshot({ path: `${dir}/designer-7-empty-states-dark.png` });
-// 提示卡贴脸看一眼，确认深色档下文字对比度过关
-await page.locator(".chart-renderer__notice").screenshot({ path: `${dir}/designer-8-notice-chart-dark.png` });
-await page.locator(".table-renderer__notice").screenshot({ path: `${dir}/designer-9-notice-table-dark.png` });
+console.log(headers.join("\n"));
 
 await browser.close();
 console.log("done");

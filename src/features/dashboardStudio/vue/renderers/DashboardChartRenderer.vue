@@ -14,6 +14,10 @@ const option = computed(() =>
   buildDashboardChartOption({ ...props.widget, style: style.value }, props.binding, { animation: !reducedMotion })
 );
 const light = computed(() => isLightDashboardSurface(style.value.background, style.value.color));
+/* 绑定了数据但一行都没有，是数据本身为空，不是指标没选好：两种提示分开说，免得用户去改一个改不好的映射。 */
+const emptyNotice = computed(() =>
+  props.binding && props.binding.table.rows.length === 0 ? "暂无数据" : "还没选到可绘制的数值指标"
+);
 const panelStyle = computed(() => ({
   backgroundColor: style.value.background ?? "#FFFFFF",
   color: style.value.color ?? "#294469",
@@ -49,7 +53,7 @@ const panelStyle = computed(() => ({
           <span class="chart-renderer__notice-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5" /><path d="M4 19.5h15.5" /><path d="M8 15.5l3.4-3.9 2.6 2.3 3.8-4.7" /></svg>
           </span>
-          <span class="chart-renderer__notice-text">还没选到可绘制的数值指标</span>
+          <span class="chart-renderer__notice-text">{{ emptyNotice }}</span>
         </span>
       </p>
     </div>

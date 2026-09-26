@@ -44,6 +44,11 @@ export type QueryColumnDefinition = {
   label: string;
   title?: string;
   type?: string;
+  /**
+   * 前端清洗列名时留下的完整原文（「cube 描述 + 空格 + 字段名」），只作悬浮提示；
+   * 有它时 label/title 已是短业务名。后端不返回这个字段。
+   */
+  fullTitle?: string;
 };
 
 export type QueryVersion = {

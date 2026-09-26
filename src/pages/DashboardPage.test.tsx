@@ -123,6 +123,38 @@ describe("DashboardPage", () => {
     expect(load).toHaveBeenCalledWith(listed.id);
   });
 
+  it("says when favorited data was captured, since refreshing only replays that snapshot", async () => {
+    const listed = createStoredDashboard("经营驾驶舱", "as-of", { published: true });
+    const runtime = structuredClone(listed);
+    const sourceRef = {
+      kind: "query-asset" as const,
+      assetId: "asset-revenue",
+      queryVersionId: "version-revenue",
+      outputKey: "output_002",
+      parameterValues: {}
+    };
+    runtime.publishedSchema!.dataBindings = {
+      revenue: {
+        id: "revenue", label: "收入", mode: "live", status: "success", sourceRef,
+        dataAsOf: "2026-07-10T12:00:00.000Z",
+        table: { columns: [{ key: "revenue", title: "收入", type: "number" }], rows: [{ revenue: 128 }], totalRows: 1 }
+      },
+      cost: {
+        id: "cost", label: "成本", mode: "live", status: "success", sourceRef,
+        dataAsOf: "2026-07-12T12:00:00.000Z",
+        table: { columns: [{ key: "cost", title: "成本", type: "number" }], rows: [{ cost: 64 }], totalRows: 1 }
+      }
+    };
+    vi.spyOn(dashboardAnalytics, "getDashboardRuntimeInitialData").mockReturnValue(undefined);
+    vi.spyOn(dashboardAnalytics, "getDashboardRuntime").mockResolvedValue(runtime);
+
+    renderPage();
+
+    // 取最早那一块，免得把旧数据说新了
+    expect(await screen.findByText(/^数据截至 7月10日/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^更新于 /)).toHaveLength(1);
+  });
+
   it("does not present the list snapshot as a live dashboard when runtime loading fails", async () => {
     createStoredDashboard("经营驾驶舱", "unavailable", { published: true });
     vi.spyOn(dashboardAnalytics, "getDashboardRuntimeInitialData").mockReturnValue(undefined);
@@ -243,35 +275,80 @@ describe("DashboardPage", () => {
     expect(localStorage.getItem(CURRENT_DASHBOARD_STORAGE_KEY)).toBe("dashboard-stock");
   });
 
-  it("keeps archive and delete apart in the settings menu", async () => {
+  it("offers delete instead of archive to the dashboard's owner", async () => {
     const user = userEvent.setup();
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
     createStoredDashboard("经营驾驶舱", "cockpit", { published: true });
+    setStoredDashboardOwners({ "dashboard-cockpit": 7 });
 
     renderPage();
     await openSettings(user);
 
-    ["编辑", "复制", "版本回滚", "分享", "归档"].forEach((action) => {
+    ["编辑", "复制", "版本回滚", "分享", "删除"].forEach((action) => {
       expect(screen.getByRole("menuitem", { name: action })).toBeInTheDocument();
     });
-    // 服务层只有 archiveDashboard，没有真删除接口，菜单里就不该出现"删除"
-    expect(screen.queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "归档" })).not.toBeInTheDocument();
   });
 
-  it("archives the current dashboard after an archive-worded confirmation", async () => {
+  it("does not offer delete on a dashboard shared into the space by someone else", async () => {
     const user = userEvent.setup();
-    createStoredDashboard("待归档看板", "archive");
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("同事共享的看板", "shared", { published: true });
+    setStoredDashboardOwners({ "dashboard-shared": 42 });
 
     renderPage();
     await openSettings(user);
-    await user.click(screen.getByRole("menuitem", { name: "归档" }));
 
-    expect(await screen.findByRole("dialog", { name: "归档看板" })).toHaveTextContent(
-      "归档“待归档看板”？归档后它会从看板广场移除，当前版本没有自助恢复入口。"
+    expect(screen.getByRole("menuitem", { name: "编辑" })).toBeInTheDocument();
+    // 后端只允许作者删除，别人的板点了只会得到 404
+    expect(screen.queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: "切换当前看板" }));
+    await waitFor(() => expect(document.querySelector(".ant-select-item-option")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: /^删除看板/ })).not.toBeInTheDocument();
+  });
+
+  it("deletes the current dashboard after a confirmation that says it cannot be undone", async () => {
+    const user = userEvent.setup();
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("待删除看板", "remove");
+    setStoredDashboardOwners({ "dashboard-remove": 7 });
+
+    renderPage();
+    await openSettings(user);
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
+
+    expect(await screen.findByRole("dialog", { name: "删除看板" })).toHaveTextContent(
+      "删除“待删除看板”？删除后无法恢复，已分享的链接也会失效。"
     );
-    await user.click(screen.getByRole("button", { name: "确认归档" }));
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
 
     expect(await screen.findByLabelText("我的看板空状态")).toBeInTheDocument();
     expect(createDashboardRepository(localStorage).list()).toHaveLength(0);
+  });
+
+  it("deletes another of the user's dashboards from the switcher and keeps the current one", async () => {
+    const user = userEvent.setup();
+    useDataHubAuthStore.getState().setAuth({ token: "token", userId: 7, username: "我", isAdmin: false });
+    createStoredDashboard("经营驾驶舱", "cockpit", { updatedAt: "2026-07-18T08:00:00.000Z" });
+    createStoredDashboard("库存周转", "stock", { updatedAt: "2026-07-15T08:00:00.000Z" });
+    setStoredDashboardOwners({ "dashboard-cockpit": 7, "dashboard-stock": 7 });
+    localStorage.setItem(CURRENT_DASHBOARD_STORAGE_KEY, "dashboard-cockpit");
+
+    renderPage();
+    expect(await screen.findByRole("region", { name: "当前看板：经营驾驶舱" })).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "切换当前看板" }));
+    await user.click(await screen.findByRole("button", { name: "删除看板「库存周转」" }));
+
+    expect(await screen.findByRole("dialog", { name: "删除看板" })).toHaveTextContent("删除“库存周转”？");
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => {
+      expect(createDashboardRepository(localStorage).list().map((record) => record.id)).toEqual(["dashboard-cockpit"]);
+    });
+    // 点删除按钮不能顺带把当前看板切过去，删完也不该跳到别的板
+    expect(screen.getByRole("region", { name: "当前看板：经营驾驶舱" })).toBeInTheDocument();
+    expect(localStorage.getItem(CURRENT_DASHBOARD_STORAGE_KEY)).toBe("dashboard-cockpit");
   });
 
   it("edits the current dashboard from the settings menu", async () => {
