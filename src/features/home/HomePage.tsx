@@ -2,6 +2,7 @@ import { XsAppCard, type XsAppCardData } from "@/components/xs/XsAppCard";
 import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { getXsCommandModelMeta } from "@/components/xs/XsCommandModelSelect";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
+import { useRef } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSessionQueryScope } from "@/app/sessionQuery";
@@ -19,6 +20,7 @@ import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscri
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { DataHubChatMode } from "@/types/dataHub";
+import { useCommandBoxHeight } from "./useCommandBoxHeight";
 import "./home.css";
 
 type RecommendedApp = XsAppCardData & {
@@ -146,6 +148,8 @@ export function HomePage() {
   const completeAskDataRun = useUiStore((state) => state.completeAskDataRun);
   const failAskDataRun = useUiStore((state) => state.failAskDataRun);
   const bindAskDataController = useUiStore((state) => state.bindAskDataController);
+  const pageRef = useRef<HTMLDivElement>(null);
+  useCommandBoxHeight(pageRef);
   const voiceInput = useVoiceInput({
     onAudioReady: async (audio, signal) => {
       setSentStatus("正在转写语音");
@@ -228,7 +232,7 @@ export function HomePage() {
   }
 
   return (
-    <div className="home-page">
+    <div className="home-page" ref={pageRef}>
       <img className="home-page__bg" src={homeWaveBg} alt="" aria-hidden="true" />
       <section className="home-page__hero" aria-labelledby="home-greeting">
         {homeChatMode === "agent" ? (
@@ -273,6 +277,7 @@ export function HomePage() {
         slotClassName="home-page__status-slot"
         message={sentStatus}
         transitionKey={sentStatus}
+        reserveSpace
       />
 
       {questions.length > 0 ? (

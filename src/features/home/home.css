@@ -1,24 +1,39 @@
-/* ---------- 首页布局基底 ---------- */
+/* ---------- 首页布局基底：以命令框为锚点 ---------- */
 
+/* 命令框是首页的视觉核心：它的中心钉在滚动区可视高度的中线上，问候语压在它上方，
+   推荐内容在它下方顺排，超出一屏交给外壳主区滚动。
+
+   --home-anchor 是命令框中心到 .home-page 顶边的距离。滚动区从 --home-shell-top 开始、
+   占满余下的视口高度，页面内容还要先让出滚动区的顶部留白 --home-shell-inset，
+   所以锚点 = 滚动区高度的一半 − 顶部留白；高度单位与外壳主区一致用 dvh。
+   外壳的两个几何值抄自 xs.css（主区顶部留白、移动端顶栏高度），那边改了这里要跟，
+   视觉用例按 ±8px 校验命令框中心与中线的偏差。
+   --home-command-height 由 useCommandBoxHeight 按实测写回；这里的 100px 是桌面单行
+   工具条的高度（62px 输入区 + 36px 工具条 + 2px 描边），只在测量之前兜底。 */
 .home-page {
   --home-track: 760px;
+  --home-shell-top: 0px;
+  --home-shell-inset: 16px;
+  --home-command-height: 100px;
+  --home-hero-gap: 32px;
+  --home-anchor: calc((100dvh - var(--home-shell-top)) / 2 - var(--home-shell-inset));
   position: relative;
   width: 100%;
-  min-height: calc(100vh - 108px);
   isolation: isolate;
 }
 
+/* 波纹以命令框顶边为基准：往上盖过问候语，往下垫到命令框之后，不随下方内容长短漂移。
+   横向铺满整个滚动区：左缘退到外壳折叠钮槽位的外侧，否则侧栏边上会露出一道没有波纹的底色。 */
 .home-page__bg {
   position: absolute;
   z-index: -1;
-  top: 40px;
-  left: 50%;
+  top: calc(var(--home-anchor) - var(--home-command-height) / 2 - 120px);
+  left: calc(-1 * var(--xs-shell-toggle-gutter, 0px));
   width: calc(100vw - var(--xs-sidebar-width));
   max-width: none;
-  height: 380px;
+  height: 340px;
   object-fit: cover;
   object-position: center 68%;
-  transform: translateX(-50%);
   opacity: 0.28;
   mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 24%, #000 68%, transparent 100%);
   pointer-events: none;
@@ -27,15 +42,22 @@
 
 /* ---------- 问候区：与命令框、推荐应用共享同一左轴 ---------- */
 
-/* 首屏问候区自己拿留白，主区 padding 保持与其他页面一致的 24px */
+/* 问候区占满锚点上方的整段高度，文字贴底、离命令框固定一个 --home-hero-gap。
+   各模式标题行数不同，变的只是这段高度里空出来的部分，命令框不会被推动。 */
 .home-page__hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
   width: min(100%, var(--home-track));
-  margin: 88px auto 40px;
+  min-height: calc(var(--home-anchor) - var(--home-command-height) / 2);
+  margin: 0 auto;
+  padding-bottom: var(--home-hero-gap);
   text-align: center;
 }
 
 .home-page__hero h1 {
-  margin: 0 0 10px;
+  margin: 0;
   color: var(--xs-text);
   font-size: var(--xs-fs-hero);
   line-height: 1.3;
@@ -105,10 +127,11 @@
   font-weight: var(--xs-fw-regular);
 }
 
-/* 命令框回执走全站状态条，跟着页面轨道居中 */
+/* 命令框回执走全站状态条，跟着页面轨道居中。槽位常驻预留一行（reserveSpace），
+   回执出现、消失时下方的推荐内容都不挪位。 */
 .home-page__status-slot {
   width: min(100%, var(--home-track));
-  margin: 14px auto 0;
+  margin: 12px auto 0;
   text-align: center;
 }
 
@@ -120,9 +143,11 @@
   max-width: var(--home-track);
 }
 
+/* 推荐内容是命令框之后的次级区：离命令框的总距离（状态条槽位 + 这段外边距）
+   明显大于问候语到命令框的距离，读起来问候语和命令框是一组，推荐另起一段。 */
 .home-page__apps {
   width: min(100%, var(--home-track));
-  margin: 40px auto 0;
+  margin: 24px auto 0;
 }
 
 .home-page__apps h2,
@@ -136,8 +161,7 @@
 
 /* 6 张推荐应用固定排成 3×2：列数写死才和命令框共用同一条左右轴，
    auto-fit 会随宽度改变列数，固定三列保留两行结构。
-   gap 是唯一一个不跟着视口高度收缩的间距，动它会把纵向节奏的改动漏到横向去；
-   矮屏要省的高度全从卡片自己的壳子里出。 */
+   gap 同时三等分 760px 轨道、决定卡片宽度，调它会连带改掉卡宽。 */
 .home-page__app-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -225,7 +249,7 @@
 
 .home-page__questions {
   width: min(100%, var(--home-track));
-  margin: 28px auto 0;
+  margin: 24px auto 0;
 }
 
 .home-page__question-grid {
@@ -255,102 +279,25 @@
   outline: none;
 }
 
-/* ---------- 桌面分段响应式：闲置态锁一屏，垂直节奏随视口高度收敛 ---------- */
+/* ---------- 移动端：锚点同样落在滚动区中线，卡片横排 ---------- */
 
-/* 首页闲置态要在 720 高的笔记本上一屏放下问候语 + 输入框 + 6 张卡，
-   所以整页只留一套刻度：留白、卡片、卡内图标全部从下面这几个变量派生，
-   调一档就整体等比缩放，不会出现"改了间距忘了卡片"的错位。
-
-   斜率写成 clamp(min, calc(N vh - M px), max) 而不是纯 vh：纯 vh 在矮屏上压不动
-   （旧的 12vh 到 720 高还剩 86px 的顶部留白），在 1440 高的外接屏又会散架成一版空白。
-   带负截距的斜率能在 720~1080 之间画出一条真正收敛的线，两端再由 min/max 兜住。 */
-@media (min-width: 901px) {
-  .home-page {
-    --home-hero-top: clamp(40px, calc(40vh - 244px), 124px);
-    --home-hero-gap: clamp(22px, calc(6vh - 20px), 46px);
-    --home-apps-gap: clamp(20px, calc(6vh - 22px), 44px);
-    --home-apps-title-gap: clamp(10px, 1.6vh, 18px);
-    --home-card-height: clamp(144px, calc(20vh - 18px), 168px);
-    --home-card-pad-top: 14px;
-    --home-card-pad-bottom: 12px;
-    --home-card-stack-gap: 10px;
-    --home-card-tile: 44px;
-    --home-card-glyph: 34px;
-    --home-card-desc: 36px;
-
-    min-height: 0;
-  }
-
-  /* 外壳主区自带 16px / 56px 的上下留白，短屏上这 72px 差不多正好是"最后一行卡片
-     露不出来"的那 72px。这里按路由把它换成同一套刻度，选择器只命中首页，
-     其他页面的外壳节奏不动（与 .xs-shell__main:has(.table-session-page) 同一手法）。 */
-  .xs-shell__main:has(.home-page) {
-    padding-top: clamp(12px, 1.6vh, 16px);
-    padding-bottom: clamp(20px, 3vh, 44px);
-  }
-
-  .home-page__bg {
-    top: 16px;
-    height: min(340px, 38vh);
-  }
-
-  .home-page__hero {
-    margin: var(--home-hero-top) auto var(--home-hero-gap);
-  }
-
-  .home-page__apps,
-  .home-page__questions {
-    margin-top: var(--home-apps-gap);
-  }
-
-  .home-page__apps h2,
-  .home-page__questions h2 {
-    margin-bottom: var(--home-apps-title-gap);
-  }
-
-  /* 卡片自然高度（图标 + 标题 + 两行描述 + 内边距）在原尺寸下就有 168px，
-     只调 min-height 压不到 150px 档，所以壳子里的内边距、图标、行距一起跟着刻度走。 */
-  .home-page .xs-app-card {
-    min-height: var(--home-card-height);
-    padding: var(--home-card-pad-top) 16px var(--home-card-pad-bottom);
-  }
-
-  /* 卡片高度现在跟着视口伸缩，内容再顶格排就会在高屏上留出一块死白；
-     居中后多出来的高度上下对半分，六张卡的图标依然在同一条基线上
-     （描述区有固定的两行位，行数差不会把图标推歪）。 */
-  .home-page .xs-app-card__main {
-    gap: var(--home-card-stack-gap);
-    justify-content: center;
-  }
-
-  .home-page .xs-app-card .xs-icon-tile {
-    --xs-icon-tile-size: var(--home-card-tile);
-  }
-
-  .home-page .xs-app-card .xs-icon-tile__image {
-    --xs-icon-glyph-size: var(--home-card-glyph);
-  }
-
-  /* 描述给两行留位，矮屏收到 36px（12px × 1.5 × 2 行）仍是整两行，不截字。 */
-  .home-page .xs-app-card__desc {
-    min-height: var(--home-card-desc);
-  }
-}
-
-/* ---------- 移动端：横排卡片、紧凑工具栏 ---------- */
-
+/* 窄屏也把命令框放在首屏中线上：和桌面同一套锚点，只换外壳几何——滚动区在 64px 顶栏
+   之下、自带 24px 顶部留白。问候语离命令框收紧到 24px，给下方推荐多露一点。 */
 @media (max-width: 900px) {
   .home-page {
-    min-height: auto;
+    --home-shell-top: 64px;
+    --home-shell-inset: 24px;
+    --home-hero-gap: 24px;
   }
 
+  /* 窄屏主区左右留白对称，按视口整宽居中铺开即可贴满滚动区；
+     命令框折行后最高 168px，波纹高度按它留足，下缘仍垫在命令框之后。 */
   .home-page__bg {
-    top: 88px;
-    height: 240px;
-  }
-
-  .home-page__hero {
-    margin: 40px auto 32px;
+    top: calc(var(--home-anchor) - var(--home-command-height) / 2 - 110px);
+    left: 50%;
+    width: 100vw;
+    height: 280px;
+    transform: translateX(-50%);
   }
 
   .home-page__app-grid {

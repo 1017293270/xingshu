@@ -1244,7 +1244,10 @@ test("home page matches the reference welcome workbench composition", async ({ p
   await settleResponsiveLayout(page);
 
   const metrics = await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>(".xs-shell__main");
     const hero = document.querySelector(".home-page__hero");
+    const greeting = document.querySelector(".home-page__hero h1");
+    const subtitle = document.querySelector(".home-page__hero p");
     const background = document.querySelector<HTMLImageElement>(".home-page__bg");
     const command = document.querySelector(".home-page .xs-command-box");
     const apps = document.querySelector(".home-page__apps");
@@ -1258,7 +1261,10 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const modelButton = document.querySelector<HTMLElement>(".home-page .xs-command-model-select");
 
     if (
+      !main ||
       !hero ||
+      !greeting ||
+      !subtitle ||
       !background ||
       !command ||
       !apps ||
@@ -1274,7 +1280,11 @@ test("home page matches the reference welcome workbench composition", async ({ p
       return null;
     }
 
+    const mainRect = main.getBoundingClientRect();
     const heroRect = hero.getBoundingClientRect();
+    const greetingRect = greeting.getBoundingClientRect();
+    const subtitleRect = subtitle.getBoundingClientRect();
+    const backgroundRect = background.getBoundingClientRect();
     const commandRect = command.getBoundingClientRect();
     const appsRect = apps.getBoundingClientRect();
     const cardRect = firstCard.getBoundingClientRect();
@@ -1288,14 +1298,22 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const sendStyles = window.getComputedStyle(sendButton);
 
     return {
-      heroTop: heroRect.top,
+      commandCenterOffset: commandRect.top + commandRect.height / 2 - (mainRect.top + main.clientHeight / 2),
+      greetingTop: greetingRect.top,
+      greetingGap: commandRect.top - subtitleRect.bottom,
       commandWidth: commandRect.width,
+      commandBottom: commandRect.bottom,
       sameTrack: Math.abs(commandRect.width - appsRect.width) < 1 && Math.abs(commandRect.left - appsRect.left) < 1
         && Math.abs(heroRect.width - appsRect.width) < 1 && Math.abs(heroRect.left - appsRect.left) < 1,
       appsColumns: getComputedStyle(document.querySelector(".home-page__app-grid")!).gridTemplateColumns.split(" ").length,
       inputHeight: input.getBoundingClientRect().height,
       commandHeight: commandRect.height,
-      appsTop: appsRect.top,
+      appsGap: appsRect.top - commandRect.bottom,
+      backgroundSpan: [backgroundRect.top, backgroundRect.bottom],
+      backgroundEdges: [
+        backgroundRect.left - mainRect.left,
+        backgroundRect.right - (mainRect.left + main.clientWidth)
+      ],
       cardHeight: cardRect.height,
       cardWidth: cardRect.width,
       descriptionDisplay: descriptionStyles.display,
@@ -1317,8 +1335,18 @@ test("home page matches the reference welcome workbench composition", async ({ p
 
   expect(metrics).not.toBeNull();
   expect(metrics!.backgroundLoaded).toBe(true);
-  expect(metrics!.heroTop).toBeGreaterThanOrEqual(120);
-  expect(metrics!.heroTop).toBeLessThanOrEqual(190);
+  // 命令框是视觉核心：中心落在滚动区可视高度的中线上
+  expect(Math.abs(metrics!.commandCenterOffset)).toBeLessThanOrEqual(8);
+  // 问候语紧贴命令框上方；推荐应用另起一段，离命令框明显更远
+  expect(metrics!.greetingGap).toBeGreaterThanOrEqual(24);
+  expect(metrics!.greetingGap).toBeLessThanOrEqual(40);
+  expect(metrics!.appsGap).toBeGreaterThanOrEqual(48);
+  expect(metrics!.appsGap).toBeLessThanOrEqual(96);
+  // 波纹垫在问候语到命令框这一段背后，左右铺满滚动区，不露出没有波纹的底色
+  expect(metrics!.backgroundSpan[0]).toBeLessThanOrEqual(metrics!.greetingTop);
+  expect(metrics!.backgroundSpan[1]).toBeGreaterThanOrEqual(metrics!.commandBottom);
+  expect(metrics!.backgroundEdges[0]).toBeLessThanOrEqual(0.5);
+  expect(metrics!.backgroundEdges[1]).toBeGreaterThanOrEqual(-0.5);
   expect(metrics!.commandWidth).toBeGreaterThanOrEqual(760);
   expect(metrics!.commandWidth).toBeLessThanOrEqual(760);
   expect(metrics!.sameTrack).toBe(true);
@@ -1326,10 +1354,9 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.inputHeight).toBeGreaterThanOrEqual(24);
   expect(metrics!.commandHeight).toBeGreaterThanOrEqual(96);
   expect(metrics!.commandHeight).toBeLessThanOrEqual(150);
-  expect(metrics!.appsTop).toBeGreaterThanOrEqual(300);
-  expect(metrics!.appsTop).toBeLessThanOrEqual(560);
-  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(144);
-  expect(metrics!.cardHeight).toBeLessThanOrEqual(180);
+  // 卡片保持正常尺寸，不再按视口高度压缩
+  expect(metrics!.cardHeight).toBeGreaterThanOrEqual(156);
+  expect(metrics!.cardHeight).toBeLessThanOrEqual(176);
   expect(metrics!.cardWidth).toBeGreaterThanOrEqual(240);
   expect(metrics!.cardWidth).toBeLessThanOrEqual(260);
   expect(["-webkit-box", "flow-root"]).toContain(metrics!.descriptionDisplay);
@@ -1348,6 +1375,56 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.quickPromptCount).toBe(0);
   expect(metrics!.generatedIconCount).toBe(6);
   expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
+});
+
+test("home keeps the command box on the midline while modes and receipts change", async ({ page }) => {
+  // 按滚动内容坐标量：点下方卡片会让主区滚动，视口坐标会跟着变
+  const layout = () =>
+    page.evaluate(() => {
+      const main = document.querySelector<HTMLElement>(".xs-shell__main")!;
+      const mainTop = main.getBoundingClientRect().top;
+      const offset = (selector: string) => {
+        const rect = document.querySelector(selector)!.getBoundingClientRect();
+        return { top: rect.top - mainTop + main.scrollTop, height: rect.height };
+      };
+      const command = offset(".home-page .xs-command-box");
+      return {
+        commandTop: command.top,
+        commandCenterOffset: command.top + command.height / 2 - main.clientHeight / 2,
+        lowerTop: offset(".home-page__apps, .home-page__questions").top
+      };
+    });
+
+  for (const [width, height] of [[1440, 900], [1366, 720], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
+    await settleResponsiveLayout(page);
+    const idle = await layout();
+    expect(Math.abs(idle.commandCenterOffset)).toBeLessThanOrEqual(8);
+
+    // 标题在两行与一行之间切换、推荐应用换成推荐问题，命令框都不动
+    for (const [label, heading] of [
+      ["问数", "从一个经营数据问题开始"],
+      ["问知", "从一个企业知识问题开始"],
+      ["找文档", "从一份企业文档开始"],
+      ["编排", "您好，张三"]
+    ]) {
+      await page.getByRole("button", { name: `切换到${label}模型` }).click();
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await settleResponsiveLayout(page);
+      expect(Math.abs((await layout()).commandTop - idle.commandTop)).toBeLessThanOrEqual(1);
+    }
+
+    // 回执落进常驻槽位：命令框和推荐区都不挪位
+    await page.getByRole("button", { name: /^打开 会议纪要/ }).click();
+    await expect(page.locator(".home-page__status-slot").getByRole("status")).toHaveText("待开放，敬请期待");
+    await settleResponsiveLayout(page);
+    const withReceipt = await layout();
+    expect(Math.abs(withReceipt.commandTop - idle.commandTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(withReceipt.lowerTop - idle.lowerTop)).toBeLessThanOrEqual(1);
+    await expectNoHorizontalOverflow(page);
+  }
 });
 
 test("home model selector exposes all modes and recommendation cards open their workspaces", async ({ page }) => {
@@ -1667,7 +1744,7 @@ test("reduced motion keeps feedback visible while suppressing nonessential motio
 
 test.describe("desktop content density", () => {
   const wideTrackCases = [
-    { path: "/", selector: ".home-page__apps", minWidth: 1439, maxWidth: 1441 },
+    { path: "/", selector: ".home-page__apps", minWidth: 759, maxWidth: 761 },
     { path: "/table", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/cloud", selector: ".xs-page", minWidth: 1479, maxWidth: 1481 },
     { path: "/writing", selector: ".official-document-app", minWidth: 1800, maxWidth: 2000 },
@@ -1726,7 +1803,7 @@ test.describe("desktop content density", () => {
 });
 
 
-test("home keeps all three tracks aligned across desktop tiers and short screens", async ({ page }) => {
+test("home keeps all three tracks aligned and the command box centered across desktop tiers and short screens", async ({ page }) => {
   for (const [width, height, track] of [[1440, 900, 760], [1672, 941, 760], [1920, 1080, 760], [2200, 1100, 760], [1366, 720, 760], [390, 844, 760]]) {
     await page.setViewportSize({ width, height });
     await page.goto("/");
@@ -1734,6 +1811,7 @@ test("home keeps all three tracks aligned across desktop tiers and short screens
     await settleResponsiveLayout(page);
     const metrics = await page.evaluate(() => {
       const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const main = document.querySelector<HTMLElement>(".xs-shell__main")!;
       const host = rect(".home-page");
       const hero = rect(".home-page__hero");
       const command = rect(".home-page .xs-command-box");
@@ -1741,15 +1819,21 @@ test("home keeps all three tracks aligned across desktop tiers and short screens
       const cards = document.querySelectorAll(".home-page .xs-app-card");
       return { available: host.width, widths: [hero.width, command.width, apps.width],
         lefts: [hero.left, command.left, apps.left], count: cards.length,
-        lastBottom: cards[cards.length - 1]!.getBoundingClientRect().bottom,
+        midlineOffset: command.top + command.height / 2 - (main.getBoundingClientRect().top + main.clientHeight / 2),
         columns: getComputedStyle(document.querySelector(".home-page__app-grid")!).gridTemplateColumns.split(" ").length };
     });
     for (const actual of metrics.widths) expect(actual).toBeCloseTo(Math.min(track, metrics.available), 0);
     expect(Math.max(...metrics.lefts) - Math.min(...metrics.lefts)).toBeLessThanOrEqual(1);
     expect(metrics.count).toBe(6);
     expect(metrics.columns).toBe(width > 900 ? 3 : 1);
-    if (height === 720) expect(metrics.lastBottom).toBeLessThanOrEqual(height);
+    expect(Math.abs(metrics.midlineOffset)).toBeLessThanOrEqual(8);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: `outputs/e2e-fixes-2026-09-07/regression/home-${width}x${height}.png`, animations: "disabled", fullPage: true });
+    // 推荐应用超出首屏是允许的，但必须能滚到最后一张
+    const lastCard = page.locator(".home-page .xs-app-card").last();
+    await lastCard.scrollIntoViewIfNeeded();
+    const lastBox = await lastCard.boundingBox();
+    expect(lastBox).not.toBeNull();
+    expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(height + 1);
   }
 });

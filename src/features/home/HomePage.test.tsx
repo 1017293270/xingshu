@@ -208,27 +208,59 @@ describe("HomePage", () => {
     expect(screen.queryByText("Ctrl/⌘ + Enter 发送")).not.toBeInTheDocument();
   });
 
-  /* 闲置态"一屏放下"是验收线：jsdom 量不了布局，这里锁住撑起这条线的几个机制。
-     720 高的笔记本上，缺任何一项最后一行卡片都会掉到折叠线以下。 */
-  it("keeps the idle home page inside one screen on short laptops", () => {
+  /* 命令框中心落在滚动区中线上是验收线：jsdom 量不了布局，这里锁住撑起这条线的几条规则，
+     实际偏差由视觉用例按 ±8px 实测。 */
+  it("anchors the command box on the scroll area's midline", () => {
     const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
 
-    /* 外壳的 16/56 上下留白按路由换成随视口收敛的刻度，且只命中首页 */
+    /* 锚点 = 滚动区高度的一半 − 滚动区顶部留白，高度单位跟外壳主区一样用 dvh */
+    expect(homeCss).toContain(
+      "--home-anchor: calc((100dvh - var(--home-shell-top)) / 2 - var(--home-shell-inset));"
+    );
+    /* 问候区撑满锚点上方、文字贴底：各模式标题行数不同，只改变区内空白，不推动命令框 */
     expect(homeCss).toMatch(
-      /\.xs-shell__main:has\(\.home-page\) \{\n\s+padding-top: clamp\([^)]*\);\n\s+padding-bottom: clamp\([^;]*vh[^;]*;/
+      /\.home-page__hero \{[^}]*justify-content: flex-end;[^}]*min-height: calc\(var\(--home-anchor\) - var\(--home-command-height\) \/ 2\);[^}]*padding-bottom: var\(--home-hero-gap\);/
     );
-    /* 留白与卡片走同一套带负截距的斜率，纯 vh 在矮屏上压不动 */
-    expect(homeCss).toMatch(/--home-hero-top: clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\);/);
-    expect(homeCss).toMatch(/--home-card-height: clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\);/);
-    expect(homeCss).toMatch(/\.home-page__hero \{\n\s+margin: var\(--home-hero-top\) auto var\(--home-hero-gap\);/);
-    expect(homeCss).toContain("min-height: var(--home-card-height);");
-    /* 卡片自然高度由内边距 + 图标 + 描述位撑起，只调 min-height 压不到 150px 档 */
-    expect(homeCss).toContain("--xs-icon-tile-size: var(--home-card-tile);");
-    expect(homeCss).toContain("min-height: var(--home-card-desc);");
-    /* 一屏锁只加在桌面档，移动端仍是可滚动的长页 */
-    expect(homeCss).not.toMatch(
-      /@media \(max-width: 900px\)[\s\S]*?\.xs-shell__main:has\(\.home-page\)/
+    /* 背景波纹以命令框顶边为基准，跟着问候语和命令框走 */
+    expect(homeCss).toMatch(
+      /\.home-page__bg \{[^}]*top: calc\(var\(--home-anchor\) - var\(--home-command-height\) \/ 2 - \d+px\);/
     );
+    /* 窄屏同一套锚点，只换外壳几何：64px 顶栏、24px 顶部留白 */
+    expect(homeCss).toMatch(
+      /@media \(max-width: 900px\) \{\n\s+\.home-page \{\n\s+--home-shell-top: 64px;\n\s+--home-shell-inset: 24px;/
+    );
+    /* 锚点按外壳的默认留白计算，首页不能再按路由改外壳留白 */
+    expect(homeCss).not.toContain(".xs-shell__main:has(.home-page)");
+    /* 除锚点外没有随视口高度伸缩的刻度：推荐应用保持正常尺寸，超出一屏交给滚动 */
+    expect(homeCss.replaceAll("100dvh", "")).not.toMatch(/[\d.]+d?vh/);
+  });
+
+  /* 命令框之前只能有问候区，之后常驻一行回执槽位：
+     插进别的块会把命令框挤离中线，槽位不预留则回执一出现推荐区就跳。 */
+  it("keeps the command box between the greeting and a reserved status slot in every mode", async () => {
+    const user = userEvent.setup();
+    const { container } = renderHomePage();
+    const layout = () =>
+      Array.from(container.querySelector(".home-page")!.children, (element) => element.classList[0]);
+
+    expect(layout()).toEqual([
+      "home-page__bg",
+      "home-page__hero",
+      "xs-command-box",
+      "xs-status-bar-slot",
+      "home-page__apps"
+    ]);
+    expect(container.querySelector(".home-page__status-slot")).toHaveClass("xs-status-bar-slot--reserved");
+
+    await user.click(screen.getByRole("button", { name: "切换到问数模型" }));
+    expect(layout()).toEqual([
+      "home-page__bg",
+      "home-page__hero",
+      "xs-command-box",
+      "xs-status-bar-slot",
+      "home-page__questions"
+    ]);
+    expect(container.querySelector(".home-page__status-slot")).toHaveClass("xs-status-bar-slot--reserved");
   });
 
   it("opens the ask workspace from the full card and selects its model", async () => {
