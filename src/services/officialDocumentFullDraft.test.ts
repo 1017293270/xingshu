@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { installBrowserUuidCompatibility } from "@/app/browserCompatibility";
 import { MAX_OFFICIAL_DOCUMENT_CHARTS } from "@/services/officialDocumentResearchService";
 import type {
   OfficialDocumentDraftContent,
@@ -80,6 +81,32 @@ function referenceContent(blocks: OfficialDocumentDraftContent["blocks"]): Offic
 }
 
 describe("reference draft generation", () => {
+  it.each([true, false])("parses generated reports over HTTP without native randomUUID (anchored=%s)", (anchored) => {
+    const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+    vi.stubGlobal("crypto", { getRandomValues });
+    try {
+      installBrowserUuidCompatibility();
+      const result = parseOfficialDocumentReferenceGeneration({
+        markdown: [
+          ...(anchored ? ["[[XS_FIXED:title-slot]]", "关于事件处理情况的报告", "[[XS_SECTION:section-1]]"] : []),
+          "一、事件概述",
+          "本次事件已完成调查核实，相关部门正在落实整改措施。"
+        ].join("\n"),
+        referenceDraftTitle: "事件处理情况报告",
+        sections: [{ id: "section-1", order: 0, title: "一、事件概述", headingRole: "HEADING_1", bodyRequired: true }],
+        fixedFields: [{ slotId: "title-slot", role: "TITLE", roleLabel: "标题", required: true, preview: "事件处理情况报告" }],
+        templateNodes
+      });
+      expect(result.blocks.some((block) => block.text.includes("已完成调查核实"))).toBe(true);
+      expect(result.blocks.length).toBeGreaterThan(1);
+      const ids = result.blocks.map((block) => block.id);
+      ids.forEach((id) => expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
+      expect(new Set(ids).size).toBe(ids.length);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("builds a structure-and-style context without copying fixed values or data blocks", () => {
     const plan = buildOfficialDocumentReferenceWritingPlan({
       referenceDraft: { id: "draft-old", title: "旧草稿", templateName: "通知模板" },

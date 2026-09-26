@@ -31,6 +31,8 @@ test(`${retryAfterReload ? "保存失败刷新重试：" : ""}成稿保存并刷
     ], tables: [], headersAndFooters: [] }, engineCapabilityReport: { available: true, licensed: true } }
   }] };
   await page.addInitScript(() => {
+    // Match the HTTP 119 deployment: secure-context-only randomUUID is absent.
+    Object.defineProperty(crypto, "randomUUID", { configurable: true, writable: true, value: undefined });
     localStorage.setItem("xingshu_datahub_token", "isolated-compose-save");
     localStorage.setItem("xingshu_datahub_user", JSON.stringify({ userId: 1, username: "compose-save", isAdmin: false }));
     localStorage.setItem("xingshu_datahub_space_id", "1");
