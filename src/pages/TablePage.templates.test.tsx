@@ -20,9 +20,27 @@ vi.mock("@/services/tableTemplateService", async (importOriginal) => ({
   ...templateMocks
 }));
 
-vi.mock("@/services/tableService", () => ({
-  listRecentTables: vi.fn().mockResolvedValue([])
+const tableMocks = vi.hoisted(() => ({
+  listRecentTables: vi.fn()
 }));
+
+vi.mock("@/services/tableService", () => ({
+  listRecentTables: tableMocks.listRecentTables
+}));
+
+/** 我的表格里的一行：id 与标题按序号编，更新时间从 9 月 20 日往前排，列表顺序即序号顺序。 */
+function tableSession(index: number) {
+  const day = String(20 - index).padStart(2, "0");
+  return {
+    id: `ask-table-${index}`,
+    title: `制表会话 ${index}`,
+    tag: "清单" as const,
+    description: `2026-08-${day} 10:00`,
+    iconId: "contact-list" as const,
+    prompt: `制表会话 ${index} 的完整要求`,
+    updatedAt: `2026-08-${day}T10:00:00`
+  };
+}
 
 function renderTablePage() {
   return render(
@@ -36,6 +54,7 @@ function renderTablePage() {
 
 describe("TablePage 表格模板选项卡", () => {
   beforeEach(() => {
+    tableMocks.listRecentTables.mockReset().mockResolvedValue([]);
     templateMocks.listTableTemplates.mockReset().mockResolvedValue([
       {
         id: 1,
@@ -49,26 +68,67 @@ describe("TablePage 表格模板选项卡", () => {
     templateMocks.deleteTableTemplate.mockReset().mockResolvedValue(undefined);
   });
 
-  it("切到模板页展示模板与结构列数，默认页仍是最近制表", async () => {
+  it("切到模板页展示模板与结构列数，默认页是我的表格", async () => {
     const user = userEvent.setup();
     renderTablePage();
 
-    expect(screen.getByLabelText("最近制表记录")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "我的表格列表" })).toBeInTheDocument();
     expect(templateMocks.listTableTemplates).not.toHaveBeenCalled();
 
     await user.click(screen.getByText("表格模板"));
     expect(await screen.findByText("季度合同台账")).toBeInTheDocument();
     expect(screen.getByText("2 列结构")).toBeInTheDocument();
-    expect(screen.queryByLabelText("最近制表记录")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "我的表格列表" })).not.toBeInTheDocument();
   });
 
-  it("选项卡不挂原生 title，鼠标扫过不会飘出重复的提示条", async () => {
+  it("只留我的表格与表格模板两个选项卡，选项卡不挂原生 title", async () => {
     renderTablePage();
 
     const tabs = screen.getByLabelText("制表内容切换");
-    for (const text of ["最近制表", "我的表格", "表格模板"]) {
+    expect(within(tabs).getAllByRole("radio")).toHaveLength(2);
+    expect(within(tabs).queryByText("最近制表")).not.toBeInTheDocument();
+    for (const text of ["我的表格", "表格模板"]) {
       expect(within(tabs).getByText(text)).toHaveAttribute("title", "");
     }
+  });
+
+  it("我的表格列出全部制表会话：先露 10 条，文字链接展开其余，行上可复制制表要求", async () => {
+    const user = userEvent.setup();
+    tableMocks.listRecentTables.mockResolvedValue(Array.from({ length: 13 }, (_, index) => tableSession(index)));
+    renderTablePage();
+
+    const list = await screen.findByRole("region", { name: "我的表格列表" });
+    await waitFor(() => expect(within(list).getAllByRole("article")).toHaveLength(10));
+    expect(screen.getByText("13 个制表会话 · 点击回到会话，未出表的也在其中")).toBeInTheDocument();
+    expect(within(list).getByRole("link", { name: "打开制表会话：制表会话 0" })).toHaveAttribute(
+      "href",
+      "/table/ask-table-0"
+    );
+    expect(within(list).queryByText("制表会话 10")).not.toBeInTheDocument();
+    // 没有分页器，只有一条文字链接
+    expect(within(list).queryByRole("navigation")).not.toBeInTheDocument();
+
+    const more = within(list).getByRole("button", { name: "展开全部 13 条" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    await user.click(more);
+    expect(within(list).getAllByRole("article")).toHaveLength(13);
+    expect(within(list).getByText("制表会话 12")).toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: "收起" }));
+    expect(within(list).getAllByRole("article")).toHaveLength(10);
+
+    const row = within(list).getByRole("article", { name: /制表会话 3/ });
+    await user.click(within(row).getByRole("button", { name: "复制制表要求" }));
+    expect(screen.getByRole("textbox", { name: "制表需求" })).toHaveValue("制表会话 3 的完整要求");
+  });
+
+  it("会话不超过 10 条时不出展开链接", async () => {
+    tableMocks.listRecentTables.mockResolvedValue(Array.from({ length: 10 }, (_, index) => tableSession(index)));
+    renderTablePage();
+
+    const list = await screen.findByRole("region", { name: "我的表格列表" });
+    await waitFor(() => expect(within(list).getAllByRole("article")).toHaveLength(10));
+    expect(within(list).queryByRole("button", { name: /展开全部/ })).not.toBeInTheDocument();
   });
 
   it("新建模板经弹窗保存并刷新列表", async () => {
@@ -115,8 +175,9 @@ describe("TablePage 表格模板选项卡", () => {
     const bar = container.querySelector<HTMLElement>(".table-home-tabs");
     expect(bar).not.toBeNull();
     expect(within(bar!).getByLabelText("制表内容切换")).toBeInTheDocument();
-    expect(within(bar!).getByText(/条记录 · 点击打开当时的结果表/)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "最近制表" })).not.toBeInTheDocument();
+    /* 口径照实说：列表是制表会话，不保证每条都出了表 */
+    expect(await within(bar!).findByText("0 个制表会话 · 点击回到会话，未出表的也在其中")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "我的表格" })).not.toBeInTheDocument();
 
     await user.click(screen.getByText("表格模板"));
     expect(within(bar!).getByText("保存常用的制表提示词与表结构，一键复用")).toBeInTheDocument();
@@ -166,26 +227,19 @@ describe("TablePage 入口页一屏布局", () => {
     expect(workflowsCss).toMatch(/\.sheet-row__cols,\n\s*\.sheet-row__meta > em \{\n\s+flex: none;/);
   });
 
-  /* 输入盒的纵向刻度是从首页抄来的同值副本（故意不跨文件引用变量）。
-     这条测试是那份约定的看门人：首页改了刻度而这里没跟，/ 与 /table 之间输入盒就会跳位。 */
-  it("制表输入盒的纵向刻度与首页逐值一致", () => {
-    const homeCss = readCss("src/features/home/home.css");
+  /* 一屏装下靠的是随视口高度收放的纵向刻度：写死成定值，矮屏上列表就会被挤没。 */
+  it("制表输入盒的纵向刻度随视口高度收放，抬头槽位定高", () => {
+    const scale = (name: string) => workflowsCss.match(new RegExp(`--${name}: ([^;]+);`))?.[1]?.trim();
 
-    const scale = (css: string, name: string) => {
-      const hit = css.match(new RegExp(`--${name}: ([^;]+);`));
-      return hit?.[1]?.trim();
-    };
+    expect(scale("table-hero-top")).toMatch(/^clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\)$/);
+    expect(scale("table-hero-gap")).toMatch(/^clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\)$/);
 
-    expect(scale(workflowsCss, "table-hero-top")).toBe(scale(homeCss, "home-hero-top"));
-    expect(scale(workflowsCss, "table-hero-gap")).toBe(scale(homeCss, "home-hero-gap"));
-    expect(scale(workflowsCss, "table-hero-top")).toMatch(/^clamp\(\d+px, calc\([\d.]+vh - \d+px\), \d+px\)$/);
+    /* 外壳留白同样跟着视口高度走，矮屏把高度让给列表 */
+    expect(workflowsCss).toMatch(
+      /\.xs-shell__main:has\(\.table-page\) \{[\s\S]*?padding-top: clamp\(\d+px, [\d.]+vh, \d+px\);/
+    );
 
-    /* 外壳上下留白也得同值，否则整段一起偏 */
-    const shellPadTop = (css: string, page: string) =>
-      css.match(new RegExp(`\\.xs-shell__main:has\\(\\.${page}\\) \\{[\\s\\S]*?padding-top: ([^;]+);`))?.[1]?.trim();
-    expect(shellPadTop(workflowsCss, "table-page")).toBe(shellPadTop(homeCss, "home-page"));
-
-    /* 制表页抬头只有一行标题，靠固定高度补齐首页"问候语 + 副标题"的两行位 */
+    /* 抬头槽位定高：标题字形或换行变化时输入盒顶边不跟着跳 */
     expect(workflowsCss).toMatch(/--table-hero-head: [\d.]+px;/);
     expect(workflowsCss).toMatch(/\.table-page \.table-hero__head \{\n\s+min-height: var\(--table-hero-head\);/);
     expect(workflowsCss).toMatch(/\.table-page \.table-hero \{[\s\S]*?padding: var\(--table-hero-top\) 0 14px;/);

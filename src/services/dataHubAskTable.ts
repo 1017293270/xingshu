@@ -1,11 +1,10 @@
+import { stripTemplateLaunchReference } from "@/services/tableTemplateService";
 import type { DataHubAskTableChatMode, DataHubChatSession } from "@/types/dataHub";
 import type { TableTemplate } from "@/types/table";
 
 /** 与 DataHub 问表页一致：会话表不存模式，用 sessionId 前缀做总记录隔离。 */
 export const ASK_TABLE_SESSION_PREFIX = "ask-table-";
 export const ASK_TABLE_CHAT_MODE: DataHubAskTableChatMode = "ask_table";
-
-const RECENT_ASK_TABLE_LIMIT = 8;
 
 export function createAskTableSessionId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -47,9 +46,21 @@ export function inferAskTablePresentation(title: string): Pick<TableTemplate, "t
   return { tag: "清单", iconId: "contact-list" };
 }
 
+/**
+ * 制表会话的标题 = 这次会话的第一句话：取第一行非空文本，行内空白收成一个空格。
+ * 多行需求只拿首行，模板发起时空一行拼上的「表结构参考」连同后端截断留下的半截都在后面几行，自然落掉。
+ * 会话页页头、顶栏会话下拉、我的表格列表都走这一个口径，同一个会话在三处读起来是同一句话。
+ */
+export function formatAskTableSessionTitle(text?: string | null) {
+  const firstLine = (text ?? "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "";
+  return firstLine.replace(/\s+/g, " ");
+}
+
 export function mapAskTableSessionToTemplate(session: DataHubChatSession): TableTemplate {
   const sessionId = session.sessionId || String(session.id);
-  const title = session.title?.trim() || "未命名制表";
+  // 后端会话标题就是首条用户消息（超 50 字截断），所以它既是列表标题的来源，也是「复制制表要求」的原文
+  const rawTitle = session.title?.trim() ?? "";
+  const title = formatAskTableSessionTitle(rawTitle) || "未命名制表";
   const presentation = inferAskTablePresentation(title);
 
   const updatedAt = session.updatedAt || session.createdAt;
@@ -58,12 +69,16 @@ export function mapAskTableSessionToTemplate(session: DataHubChatSession): Table
     id: sessionId,
     title,
     description: formatSessionTime(updatedAt),
-    prompt: title,
+    prompt: stripTemplateLaunchReference(rawTitle) || title,
     updatedAt,
     ...presentation
   };
 }
 
+/**
+ * 当前空间里的全部制表会话，最近更新的在前。后端这个列表不分页，这里也不截断：
+ * 列表页要能翻到每一个会话，露出几条由展示层自己决定（我的表格先露 10 条、会话下拉留最近一批）。
+ */
 export function selectRecentAskTableTemplates(sessions: DataHubChatSession[]): TableTemplate[] {
   return [...sessions]
     .filter(isAskTableSession)
@@ -72,6 +87,5 @@ export function selectRecentAskTableTemplates(sessions: DataHubChatSession[]): T
       const rightTime = String(right.updatedAt || right.createdAt || "");
       return rightTime.localeCompare(leftTime);
     })
-    .slice(0, RECENT_ASK_TABLE_LIMIT)
     .map(mapAskTableSessionToTemplate);
 }

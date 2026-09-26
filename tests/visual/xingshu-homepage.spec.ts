@@ -649,9 +649,11 @@ test("restores a recent table into the table agent workspace", async ({ page }) 
   await page.goto("/table");
   await expect(page.getByRole("heading", { name: "想做一张什么表？", level: 1 })).toBeVisible();
 
-  await page.getByRole("link", { name: "打开制表结果：客户销售排行榜表" }).click();
+  await page.getByRole("link", { name: "打开制表会话：客户销售排行榜表" }).click();
 
   await expect(page.getByRole("region", { name: "制表对话" })).toBeVisible();
+  // 页头是这次会话的第一句话
+  await expect(page.getByRole("button", { name: "切换制表会话" })).toContainText("客户销售排行榜表");
   await expect(page.getByText("客户销售排行榜表").first()).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "客户" })).toBeVisible();
   await expect(page.getByText("星海实业")).toBeVisible();
@@ -1774,7 +1776,7 @@ test.describe("desktop content density", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto("/table");
-    // 最近制表是单列列表：一行一条记录，密度体现在行内层级，不是卡片分栏
+    // 我的表格是单列列表：一行一个会话，密度体现在行内层级，不是卡片分栏
     await expect(page.locator(".sheet-list")).toHaveCSS(
       "grid-template-columns",
       /^\d+(?:\.\d+)?px$/

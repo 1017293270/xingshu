@@ -27,13 +27,16 @@ import {
   exportDataHubTablesXlsx
 } from "@/services/dataHubTableExport";
 import { TableTemplateModal } from "@/features/tableGeneration/TableTemplateModal";
+import { formatAskTableSessionTitle } from "@/services/dataHubAskTable";
 import {
   buildTableStructureJson,
   createTableTemplate,
+  suggestTableTemplateDraft,
   type TableTemplateInput
 } from "@/services/tableTemplateService";
 import { listRecentTables } from "@/services/tableService";
 import type { DataHubAskTurn, DataHubTableResult } from "@/types/dataHub";
+import type { TableTemplate } from "@/types/table";
 import { PageFrame } from "@/pages/PageFrame";
 import "@/pages/styles/workflows.css";
 import "@/features/tableGeneration/tableSession.css";
@@ -43,6 +46,15 @@ const PANEL_ROW_LIMIT = 100;
 
 /** 结果台滑出的时长，比 CSS 里的 --xs-motion-state(180ms) 多留一点余量再卸载。 */
 const DOCK_EXIT_MS = 220;
+
+/**
+ * 顶栏会话下拉只做就近切换，留最近 12 个：连同日期分组标题，在 768px 高的笔记本屏上也不用在菜单里再滚。
+ * 完整列表在「我的表格」，超出时菜单末尾给一个入口过去。
+ */
+const SESSION_MENU_LIMIT = 12;
+const ALL_SESSIONS_MENU_KEY = "all-sessions";
+/** 列表还没回来时的占位：固定一个引用，下拉的 useMemo 才不会每次渲染都重算。 */
+const NO_SESSIONS: TableTemplate[] = [];
 
 const followUpPlaceholder = "继续补充制表要求…";
 const clarifyPlaceholder = "选择上面的选项，或直接说明你的情况…";
@@ -65,7 +77,10 @@ export function TableSessionView() {
   const [turnStatus, setTurnStatus] = useState<TableTurnStatus & { turnId: string }>();
   /* 结果台「存为模板」的草稿：带上正在看的表结构快照 */
   const [templateDraft, setTemplateDraft] = useState<TableTemplateInput | null>(null);
+  const [templateSuggesting, setTemplateSuggesting] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
+  /* 每次打开「存为模板」领一个号：建议值晚到时只认最新这一次，关掉或换了张表就不再回填 */
+  const suggestionTicketRef = useRef(0);
   /* 每一轮只自动开一次结果台；用户关掉之后这一轮不再自己蹦出来。 */
   const autoOpenedRef = useRef(new Set<string>());
   const generation = useTableGeneration({
@@ -76,9 +91,16 @@ export function TableSessionView() {
     queryKey: sessionQueryKey(sessionScope, "recentTables"),
     queryFn: listRecentTables
   });
-  const recentTables = recentTablesQuery.data ?? [];
+  const recentTables = recentTablesQuery.data ?? NO_SESSIONS;
+  const listedSession = recentTables.find((item) => item.id === sessionId);
   const isBusy = generation.isStreaming || generation.isRestoring;
-  const activeQuestion = generation.turns.at(-1)?.question || generation.turn.question;
+  /* 标题是这次会话的第一句话，追问不改它。第一轮还没挂上（刚发起、正在还原）时，
+     先用带进来的首轮提示词或后端标题——同一句话的两个来源，页头不会先闪一下「新制表」 */
+  const sessionTitle =
+    formatAskTableSessionTitle(generation.turns[0]?.question)
+    || formatAskTableSessionTitle(launchPrompt)
+    || listedSession?.title
+    || "新制表";
   const progress = useMemo(
     () => getTableGenerationProgress(generation.turn),
     [generation.turn]
@@ -223,22 +245,28 @@ export function TableSessionView() {
     });
   };
 
-  const railItems = useMemo(() => {
-    if (recentTables.some((item) => item.id === sessionId) || !sessionId) {
-      return recentTables;
+  const railItems = useMemo<TableTemplate[]>(() => {
+    const recent = recentTables.slice(0, SESSION_MENU_LIMIT);
+    if (!sessionId || recent.some((item) => item.id === sessionId)) {
+      return recent;
+    }
+    /* 从我的表格翻出来的老会话：接在末尾，分组时自然落回它自己的日期组 */
+    if (listedSession) {
+      return [...recent, listedSession];
     }
 
     return [
       {
         id: sessionId,
-        title: activeQuestion || "新制表",
+        title: sessionTitle,
         description: "当前会话",
-        tag: "清单" as const,
-        iconId: "contact-list" as const
+        tag: "清单",
+        iconId: "contact-list"
       },
-      ...recentTables
+      ...recent
     ];
-  }, [activeQuestion, recentTables, sessionId]);
+  }, [listedSession, recentTables, sessionId, sessionTitle]);
+  const hasMoreSessions = recentTables.length > SESSION_MENU_LIMIT;
 
   /* 会话列表收在顶栏标题里：右边整块留给结果表，是这一页真正的交付物。 */
   const sessionMenu: MenuProps = {
@@ -246,24 +274,64 @@ export function TableSessionView() {
       ? [{ key: "error", disabled: true, label: "会话列表加载失败" }]
       : railItems.length === 0
         ? [{ key: "empty", disabled: true, label: "还没有制表会话" }]
-        : groupTableSessions(railItems).map((group) => ({
-          key: group.label,
-          type: "group" as const,
-          label: group.label,
-          children: group.items.map((item) => ({
-            key: item.id,
-            label: (
-              <span className="tgs-topbar__session" data-active={item.id === sessionId || undefined}>
-                <span title={`${item.title} · ${item.description}`}>{item.title}</span>
-                {item.id === sessionId ? <Check size={14} weight="bold" aria-hidden="true" /> : null}
-              </span>
-            )
-          }))
-        })),
+        : [
+          ...groupTableSessions(railItems).map((group) => ({
+            key: group.label,
+            type: "group" as const,
+            label: group.label,
+            children: group.items.map((item) => {
+              const active = item.id === sessionId;
+              /* 当前这一行与页头用同一句标题，后端截断过的长标题不会在这里换一种说法 */
+              const itemTitle = active ? sessionTitle : item.title;
+              return {
+                key: item.id,
+                label: (
+                  <span className="tgs-topbar__session" data-active={active || undefined}>
+                    <span title={`${itemTitle} · ${item.description}`}>{itemTitle}</span>
+                    {active ? <Check size={14} weight="bold" aria-hidden="true" /> : null}
+                  </span>
+                )
+              };
+            })
+          })),
+          ...(hasMoreSessions
+            ? [
+              { key: "all-sessions-divider", type: "divider" as const },
+              { key: ALL_SESSIONS_MENU_KEY, label: `查看全部 ${recentTables.length} 个制表会话` }
+            ]
+            : [])
+        ],
     onClick: ({ key }) => {
+      if (key === ALL_SESSIONS_MENU_KEY) {
+        navigate("/table");
+        return;
+      }
       if (key === sessionId || key === "error" || key === "empty") return;
       navigate(tableSessionPath(key));
     }
+  };
+
+  const openTemplateDraft = (item: TableViewerItem) => {
+    suggestionTicketRef.current += 1;
+    const ticket = suggestionTicketRef.current;
+    setTemplateDraft({ name: "", prompt: "", structureJson: buildTableStructureJson(item.table.columns) });
+    setTemplateSuggesting(true);
+    suggestTableTemplateDraft({ turns: generation.turns.slice(0, item.round), table: item.table })
+      .then((draft) => {
+        if (ticket !== suggestionTicketRef.current) return;
+        setTemplateDraft((current) => (current ? { ...current, ...draft } : current));
+      })
+      // 建议没生成出来就留给用户自己填，保存不受影响
+      .catch(() => undefined)
+      .finally(() => {
+        if (ticket === suggestionTicketRef.current) setTemplateSuggesting(false);
+      });
+  };
+
+  const closeTemplateDraft = () => {
+    suggestionTicketRef.current += 1;
+    setTemplateDraft(null);
+    setTemplateSuggesting(false);
   };
 
   return (
@@ -276,7 +344,7 @@ export function TableSessionView() {
       <div className="tgs">
         <div className="tgs__main">
           <TableSessionTopBar
-            title={activeQuestion || "新制表"}
+            title={sessionTitle}
             sessionMenu={sessionMenu}
             tableCount={tableCount}
           />
@@ -291,7 +359,7 @@ export function TableSessionView() {
               {generation.restoreError && generation.turns.length === 0 ? (
                 <div className="tgs-turn__reply" data-error="true">
                   <p>{generation.restoreError}</p>
-                  <small data-error="true">可以刷新重试，或回到最近制表换一个会话</small>
+                  <small data-error="true">可以刷新重试，或回到我的表格换一个会话</small>
                   <div className="tgs-turn__actions" data-recovery="true">
                     <button type="button" onClick={() => void generation.restore(sessionId)}>重新加载</button>
                   </div>
@@ -404,13 +472,7 @@ export function TableSessionView() {
             onClose={closeViewer}
             onCopy={() => void handleCopyTable(shownViewer)}
             onExport={(format) => exportTables([shownViewer.table], shownViewer.turn, format)}
-            onSaveTemplate={() =>
-              setTemplateDraft({
-                name: shownViewer.turn.question.trim().slice(0, 100) || "制表模板",
-                prompt: shownViewer.turn.question.trim() || "按当前表结构生成",
-                structureJson: buildTableStructureJson(shownViewer.table.columns)
-              })
-            }
+            onSaveTemplate={() => openTemplateDraft(shownViewer)}
           />
         ) : null}
       </div>
@@ -418,12 +480,13 @@ export function TableSessionView() {
         open={templateDraft !== null}
         title="存为模板"
         initial={templateDraft ?? undefined}
+        suggestion={templateSuggesting ? "pending" : "ready"}
         saving={templateSaving}
         onSave={(input) => {
           setTemplateSaving(true);
           createTableTemplate(input)
             .then(() => {
-              setTemplateDraft(null);
+              closeTemplateDraft();
               if (viewer) {
                 setTurnStatus({
                   turnId: turnKeyOf(viewer.turn),
@@ -443,7 +506,7 @@ export function TableSessionView() {
             })
             .finally(() => setTemplateSaving(false));
         }}
-        onClose={() => setTemplateDraft(null)}
+        onClose={closeTemplateDraft}
       />
     </PageFrame>
   );

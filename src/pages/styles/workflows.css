@@ -77,7 +77,7 @@
   font-weight: var(--xs-fw-regular);
 }
 
-/* ---------- 智能制表：最近制表 ---------- */
+/* ---------- 智能制表：我的表格 ---------- */
 /* 入口页只留一条中轴：列表与上面的输入盒同宽同心，读作输入盒的续篇而不是另起一张全宽数据表。
    行内也不再排四列——表名是主角，类型与时间退到副行，动作等指针进来再现身。 */
 
@@ -399,6 +399,53 @@ button.sheet-row__main {
     width: 40px;
     min-width: 40px;
     height: 40px;
+    min-height: 40px;
+  }
+}
+
+/* 列表卡与它下面的展开链接是一组，用不着模块间距那么宽 */
+.table-recent .xs-async-panel__content[data-view="content"] {
+  gap: 8px;
+}
+
+/* 展开是列表的续行，不是又一个按钮：一行文字链接跟在列表卡下方，对着这条中轴居中 */
+.table-recent .sheet-list__more {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  gap: 4px;
+  min-height: var(--xs-control-height-sm);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--xs-radius-small);
+  background: transparent;
+  color: var(--xs-interactive-text);
+  font: inherit;
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-text);
+  cursor: pointer;
+  transition: background-color var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.table-recent .sheet-list__more:hover {
+  background: var(--xs-info-soft);
+}
+
+.table-recent .sheet-list__more:focus-visible {
+  outline: 2px solid var(--xs-primary-2);
+  outline-offset: 2px;
+}
+
+.table-recent .sheet-list__more svg {
+  transition: transform var(--xs-motion-fast) var(--xs-motion-ease-out);
+}
+
+.table-recent .sheet-list__more[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+@media (pointer: coarse) {
+  .table-recent .sheet-list__more {
     min-height: 40px;
   }
 }
@@ -816,7 +863,7 @@ button.sheet-row__main {
   margin-bottom: 16px;
 }
 
-/* 从最近制表复制要求进来时闪一下，告诉用户字进了哪儿 */
+/* 从我的表格复制要求进来时闪一下，告诉用户字进了哪儿 */
 .table-hero__composer--filled {
   animation: table-hero-filled 260ms var(--xs-motion-ease-out);
 }
@@ -828,7 +875,7 @@ button.sheet-row__main {
   }
 }
 
-/* 复制反馈与列表同轴：状态条压在输入盒和最近制表之间，宽度跟着这条中轴走 */
+/* 复制反馈与列表同轴：状态条压在输入盒和我的表格之间，宽度跟着这条中轴走 */
 .table-page .table-page__status-slot {
   width: min(760px, 100%);
   margin: 12px auto var(--xs-module-gap);
@@ -836,7 +883,7 @@ button.sheet-row__main {
 
 /* ---------- 智能制表：入口页一屏布局 ---------- */
 /* 一句话：页面壳一屏收下，长内容在面板里滚。
-   hero + 状态槽 + 选项卡是固定上段，垂直节奏跟首页闲置态用同一套 vh 负截距刻度，
+   hero + 状态槽 + 选项卡是固定上段，垂直节奏用 vh 负截距刻度（clamp(下限, a·vh − b, 上限)），
    视口越矮压得越紧；下面的面板区吃掉剩余全部高度，列表装不下就在卡里滚、
    下沿正好贴住视口底，页面本身永远不滚。
    路由级高度锁沿用 .xs-shell__main:has(.table-session-page) 那一手，
@@ -850,7 +897,7 @@ button.sheet-row__main {
     display: flex;
     flex-direction: column;
     overflow-y: hidden;
-    /* 与首页同值：见下方 .table-page 上的刻度说明 */
+    /* 外壳上下留白跟着视口高度在 12–16px / 14–26px 之间收放：矮屏把这几十像素让给列表 */
     padding-top: clamp(12px, 1.6vh, 16px);
     padding-bottom: clamp(14px, 2.2vh, 26px);
   }
@@ -869,13 +916,11 @@ button.sheet-row__main {
   }
 
   .xs-page.table-page {
-    /* 纵向刻度抄自首页闲置态（src/features/home/home.css 桌面档的
-       --home-hero-top / --home-hero-gap，以及外壳的 padding-top）。
-       故意按同值重新声明而不是跨文件引用变量：两页的节奏是一份约定，不是一份依赖。
-       改首页刻度时这里要一起改，否则 / 与 /table 之间切换输入盒会跳位。
-
-       --table-hero-head: 首页 hero 区块（问候语 h1 + 副标题 p）的实测高度 69.6px。
-       制表页抬头只有一行标题，撑到同一高度，输入盒顶边才落在同一条线上。 */
+    /* /table 自己的纵向刻度，目标是 900px 高的视口里 hero、选项卡和十来行列表一屏装下。
+       输入盒上方留白（hero-top）在 710px 高时压到下限 40px，920px 以上停在 124px：
+       矮屏先省这一段，大屏也不会把输入盒推到半屏以下。
+       标题与输入盒的间距（hero-gap）同样随视口高度在 22–46px 之间收放。
+       抬头槽位（hero-head）固定高度，标题字形或换行变化时输入盒顶边不跟着跳。 */
     --table-hero-top: clamp(40px, calc(40vh - 244px), 124px);
     --table-hero-gap: clamp(22px, calc(6vh - 20px), 46px);
     --table-hero-head: 69.6px;
@@ -886,7 +931,7 @@ button.sheet-row__main {
     flex-direction: column;
   }
 
-  /* 保留首页同源的留白刻度与标题槽位，调整字形时输入框位置仍稳定。 */
+  /* 留白与间距都取上面的刻度，标题槽位定高，调整字形时输入框位置仍稳定。 */
   .table-page .table-hero {
     flex: 0 0 auto;
     gap: var(--table-hero-gap);
@@ -925,7 +970,7 @@ button.sheet-row__main {
 
   /* 列表卡按内容取高，上限是面板剩余高度（flex: 0 1 auto + min-height: 0）：
      装不下就在卡里滚、下沿正好贴住视口；装得下就到此为止。
-     不写 flex: 1 是因为「最近制表 / 我的表格」被服务端固定截到 8 条，
+     不写 flex: 1 是因为我的表格默认只露 10 条，
      强行拉通高只会在大屏上留出半张空白卡——那不是留白，是没做完。 */
   .table-page .sheet-list {
     min-height: 0;
@@ -954,6 +999,12 @@ button.sheet-row__main {
     background-clip: padding-box;
   }
 
+  /* 展开链接跟在列表卡后面：卡被压矮、在卡里滚的时候，它也不能被挤出视口 */
+  .table-page .table-recent .sheet-list__more {
+    flex: none;
+    align-self: center;
+  }
+
   /* 空态和列表的职责不同，所以填充方式也不同：
      列表只管把行摆出来，空态得把这块区域占住并解释清楚——
      一张小虚线卡孤零零吊在通高区域的顶端比撑满更难看，所以空态撑满、图文居中。 */
@@ -976,6 +1027,10 @@ button.sheet-row__main {
   .table-hero__composer--filled {
     animation: none;
   }
+
+  .table-recent .sheet-list__more svg {
+    transition: none;
+  }
 }
 
 /* ==================== 表格模板弹窗 ==================== */
@@ -995,6 +1050,14 @@ button.sheet-row__main {
   color: var(--xs-text-2);
   font-size: var(--xs-fs-label);
   font-weight: var(--xs-fw-medium);
+}
+
+/* 建议值的来历：12px 灰字注脚，收掉大半栅格间距贴着提示词框，读作上面两栏的说明而不是又一栏 */
+.table-template-modal__note {
+  margin: -6px 0 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
 }
 
 .table-template-modal__structure {

@@ -1,7 +1,7 @@
 import { Button, Input, Popconfirm, Segmented, Tooltip } from "antd";
-import { ArrowUp, Check, CopySimple, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowUp, CaretDown, Check, CopySimple, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
 import promptStar from "@/assets/brand/xingshu-prompt-star.svg";
@@ -84,13 +84,16 @@ function formatRecentTime(table: TableTemplate) {
   return `${updated.getFullYear()}-${padTwo(updated.getMonth() + 1)}-${padTwo(updated.getDate())}`;
 }
 
-type TableHomeTab = "recent" | "mine" | "templates";
+type TableHomeTab = "mine" | "templates";
 
 /** 选项卡自己就是标题，所以面板不再重复一遍 h2，只把口径说明挂在选项卡右侧。 */
-const tabHint: Record<Exclude<TableHomeTab, "recent">, string> = {
-  mine: "由制表会话生成的结果表 · 点击直接打开",
-  templates: "保存常用的制表提示词与表结构，一键复用"
-};
+const templatesHint = "保存常用的制表提示词与表结构，一键复用";
+
+/**
+ * 我的表格先露最近 10 条：一眼扫得完，列表卡也不会把输入盒下面整屏占满。
+ * 再多用「展开全部」在列表卡里接着滚，不上分页器——会话按最近更新倒序，要找的多半就在前面。
+ */
+const MINE_PREVIEW_LIMIT = 10;
 
 export function TablePage() {
   const navigate = useNavigate();
@@ -100,7 +103,9 @@ export function TablePage() {
   const [submissionTone, setSubmissionTone] = useState<XsStatusTone>("info");
   const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
   const [promptPulse, setPromptPulse] = useState<"idle" | "filled">("idle");
-  const [activeTab, setActiveTab] = useState<TableHomeTab>("recent");
+  const [activeTab, setActiveTab] = useState<TableHomeTab>("mine");
+  const [showAllTables, setShowAllTables] = useState(false);
+  const tableListId = useId();
   const [templateModal, setTemplateModal] = useState<
     { mode: "create" } | { mode: "edit"; template: DataHubTableTemplate } | null
   >(null);
@@ -112,6 +117,8 @@ export function TablePage() {
     queryFn: listRecentTables
   });
   const recentTables = recentTablesQuery.data ?? [];
+  const visibleTables = showAllTables ? recentTables : recentTables.slice(0, MINE_PREVIEW_LIMIT);
+  const canToggleTables = recentTables.length > MINE_PREVIEW_LIMIT;
   const recentTablesStatus = resolveXsAsyncStatus({
     isPending: recentTablesQuery.isPending,
     isFetching: recentTablesQuery.isFetching,
@@ -285,18 +292,18 @@ export function TablePage() {
           value={activeTab}
           onChange={(value) => setActiveTab(value as TableHomeTab)}
           /* title 置空：rc-segmented 默认把 label 复制成 title，鼠标扫过就会飘一条原生提示，
-             而这三个词本身已自说明，不需要重复一遍。 */
+             而这两个词本身已自说明，不需要重复一遍。 */
           options={[
-            { label: "最近制表", value: "recent", title: "" },
             { label: "我的表格", value: "mine", title: "" },
             { label: "表格模板", value: "templates", title: "" }
           ]}
         />
         <div className="table-home-tabs__tail">
+          {/* 列表里是制表会话：没出表、在等澄清的会话也在，口径要照实说 */}
           <span className="section-title-meta">
-            {activeTab === "recent"
-              ? `${recentTables.length} 条记录 · 点击打开当时的结果表`
-              : tabHint[activeTab]}
+            {activeTab === "mine"
+              ? `${recentTablesQuery.data ? `${recentTables.length} 个` : ""}制表会话 · 点击回到会话，未出表的也在其中`
+              : templatesHint}
           </span>
           {activeTab === "templates" ? (
             <Button
@@ -310,95 +317,35 @@ export function TablePage() {
           ) : null}
         </div>
       </div>
-      {activeTab === "recent" ? (
-      <section className="table-recent" aria-label="最近制表记录">
-        <XsAsyncPanel
-          status={recentTablesStatus}
-          empty={recentTables.length === 0}
-          emptyDescription="暂无最近制表记录。"
-          error="最近制表加载失败，请稍后重试。"
-          onRetry={() => void recentTablesQuery.refetch()}
-          loadingVariant="rows"
-          contentKey={recentTablesQuery.dataUpdatedAt}
-        >
-          {/* 一行一条记录：表名是主角，类型与时间退到副行，动作只在指针进来时现身 */}
-          <div className="sheet-list">
-            {recentTables.map((table, index) => {
-              const timeText = formatRecentTime(table);
-              const copied = copiedTemplateId === table.id;
-
-              return (
-                <article
-                  className="xs-page-enter sheet-row"
-                  style={xsEnterStep(3 + Math.min(index, 2))}
-                  key={table.id}
-                  aria-label={`${table.title} ${timeText}`}
-                >
-                  <Link
-                    className="sheet-row__main"
-                    to={tableSessionPath(table.id)}
-                    aria-label={`打开制表结果：${table.title}`}
-                  >
-                    <span className="sheet-icon" aria-hidden="true">
-                      {(() => {
-                        const SheetGlyph = sheetGlyphById[table.iconId];
-                        return <SheetGlyph size={SHEET_GLYPH_SIZE} />;
-                      })()}
-                    </span>
-                    <span className="sheet-row__text">
-                      <h3 className="sheet-row__title" title={table.title}>
-                        {table.title}
-                      </h3>
-                      <span className="sheet-row__meta">
-                        <span className="sheet-row__type">{table.tag}</span>
-                        <em aria-hidden="true">·</em>
-                        <time className="sheet-row__time" dateTime={table.updatedAt} title={table.description}>
-                          {timeText}
-                        </time>
-                      </span>
-                    </span>
-                  </Link>
-                  <Tooltip title={copied ? "已复制到制表需求" : "复制制表要求"} placement="top">
-                    <Button
-                      type="text"
-                      className="sheet-row__copy"
-                      data-copied={copied ? "true" : undefined}
-                      aria-label={copied ? "已复制制表要求" : "复制制表要求"}
-                      icon={
-                        copied
-                          ? <Check size={15} aria-hidden="true" />
-                          : <CopySimple size={15} aria-hidden="true" />
-                      }
-                      onClick={() => handleCopyTemplate(table)}
-                    />
-                  </Tooltip>
-                </article>
-              );
-            })}
-          </div>
-        </XsAsyncPanel>
-      </section>
-      ) : null}
       {activeTab === "mine" ? (
-        <section className="table-recent" aria-label="我的表格">
+        <section className="table-recent" aria-label="我的表格列表">
           <XsAsyncPanel
             status={recentTablesStatus}
             empty={recentTables.length === 0}
-            emptyDescription="还没有生成过结果表，先在上面描述一张表试试。"
-            error="表格列表加载失败，请稍后重试。"
+            emptyDescription="还没有制表会话，先在上面描述一张表试试。"
+            error="制表会话加载失败，请稍后重试。"
             onRetry={() => void recentTablesQuery.refetch()}
             loadingVariant="rows"
             contentKey={recentTablesQuery.dataUpdatedAt}
           >
-            <div className="sheet-list">
-              {recentTables.map((table) => {
+            {/* 一行一个会话：标题是主角，类型与时间退到副行，复制动作只在指针进来时现身 */}
+            <div className="sheet-list" id={tableListId}>
+              {visibleTables.map((table, index) => {
                 const SheetGlyph = sheetGlyphById[table.iconId];
+                const timeText = formatRecentTime(table);
+                const copied = copiedTemplateId === table.id;
+
                 return (
-                  <article className="sheet-row" key={table.id} aria-label={table.title}>
+                  <article
+                    className="xs-page-enter sheet-row"
+                    style={xsEnterStep(3 + Math.min(index, 2))}
+                    key={table.id}
+                    aria-label={`${table.title} ${timeText}`}
+                  >
                     <Link
                       className="sheet-row__main"
                       to={tableSessionPath(table.id)}
-                      aria-label={`打开结果表：${table.title}`}
+                      aria-label={`打开制表会话：${table.title}`}
                     >
                       <span className="sheet-icon" aria-hidden="true">
                         <SheetGlyph size={SHEET_GLYPH_SIZE} />
@@ -409,15 +356,41 @@ export function TablePage() {
                           <span className="sheet-row__type">{table.tag}</span>
                           <em aria-hidden="true">·</em>
                           <time className="sheet-row__time" dateTime={table.updatedAt} title={table.description}>
-                            {formatRecentTime(table)}
+                            {timeText}
                           </time>
                         </span>
                       </span>
                     </Link>
+                    <Tooltip title={copied ? "已复制到制表需求" : "复制制表要求"} placement="top">
+                      <Button
+                        type="text"
+                        className="sheet-row__copy"
+                        data-copied={copied ? "true" : undefined}
+                        aria-label={copied ? "已复制制表要求" : "复制制表要求"}
+                        icon={
+                          copied
+                            ? <Check size={15} aria-hidden="true" />
+                            : <CopySimple size={15} aria-hidden="true" />
+                        }
+                        onClick={() => handleCopyTemplate(table)}
+                      />
+                    </Tooltip>
                   </article>
                 );
               })}
             </div>
+            {canToggleTables ? (
+              <button
+                type="button"
+                className="sheet-list__more"
+                aria-controls={tableListId}
+                aria-expanded={showAllTables}
+                onClick={() => setShowAllTables((expanded) => !expanded)}
+              >
+                {showAllTables ? "收起" : `展开全部 ${recentTables.length} 条`}
+                <CaretDown size={12} weight="bold" aria-hidden="true" />
+              </button>
+            ) : null}
           </XsAsyncPanel>
         </section>
       ) : null}

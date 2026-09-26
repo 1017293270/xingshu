@@ -3,16 +3,28 @@ import { chromium } from "@playwright/test";
 // 用法：先启动 npm run dev，再执行 node scripts/screenshot-table-module.mjs
 // 截智能制表模块：制表台列表页与问表智能体会话页，覆盖 1440/1672/1920/390 四档，
 // 外加一张宽表（12 列 46 行）用于验证横向滚动、行号槽与行数截断提示。
+// 我的表格有 14 个会话：先露 10 条，另截一张展开后的样子；
+// 两轮会话（先澄清再追问）用来看页头标题、会话下拉与「存为模板」弹窗里的建议值。
 // 所有 /api/** 请求都被本脚本拦截，不会打到真实后端。
 const dir = "outputs/ui-audit";
 const base = process.env.XS_QA_BASE_URL ?? "http://127.0.0.1:5173";
 
+// 后端会话标题 = 首条用户消息，超 50 字截断补「...」；模板发起的会话首条消息带着结构参考尾巴
 const sessions = [
+  { id: 20, sessionId: "ask-table-followup", title: "帮我统计一下各客户的合同金额", chatMode: "ask_table", updatedAt: "2026-08-18T09:05:00" },
   { id: 1, sessionId: "ask-table-a1", title: "华东区Q1销售排行", chatMode: "ask_table", updatedAt: "2026-08-17T10:24:00" },
+  { id: 21, sessionId: "ask-table-template", title: "按年度统计合同\n\n表结构参考（按以下列生成）：合同编号、合同金额", chatMode: "ask_table", updatedAt: "2026-08-16T17:40:00" },
   { id: 2, sessionId: "ask-table-a2", title: "各部门人员通讯录", chatMode: "ask_table", updatedAt: "2026-08-16T15:02:00" },
   { id: 3, sessionId: "ask-table-a3", title: "月度费用统计报表", chatMode: "ask_table", updatedAt: "2026-08-15T09:41:00" },
   { id: 4, sessionId: "ask-table-a4", title: "仓库库存周转清单", chatMode: "ask_table", updatedAt: "2026-08-14T18:12:00" },
-  { id: 5, sessionId: "ask-table-a5", title: "重点客户回款汇总", chatMode: "ask_table", updatedAt: "2026-08-13T11:30:00" }
+  { id: 5, sessionId: "ask-table-a5", title: "重点客户回款汇总", chatMode: "ask_table", updatedAt: "2026-08-13T11:30:00" },
+  { id: 6, sessionId: "ask-table-a6", title: "供应商交付及时率排名", chatMode: "ask_table", updatedAt: "2026-08-12T16:20:00" },
+  { id: 7, sessionId: "ask-table-a7", title: "统计各事业部2025年签约合同的金额与数量并按季度汇总到一张表里需要区分新签续签\n\n表结...", chatMode: "ask_table", updatedAt: "2026-08-11T10:08:00" },
+  { id: 8, sessionId: "ask-table-a8", title: "在建项目进度清单", chatMode: "ask_table", updatedAt: "2026-08-10T14:55:00" },
+  { id: 9, sessionId: "ask-table-a9", title: "差旅费用按部门同比", chatMode: "ask_table", updatedAt: "2026-08-08T09:30:00" },
+  { id: 10, sessionId: "ask-table-a10", title: "新入职员工名单", chatMode: "ask_table", updatedAt: "2026-08-06T11:12:00" },
+  { id: 11, sessionId: "ask-table-a11", title: "设备维保到期提醒表", chatMode: "ask_table", updatedAt: "2026-07-30T15:40:00" },
+  { id: 12, sessionId: "ask-table-a12", title: "华南区渠道库存日报", chatMode: "ask_table", updatedAt: "2026-07-22T08:45:00" }
 ];
 
 const narrowTable = {
@@ -131,6 +143,77 @@ const replays = {
       10
     )
   },
+  // 两轮会话：第一轮先澄清客户口径再出表，第二轮追问再出一张。页头要一直是第一句话，不能被追问顶掉
+  "ask-table-followup": {
+    question: "帮我统计一下各客户的合同金额",
+    datasourceName: "合同主题 contract_dw",
+    clarification: {
+      interactionId: "tool-call-qa-1",
+      question: "客户范围按哪个口径？",
+      options: [
+        { label: "全部外部客户", value: "external" },
+        { label: "含关联方", value: "all" }
+      ],
+      answer: "external"
+    },
+    table: {
+      columns: [
+        { key: "customer", title: "客户" },
+        { key: "amount", title: "合同金额(万元)" },
+        { key: "count", title: "合同数" }
+      ],
+      rows: [
+        { customer: "星海实业", amount: 1280.5, count: 6 },
+        { customer: "临港贸易", amount: 960.2, count: 4 },
+        { customer: "东岳重工", amount: 742.0, count: 3 }
+      ],
+      totalRows: 3,
+      groupLabel: "各客户合同金额",
+      source: "contract_dw.fact_contract"
+    },
+    answer: "已按全部外部客户统计合同金额，共 3 家客户。",
+    trace: traceFor("合同主题 contract_dw", "SELECT customer, SUM(amount), COUNT(*)\n  FROM contract_dw.fact_contract\n GROUP BY customer", 3),
+    followUps: [
+      {
+        question: "没有日期吗，我说的客户肯定不包含我司嘛",
+        table: {
+          columns: [
+            { key: "customer", title: "客户" },
+            { key: "signDate", title: "签约日期" },
+            { key: "amount", title: "合同金额(万元)" }
+          ],
+          rows: [
+            { customer: "星海实业", signDate: "2026-03-18", amount: 1280.5 },
+            { customer: "临港贸易", signDate: "2026-02-07", amount: 960.2 }
+          ],
+          totalRows: 2,
+          groupLabel: "各客户合同金额（含签约日期）",
+          source: "contract_dw.fact_contract"
+        },
+        answer: "已排除我司自身主体，并补上签约日期。"
+      }
+    ]
+  },
+  // 从模板发起的会话：首轮带着结构参考尾巴，页头只该露出模板原话
+  "ask-table-template": {
+    question: "按年度统计合同\n\n表结构参考（按以下列生成）：合同编号、合同金额",
+    datasourceName: "合同主题 contract_dw",
+    table: {
+      columns: [
+        { key: "contractNo", title: "合同编号" },
+        { key: "amount", title: "合同金额" }
+      ],
+      rows: [
+        { contractNo: "HT-2025-0012", amount: 386000 },
+        { contractNo: "HT-2025-0047", amount: 215400 }
+      ],
+      totalRows: 2,
+      groupLabel: "年度合同",
+      source: "contract_dw.fact_contract"
+    },
+    answer: "已按模板的列生成 2025 年度合同表。",
+    trace: traceFor("合同主题 contract_dw", "SELECT contract_no, amount\n  FROM contract_dw.fact_contract\n WHERE year = 2025", 2)
+  },
   // 只有回答没有表的一轮：用来截"结果台没打开"的纯对话态
   "ask-table-chat": {
     question: "本月的费用明细能不能按部门汇总一下",
@@ -148,6 +231,71 @@ const envelope = (data) => ({ code: 200, message: "visual qa fixture", data });
 
 function replayFor(sessionId) {
   return replays[sessionId] ?? replays["ask-table-a1"];
+}
+
+/** 一个会话的各轮：主轮 + followUps。追问轮沿用主轮的数据源与执行过程。 */
+function turnsOf(replay) {
+  return [
+    replay,
+    ...(replay.followUps ?? []).map((turn) => ({
+      datasourceName: replay.datasourceName,
+      trace: replay.trace,
+      ...turn
+    }))
+  ];
+}
+
+// 每轮占一段 id / seqNum（第 k 轮从 k*100 起），多轮之间不会撞号，还原时按 seqNum 排回对话顺序
+function messagesFor(sessionId, replay) {
+  return turnsOf(replay).flatMap((turn, k) => [
+    { id: k * 100 + 1, sessionId, chatId: `c${k + 1}`, role: "user", content: turn.question, seqNum: k * 100 + 1 },
+    { id: k * 100 + 2, sessionId, chatId: `c${k + 1}`, role: "assistant", content: turn.answer, seqNum: k * 100 + 5 }
+  ]);
+}
+
+function eventsFor(sessionId, replay) {
+  return turnsOf(replay).flatMap((turn, k) => {
+    const chatId = `c${k + 1}`;
+    const at = (offset) => k * 100 + offset;
+    return [
+      { id: at(2), sessionId, chatId, type: "routing_decompose", seqNum: at(2), data: turn.trace.decompose },
+      { id: at(3), sessionId, chatId, type: "data_source_selected", seqNum: at(3), data: { datasourceId: 8, datasourceName: turn.datasourceName } },
+      ...turn.trace.reactSteps.map((step, index) => ({
+        id: at(10 + index), sessionId, chatId, type: "react_step", seqNum: at(4 + index), data: step
+      })),
+      ...turn.trace.toolCalls.map((call, index) => ({
+        id: at(30 + index), sessionId, chatId, type: "tool_call", seqNum: at(20 + index), data: call
+      })),
+      ...turn.trace.toolResults.map((result, index) => ({
+        id: at(40 + index), sessionId, chatId, type: "tool_result", seqNum: at(30 + index), data: result
+      })),
+      // 已经答过的澄清：卡片 + 回执，还原后是一行「已选择」
+      ...(turn.clarification
+        ? [
+          {
+            id: at(46), sessionId, chatId, type: "clarification", seqNum: at(36),
+            data: {
+              interactionId: turn.clarification.interactionId,
+              question: turn.clarification.question,
+              options: turn.clarification.options,
+              allowFreeText: false
+            }
+          },
+          {
+            id: at(47), sessionId, chatId, type: "clarification_response", seqNum: at(37),
+            data: { interactionId: turn.clarification.interactionId, answer: turn.clarification.answer }
+          }
+        ]
+        : []),
+      // 一轮可以出多张表：table 是单张的简写，tables 是完整写法
+      ...(turn.tables ?? (turn.table ? [turn.table] : [])).map((table, index) => ({
+        id: at(50 + index), sessionId, chatId, type: "table", seqNum: at(40 + index), data: table
+      })),
+      // 留出多张表占掉的 id / seqNum，别跟正文和 done 撞上
+      { id: at(70), sessionId, chatId, type: "content", seqNum: at(60), data: turn.answer },
+      { id: at(71), sessionId, chatId, type: "done", seqNum: at(61), data: turn.trace.done }
+    ];
+  });
 }
 
 const browser = await chromium.launch();
@@ -168,13 +316,7 @@ async function newPage(width, height, replayDelayMs = 0) {
     if (emptySessions.has(sessionId)) {
       return route.fulfill({ json: envelope([]) });
     }
-    const replay = replayFor(sessionId);
-    return route.fulfill({
-      json: envelope([
-        { id: 1, sessionId, chatId: "c1", role: "user", content: replay.question, seqNum: 1 },
-        { id: 2, sessionId, chatId: "c1", role: "assistant", content: replay.answer, seqNum: 5 }
-      ])
-    });
+    return route.fulfill({ json: envelope(messagesFor(sessionId, replayFor(sessionId))) });
   });
   await page.route("**/api/v1/chat/events/list", async (route) => {
     await holdReplay();
@@ -182,29 +324,7 @@ async function newPage(width, height, replayDelayMs = 0) {
     if (emptySessions.has(sessionId)) {
       return route.fulfill({ json: envelope([]) });
     }
-    const replay = replayFor(sessionId);
-    return route.fulfill({
-      json: envelope([
-        { id: 2, sessionId, chatId: "c1", type: "routing_decompose", seqNum: 2, data: replay.trace.decompose },
-        { id: 3, sessionId, chatId: "c1", type: "data_source_selected", seqNum: 3, data: { datasourceId: 8, datasourceName: replay.datasourceName } },
-        ...replay.trace.reactSteps.map((step, index) => ({
-          id: 10 + index, sessionId, chatId: "c1", type: "react_step", seqNum: 4 + index, data: step
-        })),
-        ...replay.trace.toolCalls.map((call, index) => ({
-          id: 30 + index, sessionId, chatId: "c1", type: "tool_call", seqNum: 20 + index, data: call
-        })),
-        ...replay.trace.toolResults.map((result, index) => ({
-          id: 40 + index, sessionId, chatId: "c1", type: "tool_result", seqNum: 30 + index, data: result
-        })),
-        // 一轮可以出多张表：table 是单张的简写，tables 是完整写法
-        ...(replay.tables ?? (replay.table ? [replay.table] : [])).map((table, index) => ({
-          id: 50 + index, sessionId, chatId: "c1", type: "table", seqNum: 40 + index, data: table
-        })),
-        // 留出多张表占掉的 id / seqNum，别跟正文和 done 撞上
-        { id: 70, sessionId, chatId: "c1", type: "content", seqNum: 60, data: replay.answer },
-        { id: 71, sessionId, chatId: "c1", type: "done", seqNum: 61, data: replay.trace.done }
-      ])
-    });
+    return route.fulfill({ json: envelope(eventsFor(sessionId, replayFor(sessionId))) });
   });
   await page.addInitScript(() => {
     window.localStorage.setItem("xingshu_datahub_token", "visual-qa-token");
@@ -218,16 +338,37 @@ async function newPage(width, height, replayDelayMs = 0) {
   return page;
 }
 
-async function shot(name, width, height, path, readySelector, replayDelayMs = 0) {
+// XS_QA_ONLY=table-list,table-followup 只截名字以这些前缀开头的几张，改一处时不用整套重跑
+const only = process.env.XS_QA_ONLY?.split(",").map((prefix) => prefix.trim()).filter(Boolean);
+
+async function shot(name, width, height, path, readySelector, replayDelayMs = 0, interact) {
+  if (only && !only.some((prefix) => name.startsWith(prefix))) {
+    return;
+  }
   const page = await newPage(width, height, replayDelayMs);
   await page.goto(`${base}${path}`, { waitUntil: replayDelayMs ? "domcontentloaded" : "networkidle" });
   await page.waitForSelector(readySelector, { timeout: 15000 });
   await page.waitForTimeout(700);
+  if (interact) {
+    await interact(page);
+    await page.waitForTimeout(500);
+  }
   // 滚动容器是 .xs-shell__main 而非文档，fullPage 无效，靠高视口覆盖整屏内容
   await page.screenshot({ path: `${dir}/${name}.png` });
   await page.close();
   console.log(`shot ${name}`);
 }
+
+const expandAllTables = (page) => page.getByRole("button", { name: /^展开全部 \d+ 条$/ }).click();
+const openSessionMenu = async (page) => {
+  await page.getByRole("button", { name: "切换制表会话" }).click();
+  // 侧栏导航也是 role=menu，这里只等顶栏下拉那一个
+  await page.locator(".ant-dropdown-menu").waitFor();
+};
+const openSaveTemplate = async (page) => {
+  await page.getByRole("button", { name: "把当前结果表存为模板" }).click();
+  await page.getByRole("dialog", { name: "存为模板" }).waitFor();
+};
 
 const listReady = ".sheet-list .sheet-row";
 // 出表的会话会自动把结果台开到第一张表，所以表体出现即代表分栏工作区已就位
@@ -239,6 +380,16 @@ await shot("table-list-1440", 1440, 1000, "/table", listReady);
 await shot("table-list-1672", 1672, 1000, "/table", listReady);
 await shot("table-list-1920", 1920, 1080, "/table", listReady);
 await shot("table-list-390", 390, 844, "/table", listReady);
+// 14 个会话先露 10 条；展开后在列表卡里接着滚，展开链接留在卡下方
+await shot("table-list-expanded-1440", 1440, 900, "/table", listReady, 0, expandAllTables);
+await shot("table-list-expanded-390", 390, 844, "/table", listReady, 0, expandAllTables);
+// 两轮会话：页头是第一句话；下拉里当前行与页头同一句；存为模板弹窗带着合成好的名称与提示词
+await shot("table-followup-1440", 1440, 900, "/table/ask-table-followup", dockReady);
+await shot("table-followup-menu-1440", 1440, 900, "/table/ask-table-followup", dockReady, 0, openSessionMenu);
+await shot("table-followup-template-1440", 1440, 900, "/table/ask-table-followup", dockReady, 0, openSaveTemplate);
+await shot("table-followup-template-390", 390, 844, "/table/ask-table-followup", dockReady, 0, openSaveTemplate);
+// 模板发起的会话：页头不带「表结构参考」尾巴
+await shot("table-template-session-1440", 1440, 900, "/table/ask-table-template", dockReady);
 // 结果台打开态：左对话列 40%，右侧结果台通高
 await shot("table-session-1440", 1440, 900, "/table/ask-table-a1", dockReady);
 await shot("table-session-1920", 1920, 1080, "/table/ask-table-a1", dockReady);

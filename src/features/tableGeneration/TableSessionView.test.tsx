@@ -149,6 +149,56 @@ function replayWithTables(question = "华东区Q1销售排行与城市订单分�
   };
 }
 
+/** 多轮会话：每轮一句提问、一串事件，还原顺序即对话顺序。 */
+function replayWithTurns(turns: Array<{ question: string; events: DataHubStreamEvent[] }>) {
+  return {
+    sessionId: SESSION_ID,
+    chatMode: "ask" as const,
+    question: turns[0]?.question ?? "",
+    events: turns[0]?.events ?? [],
+    turns: turns.map((item, index) => ({
+      id: `turn-${index + 1}`,
+      question: item.question,
+      sessionId: SESSION_ID,
+      chatId: `chat-${index + 1}`,
+      chatMode: "ask" as const,
+      status: "done" as const,
+      events: item.events,
+      error: ""
+    }))
+  };
+}
+
+/** 第一轮先澄清客户口径再出表，第二轮追问后重出一张：截图里「标题被追问顶掉」的那种会话。 */
+function replayWithFollowUp() {
+  return replayWithTurns([
+    {
+      question: "帮我统计一下各客户的合同金额",
+      events: [
+        {
+          type: "clarification",
+          data: {
+            interactionId: "tool-call-1",
+            question: "客户范围按哪个口径？",
+            options: [{ label: "全部外部客户", value: "external" }, { label: "含关联方", value: "all" }],
+            allowFreeText: false
+          }
+        },
+        { type: "clarification_response", data: { interactionId: "tool-call-1", answer: "external" } },
+        rankingTableEvent
+      ]
+    },
+    {
+      question: "没有日期吗，我说的客户肯定不包含我司嘛",
+      events: [cityTableEvent]
+    }
+  ]);
+}
+
+function tableSession(id: string, title: string, updatedAt: string) {
+  return { id, title, tag: "清单" as const, description: updatedAt.replace("T", " ").slice(0, 16), iconId: "contact-list" as const, updatedAt };
+}
+
 /** 一轮挂在 ask_user 上：后端推了 clarification 之后照常推 done，状态是 done 但其实在等人。 */
 function replayAwaitingClarification(question = "帮我做一张区域销售表") {
   const events: DataHubStreamEvent[] = [
@@ -326,6 +376,72 @@ describe("TableSessionView", () => {
 
     expect(await screen.findByText("客户销售排行榜表")).toBeInTheDocument();
     expect(screen.getByText("当前会话")).toBeInTheDocument();
+  });
+
+  it("titles the session by its first sentence and keeps that title through follow-ups", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithFollowUp());
+
+    renderSession();
+
+    const switcher = await screen.findByRole("button", { name: "切换制表会话" });
+    await waitFor(() => expect(switcher).toHaveTextContent("帮我统计一下各客户的合同金额"));
+    expect(switcher).not.toHaveTextContent("没有日期吗");
+
+    // 还没进后端列表的当前会话：下拉里那一行与页头是同一句话
+    await user.click(switcher);
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("当前会话")).toBeInTheDocument();
+    expect(within(menu).getByText("帮我统计一下各客户的合同金额")).toBeInTheDocument();
+    expect(within(menu).queryByText(/没有日期吗/)).not.toBeInTheDocument();
+  });
+
+  it("drops the template structure reference from the title of a template-launched session", async () => {
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(
+      replayWithTable("按年度统计合同\n\n表结构参考（按以下列生成）：合同编号、合同金额")
+    );
+
+    renderSession();
+
+    const switcher = await screen.findByRole("button", { name: "切换制表会话" });
+    await waitFor(() => expect(switcher).toHaveTextContent("按年度统计合同"));
+    expect(switcher).not.toHaveTextContent("表结构参考");
+  });
+
+  it("borrows the backend title while the conversation is still being restored", async () => {
+    serviceMocks.listRecentTables.mockResolvedValue([
+      tableSession(SESSION_ID, "华东区Q1销售排行", "2026-08-17T10:00:00")
+    ]);
+    serviceMocks.loadDataHubHistoryReplay.mockReturnValue(new Promise(() => undefined));
+
+    renderSession();
+
+    const switcher = await screen.findByRole("button", { name: "切换制表会话" });
+    await waitFor(() => expect(switcher).toHaveTextContent("华东区Q1销售排行"));
+  });
+
+  it("keeps the header menu to the latest sessions and links to the full list", async () => {
+    const user = userEvent.setup();
+    const sessions = Array.from({ length: 14 }, (_, index) =>
+      tableSession(`ask-table-${index}`, `制表会话 ${index}`, `2026-08-${String(20 - index).padStart(2, "0")}T10:00:00`)
+    );
+    // 当前会话排在第 14 位：超出下拉上限也要留在菜单里并打勾
+    sessions[13] = tableSession(SESSION_ID, "华东区Q1销售排行", "2026-08-07T10:00:00");
+    serviceMocks.listRecentTables.mockResolvedValue(sessions);
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithTable("华东区Q1销售排行"));
+
+    renderSession();
+
+    await user.click(await screen.findByRole("button", { name: "切换制表会话" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("制表会话 0")).toBeInTheDocument();
+    expect(within(menu).getByText("制表会话 11")).toBeInTheDocument();
+    expect(within(menu).queryByText("制表会话 12")).not.toBeInTheDocument();
+    expect(within(menu).getByText("华东区Q1销售排行")).toBeInTheDocument();
+    expect(within(menu).queryByText("当前会话")).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByText("查看全部 14 个制表会话"));
+    expect(await screen.findByRole("heading", { name: "最近制表" })).toBeInTheDocument();
   });
 
   it("asks instead of reporting an empty turn, and resumes that same turn when an option is picked", async () => {
@@ -542,7 +658,7 @@ describe("TableSessionView", () => {
     await user.click(within(dock).getByRole("button", { name: "把当前结果表存为模板" }));
 
     const modal = await screen.findByRole("dialog", { name: "存为模板" });
-    expect(within(modal).getByLabelText("模板名称")).toHaveValue("月度费用统计报表");
+    await waitFor(() => expect(within(modal).getByLabelText("模板名称")).toHaveValue("月度费用统计报表"));
     // 结构快照跟着正在看的那张表带进来，不必让用户重敲一遍列名
     expect(within(modal).getByLabelText("表结构快照")).toHaveTextContent("2 列");
 
@@ -552,6 +668,57 @@ describe("TableSessionView", () => {
       expect.objectContaining({ name: "月度费用统计报表", prompt: "月度费用统计报表" })
     );
     expect(await screen.findByText("已存为模板：月度费用统计报表")).toBeInTheDocument();
+  });
+
+  it("drafts the template from the whole conversation up to the open table, and lets the user edit it", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithFollowUp());
+
+    renderSession();
+    const dock = await screen.findByRole("complementary", { name: "结果表预览" });
+    // 还原后结果台停在最后一轮的表上
+    expect(within(dock).getByRole("tab", { name: "第2轮 · 表1" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(within(dock).getByRole("button", { name: "把当前结果表存为模板" }));
+    const modal = await screen.findByRole("dialog", { name: "存为模板" });
+    const name = within(modal).getByLabelText("模板名称");
+    const prompt = within(modal).getByLabelText("制表提示词");
+
+    // 名称是第一轮的精简版，不是那句追问
+    await waitFor(() => expect(name).toHaveValue("各客户的合同金额"));
+    expect(prompt).toHaveValue([
+      "帮我统计一下各客户的合同金额",
+      "已确认：",
+      "1. 客户范围按哪个口径：全部外部客户",
+      "补充要求：",
+      "1. 没有日期吗，我说的客户肯定不包含我司嘛"
+    ].join("\n"));
+    expect(within(modal).getByText("已根据本次会话的提问与确认项生成，可直接修改")).toBeInTheDocument();
+
+    await user.clear(name);
+    await user.type(name, "客户合同金额（不含我司）");
+    await user.click(within(modal).getByRole("button", { name: "保存模板" }));
+
+    expect(serviceMocks.createTableTemplate).toHaveBeenCalledWith({
+      name: "客户合同金额（不含我司）",
+      prompt: expect.stringContaining("补充要求：\n1. 没有日期吗"),
+      structureJson: JSON.stringify({ columns: [{ title: "城市" }, { title: "订单数", type: "number" }] })
+    });
+  });
+
+  it("leaves later follow-ups out of a template saved from an earlier round's table", async () => {
+    const user = userEvent.setup();
+    serviceMocks.loadDataHubHistoryReplay.mockResolvedValue(replayWithFollowUp());
+
+    renderSession();
+    const dock = await screen.findByRole("complementary", { name: "结果表预览" });
+    await user.click(within(dock).getByRole("tab", { name: "第1轮 · 表1" }));
+    await user.click(within(dock).getByRole("button", { name: "把当前结果表存为模板" }));
+
+    const modal = await screen.findByRole("dialog", { name: "存为模板" });
+    await waitFor(() => expect(within(modal).getByLabelText("制表提示词")).toHaveValue(
+      "帮我统计一下各客户的合同金额\n已确认：\n1. 客户范围按哪个口径：全部外部客户"
+    ));
   });
 
   it("sends a follow-up from the bottom composer", async () => {

@@ -272,7 +272,7 @@ describe("workflow refinements", () => {
     });
 
     renderPage(<TablePage />);
-    await user.click(await screen.findByRole("link", { name: "打开制表结果：客户销售排行榜表" }));
+    await user.click(await screen.findByRole("link", { name: "打开制表会话：客户销售排行榜表" }));
 
     expect(await screen.findByRole("button", { name: "切换制表会话" })).toBeInTheDocument();
     expect(await screen.findByRole("columnheader", { name: "区域" })).toBeInTheDocument();
