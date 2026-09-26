@@ -205,19 +205,21 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开主导航" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "报告智写" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("报告草稿箱")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "文稿列表" })).not.toBeInTheDocument();
+    // 写作页的二级导航已撤，模板和文稿入口在输入框底下
+    expect(screen.queryByRole("navigation", { name: "公文导航" })).not.toBeInTheDocument();
   });
 
-  it("opens the draft box with shared writing navigation", async () => {
+  it("opens my documents with a thin header back to writing", async () => {
     renderRoute("/writing/drafts");
 
     expect(
-      await screen.findByLabelText("报告草稿箱", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
+      await screen.findByLabelText("我的文稿", {}, { timeout: ROUTE_LOAD_TIMEOUT_MS })
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("结构模板库")).not.toBeInTheDocument();
 
-    expect(within(screen.getByRole("navigation", { name: "公文导航" })).getByRole("link", { name: "公文写作" }))
-      .toHaveAttribute("href", "/writing");
+    expect(screen.getByRole("link", { name: "返回公文写作" })).toHaveAttribute("href", "/writing");
+    expect(screen.queryByRole("navigation", { name: "公文导航" })).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "星数主导航" })).toBeInTheDocument();
   });
 

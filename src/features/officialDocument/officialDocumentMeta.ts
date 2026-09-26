@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { sessionQueryKey, useSessionQueryScope } from "@/app/sessionQuery";
+import { isWordEngineUnavailableCode, WORD_ENGINE_UNAVAILABLE_MESSAGE } from "@/services/officialDocumentEngine";
 import type {
   DraftDataBinding,
   OfficialDocumentAnalysis,
@@ -7,6 +8,7 @@ import type {
   OfficialDocumentMappingDefinition,
   OfficialDocumentMappingRole,
   OfficialDocumentRiskSeverity,
+  OfficialDocumentRuntimeCapabilities,
   OfficialDocumentStructureNode,
   OfficialDocumentTemplate,
   OfficialDocumentTemplateStatus,
@@ -122,14 +124,29 @@ function errorCode(error: unknown) {
   return "";
 }
 
+/**
+ * 只认服务端明说的「引擎不可用」。没有 code 或 code 是 UNKNOWN 时不下结论：
+ * 能力接口偶尔拿不到，不能因此把下载和新建模板全部锁死。
+ */
+export function wordEngineUnavailable(capabilities?: Pick<OfficialDocumentRuntimeCapabilities, "wordEngine">) {
+  const engine = capabilities?.wordEngine;
+  return Boolean(engine && !engine.available && isWordEngineUnavailableCode(engine.code));
+}
+
+/** 按钮上的提示和首页提示条说同一件事：哪些会失败、该找谁。 */
+export const WORD_ENGINE_UNAVAILABLE_ACTION_HINT = "Word 引擎暂不可用，请联系管理员处理后再试";
+
 export function operationErrorMessage(error: unknown) {
   const code = errorCode(error);
   const message = error instanceof Error ? error.message : "操作失败，请稍后重试";
+  if (isWordEngineUnavailableCode(code)) {
+    return WORD_ENGINE_UNAVAILABLE_MESSAGE;
+  }
   if (code === "LIBREOFFICE_UNAVAILABLE" || message.includes("LIBREOFFICE") || message.includes("LibreOffice")) {
     return "PDF 暂时不能生成，请先导出 Word";
   }
   if (code === "DRAFT_NOT_READY" || message.includes("READY 状态") || message.includes("还不能导出")) {
-    return "这篇草稿还不能导出。内容保存完成后即可导出 Word";
+    return "这篇文稿还不能导出。内容保存完成后即可导出 Word";
   }
   if (code === "EDITOR_SESSION_ACTIVE") {
     return "请先完成保存，再导出";
@@ -144,7 +161,7 @@ export function operationErrorMessage(error: unknown) {
     return "处理时间较长，请稍后再试。导出 Word 通常比 PDF 更快";
   }
   if (message.includes("variantId") || message.includes("格式变体")) {
-    return "模板结构还没保存成功，请再试一次创建草稿";
+    return "模板结构还没保存成功，请再试一次创建文稿";
   }
   return message;
 }
@@ -257,7 +274,7 @@ export function useOfficialDocumentWorkspaceKey() {
   return sessionQueryKey(sessionScope, "officialDocument", "workspace");
 }
 
-/** 把变更后的模板/草稿合并回共享的 workspace 查询缓存，保证列表页与详情页看到同一份数据。 */
+/** 把变更后的模板/文稿合并回共享的 workspace 查询缓存，保证列表页与详情页看到同一份数据。 */
 export function useUpdateOfficialDocumentWorkspaceCache() {
   const queryClient = useQueryClient();
   const workspaceKey = useOfficialDocumentWorkspaceKey();

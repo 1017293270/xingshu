@@ -186,6 +186,13 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
    * 不提供时完全按参考草稿自身的标题推断，行为与从前一致。
    */
   confirmedPlan?: OfficialDocumentWritingLogicPlan;
+  /**
+   * 已确认大纲里只写正文、不出标题的章节：内容复刻里原文的开头段落，或整篇没有标题时的全文。
+   * 写作计划的章节必带标题层级，这些节只能借一级标题占位，在这里单独声明。
+   */
+  bodyOnlySectionIds?: string[];
+  /** 内容复刻的原文名：给了就补一条规则，说明框架和参考资料都出自这份原文。 */
+  replicateSourceName?: string;
 }): OfficialDocumentReferenceWritingPlan {
   const userRequirement = input.userRequirement.trim();
   if (!userRequirement) throw new Error("请描述要生成的公文内容");
@@ -199,7 +206,11 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
     .filter(({ block }) => block.role === "HEADING_1" || block.role === "HEADING_2" || block.role === "HEADING_3");
   const sections: OfficialDocumentReferenceSection[] = [];
   const plannedSections = [...(input.confirmedPlan?.sections ?? [])].sort((left, right) => left.order - right.order);
-  const documentTitle = documentTitleSection(plannedSections, input.templateNodes);
+  const bodyOnly = new Set(input.bodyOnlySectionIds ?? []);
+  /* 只写正文的节没有标题可言，不能被认成整篇总标题。 */
+  const documentTitle = plannedSections[0] && bodyOnly.has(plannedSections[0].id)
+    ? undefined
+    : documentTitleSection(plannedSections, input.templateNodes);
   const confirmedSections = plannedSections.filter((section) => section !== documentTitle);
   const leadingBody = headingIndexes.length > 0
     && orderedBlocks.slice(0, headingIndexes[0].index)
@@ -219,13 +230,16 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
       const next = confirmedSections[index + 1];
       const title = section.title.trim();
       const purpose = section.purpose.trim();
+      const bodyOnlySection = bodyOnly.has(section.id);
       sections.push({
         id: section.id,
         order: sections.length,
-        headingRole: section.headingRole,
-        title: title || `第 ${index + 1} 部分`,
+        // 不带 headingRole 的节和参考稿的引言一样：模型只写正文，解析时也按正文落块
+        ...(bodyOnlySection ? {} : { headingRole: section.headingRole }),
+        title: title || (bodyOnlySection ? "正文" : `第 ${index + 1} 部分`),
         // 下一节更深一层时本节是父级标题，只出标题、不强加正文
-        bodyRequired: !next || HEADING_DEPTH[next.headingRole] <= HEADING_DEPTH[section.headingRole],
+        bodyRequired: bodyOnlySection || !next || bodyOnly.has(next.id)
+          || HEADING_DEPTH[next.headingRole] <= HEADING_DEPTH[section.headingRole],
         ...(purpose ? { purpose } : {}),
         ...(section.keyPoints.length ? { keyPoints: [...section.keyPoints] } : {})
       });
@@ -360,6 +374,10 @@ export function buildOfficialDocumentReferenceWritingPlan(input: {
         // 参考资料是用户这一轮亲手传的，和参考稿的旧事实不是一回事，得单说一句。
         ...(referenceMaterials.length ? {
           referenceMaterialsRule: "referenceMaterials 是用户本轮上传的参考资料，可作为事实与素材来源引用"
+        } : {}),
+        // 内容复刻：框架与参考资料都出自同一份原文，要照它的章节和写法写一篇新的。
+        ...(input.replicateSourceName ? {
+          replicateRule: `本轮是内容复刻：referenceSections 是从原文《${input.replicateSourceName}》整理出、经用户确认的内容框架，referenceMaterials 里的同名资料就是原文。按框架的章节顺序和原文的行文结构、详略、语气写一篇新的公文；原文里的时间、数据、人名等事实只在与本次要求一致时才能沿用，本次要求改变的以本次要求为准，缺少的标【待补充】。referenceSections 里没有 headingRole 的节只写正文：锚点后直接写正文，不写标题行，这一条优先于 sectionHeadingFirstLine。`
         } : {}),
         keepSectionOrder: true,
         allowHeadingRewrite: true,
@@ -775,7 +793,7 @@ function parseAnchoredReferenceGeneration(input: {
   const generatedSectionIds = markers.filter((marker) => marker.kind === "SECTION").map((marker) => marker.id);
   if (generatedSectionIds.length !== sectionIds.length
     || generatedSectionIds.some((id, index) => id !== sectionIds[index])) {
-    throw new GeneratedStructureError("生成结果的章节数量或顺序与参考草稿不一致");
+    throw new GeneratedStructureError("生成结果的章节数量或顺序与所选结构不一致");
   }
 
   const blocks: OfficialDocumentDraftContent["blocks"] = [];

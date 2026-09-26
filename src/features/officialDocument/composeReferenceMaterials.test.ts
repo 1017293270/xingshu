@@ -6,7 +6,6 @@ import {
 import {
   classifyMaterialFile,
   composeMaterialPayload,
-  joinContentProfileBlocks,
   materialExtension,
   resolveComposeMaterials,
   type ComposeMaterial
@@ -17,26 +16,18 @@ function material(partial: Partial<ComposeMaterial> & { id: string }): ComposeMa
 }
 
 describe("classifyMaterialFile", () => {
-  it("routes text formats, DOCX and everything else apart", () => {
+  it("routes text formats, DOCX, PDF and everything else apart", () => {
     expect(classifyMaterialFile(new File([""], "台账.csv"))).toBe("text");
     expect(classifyMaterialFile(new File([""], "说明.MD"))).toBe("text");
     expect(classifyMaterialFile(new File([""], "材料.docx"))).toBe("docx");
-    expect(classifyMaterialFile(new File([""], "扫描件.pdf"))).toBe("unsupported");
+    expect(classifyMaterialFile(new File([""], "扫描件.PDF"))).toBe("pdf");
+    expect(classifyMaterialFile(new File([""], "表格.xlsx"))).toBe("unsupported");
     expect(classifyMaterialFile(new File([""], "无后缀"))).toBe("unsupported");
   });
 
   it("reads the extension case-insensitively", () => {
     expect(materialExtension("A.DOCX")).toBe(".docx");
     expect(materialExtension("noext")).toBe("");
-  });
-});
-
-describe("joinContentProfileBlocks", () => {
-  it("puts blocks back in order and flattens tables into rows", () => {
-    expect(joinContentProfileBlocks([
-      { id: "b2", order: 1, kind: "TABLE", text: "", headingHint: "", columns: ["季度", "隐患"], rows: [["Q1", "18"]] },
-      { id: "b1", order: 0, kind: "PARAGRAPH", text: "整改率 96%。", headingHint: "", columns: [], rows: [] }
-    ])).toBe("整改率 96%。\n\n季度\t隐患\nQ1\t18");
   });
 });
 

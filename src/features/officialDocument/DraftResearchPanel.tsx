@@ -135,14 +135,14 @@ export function DraftResearchPanel({
   };
 
   if (!profile || !plan) {
-    return <div className="official-document-inline-empty">旧草稿没有绑定内容方案，可继续手工编辑和导出。</div>;
+    return <div className="official-document-inline-empty">旧文稿没有绑定内容方案，可继续手工编辑和导出。</div>;
   }
 
   return (
     <section className="draft-research" aria-labelledby="draft-research-heading">
       <div className="official-document-section-title">
         <div>
-          <h4 id="draft-research-heading">资料补全</h4>
+          <h2 id="draft-research-heading">资料补全</h2>
           <p>按已确认计划执行问数和问知；结果成功后才会写入全文。</p>
         </div>
         <Button

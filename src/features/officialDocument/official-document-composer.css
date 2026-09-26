@@ -21,6 +21,45 @@
   gap: 8px;
 }
 
+/* 「公文模板」「内容复刻」：带字的工具按钮，和 + 号同一行、同一高度 */
+.xs-prompt-surface .official-document-composer__tool.ant-btn {
+  height: var(--xs-control-height-sm);
+  gap: 4px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--xs-radius-small);
+  background: transparent;
+  box-shadow: none;
+  color: var(--composer-ink);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+}
+
+.xs-prompt-surface .official-document-composer__tool.ant-btn:hover:not(:disabled) {
+  background: var(--xs-surface-hover);
+  color: var(--xs-primary-2);
+}
+
+.xs-prompt-surface .official-document-composer__tool.ant-btn[aria-pressed="true"] {
+  background: var(--xs-info-soft);
+  color: var(--xs-primary-2);
+}
+
+.xs-prompt-surface .official-document-composer__tool.ant-btn:disabled {
+  color: #bcbcbc;
+}
+
+/* 麦克风和取消语音：正圆尺寸由 composer-surface 统一给，这里只补悬停和录音中两种状态 */
+.xs-prompt-surface .official-document-composer__icon.ant-btn.ant-btn-icon-only:hover:not(:disabled) {
+  background: var(--xs-surface-hover);
+  color: var(--xs-primary-2);
+}
+
+.xs-prompt-surface .official-document-composer__icon.ant-btn.ant-btn-icon-only[aria-pressed="true"] {
+  background: var(--xs-info-soft);
+  color: var(--xs-primary-2);
+}
+
 .official-document-composer__footnote {
   position: absolute;
   top: calc(100% + 10px);

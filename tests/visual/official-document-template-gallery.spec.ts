@@ -10,7 +10,7 @@ const names = [
   "工作总结", "公文助手_占位符通知模板"
 ];
 
-test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ page }) => {
+test("模板库页和「公文模板」弹窗的筛选、状态在各尺寸下可用", async ({ page }) => {
   await page.route("**/api/**", (route) => route.fulfill({ json: { code: 200, data: [] } }));
   await page.route("**/api/analytics/**", (route) => route.fulfill({ status: 503, json: { message: "问数资产不参与本次视觉检查" } }));
   await page.route("**/api/official-document/v1/capabilities", (route) => route.fulfill({ json: {
@@ -71,39 +71,41 @@ test("模板库的筛选、状态与双入口在各尺寸下可用", async ({ pa
   await expect(page.locator(".official-document-template-card")).toHaveCount(17);
 
   await page.goto("/writing");
-  await page.getByRole("textbox", { name: "公文写作要求" }).fill("@");
-  await page.getByRole("option", { name: /模板库/ }).click();
-  const gallery = page.getByRole("region", { name: "模板库", exact: true });
+  await page.getByRole("button", { name: "公文模板", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "公文模板" });
+  const gallery = dialog.getByRole("region", { name: "模板库", exact: true });
   await expect(gallery).toBeVisible();
+  await expect(gallery.getByRole("button", { name: "新建模板" })).toBeEnabled();
   for (const [width, height] of [[1440, 1000], [1512, 1312], [1672, 1080], [1920, 1080], [2200, 1200], [1024, 900], [768, 1024], [390, 844]]) {
     await page.setViewportSize({ width, height });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
     expect(await gallery.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-    const header = await gallery.locator(".official-document-templates__head").boundingBox();
     const search = await gallery.getByRole("textbox", { name: "搜索模板" }).boundingBox();
-    expect(search!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+    const grid = await gallery.locator(".official-document-templates__grid").boundingBox();
+    expect(grid!.y).toBeGreaterThanOrEqual(search!.y + search!.height);
     if (width === 390) {
       const filters = await gallery.getByRole("group", { name: "按模板状态筛选" }).boundingBox();
-      const grid = await gallery.locator(".official-document-templates__grid").boundingBox();
       expect(filters!.y).toBeGreaterThanOrEqual(search!.y + search!.height);
       expect(grid!.y).toBeGreaterThanOrEqual(filters!.y + filters!.height);
     }
+    // 弹窗宽度封顶，卡片按弹窗内宽排，不跟着屏幕加列
     const columns = await gallery.locator(".official-document-templates__grid").evaluate((element) =>
       getComputedStyle(element).gridTemplateColumns.split(" ").length);
-    expect(columns).toBe(width >= 1840 ? 4 : width >= 1200 ? 3 : width > 640 ? 2 : 1);
+    expect(columns).toBe(width >= 1024 ? 3 : width > 640 ? 2 : 1);
     await expect(gallery.locator(".official-document-template-card__text strong").first()).toHaveCSS("font-size", "16px");
     if (width > 900) {
       const heights = await gallery.locator(".official-document-template-card").evaluateAll((cards) =>
         cards.map((card) => Math.round(card.getBoundingClientRect().height)));
       expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
     }
-    await page.screenshot({ path: `outputs/template-library-svg/overlay-${width}.png` });
+    await page.screenshot({ path: `outputs/template-library-svg/modal-${width}.png` });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect(await page.locator(".official-document-template-card").first().evaluate((element) =>
     parseFloat(getComputedStyle(element).transitionDuration))).toBeLessThanOrEqual(0.01);
-  const accessibility = await new AxeBuilder({ page }).include(".official-document-templates").analyze();
+  const accessibility = await new AxeBuilder({ page }).include(".official-document-template-modal").analyze();
   expect(accessibility.violations).toEqual([]);
-  await page.getByRole("button", { name: "关闭模板库" }).click();
-  await expect(gallery).not.toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).not.toBeVisible();
   await expect(page.getByRole("textbox", { name: "公文写作要求" })).toBeFocused();
 });

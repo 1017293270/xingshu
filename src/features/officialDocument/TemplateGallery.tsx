@@ -86,24 +86,29 @@ export function TemplateGalleryCard({
 }
 
 /**
- * 写作台的覆盖面板和 /writing/templates 独立页共用它，只有外层动作不同。
+ * 写作台的「公文模板」弹窗和 /writing/templates 独立页共用它，只有外层动作不同。
+ * 两处的标题都由外层给（弹窗标题、细头部），这里只管筛选、搜索和卡片。
  */
 export function TemplateGallery({
   templates,
   label,
-  actions,
+  toolbarActions,
+  notice,
   empty,
   onUse,
   onOpen,
-  overlay
+  autoFocusSearch
 }: {
   templates: OfficialDocumentTemplate[];
   label: string;
-  actions?: ReactNode;
+  /** 搜索框右边的动作，比如弹窗里的「新建模板」。 */
+  toolbarActions?: ReactNode;
+  /** 工具条上方的一条提示，比如刚上传的模板现在走到哪一步。 */
+  notice?: ReactNode;
   empty?: ReactNode;
   onUse: (template: OfficialDocumentTemplate) => void;
   onOpen: (template: OfficialDocumentTemplate) => void;
-  overlay?: boolean;
+  autoFocusSearch?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -115,16 +120,8 @@ export function TemplateGallery({
   });
 
   return (
-    <section className="official-document-templates" aria-label={label} data-overlay={overlay || undefined}>
-      <header className="official-document-templates__head">
-        <div className="official-document-templates__intro">
-          <div className="official-document-templates__title">
-            <h2>模板库</h2>
-            <span className="official-document-templates__count">{templates.length} 份结构模板</span>
-          </div>
-        </div>
-        {actions ? <div className="official-document-templates__actions">{actions}</div> : null}
-      </header>
+    <section className="official-document-templates" aria-label={label}>
+      {notice}
       {templates.length ? (
         <>
           <div className="official-document-templates__toolbar">
@@ -139,16 +136,19 @@ export function TemplateGallery({
                 </button>
               ))}
             </div>
-            <Input
-              className="official-document-templates__search"
-              aria-label="搜索模板"
-              placeholder="搜索模板名称或文件名"
-              prefix={<MagnifyingGlass size={17} aria-hidden="true" />}
-              allowClear
-              autoFocus={overlay}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+            <div className="official-document-templates__tools">
+              <Input
+                className="official-document-templates__search"
+                aria-label="搜索模板"
+                placeholder="搜索模板名称或文件名"
+                prefix={<MagnifyingGlass size={17} aria-hidden="true" />}
+                allowClear
+                autoFocus={autoFocusSearch}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              {toolbarActions}
+            </div>
           </div>
           <span className="sr-only" role="status">当前显示 {visibleTemplates.length} 份模板</span>
           {visibleTemplates.length ? (
@@ -160,7 +160,7 @@ export function TemplateGallery({
           ) : (
             <div className="official-document-templates__empty">
               <MagnifyingGlass size={28} aria-hidden="true" />
-              <h3>没有符合条件的模板</h3>
+              <h2>没有符合条件的模板</h2>
               <p>试试其他关键词，或清除筛选查看全部模板。</p>
               <Button onClick={() => { setSearch(""); setFilter("all"); }}>清除筛选</Button>
             </div>

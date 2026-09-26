@@ -82,7 +82,7 @@ const rolePlaceholders: Record<OfficialDocumentDraftBlockRole, string> = {
 };
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "草稿保存失败";
+  return error instanceof Error ? error.message : "文稿保存失败";
 }
 
 /**
@@ -363,7 +363,7 @@ export function StructuredDraftEditor({
     try {
       recoveryIdRef.current = writeStructuredDraftRecovery(recoveryKey, draft.templateVersionId, snapshot, serverConflictRef.current)?.id;
     } catch {
-      setRecoveryNotice("浏览器未能保存本地副本，请使用保存草稿将修改保存到服务器。");
+      setRecoveryNotice("浏览器未能保存本地副本，请使用保存文稿将修改保存到服务器。");
     }
   }, [recoveryKey, draft.templateVersionId]);
 
@@ -398,20 +398,20 @@ export function StructuredDraftEditor({
       setPreviewUrl(undefined);
       setPreviewRevision(undefined);
       setIsPreviewing(false);
-      setPreviewError(previewOpen ? "草稿已更新，请重新生成当前稿预览" : "");
+      setPreviewError(previewOpen ? "文稿已更新，请重新生成当前稿预览" : "");
     }
     scheduleSave();
   };
 
   performSaveRef.current = () => {
     if (serverConflictRef.current) return Promise.reject(new Error("服务器已有新版本，本地修改已保留，可先对照再保存"));
-    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) return Promise.reject(new Error("账号或空间已切换，请重新打开草稿"));
+    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) return Promise.reject(new Error("账号或空间已切换，请重新打开文稿"));
     if (savingRef.current) {
       pendingSaveRef.current = true;
       return activeSaveRef.current ?? Promise.reject(new Error("正文正在应用，请稍后保存"));
     }
     const snapshot = contentRef.current;
-    if (!snapshot || !mountedRef.current) return Promise.reject(new Error("草稿内容尚未加载或编辑器已关闭"));
+    if (!snapshot || !mountedRef.current) return Promise.reject(new Error("文稿内容尚未加载或编辑器已关闭"));
     const epoch = contextEpochRef.current;
     const backupId = recoveryIdRef.current;
     const operation = async () => {
@@ -694,9 +694,9 @@ export function StructuredDraftEditor({
 
   const flushPendingSave = async () => {
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (!mountedRef.current || !contentRef.current) throw new Error("草稿内容尚未加载或编辑器已关闭");
+      if (!mountedRef.current || !contentRef.current) throw new Error("文稿内容尚未加载或编辑器已关闭");
       if (serverConflictRef.current) throw new Error("服务器已有新版本，本地修改已保留，可先对照再保存");
-      if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开草稿");
+      if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开文稿");
       if (!dirtyRef.current && !savingRef.current && !pendingSaveRef.current) return;
       if (saveTimerRef.current !== undefined) {
         window.clearTimeout(saveTimerRef.current);
@@ -707,7 +707,7 @@ export function StructuredDraftEditor({
       if (!savingRef.current && !pendingSaveRef.current) return;
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     }
-    throw new Error("草稿保存超时，请稍后重试");
+    throw new Error("文稿保存超时，请稍后重试");
   };
 
   const saveResearchResults = async (
@@ -718,9 +718,9 @@ export function StructuredDraftEditor({
   };
 
   const applyBlocks = async (blocks: OfficialDocumentDraftContent["blocks"]) => {
-    if (!contentRef.current || !mountedRef.current) throw new Error("草稿内容尚未加载或编辑器已关闭");
+    if (!contentRef.current || !mountedRef.current) throw new Error("文稿内容尚未加载或编辑器已关闭");
     if (serverConflictRef.current) throw new Error("服务器已有新版本，本地修改已保留，可先对照再保存");
-    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开草稿");
+    if (recoveryKey !== structuredDraftRecoveryKey(draft.id)) throw new Error("账号或空间已切换，请重新打开文稿");
     // 与键盘编辑共用同步提交和串行保存，等待服务器期间的新输入也会保留。
     commit((current) => ({ ...current, blocks: normalizeOrders(blocks) }));
     await flushPendingSave();
@@ -728,7 +728,7 @@ export function StructuredDraftEditor({
 
   const normalizeForExport = async () => {
     const current = contentRef.current;
-    if (!current) throw new Error("草稿内容尚未加载");
+    if (!current) throw new Error("文稿内容尚未加载");
     const normalized = normalizeOfficialDocumentDraftBlocks(current.blocks, templateNodes);
     if (!normalized.changedCount) {
       await flushPendingSave();
@@ -762,7 +762,7 @@ export function StructuredDraftEditor({
   const saveFactReview = async (review: OfficialDocumentFactReview) => {
     await flushPendingSave();
     const snapshot = contentRef.current;
-    if (!snapshot) throw new Error("草稿内容尚未加载");
+    if (!snapshot) throw new Error("文稿内容尚未加载");
     const factReview = review.confirmedAt && review.textSnapshot !== officialDocumentContentText(snapshot)
       ? { ...review, confirmedAt: undefined } : review;
     commit((current) => ({ ...current, factReview }));
@@ -847,11 +847,11 @@ export function StructuredDraftEditor({
       if (kind === "draft") {
         const server = await getOfficialDocumentDraftContent(draft.id);
         if (server.revision !== revision || !renderedContent || !sameStructuredDraftContent(server, renderedContent)) {
-          throw new Error("服务器版本已变化，请重新打开草稿后预览");
+          throw new Error("服务器版本已变化，请重新打开文稿后预览");
         }
       }
       if (!mountedRef.current || request !== previewRequestRef.current || epoch !== contextEpochRef.current) return;
-      if (kind === "draft" && generation !== generationRef.current) throw new Error("草稿已更新，请重新生成当前稿预览");
+      if (kind === "draft" && generation !== generationRef.current) throw new Error("文稿已更新，请重新生成当前稿预览");
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;
       setPreviewUrl(url);
@@ -888,7 +888,7 @@ export function StructuredDraftEditor({
     return (
       <div className="structured-draft-editor-frame">
         <div className="structured-draft-editor__loading" role={saveError ? "alert" : "status"}>
-          {saveError || "正在加载结构化草稿…"}
+          {saveError || "正在加载文稿…"}
         </div>
       </div>
     );
@@ -1006,7 +1006,7 @@ export function StructuredDraftEditor({
         open={previewOpen}
         footer={(
           <div className="official-document-preview-modal__footer">
-            <span>{previewKind === "template" ? "当前绑定结构模板 · 不包含草稿正文"
+            <span>{previewKind === "template" ? "当前绑定结构模板 · 不包含文稿正文"
               : previewRevision == null ? "保存成功后生成当前正文预览" : `当前已保存正文 · 内容修订 ${previewRevision}`}</span>
             <Button icon={<Eye size={15} />} loading={isPreviewing} onClick={() => void refreshPreview()}>重新加载</Button>
           </div>
@@ -1026,7 +1026,7 @@ export function StructuredDraftEditor({
             <Eye size={28} />
             <strong>{isPreviewing ? "正在生成预览" : previewError ? "预览暂不可用" : "尚未生成预览"}</strong>
             {previewError ? <p role="alert">{previewError}</p> : <p>{previewKind === "draft"
-              ? "保存当前内容后生成PDF，旧预览不会代替当前稿。" : "打开当前草稿绑定的结构模板 PDF，核对版式和静态元素。"}</p>}
+              ? "保存当前内容后生成PDF，旧预览不会代替当前稿。" : "打开当前文稿绑定的结构模板 PDF，核对版式和静态元素。"}</p>}
           </div>
         )}
       </Modal>

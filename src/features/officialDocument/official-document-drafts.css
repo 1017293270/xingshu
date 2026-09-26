@@ -7,12 +7,13 @@
 .official-document-drafts .official-document-templates__grid { margin-block: 0; padding: 0; list-style: none; }
 .official-document-app__workspace[data-stage="drafts"] { background: var(--xs-bg); }
 .official-document-drafts .official-document-templates__filters { flex-wrap: wrap; }
-.official-document-drafts .official-document-drafts__refresh.ant-btn {
+/* 刷新按钮挂在细头部上，不在 .official-document-drafts 里面 */
+.official-document-drafts__refresh.ant-btn {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  color: var(--template-muted);
-  border-radius: 10px;
+  color: var(--xs-text-3);
+  border-radius: var(--xs-radius-control);
 }
 @media (max-width: 760px) {
   .official-document-drafts .official-document-templates__filters { justify-content: flex-start; }

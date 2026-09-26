@@ -693,7 +693,7 @@ describe("structured draft recovery and current preview", () => {
     const originalUrl = URL;
     const revoke = vi.fn();
     vi.stubGlobal("URL", class extends originalUrl { static createObjectURL = vi.fn(() => "blob:current-draft"); static revokeObjectURL = revoke; });
-    render(<MemoryRouter><OfficialDocumentAppShell><StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/writing/drafts/draft-1"]}><OfficialDocumentAppShell><StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
     await ready();
     fireEvent.change(screen.getByLabelText("正文节点 1"), { target: { value: "预览正文" } });
     fireEvent.click(screen.getByRole("button", { name: "预览当前稿" }));
@@ -721,7 +721,7 @@ describe("structured draft recovery and current preview", () => {
     const revoke = vi.fn();
     vi.stubGlobal("URL", class extends originalUrl { static createObjectURL = vi.fn(() => "blob:old-draft"); static revokeObjectURL = revoke; });
     const ref = createRef<StructuredDraftEditorHandle>();
-    render(<MemoryRouter><OfficialDocumentAppShell><StructuredDraftEditor ref={ref} draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/writing/drafts/draft-1"]}><OfficialDocumentAppShell><StructuredDraftEditor ref={ref} draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "预览当前稿" }));
     await waitFor(() => expect(screen.getByLabelText("当前稿 PDF · 内容修订 4")).toBeInTheDocument());
@@ -774,7 +774,7 @@ describe("structured draft recovery and current preview", () => {
     const originalUrl = URL;
     const create = vi.fn(() => "blob:must-not-show");
     vi.stubGlobal("URL", class extends originalUrl { static createObjectURL = create; static revokeObjectURL = vi.fn(); });
-    render(<MemoryRouter><OfficialDocumentAppShell><StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/writing/drafts/draft-1"]}><OfficialDocumentAppShell><StructuredDraftEditor draft={draft} templateNodes={nodes} onStatus={vi.fn()} /></OfficialDocumentAppShell></MemoryRouter>);
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "预览当前稿" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("服务器版本已变化"));

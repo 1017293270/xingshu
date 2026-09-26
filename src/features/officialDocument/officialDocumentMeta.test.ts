@@ -10,7 +10,8 @@ import {
   operationErrorMessage,
   styleVariantId,
   templateIsUsable,
-  templateUsabilityLabel
+  templateUsabilityLabel,
+  wordEngineUnavailable
 } from "./officialDocumentMeta";
 
 function usabilityFixture(status: OfficialDocumentTemplateStatus, compiledAvailable?: boolean) {
@@ -19,6 +20,25 @@ function usabilityFixture(status: OfficialDocumentTemplateStatus, compiledAvaila
     currentVersion: { compiledAvailable }
   } as Pick<OfficialDocumentTemplate, "status" | "currentVersion">;
 }
+
+describe("Word 引擎可用性", () => {
+  it("只在服务端明说引擎不可用时下结论", () => {
+    expect(wordEngineUnavailable({ wordEngine: { available: false, code: "ENGINE_UNAVAILABLE" } })).toBe(true);
+    expect(wordEngineUnavailable({ wordEngine: { available: false, code: "WORD_ENGINE_UNAVAILABLE" } })).toBe(true);
+    // 能力接口没拿到或说不清，不能把按钮全锁死
+    expect(wordEngineUnavailable({ wordEngine: { available: false, code: "ENGINE_CAPABILITY_UNKNOWN" } })).toBe(false);
+    expect(wordEngineUnavailable({ wordEngine: { available: false } })).toBe(false);
+    expect(wordEngineUnavailable({ wordEngine: { available: true, code: "AVAILABLE" } })).toBe(false);
+    expect(wordEngineUnavailable(undefined)).toBe(false);
+  });
+
+  it("两种引擎不可用的错误码说同一句话", () => {
+    for (const code of ["ENGINE_UNAVAILABLE", "WORD_ENGINE_UNAVAILABLE"]) {
+      expect(operationErrorMessage(Object.assign(new Error("Syncfusion license expired"), { code })))
+        .toBe("Word 引擎未配置或不可用，当前操作已停止");
+    }
+  });
+});
 
 describe("officialDocumentMeta template usage", () => {
   it("只有已发布且编译文件还在的模板才算可用", () => {
@@ -174,7 +194,7 @@ describe("officialDocumentMeta template usage", () => {
 
   it("hides leaked format-fingerprint errors from draft creation", () => {
     expect(operationErrorMessage(new Error("variantId 不属于该段落和角色对应的格式变体")))
-      .toBe("模板结构还没保存成功，请再试一次创建草稿");
+      .toBe("模板结构还没保存成功，请再试一次创建文稿");
   });
 
   it("lets saved structured drafts export without waiting for a READY label", () => {
@@ -190,6 +210,6 @@ describe("officialDocumentMeta template usage", () => {
     }))).toBe("PDF 暂时不能生成，请先导出 Word");
     expect(operationErrorMessage(Object.assign(new Error("草稿必须处于 READY 状态才能正式导出"), {
       code: "DRAFT_NOT_READY"
-    }))).toBe("这篇草稿还不能导出。内容保存完成后即可导出 Word");
+    }))).toBe("这篇文稿还不能导出。内容保存完成后即可导出 Word");
   });
 });

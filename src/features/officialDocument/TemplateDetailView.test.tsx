@@ -177,9 +177,13 @@ describe("TemplateDetailView", () => {
     expect(within(outline).getByText("关于示范项目的请示")).toBeInTheDocument();
     expect(screen.getByLabelText("结构模板原文")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /段落角色/ })).not.toBeInTheDocument();
+    // 细头部的 h1 是页面标题，页内分区标题紧接着从 h2 起
+    expect(screen.getByRole("heading", { level: 2, name: "结构大纲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "结构模板原文" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "校准结构" }));
     expect(await screen.findByRole("combobox", { name: /段落角色/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "节点属性" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "校准结构" }));
     await waitFor(() =>
@@ -205,7 +209,7 @@ describe("TemplateDetailView", () => {
     } });
     mocks.createOfficialDocumentDraft.mockResolvedValue({
       id: "draft-1",
-      title: "请示 - 新草稿",
+      title: "请示 - 新文稿",
       status: "EDITING",
       source: "LIVE",
       templateId: reviewTemplate.id,
@@ -234,10 +238,10 @@ describe("TemplateDetailView", () => {
     });
 
     expect((await screen.findAllByText("服务端发布后的标题")).length).toBeGreaterThan(0);
-    const createButton = await screen.findByRole("button", { name: "按此结构新建草稿" });
+    const createButton = await screen.findByRole("button", { name: "按此结构新建文稿" });
     await user.click(createButton);
-    expect(await screen.findByRole("dialog", { name: "按结构创建报告草稿" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+    expect(await screen.findByRole("dialog", { name: "按结构新建文稿" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "创建文稿" }));
 
     await waitFor(() => expect(mocks.createOfficialDocumentDraft).toHaveBeenCalled());
     expect(await screen.findByText("草稿页")).toBeInTheDocument();

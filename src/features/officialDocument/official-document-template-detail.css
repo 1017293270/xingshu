@@ -28,15 +28,6 @@
   border-color: var(--doc-ui-line);
 }
 
-.official-document-app[data-stage="template"] .official-document-app__back {
-  font-size: 13px;
-  color: var(--doc-ui-secondary);
-}
-
-.official-document-app[data-stage="template"] .official-document-app__back:hover {
-  color: var(--xs-interactive-text);
-}
-
 .official-document-app[data-stage="template"] .official-document-app__context {
   gap: 10px;
   padding-left: 12px;
@@ -132,7 +123,7 @@
   border-color: var(--doc-ui-line);
 }
 
-.official-document-template-detail .official-document-workspace-panel-head h4 {
+.official-document-template-detail .official-document-workspace-panel-head h2 {
   color: var(--doc-ui-text);
   font-size: 13px;
   font-weight: 500;
@@ -422,7 +413,7 @@
   gap: 8px;
 }
 
-.official-document-template-detail .official-document-section-title h4 {
+.official-document-template-detail .official-document-section-title h2 {
   color: var(--doc-ui-text);
   font-size: 13px;
   font-weight: 500;

@@ -1,4 +1,5 @@
 import { expireDataHubSession, readDataHubSession } from "@/services/dataHubSession";
+import { isWordEngineUnavailableCode, WORD_ENGINE_UNAVAILABLE_MESSAGE } from "@/services/officialDocumentEngine";
 import { listQueryAssets } from "@/services/queryAssetService";
 import type { QueryAsset } from "@/types/analytics";
 import type {
@@ -123,6 +124,9 @@ type ApiAnalysisJob = {
   message?: string | null;
   updatedAt?: string;
 };
+
+/** 段落事实：模板分析来自 Word 引擎，内容复刻来自浏览器本地解析，角色启发式两边共用。 */
+export type OfficialDocumentParagraphFact = ApiParagraphFact;
 
 type ApiParagraphFact = {
   index: number;
@@ -325,13 +329,13 @@ export function resolveOfficialDocumentErrorMessage(status: number, payload: unk
     if (typeof record.message === "string" && record.message.trim()) {
       const code = typeof record.code === "string" ? record.code : "";
       if (code === "OBJECT_NOT_FOUND" || record.message.includes("文档对象不存在")) {
-        return "该模板的编译文件已丢失，无法创建草稿。请重新上传模板后再试。";
+        return "该模板的编译文件已丢失，无法创建文稿。请重新上传模板后再试。";
       }
       if (code === "TEMPLATE_NOT_PUBLISHED") {
-        return "模板还不能起草。请重新打开模板并点击“按模板新建草稿”。";
+        return "模板还不能起草。请重新打开模板并点击“按此结构新建文稿”。";
       }
       if (code === "DRAFT_NOT_READY" || record.message.includes("READY 状态")) {
-        return "这篇草稿还不能导出。内容保存完成后即可导出 Word";
+        return "这篇文稿还不能导出。内容保存完成后即可导出 Word";
       }
       if (code === "LIBREOFFICE_UNAVAILABLE" || record.message.includes("LibreOffice")) {
         return "PDF 暂时不能生成，请先导出 Word";
@@ -343,7 +347,7 @@ export function resolveOfficialDocumentErrorMessage(status: number, payload: unk
         return "导出文件没有通过版式检查。请先导出 Word，或调整正文后再试";
       }
       if (code === "COMPILED_TEMPLATE_HASH_MISMATCH") {
-        return "模板文件已变更，请重新打开模板并创建草稿后再导出";
+        return "模板文件已变更，请重新打开模板并创建文稿后再导出";
       }
       return record.message.trim();
     }
@@ -420,7 +424,7 @@ async function requestOfficialDocument<T>(baseUrl: string, path: string, options
 
     if (response.status === 401) expireDataHubSession(session.token);
     throw new OfficialDocumentServiceError(
-      code === "ENGINE_UNAVAILABLE" ? "Word 引擎未配置或不可用，当前操作已停止" : message,
+      isWordEngineUnavailableCode(code) ? WORD_ENGINE_UNAVAILABLE_MESSAGE : message,
       { status: response.status, code, details: payload }
     );
   }
@@ -641,7 +645,7 @@ function isRedFormat(paragraph: ApiParagraphFact) {
     && (color.includes("ff0000") || color.includes("r=255,g=0,b=0") || color.includes("255,0,0"));
 }
 
-function suggestParagraphRoles(paragraphs: ApiParagraphFact[]) {
+export function suggestParagraphRoles(paragraphs: ApiParagraphFact[]) {
   const roles = new Map<number, SuggestedOfficialDocumentRole>();
   const normalized = paragraphs.map((paragraph) => paragraph.text?.replace(/\s+/g, "").trim() ?? "");
   const nonEmptyIndexes = paragraphs
@@ -1112,7 +1116,7 @@ function mapDraft(snapshot: ApiDraftSnapshot, templateNames: Map<string, string>
 function authenticatedActor() {
   const user = readDataHubSession().user;
   if (!user) {
-    throw new OfficialDocumentServiceError("登录信息缺失，不能创建报告草稿或编辑会话", {
+    throw new OfficialDocumentServiceError("登录信息缺失，不能创建文稿或编辑会话", {
       status: 401,
       code: "ACTOR_REQUIRED"
     });
@@ -1305,7 +1309,7 @@ function createHttpService(baseUrl: string): OfficialDocumentService {
     },
     async renameDraft(draftId, title) {
       const trimmed = title.trim();
-      if (!trimmed || trimmed.length > 255) throw new OfficialDocumentServiceError("草稿名称不能为空且不能超过 255 个字符", { code: "DRAFT_TITLE_INVALID" });
+      if (!trimmed || trimmed.length > 255) throw new OfficialDocumentServiceError("文稿名称不能为空且不能超过 255 个字符", { code: "DRAFT_TITLE_INVALID" });
       const snapshot = await requestOfficialDocument<ApiDraftSnapshot>(baseUrl, `/v1/drafts/${encodeURIComponent(draftId)}/title`, {
         method: "PUT", body: JSON.stringify({ title: trimmed })
       });

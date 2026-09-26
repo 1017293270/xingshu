@@ -364,7 +364,7 @@ const pages: SmokePage[] = [
   { slug: "ask-knowledge", path: "/ask-knowledge", heading: "从一个企业知识问题开始", charts: 0 },
   { slug: "history", path: "/history", heading: "历史对话", readyText: "还没有历史对话", charts: 0 },
   { slug: "table", path: "/table", heading: "想做一张什么表？", charts: 0 },
-  { slug: "writing", path: "/writing", heading: "想写一篇什么公文？", charts: 0, shell: false },
+  { slug: "writing", path: "/writing", heading: "公文模板化复刻", charts: 0, shell: false },
   { slug: "dashboard", path: "/dashboard", heading: "我的看板", readyText: "暂无看板", charts: 0 },
   { slug: "cloud", path: "/cloud", heading: "我的云盘", readyText: "企业制度知识库", charts: 0 },
   { slug: "data-dashboard", path: "/data-dashboard", heading: "数据资产看板", charts: 4 },

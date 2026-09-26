@@ -104,7 +104,7 @@ function pdfFixture(text: string) {
 
 async function openDraft(page: Page) {
   await page.goto("/writing/drafts");
-  await page.getByRole("button", { name: "打开草稿 最新工作报告", exact: true }).click();
+  await page.getByRole("button", { name: "打开文稿 最新工作报告", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "正文节点 1", exact: true })).toHaveValue("原始正文内容。");
 }
 test("keeps immediate edits across navigation, failed save and reload", async ({ page }) => {
@@ -115,8 +115,8 @@ test("keeps immediate edits across navigation, failed save and reload", async ({
   await page.clock.pauseAt(new Date(Date.now() + 1000));
   await editor.fill("刚编辑就离开，也应保留这句正文。");
   expect(state.saves()).toBe(0);
-  await page.getByRole("link", { name: "返回草稿管理", exact: true }).click();
-  await page.getByRole("button", { name: "打开草稿 最新工作报告", exact: true }).click();
+  await page.getByRole("link", { name: "返回我的文稿", exact: true }).click();
+  await page.getByRole("button", { name: "打开文稿 最新工作报告", exact: true }).click();
   await expect(editor).toHaveValue("刚编辑就离开，也应保留这句正文。");
   await page.clock.resume();
   state.failSaves(true);
@@ -126,7 +126,7 @@ test("keeps immediate edits across navigation, failed save and reload", async ({
   await page.clock.fastForward(1000);
   await expect(page.getByText("模拟网络不可用", { exact: true }).first()).toBeVisible();
   state.failSaves(false);
-  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await page.getByRole("button", { name: "保存文稿", exact: true }).click();
   await expect.poll(() => state.content().blocks[0].text).toBe("网络故障时，这次修改也应能恢复。");
 });
 

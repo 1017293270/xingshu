@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 /*
- * 报告智写分两页：/writing 是入口首页（只有标题和输入框），/writing/session 才是会话与成稿。
+ * 报告智写分两页：/writing 是入口首页（标题、输入框和我的文稿），/writing/session 才是会话与成稿。
  * 生成过程离开写作台也要继续跑——写作台常驻在壳层里，路由重挂的只是承载它的槽位。
  * 这一组用例把正文流卡住，切走再回来，看首页提示条、进度指示、完成提醒和成稿是不是都对得上。
  */
@@ -110,7 +110,7 @@ async function startGeneration(page: Page) {
 
 const runningDot = '.xs-sidebar__job[data-state="running"]';
 const unseenDot = '.xs-sidebar__job[data-state="unseen"]';
-const heroTitle = "想写一篇什么公文？";
+const heroTitle = "公文模板化复刻";
 const notice = ".writing-session-notice";
 
 test.describe("报告智写：生成过程跟着用户走", () => {
@@ -169,14 +169,10 @@ test.describe("报告智写：生成过程跟着用户走", () => {
     const fixture = await install(page);
     await startGeneration(page);
 
-    await page.getByRole("link", { name: "格式模板" }).click();
-    await expect(page).toHaveURL(/\/writing\/templates$/);
-    await expect(page.locator(".official-document-app")).toHaveAttribute("data-stage", "library");
-    await expect(page.locator(runningDot)).toHaveCount(1);
-
-    // 页头跟着路径回到写作态，落点仍是入口首页
-    await page.getByRole("link", { name: "公文写作" }).click();
+    // 二级导航已撤：从侧栏回报告智写，落点是入口首页
+    await page.getByRole("link", { name: "报告智写" }).click();
     await expect(page).toHaveURL(/\/writing$/);
+    await expect(page.locator(runningDot)).toHaveCount(1);
     await expect(page.locator(".official-document-app")).toHaveAttribute("data-stage", "compose");
     await expect(page.getByRole("heading", { name: heroTitle })).toBeVisible();
 

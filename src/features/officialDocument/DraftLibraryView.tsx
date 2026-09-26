@@ -36,7 +36,7 @@ const draftFilters: Array<{ key: DraftFilter; label: string }> = [
 export function DraftLibraryView() {
   const navigate = useNavigate();
   const location = useLocation();
-  useOfficialDocumentAppChrome({ stage: "drafts", context: "草稿管理" });
+  useOfficialDocumentAppChrome({ stage: "drafts", context: "我的文稿" });
   const { query, status } = useOfficialDocumentWorkspace();
   const [operationStatus, setOperationStatus] = useState(
     () => (location.state as { notice?: string } | null)?.notice ?? ""
@@ -70,7 +70,7 @@ export function DraftLibraryView() {
         updateWorkspace((current) => ({ ...current, drafts: current.drafts.filter((item) => item.id !== dialog.draft.id) }));
       }
       setOperationTone("success");
-      setOperationStatus(dialog.kind === "rename" ? "草稿已重命名" : "草稿已删除");
+      setOperationStatus(dialog.kind === "rename" ? "文稿已重命名" : "文稿已删除");
       setDialog(undefined);
     } catch (error) {
       setDialogError(error instanceof Error ? error.message : "操作失败，请重试");
@@ -94,16 +94,19 @@ export function DraftLibraryView() {
     }
     navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH, {
       state: {
-        notice: "选择格式模板后，即可编辑并保存草稿。",
+        notice: "选择格式模板后，即可编辑并保存文稿。",
         noticeTone: "info"
       }
     });
   };
 
   return (
-    <section className="official-document-view official-document-drafts" aria-label="报告草稿箱">
+    <section className="official-document-view official-document-drafts" aria-label="我的文稿">
       <OfficialDocumentAppActions>
-        <Button type="primary" icon={<Plus size={16} />} onClick={handleCreateDraft}>新建草稿</Button>
+        <Button type="text" className="official-document-drafts__refresh" aria-label="刷新文稿列表"
+          title="刷新文稿列表" loading={query.isFetching} icon={<ArrowsClockwise size={18} aria-hidden="true" />}
+          onClick={() => void query.refetch()} />
+        <Button type="primary" icon={<Plus size={16} />} onClick={handleCreateDraft}>新建文稿</Button>
       </OfficialDocumentAppActions>
 
       {operationStatus ? (
@@ -117,47 +120,37 @@ export function DraftLibraryView() {
       <XsAsyncPanel
         status={status}
         empty={drafts.length === 0}
-        emptyTitle="还没有报告草稿"
-        emptyDescription="选择格式模板创建第一份草稿，随后编辑并保存。"
+        emptyTitle="还没有文稿"
+        emptyDescription="写作台生成的公文保存后会出现在这里，也可以选格式模板新建一份。"
         emptyActionLabel="选格式模板"
         onEmptyAction={() => navigate(OFFICIAL_DOCUMENT_TEMPLATES_PATH)}
-        errorTitle="草稿管理暂不可用"
-        error={query.error instanceof Error ? query.error.message : "无法加载报告草稿。"}
+        errorTitle="我的文稿暂不可用"
+        error={query.error instanceof Error ? query.error.message : "无法加载文稿。"}
         onRetry={() => void query.refetch()}
         loadingVariant="rows"
         contentKey={query.dataUpdatedAt}
       >
-        <section className="official-document-templates" aria-label="草稿管理">
-          <header className="official-document-templates__head">
-            <div className="official-document-templates__intro">
-              <div className="official-document-templates__title">
-                <h2>草稿管理</h2>
-                <span className="official-document-templates__count">{drafts.length} 份草稿</span>
-              </div>
-            </div>
-            <Button type="text" className="official-document-drafts__refresh" aria-label="刷新草稿列表"
-              title="刷新草稿列表" loading={query.isFetching} icon={<ArrowsClockwise size={18} aria-hidden="true" />}
-              onClick={() => void query.refetch()} />
-          </header>
+        {/* 页面标题在细头部上，这里直接从筛选开始 */}
+        <div className="official-document-templates">
           <div className="official-document-templates__toolbar">
-            <div className="official-document-templates__filters" role="group" aria-label="草稿状态筛选">
+            <div className="official-document-templates__filters" role="group" aria-label="文稿状态筛选">
               {draftFilters.map((filter) => (
                 <button key={filter.key} type="button" aria-pressed={draftFilter === filter.key} onClick={() => setDraftFilter(filter.key)}>
                   {filter.label}<span>{filter.key === "ALL" ? drafts.length : drafts.filter((draft) => draft.status === filter.key).length}</span>
                 </button>
               ))}
             </div>
-            <Input className="official-document-templates__search" aria-label="搜索草稿标题" placeholder="搜索草稿标题或模板"
+            <Input className="official-document-templates__search" aria-label="搜索文稿标题" placeholder="搜索文稿标题或模板"
               prefix={<MagnifyingGlass size={17} aria-hidden="true" />} allowClear
               value={keyword} onChange={(event) => setKeyword(event.target.value)} />
           </div>
-          <span className="sr-only" role="status">当前显示 {visibleDrafts.length} 份草稿</span>
+          <span className="sr-only" role="status">当前显示 {visibleDrafts.length} 份文稿</span>
           {visibleDrafts.length ? (
-            <ul className="official-document-templates__grid" role="list" aria-label="报告草稿列表">
+            <ul className="official-document-templates__grid" role="list" aria-label="文稿列表">
               {visibleDrafts.map((draft) => (
                 <li key={draft.id} className="official-document-template-card" data-status={draft.status}>
                   <button type="button" className="official-document-template-card__open"
-                    aria-label={`打开草稿 ${draft.title}`} title="编辑草稿" onClick={() => navigate(`/writing/drafts/${draft.id}`)}>
+                    aria-label={`打开文稿 ${draft.title}`} title="编辑文稿" onClick={() => navigate(`/writing/drafts/${draft.id}`)}>
                     <span className="official-document-template-card__identity">
                       <span className="official-document-template-card__glyph">
                         <img src={templateIconForName(draft.templateName)} width={28} height={28} alt="" aria-hidden="true" draggable={false} />
@@ -188,8 +181,8 @@ export function DraftLibraryView() {
                     { key: "rename", label: "重命名", onClick: () => openAction("rename", draft) },
                     { key: "delete", label: "删除", danger: true, onClick: () => openAction("delete", draft) }
                   ] }}>
-                    <button type="button" className="official-document-template-card__use" aria-label={`管理草稿 ${draft.title}`}
-                      title="管理草稿"><DotsThree size={20} aria-hidden="true" /></button>
+                    <button type="button" className="official-document-template-card__use" aria-label={`管理文稿 ${draft.title}`}
+                      title="管理文稿"><DotsThree size={20} aria-hidden="true" /></button>
                   </Dropdown>
                 </li>
               ))}
@@ -197,20 +190,20 @@ export function DraftLibraryView() {
           ) : (
             <div className="official-document-templates__empty">
               <MagnifyingGlass size={28} aria-hidden="true" />
-              <h3>没有符合条件的草稿</h3>
-              <p>试试其他关键词，或清除筛选查看全部草稿。</p>
+              <h2>没有符合条件的文稿</h2>
+              <p>试试其他关键词，或清除筛选查看全部文稿。</p>
               <Button onClick={() => { setKeyword(""); setDraftFilter("ALL"); }}>清除筛选</Button>
             </div>
           )}
-        </section>
+        </div>
       </XsAsyncPanel>
-      <Modal open={Boolean(dialog)} title={dialog?.kind === "delete" ? "删除草稿" : "重命名草稿"}
-        okText={dialog?.kind === "delete" ? "删除草稿" : "保存名称"} cancelText="取消"
-        okButtonProps={{ danger: dialog?.kind === "delete", "aria-label": dialog?.kind === "delete" ? "删除草稿" : "保存名称" }} confirmLoading={busy}
+      <Modal open={Boolean(dialog)} title={dialog?.kind === "delete" ? "删除文稿" : "重命名文稿"}
+        okText={dialog?.kind === "delete" ? "删除文稿" : "保存名称"} cancelText="取消"
+        okButtonProps={{ danger: dialog?.kind === "delete", "aria-label": dialog?.kind === "delete" ? "删除文稿" : "保存名称" }} confirmLoading={busy}
         closable={!busy} maskClosable={!busy} cancelButtonProps={{ disabled: busy }}
         onCancel={() => { if (!busy) setDialog(undefined); }} onOk={() => void submitAction()}>
-        {dialog?.kind === "delete" ? <p>确定删除“{dialog.draft.title}”？删除后将无法继续编辑，该草稿此前导出的文件链接也将无法访问。共享格式模板不受影响。</p>
-          : <Input aria-label="草稿名称" value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} onPressEnter={() => void submitAction()} />}
+        {dialog?.kind === "delete" ? <p>确定删除“{dialog.draft.title}”？删除后将无法继续编辑，该文稿此前导出的文件链接也将无法访问。共享格式模板不受影响。</p>
+          : <Input aria-label="文稿名称" value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} onPressEnter={() => void submitAction()} />}
         {dialogError ? <XsStatusBar tone="error" message={dialogError} /> : null}
       </Modal>
     </section>

@@ -104,7 +104,7 @@ function templateStage(mode: "write" | "calibrate") {
   </div>`;
 }
 
-test("真实 React 页面可通过 @ 搜索并选择草稿", async ({ page }) => {
+test("真实 React 页面可通过 @ 搜索并选择文稿", async ({ page }) => {
   await page.addInitScript(() => {
     sessionStorage.setItem("xingshu_datahub_token", "visual-token");
     sessionStorage.setItem("xingshu_datahub_user", JSON.stringify({
@@ -162,7 +162,7 @@ test("真实 React 页面可通过 @ 搜索并选择草稿", async ({ page }) =>
   await page.goto("/writing");
   const input = page.getByRole("textbox", { name: "公文写作要求" });
   await expect(input).toBeVisible();
-  await expect(page.getByRole("heading", { name: "想写一篇什么公文？" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "公文模板化复刻" })).toBeVisible();
   const box = page.locator(".official-document-composer");
   const boxBox = (await box.boundingBox())!;
   expect(boxBox.width).toBeLessThanOrEqual(1120);
@@ -184,7 +184,7 @@ test("真实 React 页面可通过 @ 搜索并选择草稿", async ({ page }) =>
   await page.screenshot({ path: "outputs/report-writing/compose-app-selected-1440.png", fullPage: false });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("heading", { name: "想写一篇什么公文？" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "公文模板化复刻" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
     .toBeLessThanOrEqual(0);
   await page.screenshot({ path: "outputs/report-writing/compose-app-selected-390.png", fullPage: false });

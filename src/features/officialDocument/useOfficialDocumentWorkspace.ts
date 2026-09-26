@@ -7,7 +7,7 @@ import {
   useOfficialDocumentWorkspaceKey
 } from "./officialDocumentMeta";
 
-/** 模板库与草稿箱共用同一份 workspace 快照，避免两个列表页各自拉取后出现数据漂移。 */
+/** 模板库与我的文稿共用同一份 workspace 快照，避免两个列表页各自拉取后出现数据漂移。 */
 export function useOfficialDocumentWorkspace() {
   const workspaceKey = useOfficialDocumentWorkspaceKey();
   const query = useQuery({

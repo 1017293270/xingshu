@@ -7,7 +7,11 @@ import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import { XsUploadDialog } from "@/components/xs/XsUploadDialog";
 import { uploadOfficialDocumentTemplate } from "@/services/officialDocumentService";
 import type { OfficialDocumentTemplate } from "@/types/officialDocument";
-import { useUpdateOfficialDocumentWorkspaceCache } from "./officialDocumentMeta";
+import {
+  useUpdateOfficialDocumentWorkspaceCache,
+  WORD_ENGINE_UNAVAILABLE_ACTION_HINT,
+  wordEngineUnavailable
+} from "./officialDocumentMeta";
 import { OfficialDocumentAppActions, useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
 import { TemplateGallery } from "./TemplateGallery";
 import { useOfficialDocumentWorkspace } from "./useOfficialDocumentWorkspace";
@@ -25,9 +29,11 @@ export function TemplateLibraryView() {
   const operationStatus = routeState?.notice ?? "";
   const operationTone: XsStatusTone = routeState?.noticeTone ?? "info";
   const templates = query.data?.templates ?? [];
+  /* 新建模板要靠 Word 引擎做结构分析；引擎明说不可用就先置灰，别让人传完才失败。 */
+  const engineDown = wordEngineUnavailable(query.data?.capabilities);
 
   const handleUploadClick = () => {
-    setUploadOpen(true);
+    if (!engineDown) setUploadOpen(true);
   };
 
   // 失败时把错误抛回弹窗：弹窗保持打开、就地显示原因，用户换个文件就能重试。
@@ -50,10 +56,24 @@ export function TemplateLibraryView() {
   return (
     <section className="official-document-view official-document-template-library" aria-label="结构模板库">
       <OfficialDocumentAppActions>
-        <Button type="primary" icon={<UploadSimple size={17} />} onClick={handleUploadClick}>
-          上传结构 DOCX
+        <Button
+          type="primary"
+          icon={<UploadSimple size={17} />}
+          disabled={engineDown}
+          title={engineDown ? WORD_ENGINE_UNAVAILABLE_ACTION_HINT : undefined}
+          onClick={handleUploadClick}
+        >
+          新建模板
         </Button>
       </OfficialDocumentAppActions>
+
+      {engineDown ? (
+        <XsStatusBar
+          tone="warning"
+          message="Word 引擎暂不可用，暂时不能新建模板"
+          detail="已发布的模板照常可以使用。请联系管理员检查 Word 引擎许可证或服务状态。"
+        />
+      ) : null}
 
       {operationStatus ? (
         <XsStatusBar
@@ -68,7 +88,7 @@ export function TemplateLibraryView() {
         empty={templates.length === 0}
         emptyTitle="还没有可用的结构模板"
         emptyDescription="上传一份结构 DOCX，分析、校准并发布版本。"
-        emptyActionLabel="上传结构 DOCX"
+        emptyActionLabel={engineDown ? undefined : "新建模板"}
         onEmptyAction={handleUploadClick}
         errorTitle="结构模板不可用"
         error={query.error instanceof Error ? query.error.message : "无法加载结构模板。"}
@@ -92,8 +112,8 @@ export function TemplateLibraryView() {
 
       <XsUploadDialog
         open={uploadOpen}
-        title="上传结构 DOCX"
-        description="上传后自动做安全检查和结构分析；示例文字只用于识别结构。"
+        title="新建模板"
+        description="上传一份结构 DOCX：自动做安全检查和结构分析，核对后发布即可使用；示例文字只用于识别结构。"
         accept={[".docx"]}
         acceptMimeTypes={["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}
         maxBytes={25 * 1024 * 1024}

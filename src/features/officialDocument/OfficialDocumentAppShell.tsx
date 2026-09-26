@@ -1,13 +1,15 @@
 import { ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link, NavLink, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import {
   releaseOfficialDocumentActionsHost,
   useOfficialDocumentShellStore,
   type OfficialDocumentAppChrome,
   type OfficialDocumentAppStage
 } from "./officialDocumentShellStore";
+/* 返回链接用全站的 .xs-action-link，直接进详情页时也得有这份样式。 */
+import "@/pages/styles/page-shell.css";
 import "./official-document.css";
 import "./official-document-workspace.css";
 
@@ -18,28 +20,41 @@ export const OFFICIAL_DOCUMENT_DRAFTS_PATH = "/writing/drafts";
 export const OFFICIAL_DOCUMENT_COMPOSE_PATH = "/writing";
 export const OFFICIAL_DOCUMENT_SESSION_PATH = "/writing/session";
 
+/** 从写作台跳进详情页时带上这个 state，细头部就原路返回写作台，而不是绕去列表页。 */
+export type OfficialDocumentReturnState = { returnTo?: string };
+
 /** 首屏就是写作台，路径决定初始形态，避免刷新详情页时先闪一帧写作态页头。 */
 function stageForPath(pathname: string): OfficialDocumentAppStage {
   if (pathname.startsWith(`${OFFICIAL_DOCUMENT_TEMPLATES_PATH}/`)) return "template";
   if (pathname.startsWith(OFFICIAL_DOCUMENT_TEMPLATES_PATH)) return "library";
   if (pathname.startsWith(`${OFFICIAL_DOCUMENT_DRAFTS_PATH}/`)) return "draft";
   if (pathname.startsWith(OFFICIAL_DOCUMENT_DRAFTS_PATH)) return "drafts";
-  /* 入口首页和会话页是同一件事的两页，页头都停在写作态。 */
+  /* 入口首页和会话页是同一件事的两页，都没有页头。 */
   return "compose";
-}
-
-/** 写作是「首页 + 会话页」两页，导航要一起亮；模板库和草稿管理各归各的。 */
-function composeNavActive(pathname: string) {
-  return pathname === OFFICIAL_DOCUMENT_COMPOSE_PATH || pathname.startsWith(OFFICIAL_DOCUMENT_SESSION_PATH);
 }
 
 const stageContext: Record<OfficialDocumentAppStage, string> = {
   compose: "公文写作",
   library: "模板库",
-  drafts: "草稿管理",
+  drafts: "我的文稿",
   template: "模板结构",
   draft: "结构化起草"
 };
+
+function isComposePath(value: unknown): value is string {
+  return value === OFFICIAL_DOCUMENT_COMPOSE_PATH || value === OFFICIAL_DOCUMENT_SESSION_PATH;
+}
+
+/** 列表页回写作首页，详情页回各自的列表；从写作台点进来的详情页原路回写作台。 */
+function backLinkFor(stage: OfficialDocumentAppStage, returnTo: unknown) {
+  if (stage === "template" || stage === "draft") {
+    if (isComposePath(returnTo)) return { to: returnTo, label: "返回公文写作" };
+    return stage === "draft"
+      ? { to: OFFICIAL_DOCUMENT_DRAFTS_PATH, label: "返回我的文稿" }
+      : { to: OFFICIAL_DOCUMENT_TEMPLATES_PATH, label: "返回模板库" };
+  }
+  return { to: OFFICIAL_DOCUMENT_COMPOSE_PATH, label: "返回公文写作" };
+}
 
 /** 壳层在场与否决定动作是进页头还是就地渲染，所以这层标记仍走 context。 */
 const OfficialDocumentAppContext = createContext(false);
@@ -91,45 +106,33 @@ export function OfficialDocumentAppShell({ children }: { children: ReactNode }) 
     return () => releaseOfficialDocumentActionsHost(host);
   }, [setActionsHost]);
 
-  const detailStage = chrome.stage === "template" || chrome.stage === "draft";
-  const parentPath = chrome.stage === "draft" ? OFFICIAL_DOCUMENT_DRAFTS_PATH : OFFICIAL_DOCUMENT_TEMPLATES_PATH;
+  const back = backLinkFor(chrome.stage, (location.state as OfficialDocumentReturnState | null)?.returnTo);
 
   return (
     <OfficialDocumentAppContext.Provider value={true}>
       <div className="official-document-app" data-stage={chrome.stage}>
         <a className="xs-skip-link" href="#official-document-workspace">跳到报告工作区</a>
-        <header className="official-document-app__bar" data-stage={chrome.stage}>
-          {detailStage ? (
-            <Link className="official-document-app__back" to={parentPath}>
-              <ArrowLeft size={15} aria-hidden="true" />
-              {chrome.stage === "draft" ? "返回草稿管理" : "返回格式模板"}
+        {/* 写作首页和会话页不要页头：模板和文稿的入口都在输入框底下 */}
+        {chrome.stage === "compose" ? null : (
+          <header className="official-document-app__bar" data-stage={chrome.stage}>
+            <Link className="xs-action-link official-document-app__back" to={back.to}>
+              <ArrowLeft size={16} aria-hidden="true" />
+              {back.label}
             </Link>
-          ) : (
-            <nav className="official-document-app__nav" aria-label="公文导航">
-              {/* NavLink 只会认一条路径，写作有两页，激活态自己算 */}
-              <Link
-                to={OFFICIAL_DOCUMENT_COMPOSE_PATH}
-                aria-current={composeNavActive(location.pathname) ? "page" : undefined}
-              >公文写作</Link>
-              <NavLink to={OFFICIAL_DOCUMENT_TEMPLATES_PATH}>格式模板</NavLink>
-              <NavLink to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>草稿管理</NavLink>
-            </nav>
-          )}
-          {detailStage ? (
             <div className="official-document-app__context">
-              <p className="official-document-app__context-title">
+              <h1 className="official-document-app__context-title">
                 {chrome.contextTo ? (
                   <Link className="official-document-app__context-link" to={chrome.contextTo} title={chrome.context}>
                     <span>{chrome.context}</span>
                     <ArrowSquareOut size={15} aria-hidden="true" />
                   </Link>
                 ) : chrome.context}
-              </p>
+              </h1>
               {chrome.contextDetail ? <small>{chrome.contextDetail}</small> : null}
             </div>
-          ) : null}
-          <div className="official-document-app__actions" ref={attachActionsHost} />
-        </header>
+            <div className="official-document-app__actions" ref={attachActionsHost} />
+          </header>
+        )}
         <section
           className="official-document-app__workspace"
           id="official-document-workspace"

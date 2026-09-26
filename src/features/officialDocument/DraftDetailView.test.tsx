@@ -147,8 +147,8 @@ describe("DraftDetailView", () => {
   it("does not invent a demo draft when the live workspace is empty", async () => {
     renderDraftDetail("draft-missing");
 
-    expect(await screen.findByText("未找到该报告草稿")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回草稿箱" })).toHaveAttribute("href", "/writing/drafts");
+    expect(await screen.findByText("未找到这篇文稿")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回我的文稿" })).toHaveAttribute("href", "/writing/drafts");
     expect(screen.queryByText(/示例/)).not.toBeInTheDocument();
   });
 
@@ -306,6 +306,27 @@ describe("DraftDetailView", () => {
     expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
   });
 
+  it("disables both exports ahead of time when the Word engine says it is unavailable", async () => {
+    mocks.loadOfficialDocumentWorkspace.mockResolvedValue({
+      ...workspaceWithDraft(liveDraft([])),
+      capabilities: {
+        ...emptyWorkspace.capabilities,
+        exportFormats: ["DOCX", "PDF"],
+        wordEngine: { available: false, code: "ENGINE_UNAVAILABLE" }
+      }
+    });
+
+    renderDraftDetail("draft-ready");
+
+    expect(await screen.findByText("已保存")).toBeInTheDocument();
+    const docx = screen.getByRole("button", { name: "导出 DOCX" });
+    expect(docx).toBeDisabled();
+    expect(docx).toHaveAttribute("title", "Word 引擎暂不可用，请联系管理员处理后再试");
+    expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
+    // 编辑和保存不靠引擎，照常能用
+    expect(screen.getByRole("button", { name: "保存文稿" })).toBeInTheDocument();
+  });
+
   it("explicitly saves edited content and supports retry after a failed save", async () => {
     const content = {
       revision: 1,
@@ -321,14 +342,14 @@ describe("DraftDetailView", () => {
 
     const input = await screen.findByRole("textbox", { name: "正文节点 1" });
     fireEvent.change(input, { target: { value: "编辑后的正文" } });
-    await user.click(screen.getByRole("button", { name: "保存草稿" }));
+    await user.click(screen.getByRole("button", { name: "保存文稿" }));
     expect(await screen.findByText("保存失败：暂时无法保存")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出 DOCX" })).toBeDisabled();
     expect(input).toHaveValue("编辑后的正文");
 
     mocks.updateOfficialDocumentDraftContent.mockImplementation(async (_id, saved) => ({ ...saved, revision: 2 }));
-    await user.click(screen.getByRole("button", { name: "保存草稿" }));
-    expect(await screen.findByText("草稿已保存")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存文稿" }));
+    expect(await screen.findByText("文稿已保存")).toBeInTheDocument();
     expect(mocks.updateOfficialDocumentDraftContent).toHaveBeenLastCalledWith("draft-ready", expect.objectContaining({
       expectedRevision: 1,
       blocks: [expect.objectContaining({ text: "编辑后的正文" })]

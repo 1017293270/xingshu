@@ -75,7 +75,7 @@ export function WritingComposeHost() {
       api.open({
         key,
         message: "公文已生成",
-        description: `《${result.title}》已经写好，回写作台查看或保存到草稿箱。`,
+        description: `《${result.title}》已经写好，回写作台查看或保存到我的文稿。`,
         placement: "bottomRight",
         duration: 8,
         actions: (

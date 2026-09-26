@@ -158,6 +158,46 @@ describe("officialDocumentService HTTP client", () => {
     });
   });
 
+  /* 服务层抛 ENGINE_UNAVAILABLE，引擎适配层直接抛 WORD_ENGINE_UNAVAILABLE：两种都得说成同一句人话。 */
+  it.each(["ENGINE_UNAVAILABLE", "WORD_ENGINE_UNAVAILABLE"])("maps %s to the same Word engine message", async (code) => {
+    vi.stubGlobal("fetch", vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(
+      JSON.stringify({ code, message: "Syncfusion license expired" }),
+      { status: 503 }
+    )));
+
+    await expect(service.getDraftPreview("draft-1")).rejects.toMatchObject({
+      status: 503,
+      code,
+      message: "Word 引擎未配置或不可用，当前操作已停止"
+    });
+  });
+
+  it("keeps the Word engine capability code so pages can warn ahead of time", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/v1/capabilities")) {
+        return new Response(JSON.stringify({
+          wordEngine: { available: false, code: "ENGINE_UNAVAILABLE", details: { blockingReasons: ["license expired"] } },
+          queryAssets: { available: true }
+        }));
+      }
+      if (path.endsWith("/v1/templates") || path.endsWith("/v1/drafts")) {
+        return new Response(JSON.stringify([]));
+      }
+      if (path.endsWith("/api/analytics/query-assets")) {
+        return new Response(JSON.stringify({ code: 200, message: "success", data: [] }));
+      }
+      throw new Error(`unexpected request: ${path}`);
+    }));
+
+    const workspace = await service.loadWorkspace();
+    expect(workspace.capabilities.wordEngine).toEqual({
+      available: false,
+      code: "ENGINE_UNAVAILABLE",
+      detail: "license expired"
+    });
+  });
+
   it("passes PDF through the capabilities export formats", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
@@ -409,6 +449,6 @@ describe("officialDocumentService HTTP client", () => {
     expect(resolveOfficialDocumentErrorMessage(404, {
       code: "OBJECT_NOT_FOUND",
       message: "文档对象不存在"
-    }, "Not Found")).toBe("该模板的编译文件已丢失，无法创建草稿。请重新上传模板后再试。");
+    }, "Not Found")).toBe("该模板的编译文件已丢失，无法创建文稿。请重新上传模板后再试。");
   });
 });

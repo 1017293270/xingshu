@@ -1,8 +1,9 @@
 import { chromium } from "@playwright/test";
 
 // 用法：先启动 npm run dev，再执行 node scripts/screenshot-writing-module.mjs
-// 截公文写作模块：模板库网格页、草稿箱列表页与两个详情页，覆盖 1440/1672/1920/390 四档。
-// 写作台本身（输入盒、@ 浮层、模板面板）由 scripts/screenshot-writing-compose.mjs 负责。
+// 截公文写作模块：模板库网格页、我的文稿列表页与两个详情页（都是细头部：返回 + 标题 + 页面动作），
+// 覆盖 1440/1672/1920/390 四档；另截一张 Word 引擎不可用时的模板库。
+// 写作台本身（输入盒、@ 浮层、「公文模板」弹窗、内容复刻）由 scripts/screenshot-writing-compose.mjs 负责。
 // 所有 /api/** 请求都被本脚本拦截，不会打到真实后端。
 const dir = "outputs/ui-audit";
 const base = process.env.XS_QA_BASE_URL ?? "http://127.0.0.1:5173";
@@ -115,7 +116,7 @@ const draftContent = {
 };
 
 const capabilities = {
-  wordEngine: { available: true, code: "ENGINE_READY" },
+  wordEngine: { available: true, code: "AVAILABLE" },
   queryAssets: { available: true, code: "QUERY_ASSET_READY" },
   limits: {
     acceptedFileTypes: [".docx"],
@@ -128,7 +129,7 @@ const capabilities = {
 
 const browser = await chromium.launch();
 
-async function newPage(width, height) {
+async function newPage(width, height, options = {}) {
   const page = await browser.newPage({ viewport: { width, height } });
   // Playwright 按注册的倒序匹配路由，通配兜底必须先注册。
   await page.route("**/api/**", (route) =>
@@ -137,7 +138,11 @@ async function newPage(width, height) {
   await page.route("**/api/analytics/**", (route) =>
     route.fulfill({ status: 503, json: { code: 503, message: "visual qa fixture: 问数资产不参与本次截图" } })
   );
-  await page.route("**/api/official-document/v1/capabilities", (route) => route.fulfill({ json: capabilities }));
+  await page.route("**/api/official-document/v1/capabilities", (route) => route.fulfill({
+    json: options.engineDown
+      ? { ...capabilities, wordEngine: { available: false, code: "ENGINE_UNAVAILABLE" } }
+      : capabilities
+  }));
   await page.route("**/api/official-document/v1/templates", (route) => route.fulfill({ json: { items: templates } }));
   await page.route("**/api/official-document/v1/drafts", (route) => route.fulfill({ json: { items: drafts } }));
   await page.route("**/api/official-document/v1/drafts/*/content", (route) => route.fulfill({ json: draftContent }));
@@ -153,8 +158,8 @@ async function newPage(width, height) {
   return page;
 }
 
-async function shot(name, width, height, path, readySelector, extra) {
-  const page = await newPage(width, height);
+async function shot(name, width, height, path, readySelector, extra, options) {
+  const page = await newPage(width, height, options);
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
   await page.waitForSelector(readySelector, { timeout: 15000 });
   await page.waitForTimeout(700);
@@ -164,15 +169,18 @@ async function shot(name, width, height, path, readySelector, extra) {
   console.log(`shot ${name}`);
 }
 
-const listReady = ".official-document-list__rows .official-document-row";
-// 模板库改成卡片网格之后，它自己的就绪信号也换了一个
+// 模板库和我的文稿都是卡片网格，就绪信号是第一张卡片
+const listReady = ".official-document-drafts .official-document-template-card";
 const gridReady = ".official-document-templates__grid";
 
 await shot("writing-templates-1440", 1440, 900, "/writing/templates", gridReady);
 await shot("writing-templates-1672", 1672, 1000, "/writing/templates", gridReady);
 await shot("writing-templates-1920", 1920, 1080, "/writing/templates", gridReady);
 await shot("writing-templates-390", 390, 844, "/writing/templates", gridReady);
+await shot("writing-templates-engine-down-1440", 1440, 900, "/writing/templates", gridReady, null, { engineDown: true });
 await shot("writing-drafts-1440", 1440, 900, "/writing/drafts", listReady);
+await shot("writing-drafts-1672", 1672, 1000, "/writing/drafts", listReady);
+await shot("writing-drafts-1920", 1920, 1080, "/writing/drafts", listReady);
 await shot("writing-drafts-390", 390, 844, "/writing/drafts", listReady);
 await shot(
   "writing-template-detail-1440",
@@ -182,9 +190,23 @@ await shot(
   ".official-document-app__workspace"
 );
 await shot(
+  "writing-template-detail-390",
+  390,
+  844,
+  "/writing/templates/template-notice",
+  ".official-document-app__workspace"
+);
+await shot(
   "writing-draft-detail-1440",
   1440,
   1100,
+  "/writing/drafts/draft-progress",
+  ".official-document-app__workspace"
+);
+await shot(
+  "writing-draft-detail-390",
+  390,
+  844,
   "/writing/drafts/draft-progress",
   ".official-document-app__workspace"
 );

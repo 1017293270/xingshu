@@ -165,7 +165,7 @@ export function WritingChatPanel({
     }
     const context = resolveWritingContext?.("DRAFT_ASSIST") ?? writingContext;
     if (resolveWritingContext && !context) {
-      setLocalError("草稿内容仍在加载，请稍后再试");
+      setLocalError("文稿内容仍在加载，请稍后再试");
       return;
     }
     setLocalError("");
@@ -186,7 +186,7 @@ export function WritingChatPanel({
     const question = value.trim();
     if (!question || anyBusy) return;
     if (resolveWritingContext && !resolveWritingContext("DRAFT_ASSIST")) {
-      setLocalError("草稿内容仍在加载，请稍后再试");
+      setLocalError("文稿内容仍在加载，请稍后再试");
       return;
     }
     setDataTable({
@@ -246,7 +246,7 @@ export function WritingChatPanel({
   return (
     <aside className="writing-chat" aria-label="报告智写对话">
       <div className="official-document-workspace-panel-head">
-        <h4>智写助手</h4>
+        <h2>智写助手</h2>
         <div className="writing-chat__head-actions">
           <Button
             size="small"

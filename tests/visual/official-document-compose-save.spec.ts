@@ -115,11 +115,11 @@ test(`${retryAfterReload ? "保存失败刷新重试：" : ""}成稿保存并刷
   await input.fill("根据蓝桥验收材料撰写建设情况报告");
   await page.getByRole("button", { name: "生成完整公文", exact: true }).click();
   await page.getByRole("button", { name: "确认大纲，补资料并生成", exact: true }).click();
-  await page.getByRole("button", { name: "保存到草稿箱", exact: true }).click();
+  await page.getByRole("button", { name: "保存到我的文稿", exact: true }).click();
   if (retryAfterReload) {
-    await expect(page.getByText(/草稿已创建，但正文保存失败/)).toBeVisible();
+    await expect(page.getByText(/文稿已创建，但正文保存失败/)).toBeVisible();
     await page.reload();
-    await page.getByRole("button", { name: "重试保存到草稿箱", exact: true }).click();
+    await page.getByRole("button", { name: "重试保存到我的文稿", exact: true }).click();
   }
   await expect(page).toHaveURL(/\/writing\/drafts\/draft-save$/);
   expect(rejected).toEqual([]);

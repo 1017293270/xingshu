@@ -82,7 +82,7 @@ test("成稿核对面板把三类提醒收进一块有边界的容器", async ({
   await state.release();
   await response;
   await page.getByRole("button", { name: "确认大纲并生成", exact: true }).click();
-  await expect(page.getByRole("button", { name: "保存到草稿箱", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存到我的文稿", exact: true })).toBeVisible();
 
   // 研究结果只能由真实问数产生；这里写进恢复态，把「未补齐」与「缺来源链接」一次凑齐。
   // 必须走 addInitScript：页面卸载时 pagehide 会用内存状态回写，直接改当前页会被盖掉。

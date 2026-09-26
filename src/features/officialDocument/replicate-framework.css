@@ -1,0 +1,202 @@
+/* 内容复刻左栏：一张白底卡，内部独立滚动，章节按层级缩进。 */
+
+.replicate-framework {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+  scrollbar-width: thin;
+}
+
+.replicate-framework__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.replicate-framework__heading {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.replicate-framework__heading h2 {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-card);
+  font-weight: var(--xs-fw-medium);
+  line-height: 24px;
+}
+
+.replicate-framework__source {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  line-height: 20px;
+}
+
+.replicate-framework__source svg {
+  flex: none;
+  color: var(--xs-primary-2);
+}
+
+.replicate-framework__source span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 纯计数：灰字，不做状态条 */
+.replicate-framework__count,
+.replicate-framework__note {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  line-height: 18px;
+}
+
+.replicate-framework__head-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.replicate-framework__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replicate-framework__section {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-control);
+  background: var(--xs-surface);
+}
+
+/* 层级只用缩进和左边线表达，不另起颜色 */
+.replicate-framework__section[data-level="HEADING_2"] {
+  margin-inline-start: 16px;
+}
+
+.replicate-framework__section[data-level="HEADING_3"] {
+  margin-inline-start: 32px;
+}
+
+.replicate-framework__section[data-level="BODY"] {
+  background: var(--xs-surface-soft);
+}
+
+/* 第一行层级和挪动按钮，标题独占第二行：左栏不宽，标题不能被按钮挤得只剩几个字 */
+.replicate-framework__row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.replicate-framework__title.ant-input {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.replicate-framework__level.ant-select {
+  width: 100%;
+}
+
+.replicate-framework__title.ant-input {
+  font-weight: var(--xs-fw-medium);
+}
+
+.replicate-framework__section[data-level="BODY"] .replicate-framework__title.ant-input {
+  font-weight: var(--xs-fw-regular);
+}
+
+.replicate-framework__tools {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  gap: 2px;
+}
+
+.replicate-framework__tools .ant-btn {
+  color: var(--xs-text-3);
+}
+
+.replicate-framework__tools .ant-btn:hover:not(:disabled) {
+  color: var(--xs-primary-2);
+}
+
+.replicate-framework__points.ant-input {
+  font-size: var(--xs-fs-label);
+  line-height: 20px;
+}
+
+.replicate-framework__excerpt summary {
+  width: fit-content;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.replicate-framework__excerpt summary:hover {
+  color: var(--xs-primary-2);
+}
+
+.replicate-framework__excerpt p {
+  max-height: 220px;
+  margin: 6px 0 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: var(--xs-radius-small);
+  background: var(--xs-surface-soft);
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.replicate-framework__section[data-level="BODY"] .replicate-framework__excerpt p {
+  background: var(--xs-surface);
+}
+
+.replicate-framework__append.ant-btn {
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .replicate-framework {
+    padding: 12px;
+  }
+
+  .replicate-framework__head {
+    flex-wrap: wrap;
+  }
+
+  .replicate-framework__section[data-level="HEADING_2"] {
+    margin-inline-start: 8px;
+  }
+
+  .replicate-framework__section[data-level="HEADING_3"] {
+    margin-inline-start: 16px;
+  }
+}

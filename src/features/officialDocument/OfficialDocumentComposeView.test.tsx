@@ -1,10 +1,16 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { ConfigProvider } from "antd";
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
+import { DocxParseError, type ParsedDocx } from "@/services/officialDocumentDocxParser";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
-import type { OfficialDocumentContentProfile, OfficialDocumentWorkspaceSnapshot } from "@/types/officialDocument";
+import type {
+  OfficialDocumentContentProfile,
+  OfficialDocumentTemplate,
+  OfficialDocumentWorkspaceSnapshot
+} from "@/types/officialDocument";
 import { OfficialDocumentComposeView } from "./OfficialDocumentComposeView";
 import { useWritingJobStore } from "./writingJobStore";
 
@@ -32,7 +38,7 @@ const mocks = vi.hoisted(() => ({
   downloadExport: vi.fn(),
   analyzeContent: vi.fn(),
   executeResearchPlan: vi.fn(),
-  uploadContentProfile: vi.fn(),
+  parseDocx: vi.fn(),
   createTextContentProfile: vi.fn(),
   saveContentProfileAnalysis: vi.fn(),
   confirmContentProfile: vi.fn(),
@@ -124,13 +130,18 @@ vi.mock("@/services/officialDocumentService", () => ({
   exportOfficialDocumentDraft: mocks.exportDraft,
   exportOfficialDocumentTransient: mocks.exportTransient,
   downloadOfficialDocumentExport: mocks.downloadExport,
-  uploadOfficialDocumentContentProfile: mocks.uploadContentProfile,
   createOfficialDocumentTextContentProfile: mocks.createTextContentProfile,
   saveOfficialDocumentContentProfileAnalysis: mocks.saveContentProfileAnalysis,
   confirmOfficialDocumentContentProfile: mocks.confirmContentProfile,
   bindOfficialDocumentContentProfile: mocks.bindContentProfile,
   getOfficialDocumentContentProfile: mocks.getContentProfile,
   uploadOfficialDocumentTemplate: mocks.uploadTemplate
+}));
+
+/* DOCX 解析本身在解析器的单测里逐格式覆盖，这里只替换入口，看写作台怎么接住解析结果和错误。 */
+vi.mock("@/services/officialDocumentDocxParser", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/services/officialDocumentDocxParser")>(),
+  parseDocx: mocks.parseDocx
 }));
 
 vi.mock("@/services/writingContentAnalysisService", () => ({
@@ -158,7 +169,11 @@ vi.mock("./useWritingChat", async () => {
         busy: chat.state.turns.some((turn) => turn.status === "streaming"),
         send,
         stop: mocks.stop,
-        reset: mocks.reset
+        reset: mocks.reset,
+        getSnapshot: () => ({
+          sessionId: "session-test",
+          turns: chat.state.turns.map((turn) => ({ ...turn, events: [] }))
+        })
       };
     }
   };
@@ -316,6 +331,28 @@ const unusableWorkspace: OfficialDocumentWorkspaceSnapshot = {
   ]
 };
 
+/* 内容复刻用的原文：开头一段、两个一级标题，中间夹一个二级标题。 */
+const speechDocx: ParsedDocx = {
+  title: "在年中工作会议上的讲话",
+  paragraphCount: 8,
+  tableCount: 0,
+  headingCount: 3,
+  blocks: [
+    { kind: "PARAGRAPH", role: "TITLE", text: "在年中工作会议上的讲话" },
+    { kind: "PARAGRAPH", role: "BODY", text: "今天召开年中工作会议，总结上半年工作。" },
+    { kind: "PARAGRAPH", role: "HEADING_1", text: "一、上半年工作回顾", heading: "一、上半年工作回顾" },
+    { kind: "PARAGRAPH", role: "BODY", text: "上半年重点任务按节点推进。" },
+    { kind: "PARAGRAPH", role: "HEADING_2", text: "（一）安全生产", heading: "（一）安全生产" },
+    { kind: "PARAGRAPH", role: "BODY", text: "隐患整改率达到96%。" },
+    { kind: "PARAGRAPH", role: "HEADING_1", text: "二、下半年工作安排", heading: "二、下半年工作安排" },
+    { kind: "PARAGRAPH", role: "BODY", text: "下半年要盯紧年度目标。" }
+  ]
+};
+
+const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+/* 关掉 antd 动效：jsdom 里没有 transitionend，弹窗关上后会一直停在离场动画里。 */
+const NO_MOTION = { token: { motion: false } };
+
 /*
  * 会话和成稿都在 /writing/session，写作本身的用例默认落在那一页；
  * /writing 是入口首页，只有入口分层那一组用例才从那里进。
@@ -323,6 +360,7 @@ const unusableWorkspace: OfficialDocumentWorkspaceSnapshot = {
 function renderView() {
   return render(
     <AppProviders>
+      <ConfigProvider theme={NO_MOTION}>
       <MemoryRouter initialEntries={["/writing/session"]}>
         <Routes>
           <Route path="/writing" element={<OfficialDocumentComposeView />} />
@@ -330,7 +368,8 @@ function renderView() {
           <Route path="/writing/drafts/:draftId" element={<div aria-label="生成公文成品页">成品页</div>} />
         </Routes>
       </MemoryRouter>
-    </AppProviders>
+    </ConfigProvider>
+      </AppProviders>
   );
 }
 
@@ -339,16 +378,26 @@ function PathProbe() {
   return <span data-testid="path">{location.pathname}</span>;
 }
 
+/* 模板详情页替身：只报出模板 id 和细头部要原路返回的地方。 */
+function TemplateRouteProbe() {
+  const location = useLocation();
+  const templateId = location.pathname.split("/").pop();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? "";
+  return <span data-testid="template-route">{`${templateId}|${returnTo}`}</span>;
+}
+
 /* 真实结构里写作台常驻在壳层，首页和会话页只是槽位：这里也让它跨路由活着。 */
 function renderEntry(initialPath = "/writing") {
   return render(
     <AppProviders>
+      <ConfigProvider theme={NO_MOTION}>
       <MemoryRouter initialEntries={[initialPath]}>
         <PathProbe />
         <Link to="/writing">回写作首页</Link>
         <OfficialDocumentComposeView />
       </MemoryRouter>
-    </AppProviders>
+    </ConfigProvider>
+      </AppProviders>
   );
 }
 
@@ -417,7 +466,7 @@ describe("OfficialDocumentComposeView", () => {
     // 默认按「大纲分析不可用」走一步到位老路径，既有用例行为不变；大纲环用例单独改 mock
     mocks.analyzeContent.mockReset().mockRejectedValue(new Error("analysis unavailable"))
     mocks.executeResearchPlan.mockReset().mockResolvedValue([]);
-    mocks.uploadContentProfile.mockReset();
+    mocks.parseDocx.mockReset().mockResolvedValue(speechDocx);
     let profile: OfficialDocumentContentProfile;
     mocks.createTextContentProfile.mockReset().mockImplementation(async (templateId, templateVersionId, input) => {
       profile = { id: "compose-profile", templateId, templateVersionId, name: input.name,
@@ -449,13 +498,20 @@ describe("OfficialDocumentComposeView", () => {
   it("keeps the entry page down to a centered title and the composer", async () => {
     renderView();
 
-    expect(await screen.findByRole("heading", { name: "想写一篇什么公文？" })).toBeInTheDocument();
-    // 模式 chip、模板浮层入口与文稿宫格都已下线，选参考草稿只走 @ Mentions
-    expect(screen.queryByRole("button", { name: "公文写作：选择参考草稿" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("我的文稿")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "公文模板化复刻" })).toBeInTheDocument();
+    // 会话页不放「我的文稿」，那是入口首页的东西
+    expect(screen.queryByRole("heading", { name: "我的文稿" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /设为参考/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "公文写作要求" })).toBeInTheDocument();
-    expect(screen.getByText("写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。")).toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "公文写作要求" });
+    expect(input).toHaveAttribute("placeholder", "描述你想写的内容，我来给你搭结构");
+    // 工具条：左边 + / 公文模板 / 内容复刻，右边语音和发送
+    const composer = screen.getByRole("region", { name: "公文写作输入" });
+    expect(within(composer).getByRole("button", { name: "上传参考资料" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "公文模板" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "内容复刻" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "语音输入" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "生成完整公文" })).toBeDisabled();
+    expect(screen.getByText("写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到我的文稿。")).toBeInTheDocument();
   });
 
   it("keeps the mention menu closed after Escape keyup", async () => {
@@ -471,7 +527,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(input).toHaveFocus();
   });
 
-  it("keeps the generated document temporary until the user saves it to the draft box", async () => {
+  it("keeps the generated document temporary until the user saves it to my documents", async () => {
     const user = userEvent.setup();
     renderView();
 
@@ -497,9 +553,9 @@ describe("OfficialDocumentComposeView", () => {
     expect(mocks.createTextContentProfile).not.toHaveBeenCalled();
     expect(mocks.updateDraftContent).not.toHaveBeenCalled();
 
-    const saveButton = screen.getByRole("button", { name: "保存到草稿箱" });
+    const saveButton = screen.getByRole("button", { name: "保存到我的文稿" });
     expect(saveButton).toHaveTextContent("");
-    expect(saveButton).toHaveAttribute("title", "保存到草稿箱");
+    expect(saveButton).toHaveAttribute("title", "保存到我的文稿");
     await user.click(saveButton);
 
     expect(mocks.createDraft).toHaveBeenCalledWith({
@@ -582,7 +638,7 @@ describe("OfficialDocumentComposeView", () => {
     const conversation = await screen.findByRole("region", { name: "公文生成对话" });
     expect(conversation).toHaveTextContent("撰写2026年安全检查通知");
     expect(conversation).toHaveTextContent("正在读取“季度通知草稿”的结构与文风");
-    expect(screen.queryByRole("heading", { name: "想写一篇什么公文？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "公文模板化复刻" })).not.toBeInTheDocument();
   });
 
   it("keeps earlier turns when the user follows up, and versions the new draft", async () => {
@@ -740,7 +796,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(screen.queryByText(/没能解析成公文结构/)).not.toBeInTheDocument();
     expect(screen.getByText(/关于安全检查的通知/)).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存到草稿箱" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "保存到我的文稿" })).toBeEnabled();
   });
 
   it("keeps the conversation when the reference draft changes", async () => {
@@ -1095,7 +1151,7 @@ describe("OfficialDocumentComposeView", () => {
     anchorClick.mockRestore();
   });
 
-  it("保存到草稿箱时把这一轮研究材料一并落库", async () => {
+  it("保存到我的文稿时把这一轮研究材料一并落库", async () => {
     const user = userEvent.setup();
     chat.state.autoSettleContent = [
       "[[XS_FIXED:title-slot]]",
@@ -1170,7 +1226,7 @@ describe("OfficialDocumentComposeView", () => {
     await user.click(within(outline).getByRole("button", { name: "确认大纲，补资料并生成" }));
 
     await screen.findByRole("article", { name: "生成的公文文件" });
-    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+    await user.click(screen.getByRole("button", { name: "保存到我的文稿" }));
 
     await waitFor(() => expect(mocks.updateDraftContent).toHaveBeenCalledTimes(1));
     // 图表 base64 与失败项都原样留在草稿里：资料面板要列全量任务，再生成要拿得到出处
@@ -1199,12 +1255,12 @@ describe("OfficialDocumentComposeView", () => {
     await pickReference(user);
     await submitRequirement(user, "撰写2026年安全检查通知");
     await screen.findByRole("article", { name: "生成的公文文件" });
-    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+    await user.click(screen.getByRole("button", { name: "保存到我的文稿" }));
     await screen.findByText("保存失败：方案确认暂时失败");
     expect(mocks.createDraft).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
-    await screen.findByText("草稿已创建，但正文保存失败：正文保存暂时失败");
-    await user.click(screen.getByRole("button", { name: "重试保存到草稿箱" }));
+    await user.click(screen.getByRole("button", { name: "保存到我的文稿" }));
+    await screen.findByText("文稿已创建，但正文保存失败：正文保存暂时失败");
+    await user.click(screen.getByRole("button", { name: "重试保存到我的文稿" }));
     await screen.findByLabelText("生成公文成品页");
     expect(mocks.createTextContentProfile).toHaveBeenCalledTimes(1);
     expect(mocks.createDraft).toHaveBeenCalledTimes(1);
@@ -1220,22 +1276,22 @@ describe("OfficialDocumentComposeView", () => {
     await submitRequirement(user, "撰写2026年安全检查通知");
 
     await screen.findByRole("article", { name: "生成的公文文件" });
-    await user.click(screen.getByRole("button", { name: "保存到草稿箱" }));
+    await user.click(screen.getByRole("button", { name: "保存到我的文稿" }));
 
     await waitFor(() => expect(mocks.updateDraftContent).toHaveBeenCalledTimes(1));
     expect(mocks.updateDraftContent.mock.calls[0][1]).not.toHaveProperty("researchResults");
   });
-  it("@ 浮层按分组给出模板库入口、结构模板与参考草稿", async () => {
+  it("@ 浮层按分组给出公文模板入口、结构模板与参考文稿", async () => {
     const user = userEvent.setup();
     renderView();
 
     const { menu } = await openMentions(user);
     expect(within(menu).getByRole("group", { name: "添加" })).toBeInTheDocument();
-    expect(within(menu).getByRole("option", { name: /模板库/ })).toBeInTheDocument();
+    expect(within(menu).getByRole("option", { name: /公文模板/ })).toBeInTheDocument();
     expect(within(menu).getByRole("option", { name: /上传参考资料/ })).toBeInTheDocument();
     const templateGroup = within(menu).getByRole("group", { name: "模板" });
     expect(within(templateGroup).getByRole("option", { name: /通知模板/ })).toHaveTextContent("v1 · 通知模板.docx");
-    const draftGroup = within(menu).getByRole("group", { name: "参考草稿" });
+    const draftGroup = within(menu).getByRole("group", { name: "参考文稿" });
     expect(within(draftGroup).getByRole("option", { name: /季度通知草稿/ })).toHaveTextContent("通知模板");
   });
 
@@ -1249,7 +1305,7 @@ describe("OfficialDocumentComposeView", () => {
     expect(within(templateGroup).getByRole("option", { name: /通知模板/ })).toBeInTheDocument();
     expect(within(templateGroup).queryByRole("option", { name: /文件缺失模板/ })).not.toBeInTheDocument();
     expect(within(templateGroup).queryByRole("option", { name: /待发布模板/ })).not.toBeInTheDocument();
-    const draftGroup = within(menu).getByRole("group", { name: "参考草稿" });
+    const draftGroup = within(menu).getByRole("group", { name: "参考文稿" });
     expect(within(draftGroup).getByRole("option", { name: /季度通知草稿/ })).toBeInTheDocument();
     expect(within(draftGroup).queryByRole("option", { name: /缺文件草稿/ })).not.toBeInTheDocument();
     expect(within(draftGroup).queryByRole("option", { name: /待发布草稿/ })).not.toBeInTheDocument();
@@ -1264,7 +1320,7 @@ describe("OfficialDocumentComposeView", () => {
 
     const menu = await screen.findByRole("listbox", { name: "引用与动作" });
     expect(within(menu).getByRole("option", { name: /季度通知草稿/ })).toBeInTheDocument();
-    expect(within(menu).queryByRole("option", { name: /模板库/ })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("option", { name: /公文模板/ })).not.toBeInTheDocument();
   });
 
   it("直接 @ 一个结构模板就能成稿，不去读任何草稿正文", async () => {
@@ -1300,20 +1356,35 @@ describe("OfficialDocumentComposeView", () => {
     expect(await screen.findByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
   });
 
-  it("没有引用就提交时提示先 @ 选择", async () => {
+  it("没选模板也能点发送，点了当面说去哪儿选", async () => {
     const user = userEvent.setup();
     renderView();
 
     const input = await screen.findByRole("textbox", { name: "公文写作要求" });
     await user.type(input, "撰写2026年安全检查通知");
-    expect(screen.getByRole("button", { name: "生成完整公文" })).toBeDisabled();
+    // 不靠置灰让人猜：按钮可点，点了给出明确去处
+    const sendButton = screen.getByRole("button", { name: "生成完整公文" });
+    expect(sendButton).toBeEnabled();
+    expect(sendButton).toHaveAttribute("title", "先选公文模板再生成");
 
-    await user.type(input, "{Enter}");
-    expect(await screen.findByText("请先通过 @ 选择模板或参考草稿")).toBeInTheDocument();
+    await user.click(sendButton);
+    expect(await screen.findByText("请先选择公文模板：点输入框下方的「公文模板」，或输入 @ 选择")).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+    expect(input).toHaveValue("撰写2026年安全检查通知");
+  });
+
+  it("一份能用的模板都没有时，提示去新建", async () => {
+    mocks.loadWorkspace.mockResolvedValue({ ...workspace, templates: [], drafts: [] });
+    const user = userEvent.setup();
+    renderView();
+
+    const input = await screen.findByRole("textbox", { name: "公文写作要求" });
+    await user.type(input, "撰写2026年安全检查通知{Enter}");
+    expect(await screen.findByText("还没有可用的公文模板：点输入框下方的「公文模板」新建一份，发布后就能用")).toBeInTheDocument();
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("模板界面盖在对话上，使用模板设为本轮引用并保留已有轮次", async () => {
+  it("「公文模板」弹窗：使用模板设为本轮引用并保留已有轮次", async () => {
     const user = userEvent.setup();
     renderView();
 
@@ -1321,20 +1392,79 @@ describe("OfficialDocumentComposeView", () => {
     await submitRequirement(user, "撰写2026年安全检查通知");
     await screen.findByRole("article", { name: "生成的公文文件" });
 
-    const { menu } = await openMentions(user);
-    await user.click(within(menu).getByRole("option", { name: /模板库/ }));
+    await user.click(screen.getByRole("button", { name: "公文模板" }));
 
-    const gallery = await screen.findByRole("region", { name: "模板库" });
-    expect(within(gallery).getByRole("heading", { name: "模板库" })).toBeInTheDocument();
-    expect(within(gallery).getByRole("button", { name: "上传结构 DOCX" })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "公文模板" });
+    const gallery = within(dialog).getByRole("region", { name: "模板库" });
+    expect(within(gallery).getByRole("button", { name: "新建模板" })).toBeEnabled();
 
     await user.click(within(gallery).getByRole("button", { name: "使用模板 通知模板" }));
 
-    expect(screen.queryByRole("region", { name: "模板库" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "公文模板" })).not.toBeInTheDocument());
     expect(screen.getByLabelText("本轮引用")).toHaveTextContent("@通知模板");
-    // 覆盖面板只是盖住对话，轮次状态一条都不能掉
+    // 弹窗只是盖住对话，轮次状态一条都不能掉
     expect(screen.getByRole("region", { name: "公文生成对话" })).toHaveTextContent("撰写2026年安全检查通知");
     expect(screen.getByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
+  });
+
+  it("@ 里的「公文模板」同样打开模板弹窗", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    const { menu } = await openMentions(user);
+    await user.click(within(menu).getByRole("option", { name: /公文模板/ }));
+
+    expect(await screen.findByRole("dialog", { name: "公文模板" })).toBeInTheDocument();
+  });
+
+  it("弹窗里新建模板：分析完待发布给「去发布」，跳详情时带上回写作台的路", async () => {
+    const analyzing: OfficialDocumentTemplate = {
+      ...workspace.templates[0],
+      id: "template-new",
+      name: "新会议纪要模板",
+      status: "ANALYZING",
+      currentVersion: { ...workspace.templates[0].currentVersion, id: "version-new", fileName: "新会议纪要模板.docx", analysis: undefined }
+    };
+    mocks.uploadTemplate.mockResolvedValue({ source: "LIVE", persisted: true, template: analyzing, message: "已上传" });
+    const user = userEvent.setup();
+    render(
+      <AppProviders>
+      <ConfigProvider theme={NO_MOTION}>
+        <MemoryRouter initialEntries={["/writing/session"]}>
+          <Routes>
+            <Route path="/writing/session" element={<OfficialDocumentComposeView />} />
+            <Route path="/writing/templates/:templateId" element={<TemplateRouteProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </ConfigProvider>
+      </AppProviders>
+    );
+
+    await user.click(await screen.findByRole("button", { name: "公文模板" }));
+    const dialog = await screen.findByRole("dialog", { name: "公文模板" });
+    await user.click(within(dialog).getByRole("button", { name: "新建模板" }));
+
+    // 测试环境里 antd 给两个弹窗的标题发同一个 id，按名字找会串到外层弹窗，这里从文件输入框往上认
+    const upload = (await screen.findByTestId("official-document-template-file")).closest("[role='dialog']") as HTMLElement;
+    expect(upload).toHaveTextContent("新建模板上传一份结构 DOCX");
+    await user.upload(within(upload).getByTestId("official-document-template-file"),
+      new File(["docx"], "新会议纪要模板.docx", { type: DOCX_TYPE }));
+    await user.click(within(upload).getByRole("button", { name: "上传并分析" }));
+
+    await waitFor(() => expect(mocks.uploadTemplate).toHaveBeenCalledTimes(1));
+    expect(await within(dialog).findByText("《新会议纪要模板》正在分析结构")).toBeInTheDocument();
+
+    // 轮询回来的新快照里它已分析完、待发布
+    mocks.loadWorkspace.mockResolvedValue({
+      ...workspace,
+      templates: [{ ...analyzing, status: "NEEDS_REVIEW", currentVersion: workspace.templates[0].currentVersion }, ...workspace.templates]
+    });
+    const pending = await within(dialog).findByText("《新会议纪要模板》已分析完，待发布", {}, { timeout: 4000 });
+    const bar = pending.closest(".xs-status-bar") as HTMLElement;
+    await user.click(within(bar).getByRole("button", { name: "去发布" }));
+
+    expect(await screen.findByTestId("template-route")).toHaveTextContent("template-new|/writing/session");
+    expect(screen.queryByRole("dialog", { name: "公文模板" })).not.toBeInTheDocument();
   });
 
   it("上传的文本参考资料按芯片列出并随写作上下文发出", async () => {
@@ -1370,12 +1500,17 @@ describe("OfficialDocumentComposeView", () => {
     renderView();
 
     await pickReference(user);
-    const file = new File(["%PDF-1.7"], "扫描件.pdf", { type: "application/pdf" });
-    await user.upload(screen.getByTestId("official-document-material-file"), file);
+    await user.upload(screen.getByTestId("official-document-material-file"), [
+      new File(["%PDF-1.7"], "扫描件.pdf", { type: "application/pdf" }),
+      new File(["xlsx"], "台账.xlsx")
+    ]);
 
-    const chip = await screen.findByTitle("暂不支持解析该格式，请转为 DOCX 或文本");
-    expect(chip).toHaveTextContent("扫描件.pdf");
-    expect(chip).toHaveTextContent("读取失败");
+    // PDF 单独说怎么转
+    const pdfChip = await screen.findByTitle("暂不支持 PDF，可另存为 DOCX 后上传");
+    expect(pdfChip).toHaveTextContent("扫描件.pdf");
+    expect(pdfChip).toHaveTextContent("读取失败");
+    expect(await screen.findByTitle("暂不支持解析该格式，请转为 DOCX 或文本")).toHaveTextContent("台账.xlsx");
+    expect(mocks.parseDocx).not.toHaveBeenCalled();
 
     await submitRequirement(user, "撰写2026年安全检查通知");
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
@@ -1383,52 +1518,27 @@ describe("OfficialDocumentComposeView", () => {
     expect(context.referenceMaterials).toBeUndefined();
   });
 
-  it("没有引用时上传 DOCX 资料要先选模板", async () => {
+  it("DOCX 资料在浏览器本地解析，不用先选模板，也不走服务端", async () => {
+    mocks.parseDocx.mockResolvedValue({
+      paragraphCount: 1,
+      tableCount: 1,
+      headingCount: 0,
+      blocks: [
+        { kind: "PARAGRAPH", role: "BODY", text: "上季度隐患整改率 96%。" },
+        { kind: "TABLE", role: "BODY", text: "季度\t隐患\nQ1\t18", rows: [["季度", "隐患"], ["Q1", "18"]] }
+      ]
+    } satisfies ParsedDocx);
     const user = userEvent.setup();
     renderView();
 
     await screen.findByRole("textbox", { name: "公文写作要求" });
-    const file = new File(["docx"], "参考材料.docx", {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    });
+    const file = new File(["docx"], "参考材料.docx", { type: DOCX_TYPE });
     await user.upload(screen.getByTestId("official-document-material-file"), file);
 
-    expect(
-      await screen.findByTitle("请先 @ 选择模板或参考草稿，再上传 DOCX 资料")
-    ).toHaveTextContent("参考材料.docx");
-    expect(mocks.uploadContentProfile).not.toHaveBeenCalled();
-  });
-
-  it("DOCX 资料走内容方案抽取，拼好的正文进写作上下文", async () => {
-    const user = userEvent.setup();
-    mocks.uploadContentProfile.mockResolvedValue({
-      id: "profile-1",
-      status: "EXTRACTED",
-      profile: {
-        source: {
-          sourceSha256: "sha",
-          warnings: [],
-          blocks: [
-            { id: "b1", order: 0, kind: "PARAGRAPH", text: "上季度隐患整改率 96%。", headingHint: "", columns: [], rows: [] },
-            { id: "b2", order: 1, kind: "TABLE", text: "", headingHint: "", columns: ["季度", "隐患"], rows: [["Q1", "18"]] }
-          ]
-        }
-      }
-    });
-    renderView();
+    await waitFor(() => expect(mocks.parseDocx).toHaveBeenCalledWith(file));
+    expect(await screen.findByText("参考材料.docx")).toBeInTheDocument();
 
     await pickReference(user);
-    const file = new File(["docx"], "参考材料.docx", {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    });
-    await user.upload(screen.getByTestId("official-document-material-file"), file);
-
-    await waitFor(() => expect(mocks.uploadContentProfile).toHaveBeenCalledWith(
-      "template-1",
-      "version-1",
-      file,
-      "参考材料.docx"
-    ));
     await submitRequirement(user, "撰写2026年安全检查通知");
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
@@ -1436,9 +1546,22 @@ describe("OfficialDocumentComposeView", () => {
       referenceMaterials?: Array<{ name: string; content: string }>;
     };
     expect(context.referenceMaterials).toEqual([
-      { name: "参考材料.docx", content: "上季度隐患整改率 96%。\n\n季度\t隐患\nQ1\t18" }
+      { name: "参考材料.docx", content: "上季度隐患整改率 96%。\n季度\t隐患\nQ1\t18" }
     ]);
   });
+
+  it("DOCX 解析失败时芯片上给出原因，不进写作上下文", async () => {
+    mocks.parseDocx.mockRejectedValue(new DocxParseError("这是旧版 .doc 或加了密码的文档，请另存为 .docx 后上传", "LEGACY_OR_ENCRYPTED"));
+    const user = userEvent.setup();
+    renderView();
+
+    await screen.findByRole("textbox", { name: "公文写作要求" });
+    await user.upload(screen.getByTestId("official-document-material-file"), new File(["doc"], "旧文件.docx", { type: DOCX_TYPE }));
+
+    const chip = await screen.findByTitle("这是旧版 .doc 或加了密码的文档，请另存为 .docx 后上传");
+    expect(chip).toHaveTextContent("读取失败");
+  });
+
   it("shows a factual review for invented fifteen-minute sign-in without blocking the generated draft", async () => {
     chat.state.autoSettle = false;
     const user = userEvent.setup();
@@ -1618,7 +1741,7 @@ describe("OfficialDocumentComposeView", () => {
       useWritingJobStore.getState().markSeen();
       renderEntry("/writing");
 
-      expect(await screen.findByRole("heading", { name: "想写一篇什么公文？" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "公文模板化复刻" })).toBeInTheDocument();
       /* 会话没有被展开：上一轮的问题和成稿都留在会话页 */
       expect(screen.queryByText("撰写2026年安全检查通知")).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "公文生成对话" })).not.toBeInTheDocument();
@@ -1628,7 +1751,7 @@ describe("OfficialDocumentComposeView", () => {
 
       await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing/session"));
       expect(await screen.findByText("撰写2026年安全检查通知")).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "想写一篇什么公文？" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "公文模板化复刻" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /上次成稿/ })).not.toBeInTheDocument();
     });
 
@@ -1710,7 +1833,7 @@ describe("OfficialDocumentComposeView", () => {
 
       renderEntry("/writing");
 
-      await screen.findByRole("heading", { name: "想写一篇什么公文？" });
+      await screen.findByRole("heading", { name: "公文模板化复刻" });
       /* 已看过、已提醒：不弹提醒也不亮未读圆点，只让首页有东西可点 */
       await waitFor(() => expect(useWritingJobStore.getState().lastResult).toMatchObject({
         turnId: "recovered-turn",
@@ -1721,6 +1844,281 @@ describe("OfficialDocumentComposeView", () => {
       expect(screen.getByRole("button", { name: /上次成稿《关于开展2026年安全检查的通知》/ })).toBeInTheDocument();
 
       useDataHubAuthStore.getState().clearAuthState();
+    });
+
+    it("首页「我的文稿」列最近 6 篇，点标题进文稿，更多进列表", async () => {
+      const drafts = Array.from({ length: 8 }, (_, index) => ({
+        ...workspace.drafts[0],
+        id: `draft-${index + 1}`,
+        title: `第 ${index + 1} 篇文稿`,
+        updatedAt: `2026-09-${String(10 + index).padStart(2, "0")}T08:00:00Z`
+      }));
+      mocks.loadWorkspace.mockResolvedValue({ ...workspace, drafts });
+      renderEntry("/writing");
+
+      const block = await screen.findByRole("region", { name: "我的文稿" });
+      const items = within(block).getAllByRole("listitem");
+      expect(items).toHaveLength(6);
+      // 最近更新的在前
+      expect(items[0]).toHaveTextContent("第 8 篇文稿");
+      expect(within(items[0]).getByRole("link")).toHaveAttribute("href", "/writing/drafts/draft-8");
+      expect(within(block).queryByText("第 2 篇文稿")).not.toBeInTheDocument();
+      expect(within(block).getByRole("link", { name: "查看全部文稿" })).toHaveAttribute("href", "/writing/drafts");
+    });
+
+    it("没有文稿时首页不占位", async () => {
+      mocks.loadWorkspace.mockResolvedValue({ ...workspace, drafts: [] });
+      renderEntry("/writing");
+
+      await screen.findByRole("heading", { name: "公文模板化复刻" });
+      expect(screen.queryByRole("region", { name: "我的文稿" })).not.toBeInTheDocument();
+    });
+
+    it("首页收到模板库「使用」带回来的模板，写作台常驻也照样认", async () => {
+      const user = userEvent.setup();
+      function UseFromLibrary() {
+        const navigate = useNavigate();
+        return <button type="button" onClick={() => navigate("/writing", { state: { useTemplateId: "template-1" } })}>从模板库使用</button>;
+      }
+      render(
+        <AppProviders>
+      <ConfigProvider theme={NO_MOTION}>
+          <MemoryRouter initialEntries={["/writing"]}>
+            <UseFromLibrary />
+            <OfficialDocumentComposeView />
+          </MemoryRouter>
+        </ConfigProvider>
+      </AppProviders>
+      );
+
+      await screen.findByRole("heading", { name: "公文模板化复刻" });
+      expect(screen.queryByLabelText("本轮引用")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "从模板库使用" }));
+      expect(await screen.findByLabelText("本轮引用")).toHaveTextContent("@通知模板");
+    });
+  });
+
+  describe("Word 引擎不可用", () => {
+    const engineDownWorkspace: OfficialDocumentWorkspaceSnapshot = {
+      ...workspace,
+      capabilities: { ...workspace.capabilities, wordEngine: { available: false, code: "ENGINE_UNAVAILABLE" } }
+    };
+
+    it("首页说清楚哪些会失败、找谁；新建模板提前置灰", async () => {
+      mocks.loadWorkspace.mockResolvedValue(engineDownWorkspace);
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      expect(await screen.findByText("Word 引擎暂不可用")).toBeInTheDocument();
+      expect(screen.getByText(/新建模板、下载 Word\/PDF 和排版预览会失败.*请联系管理员/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "公文模板" }));
+      const dialog = await screen.findByRole("dialog", { name: "公文模板" });
+      expect(within(dialog).getByRole("button", { name: "新建模板" })).toBeDisabled();
+      expect(within(dialog).getByText("Word 引擎暂不可用，暂时不能新建模板")).toBeInTheDocument();
+      // 已发布的模板照常能用
+      expect(within(dialog).getByRole("button", { name: "使用模板 通知模板" })).toBeEnabled();
+    });
+
+    it("成稿照常生成和保存，下载提前置灰，预览直接给结构化兜底", async () => {
+      mocks.loadWorkspace.mockResolvedValue(engineDownWorkspace);
+      const user = userEvent.setup();
+      renderView();
+
+      await pickReference(user);
+      await submitRequirement(user, "撰写2026年安全检查通知");
+      const artifact = await screen.findByRole("article", { name: "生成的公文文件" });
+
+      const download = within(artifact).getByRole("button", { name: /下载/ });
+      expect(download).toBeDisabled();
+      expect(download).toHaveAttribute("title", "Word 引擎暂不可用，请联系管理员处理后再试");
+      expect(screen.getByRole("button", { name: "保存到我的文稿" })).toBeEnabled();
+
+      await user.click(within(artifact).getByRole("button", { name: /浏览/ }));
+      expect(await screen.findByText("Word 引擎暂不可用，请联系管理员处理后再试，先看结构化预览")).toBeInTheDocument();
+      expect(mocks.getTransientPreview).not.toHaveBeenCalled();
+    });
+
+    it("没带 code 的「不可用」不下结论，按钮照常可点", async () => {
+      mocks.loadWorkspace.mockResolvedValue({
+        ...workspace,
+        capabilities: { ...workspace.capabilities, wordEngine: { available: false } }
+      });
+      renderEntry("/writing");
+
+      await screen.findByRole("heading", { name: "公文模板化复刻" });
+      expect(screen.queryByText("Word 引擎暂不可用")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("内容复刻", () => {
+    async function startReplicate(user: ReturnType<typeof userEvent.setup>, fileName = "年中讲话.docx") {
+      await user.click(await screen.findByRole("button", { name: "内容复刻" }));
+      const dialog = await screen.findByRole("dialog", { name: /^内容复刻/ });
+      await user.upload(within(dialog).getByTestId("official-document-replicate-file"),
+        new File(["docx"], fileName, { type: DOCX_TYPE }));
+      await user.click(within(dialog).getByRole("button", { name: "读取框架" }));
+      return dialog;
+    }
+
+    function sectionTitles() {
+      const panel = screen.getByRole("complementary", { name: "内容框架" });
+      return within(panel).getAllByRole("textbox", { name: /节标题$/ }).map((input) => (input as HTMLInputElement).value);
+    }
+
+    it("上传原文后进左右结构：左边读出的框架可改，右边按最新框架生成", async () => {
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      await startReplicate(user);
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing/session"));
+      expect(mocks.parseDocx).toHaveBeenCalledWith(expect.objectContaining({ name: "年中讲话.docx" }));
+
+      const panel = await screen.findByRole("complementary", { name: "内容框架" });
+      expect(within(panel).getByText("年中讲话.docx")).toBeInTheDocument();
+      expect(sectionTitles()).toEqual(["开头", "一、上半年工作回顾", "（一）安全生产", "二、下半年工作安排"]);
+      expect(within(panel).getByRole("textbox", { name: "第 2 节要点" })).toHaveValue("上半年重点任务按节点推进");
+      expect(screen.getByRole("textbox", { name: "公文写作要求" }))
+        .toHaveAttribute("placeholder", "说说这次要写什么，比如「按这个框架写 2026 年版本」");
+
+      // 改标题、删一节
+      const title = within(panel).getByRole("textbox", { name: "第 2 节标题" });
+      await user.clear(title);
+      await user.type(title, "一、2026年上半年工作回顾");
+      await user.click(within(panel).getByRole("button", { name: "删除第 3 节" }));
+      expect(sectionTitles()).toEqual(["开头", "一、2026年上半年工作回顾", "二、下半年工作安排"]);
+
+      // 没选模板：当面提示，点发送给出去处，不静默置灰
+      expect(screen.getByText("还没选公文模板")).toBeInTheDocument();
+      await submitRequirement(user, "按这个框架写2026年版本");
+      expect(await screen.findByText("请先选择公文模板：点输入框下方的「公文模板」，或输入 @ 选择")).toBeInTheDocument();
+      expect(send).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "选择模板" }));
+      const templates = await screen.findByRole("dialog", { name: "公文模板" });
+      await user.click(within(templates).getByRole("button", { name: "使用模板 通知模板" }));
+      await waitFor(() => expect(screen.queryByText("还没选公文模板")).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: "生成完整公文" }));
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      // 框架就是拍过板的大纲，不再跑一遍分析
+      expect(mocks.analyzeContent).not.toHaveBeenCalled();
+      const context = send.mock.calls[0][1]?.writingContext as {
+        referenceSections: Array<{ id: string; title: string; headingRole?: string }>;
+        referenceMaterials: Array<{ name: string; content: string }>;
+        outputRules: { replicateRule?: string; confirmedOutline?: boolean };
+      };
+      expect(context.referenceSections.map((section) => [section.title, section.headingRole ?? "BODY"])).toEqual([
+        ["开头", "BODY"],
+        ["一、2026年上半年工作回顾", "HEADING_1"],
+        ["二、下半年工作安排", "HEADING_1"]
+      ]);
+      expect(context.outputRules.confirmedOutline).toBe(true);
+      expect(context.outputRules.replicateRule).toContain("《年中讲话.docx》");
+      expect(context.referenceMaterials[0].name).toBe("年中讲话.docx");
+      expect(context.referenceMaterials[0].content).toContain("隐患整改率达到96%。");
+
+      const conversation = await screen.findByRole("region", { name: "公文生成对话" });
+      expect(conversation).toHaveTextContent("复刻 年中讲话.docx · @通知模板");
+      expect(await screen.findByRole("article", { name: "生成的公文文件" })).toBeInTheDocument();
+      // 生成完框架还在左边，接着改接着写
+      expect(screen.getByRole("complementary", { name: "内容框架" })).toBeInTheDocument();
+    });
+
+    it("PDF 和旧版 .doc 留在上传弹窗里就地提示，换个文件就能重试", async () => {
+      mocks.parseDocx.mockRejectedValueOnce(new DocxParseError("暂不支持 PDF，可另存为 DOCX 后上传", "PDF"));
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      const dialog = await startReplicate(user, "改了后缀的扫描件.docx");
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("暂不支持 PDF，可另存为 DOCX 后上传");
+      expect(screen.getByTestId("path")).toHaveTextContent("/writing");
+      expect(screen.queryByRole("complementary", { name: "内容框架" })).not.toBeInTheDocument();
+    });
+
+    it("读不出正文也进左右结构，整篇作为一节并给出可操作的提示", async () => {
+      mocks.parseDocx.mockRejectedValueOnce(new DocxParseError("这个文件不是有效的 DOCX，请用 Word 另存为 .docx 后重试", "NOT_DOCX"));
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      await startReplicate(user);
+      const panel = await screen.findByRole("complementary", { name: "内容框架" });
+      expect(within(panel).getByText("没从这份文档里读出正文")).toBeInTheDocument();
+      expect(sectionTitles()).toEqual(["全文"]);
+      // 至少留一节，但可以接着往下加
+      expect(within(panel).getByRole("button", { name: "删除第 1 节" })).toBeDisabled();
+      await user.click(within(panel).getByRole("button", { name: "添加章节" }));
+      expect(sectionTitles()).toEqual(["全文", ""]);
+      await waitFor(() => expect(within(panel).getByRole("textbox", { name: "第 2 节标题" })).toHaveFocus());
+    });
+
+    it("没识别出章节标题时提示手动拆分", async () => {
+      mocks.parseDocx.mockResolvedValueOnce({
+        paragraphCount: 2,
+        tableCount: 0,
+        headingCount: 0,
+        blocks: [
+          { kind: "PARAGRAPH", role: "BODY", text: "第一段正文。" },
+          { kind: "PARAGRAPH", role: "BODY", text: "第二段正文。" }
+        ]
+      } satisfies ParsedDocx);
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      await startReplicate(user);
+      const panel = await screen.findByRole("complementary", { name: "内容框架" });
+      expect(within(panel).getByText("没识别出章节标题，已把整篇作为一节")).toBeInTheDocument();
+      expect(sectionTitles()).toEqual(["全文"]);
+    });
+
+    it("框架里有空标题的章节时，生成前指出是哪一节", async () => {
+      const user = userEvent.setup();
+      renderEntry("/writing");
+
+      await startReplicate(user);
+      const panel = await screen.findByRole("complementary", { name: "内容框架" });
+      await user.clear(within(panel).getByRole("textbox", { name: "第 4 节标题" }));
+      await pickReference(user);
+      await submitRequirement(user, "按这个框架写2026年版本");
+
+      expect(await screen.findByText("内容框架第 4 节是标题但还没写名字：补上标题，或把层级改成「无标题段落」")).toBeInTheDocument();
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("刷新后认回左右结构；首页给一条回去的路，退出后回到普通写作", async () => {
+      useDataHubAuthStore.getState().setSession(
+        { token: "token-1", userId: 1, username: "qa", isAdmin: false },
+        7
+      );
+      sessionStorage.removeItem("xingshu:writing:1:7");
+      const user = userEvent.setup();
+      const first = renderEntry("/writing");
+
+      await startReplicate(user);
+      const panel = await screen.findByRole("complementary", { name: "内容框架" });
+      const title = within(panel).getByRole("textbox", { name: "第 2 节标题" });
+      await user.clear(title);
+      await user.type(title, "一、改过的标题");
+      first.unmount();
+
+      renderEntry("/writing/session");
+      await screen.findByRole("complementary", { name: "内容框架" });
+      expect(sectionTitles()).toEqual(["开头", "一、改过的标题", "（一）安全生产", "二、下半年工作安排"]);
+
+      await user.click(screen.getByRole("link", { name: "回写作首页" }));
+      const notice = await screen.findByRole("group", { name: "内容复刻进行中" });
+      expect(notice).toHaveTextContent("内容复刻进行中：年中讲话.docx");
+      await user.click(within(notice).getByRole("button", { name: "继续复刻" }));
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/writing/session"));
+
+      await user.click(await screen.findByRole("button", { name: "退出复刻" }));
+      // 没有对话可看，退出就回首页
+      await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/writing$/));
+      expect(screen.queryByRole("complementary", { name: "内容框架" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "内容复刻进行中" })).not.toBeInTheDocument();
+
+      useDataHubAuthStore.getState().clearAuthState();
+      sessionStorage.removeItem("xingshu:writing:1:7");
     });
   });
 

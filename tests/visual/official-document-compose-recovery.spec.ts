@@ -89,9 +89,9 @@ test("restores an unsaved generated artifact after reload without generating twi
   await submit(page);
   await releaseResponse(page, state.release);
   await page.getByRole("button", { name: "确认大纲并生成", exact: true }).click();
-  await expect(page.getByRole("button", { name: "保存到草稿箱", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存到我的文稿", exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: "保存到草稿箱", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存到我的文稿", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "公文生成对话", exact: true })).toContainText(requirement);
   expect(state.generations()).toBe(1);
   await page.addInitScript(() => {
@@ -103,7 +103,7 @@ test("restores an unsaved generated artifact after reload without generating twi
     }
   });
   await page.reload();
-  await expect(page.getByRole("button", { name: "保存到草稿箱", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存到我的文稿", exact: true })).toBeVisible();
   expect(state.generations()).toBe(1);
   for (const width of [1440, 1672, 1920, 2200, 390]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -154,6 +154,6 @@ test("research checkpoints resume without repeating completed queries and stop i
   await page.getByRole("button", { name: "继续补充资料并生成", exact: true }).click();
   await expect.poll(state.researchRequests).toBe(4);
   await state.releaseResearch();
-  await expect(page.getByRole("button", { name: "保存到草稿箱", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存到我的文稿", exact: true })).toBeVisible();
   expect(state.generations()).toBe(1);
 });

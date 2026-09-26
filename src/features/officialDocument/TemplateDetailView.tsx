@@ -299,7 +299,7 @@ function CalibrationPanel({
               ? buildOfficialDocumentMappings(calibrationNodes, bodyRegionStart, bodyRegionEnd)
               : [])}
         >
-          {template.status === "PUBLISHED" ? "按此结构新建草稿" : "发布结构"}
+          {template.status === "PUBLISHED" ? "按此结构新建文稿" : "发布结构"}
         </Button>
       </OfficialDocumentAppActions>
 
@@ -307,7 +307,7 @@ function CalibrationPanel({
         <section className="official-document-calibration-outline" aria-labelledby="structure-heading">
           <div className="official-document-workspace-panel-head">
             <div>
-              <h4 id="structure-heading">结构大纲</h4>
+              <h2 id="structure-heading">结构大纲</h2>
               <p>点标题跳到对应段落。</p>
             </div>
             <div className="official-document-structure-head-actions">
@@ -337,7 +337,7 @@ function CalibrationPanel({
         <section className="official-document-calibration-document" aria-label="结构模板原文">
           <div className="official-document-workspace-panel-head">
             <div>
-              <h4>结构模板原文</h4>
+              <h2>结构模板原文</h2>
               <p>示例文字只用于识别结构，不会进入最终文稿。</p>
             </div>
           </div>
@@ -352,7 +352,7 @@ function CalibrationPanel({
         {calibrating ? (
           <aside className="official-document-calibration-inspector">
             <div className="official-document-workspace-panel-head">
-              <div><h4>节点属性</h4><p>角色、格式事实与绑定权限</p></div>
+              <div><h2>节点属性</h2><p>角色、格式事实与绑定权限</p></div>
             </div>
             <div className="official-document-static-preserve-note">
               {canEditStructure
@@ -361,7 +361,7 @@ function CalibrationPanel({
             </div>
             {bodyRegionNodes.length ? (
               <div className="official-document-body-region" aria-label="正文区域范围">
-                <div><strong>正文区域</strong><small>范围内标题和正文会初始化为草稿节点。</small></div>
+                <div><strong>正文区域</strong><small>范围内标题和正文会初始化为文稿节点。</small></div>
                 <label><span>起点</span><Select aria-label="正文区域起点" value={bodyRegionStart} options={bodyRegionStartOptions} disabled={!canEditStructure} onChange={(value) => { calibrationDirty.current = true; setBodyRegionStart(value); if (bodyRegionEnd === undefined || bodyRegionEnd < value) setBodyRegionEnd(value); }} /></label>
                 <label><span>终点</span><Select aria-label="正文区域终点" value={bodyRegionEnd} options={bodyRegionEndOptions} disabled={!canEditStructure} onChange={(value) => { calibrationDirty.current = true; setBodyRegionEnd(value); }} /></label>
               </div>
@@ -425,7 +425,7 @@ function CalibrationPanel({
             ) : <div className="official-document-inline-empty">请在大纲或原文里选中一个段落。</div>}
 
             <section className="official-document-calibration-risks" aria-labelledby="risk-heading">
-              <div className="official-document-section-title"><div><h4 id="risk-heading">文档兼容性提示</h4><p>系统会尽量保留原稿；只有标为“错误”的项目会阻止发布。</p></div></div>
+              <div className="official-document-section-title"><div><h2 id="risk-heading">文档兼容性提示</h2><p>系统会尽量保留原稿；只有标为“错误”的项目会阻止发布。</p></div></div>
               {analysis?.risks.length ? (
                 <ul className="official-document-risks">
                   {analysis.risks.map((risk) => (
@@ -586,7 +586,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
           ? { ...item, currentVersion: publishedVersion, status: "PUBLISHED" as const }
           : item)
       }));
-      announce("success", "结构版本已发布，可以按此结构新建草稿。");
+      announce("success", "结构版本已发布，可以按此结构新建文稿。");
     } catch (error) {
       announce("error", operationErrorMessage(error));
     } finally {
@@ -596,7 +596,7 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
 
   const openDraftModal = () => {
     if (!template || template.status !== "PUBLISHED") return;
-    setDraftTitle(`${template.name.replace(/（.*?）/g, "")} - 新草稿`);
+    setDraftTitle(`${template.name.replace(/（.*?）/g, "")} - 新文稿`);
     setDraftCreateError("");
     setDraftModalOpen(true);
   };
@@ -675,9 +675,9 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
       {draftModalOpen && template ? (
         <Modal
           className="official-document-template-dialog"
-          title="按结构创建报告草稿"
+          title="按结构新建文稿"
           open
-          okText="创建草稿"
+          okText="创建文稿"
           cancelText="取消"
           zIndex={2000}
           confirmLoading={isCreatingDraft}
@@ -687,8 +687,8 @@ export function TemplateDetailView({ templateId }: { templateId: string }) {
         >
           <div className="official-document-modal-copy">
             <p>结构版本：{template.name} · v{template.currentVersion.versionNo}</p>
-            <p>创建后在草稿页上传文章并确认内容方案。</p>
-            <label htmlFor="official-document-draft-title">草稿名称</label>
+            <p>创建后在文稿页上传文章并确认内容方案。</p>
+            <label htmlFor="official-document-draft-title">文稿名称</label>
             <Input
               id="official-document-draft-title"
               value={draftTitle}

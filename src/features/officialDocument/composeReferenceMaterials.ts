@@ -2,11 +2,12 @@ import {
   MAX_REFERENCE_MATERIALS_CHARS,
   MAX_REFERENCE_MATERIAL_CHARS
 } from "@/services/officialDocumentFullDraft";
-import type { OfficialDocumentContentSourceBlock } from "@/types/officialDocument";
 
 /** 浏览器直接读成文本的格式；再大就不是「参考资料」而是数据文件了。 */
 export const TEXT_MATERIAL_EXTENSIONS = [".txt", ".md", ".csv", ".json"];
 export const MAX_TEXT_MATERIAL_BYTES = 2 * 1024 * 1024;
+/** DOCX 在浏览器里本地解析，上限跟模板上传一致。 */
+export const MAX_DOCX_MATERIAL_BYTES = 25 * 1024 * 1024;
 
 export type ComposeMaterialStatus = "reading" | "ready" | "failed";
 
@@ -30,27 +31,13 @@ export function materialExtension(name: string) {
   return index < 0 ? "" : name.slice(index).toLocaleLowerCase();
 }
 
-export function classifyMaterialFile(file: File): "text" | "docx" | "unsupported" {
+/** PDF 单列出来：它不是「不认识的格式」，用户需要的是一句怎么转的提示。 */
+export function classifyMaterialFile(file: File): "text" | "docx" | "pdf" | "unsupported" {
   const extension = materialExtension(file.name);
   if (TEXT_MATERIAL_EXTENSIONS.includes(extension)) return "text";
   if (extension === ".docx") return "docx";
+  if (extension === ".pdf") return "pdf";
   return "unsupported";
-}
-
-/** 内容方案抽取出来的块拼回一篇纯文本，表格按行用制表符分列。 */
-export function joinContentProfileBlocks(blocks: OfficialDocumentContentSourceBlock[]) {
-  return [...blocks]
-    .sort((left, right) => left.order - right.order)
-    .map((block) => {
-      if (block.kind === "TABLE") {
-        const header = block.columns.length ? [block.columns.join("\t")] : [];
-        return [...header, ...block.rows.map((row) => row.join("\t"))].join("\n");
-      }
-      return block.text;
-    })
-    .map((text) => text.trim())
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 /**

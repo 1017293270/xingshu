@@ -311,7 +311,7 @@ export function ContentProfileWorkspace({
     >
       <header className="content-profile-workspace__head">
         <div>
-          <h3 id="content-profile-heading">内容方案</h3>
+          <h2 id="content-profile-heading">内容方案</h2>
           <p>
             当前结构：<strong>{template.name}</strong> · v{template.currentVersion.versionNo}。
             内容只提供原文、行文逻辑和资料需求，最终版式统一使用当前结构。
@@ -375,7 +375,7 @@ export function ContentProfileWorkspace({
               ) : null}
               <div className="content-profile-review">
                 <section aria-labelledby="source-content-heading">
-                  <h4 id="source-content-heading">原始内容</h4>
+                  <h3 id="source-content-heading">原始内容</h3>
                   {selected.profile.source?.warnings.length ? (
                     <div className="content-profile-warnings">
                       {selected.profile.source.warnings.map((warning) => (
@@ -398,7 +398,7 @@ export function ContentProfileWorkspace({
                 </section>
 
                 <section aria-labelledby="writing-logic-heading">
-                  <h4 id="writing-logic-heading">行文逻辑</h4>
+                  <h3 id="writing-logic-heading">行文逻辑</h3>
                   <div className="content-profile-section-list">
                     {plan.sections.map((section, index) => (
                       <article key={section.id}>
@@ -431,7 +431,7 @@ export function ContentProfileWorkspace({
 
                 <section aria-labelledby="research-needs-heading">
                   <div className="content-profile-review__section-head">
-                    <h4 id="research-needs-heading">资料补全</h4>
+                    <h3 id="research-needs-heading">资料补全</h3>
                     {editable ? <Button type="text" icon={<Plus />} onClick={addResearch}>新增</Button> : null}
                   </div>
                   <div className="content-profile-research-list">
@@ -457,11 +457,11 @@ export function ContentProfileWorkspace({
               <footer className="content-profile-workspace__footer">
                 <span>{plan.unassignedSourceBlockIds.length ? `${plan.unassignedSourceBlockIds.length} 段未分配` : "原始内容已全部归类"}</span>
                 {editable ? (
-                  <Button type="primary" loading={busy === "confirm"} onClick={() => void confirm()}>确认并绑定到草稿</Button>
+                  <Button type="primary" loading={busy === "confirm"} onClick={() => void confirm()}>确认并绑定到文稿</Button>
                 ) : boundProfileId ? (
-                  <Tag bordered={false} color="success">已绑定当前草稿</Tag>
+                  <Tag bordered={false} color="success">已绑定当前文稿</Tag>
                 ) : (
-                  <Button type="primary" loading={busy === "bind"} onClick={() => void bind()}>绑定到当前草稿</Button>
+                  <Button type="primary" loading={busy === "bind"} onClick={() => void bind()}>绑定到当前文稿</Button>
                 )}
               </footer>
             </>

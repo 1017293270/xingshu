@@ -2,12 +2,15 @@ import {
   ArrowsClockwise,
   ArrowUp,
   CaretDown,
+  CaretRight,
   CaretUp,
   CircleNotch,
   Copy,
   DownloadSimple,
   FileDoc,
+  Files,
   FileText,
+  Microphone,
   Paperclip,
   Plus,
   Star,
@@ -16,10 +19,10 @@ import {
   WarningCircle,
   X
 } from "@phosphor-icons/react";
-import { Button, Dropdown } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useLocation, useNavigate } from "react-router";
-import promptStar from "@/assets/brand/xingshu-prompt-star.svg";
+import { Button, Dropdown, Modal } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import appWritingIcon from "@/assets/generated-icons/app-writing.png";
 import mentionLibraryIcon from "@/assets/writing-mention-icons/library.svg";
 import mentionMaterialIcon from "@/assets/writing-mention-icons/material.svg";
 import mentionTemplateIcon from "@/assets/writing-mention-icons/template.svg";
@@ -37,6 +40,7 @@ import { XsAsyncPanel } from "@/components/xs/XsAsyncPanel";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import { XsUploadDialog } from "@/components/xs/XsUploadDialog";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { copyText } from "@/services/clipboard";
 import { resolveDataHubFinalAnswer } from "@/services/dataHubAskDataPresenter";
 import {
@@ -54,9 +58,15 @@ import {
   type OfficialDocumentTransientArtifactInput,
   saveOfficialDocumentContentProfileAnalysis,
   updateOfficialDocumentDraftContent,
-  uploadOfficialDocumentContentProfile,
   uploadOfficialDocumentTemplate
 } from "@/services/officialDocumentService";
+import {
+  DOCX_PDF_UNSUPPORTED_MESSAGE,
+  DocxParseError,
+  docxPlainText,
+  parseDocx,
+  type ParsedDocx
+} from "@/services/officialDocumentDocxParser";
 import {
   buildOfficialDocumentPreviewLines,
   buildOfficialDocumentReferenceWritingPlan,
@@ -72,10 +82,12 @@ import {
 import { analyzeOfficialDocumentContent } from "@/services/writingContentAnalysisService";
 import { executeOfficialDocumentResearchPlan } from "@/services/officialDocumentResearchService";
 import { officialDocumentContentText } from "@/services/officialDocumentFactReview";
+import { appendVoiceTranscript, transcribeVoice } from "@/services/voiceTranscriptionService";
 import { useDataHubAuthStore } from "@/stores/dataHubAuthStore";
 import type {
   OfficialDocumentContentSourceBlock,
   OfficialDocumentDraft,
+  OfficialDocumentDraftContent,
   OfficialDocumentExportFormat,
   OfficialDocumentResearchResult,
   OfficialDocumentStructureNode,
@@ -88,19 +100,21 @@ import { ComposeReviewPanel } from "./ComposeReviewPanel";
 import {
   classifyMaterialFile,
   composeMaterialPayload,
-  joinContentProfileBlocks,
+  MAX_DOCX_MATERIAL_BYTES,
   MAX_TEXT_MATERIAL_BYTES,
   resolveComposeMaterials,
   TEXT_MATERIAL_EXTENSIONS,
   type ComposeMaterial
 } from "./composeReferenceMaterials";
 import {
-  ANALYZING_POLL_INTERVAL_MS,
   formatDate,
   formatFileSize,
   operationErrorMessage,
+  templateFileIsMissing,
   templateIsUsable,
-  useUpdateOfficialDocumentWorkspaceCache
+  useUpdateOfficialDocumentWorkspaceCache,
+  WORD_ENGINE_UNAVAILABLE_ACTION_HINT,
+  wordEngineUnavailable
 } from "./officialDocumentMeta";
 import { OfficialDocumentComposer } from "./OfficialDocumentComposer";
 import { OfficialDocumentMentionMenu } from "./OfficialDocumentMentionMenu";
@@ -113,8 +127,20 @@ import {
   type OfficialDocumentMentionGroup,
   type OfficialDocumentMentionItem
 } from "./officialDocumentMentions";
-import { useOfficialDocumentAppChrome } from "./OfficialDocumentAppShell";
-import { WRITING_HOME_PATH, WRITING_SESSION_PATH } from "./writingComposeNode";
+import {
+  OFFICIAL_DOCUMENT_DRAFTS_PATH,
+  useOfficialDocumentAppChrome,
+  type OfficialDocumentReturnState
+} from "./OfficialDocumentAppShell";
+import { ReplicateFrameworkPanel } from "./ReplicateFrameworkPanel";
+import {
+  buildReplicateFramework,
+  readReplicateFramework,
+  replicateStyleContent,
+  replicateWritingPlan,
+  type ReplicateFramework
+} from "./replicateFramework";
+import { useWritingComposeHostStore, WRITING_HOME_PATH, WRITING_SESSION_PATH } from "./writingComposeNode";
 import { useWritingJobStore, type WritingJobPhase } from "./writingJobStore";
 import { WritingSessionNotice } from "./WritingSessionNotice";
 import { TemplateGallery } from "./TemplateGallery";
@@ -129,8 +155,22 @@ const RETRY_HINT = "请严格按 [[XS_FIXED:slot-id]] 和 [[XS_SECTION:section-i
 const MENTION_TEMPLATES_ACTION = "action:templates";
 const MENTION_MATERIAL_ACTION = "action:material";
 
-/** DOCX 资料走服务端内容方案抽取，轮询次数够覆盖一次冷启动。 */
-const MATERIAL_POLL_LIMIT = 30;
+/** 首页「我的文稿」只放最近几篇：两列三行一屏看完，再多就该去列表页找了。 */
+const RECENT_DRAFT_LIMIT = 6;
+
+const HERO_PLACEHOLDER = "描述你想写的内容，我来给你搭结构";
+const CHAT_PLACEHOLDER = "继续描述，输入 @ 更换模板或参考文稿";
+const REPLICATE_PLACEHOLDER = "说说这次要写什么，比如「按这个框架写 2026 年版本」";
+
+const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+const VOICE_LABELS = {
+  idle: "语音输入",
+  permission: "正在请求麦克风权限",
+  recording: "停止语音录入",
+  processing: "正在转写语音",
+  error: "重试语音输入"
+} as const;
 
 /** 短到一眼看完的回答不值得再给一个折叠开关。 */
 function isCollapsibleAnswer(lines: OfficialDocumentPreviewLine[]) {
@@ -146,7 +186,7 @@ type GeneratedArtifact = OfficialDocumentTransientArtifactInput & {
   templateName: string;
 };
 
-/** 本轮引用的东西：一份结构模板，或一篇带着模板的参考草稿。 */
+/** 本轮引用的东西：一份结构模板，或一篇带着模板的参考文稿。 */
 export type ComposeReference =
   | { kind: "template"; template: OfficialDocumentTemplate }
   | { kind: "draft"; draft: OfficialDocumentDraft; template: OfficialDocumentTemplate };
@@ -161,6 +201,23 @@ function referenceMeta(reference: ComposeReference) {
 
 type ReferenceMaterialPayload = Array<{ name: string; content: string }>;
 
+/** 内容复刻那一轮要记住的：原文叫什么、哪几节只写正文不出标题。 */
+type ReplicateTurn = {
+  sourceName: string;
+  bodyOnlySectionIds: string[];
+};
+
+/** 原文进参考资料时占第一个位置，单篇与总量上限和其他资料一起算。 */
+function replicateSourceMaterial(framework: ReplicateFramework): ComposeMaterial {
+  return {
+    id: "replicate-source",
+    name: framework.source.name,
+    size: framework.source.size,
+    status: "ready",
+    content: framework.sourceText
+  };
+}
+
 /** 每一轮的产物状态。轮次顺序、问题和 streaming/done/error 一律以 messages 为准。 */
 type ComposeTurnState = {
   requirement: string;
@@ -174,6 +231,8 @@ type ComposeTurnState = {
   research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
   /** 这一轮带的参考资料，重新生成时同样原样复用。 */
   materials?: ReferenceMaterialPayload;
+  /** 内容复刻出的这一轮：重新生成时优先用左侧最新的框架。 */
+  replicate?: ReplicateTurn;
   artifact?: GeneratedArtifact;
   /** 保存中断后复用已创建的方案，避免重试生成重复记录。 */
   contentProfileId?: string;
@@ -235,6 +294,7 @@ type PendingSubmission = {
   reference: ComposeReference;
   startedAt: number;
   materials?: ReferenceMaterialPayload;
+  replicate?: ReplicateTurn;
 };
 
 /** 分析等待态：卡片要按真实耗时推进阶段，也要把参考结构的章节骨架亮出来。 */
@@ -265,6 +325,8 @@ type ComposeRecovery = {
   planning: ComposePlanning | null;
   interrupted?: PendingSubmission;
   chat: WritingChatSnapshot;
+  /** 内容复刻的框架。旧记录没有这个字段，形状不对也只丢这一块。 */
+  replicate?: ReplicateFramework | null;
 };
 
 function readComposeRecovery(key: string | null): ComposeRecovery | undefined {
@@ -292,7 +354,8 @@ function readComposeRecovery(key: string | null): ComposeRecovery | undefined {
       value: saved.value || saved.interrupted?.requirement || "",
       materials: saved.materials.map((material) => material.status === "reading"
         ? { ...material, status: "failed", message: "解析已中断，请重新添加这份资料" } : material),
-      planning: saved.planning ? { ...saved.planning, phase: "confirm", progressText: undefined } : null
+      planning: saved.planning ? { ...saved.planning, phase: "confirm", progressText: undefined } : null,
+      replicate: readReplicateFramework(saved.replicate) ?? null
     };
   } catch {
     return;
@@ -305,7 +368,11 @@ type GenerationInput = {
   extraInstruction?: string;
   research?: { plan: OfficialDocumentWritingLogicPlan; results: OfficialDocumentResearchResult[] };
   materials?: ReferenceMaterialPayload;
+  /** 文风样本取原文正文；框架已经退出时没有样本，原文仍在参考资料里。 */
+  replicate?: ReplicateTurn & { styleContent?: OfficialDocumentDraftContent };
 };
+
+const EMPTY_CONTENT: OfficialDocumentDraftContent = { revision: 0, fixedValues: [], blocks: [] };
 
 /** 只把有内容的研究结果注入写作上下文；失败项由正文写「[待补充]」。 */
 function usableResearchResults(results: OfficialDocumentResearchResult[]) {
@@ -325,12 +392,6 @@ function embeddableResearchResults(results: OfficialDocumentResearchResult[]) {
 const EMPTY_FIXED_FIELDS: OfficialDocumentReferenceFixedField[] = [];
 const EMPTY_DRAFTS: OfficialDocumentDraft[] = [];
 const EMPTY_TEMPLATES: OfficialDocumentTemplate[] = [];
-
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
 
 /**
  * 生成中的正文装在限高窗里自己贴底滚动，完成后收起来给文件卡让位。
@@ -387,13 +448,15 @@ function ComposeAnswerStream({
   );
 }
 
-function ComposeReferenceMeta({ reference }: { reference: ComposeReference }) {
+function ComposeReferenceMeta({ reference, replicate }: { reference: ComposeReference; replicate?: ReplicateTurn }) {
   return (
     <>
-      {reference.kind === "draft"
-        ? <FileText size={14} aria-hidden="true" />
-        : <FileDoc size={14} aria-hidden="true" />}
-      @{referenceTitle(reference)} · {referenceMeta(reference)}
+      {replicate
+        ? <Files size={14} aria-hidden="true" />
+        : reference.kind === "draft"
+          ? <FileText size={14} aria-hidden="true" />
+          : <FileDoc size={14} aria-hidden="true" />}
+      {replicate ? `复刻 ${replicate.sourceName} · ` : ""}@{referenceTitle(reference)} · {referenceMeta(reference)}
     </>
   );
 }
@@ -423,8 +486,12 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   const [materials, setMaterials] = useState<ComposeMaterial[]>(recovered?.materials ?? []);
   const materialsRef = useRef(materials);
   const materialTasksRef = useRef(new Map<string, Promise<void>>());
-  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [replicateUploadOpen, setReplicateUploadOpen] = useState(false);
+  /* 弹窗里刚新建的那份模板：分析、待发布、可用各有一句话和一个去处。 */
+  const [uploadedTemplate, setUploadedTemplate] = useState<{ id: string; persisted: boolean; message: string } | null>(null);
+  const [replicate, setReplicate] = useState<ReplicateFramework | null>(recovered?.replicate ?? null);
   const [turnStates, setTurnStates] = useState<Record<string, ComposeTurnState>>(recovered?.turnStates ?? {});
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission>();
   const [analyzingSubmission, setAnalyzingSubmission] = useState<AnalyzingSubmission>();
@@ -444,6 +511,14 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   const mountedRef = useRef(true);
   const drafts = query.data?.drafts ?? EMPTY_DRAFTS;
   const templates = query.data?.templates ?? EMPTY_TEMPLATES;
+  const engineDown = wordEngineUnavailable(query.data?.capabilities);
+  /*
+   * 写作台常驻：用户切去别的模块时它仍然挂着，只是被收进隐藏停放区。
+   * 弹窗是传送到 body 上的，不看这个就会盖在别的页面上。独立渲染（没有宿主）时视为在场。
+   */
+  const hostStarted = useWritingComposeHostStore((state) => state.started);
+  const hostFace = useWritingComposeHostStore((state) => state.face);
+  const onScreen = !hostStarted || hostFace !== null;
   const { messages, busy: writingBusy, send, stop, getSnapshot } = useWritingChat(COMPOSE_CHAT_KEY, recovered?.chat);
   const composerBusy = writingBusy
     || Boolean(pendingSubmission)
@@ -462,6 +537,9 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     || Boolean(analyzingSubmission)
     || planning !== null;
   const conversationVisible = onSessionPage && hasSession;
+  /* 内容复刻只在会话页展开成左右两栏；首页只留一条回去的提示。 */
+  const replicateLayout = onSessionPage && replicate !== null;
+  const composerMode = conversationVisible || replicateLayout ? "chat" : "hero";
 
   useOfficialDocumentAppChrome({ stage: "compose", context: "公文写作" });
 
@@ -538,6 +616,13 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     ))),
     [drafts, usableTemplates]
   );
+  /* 首页「我的文稿」：按最近更新排，只取头几篇。 */
+  const recentDrafts = useMemo(
+    () => [...drafts]
+      .sort((left, right) => (Date.parse(right.updatedAt) || 0) - (Date.parse(left.updatedAt) || 0))
+      .slice(0, RECENT_DRAFT_LIMIT),
+    [drafts]
+  );
   const reference = useMemo<ComposeReference | null>(() => {
     if (!selection) return null;
     if (selection.kind === "template") {
@@ -575,8 +660,12 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     };
   }, []);
 
-  const recoveryRef = useRef({ value, selection, materials, turnStates, planning, interrupted: analyzingSubmission ?? pendingSubmission });
-  recoveryRef.current = { value, selection, materials, turnStates, planning, interrupted: analyzingSubmission ?? pendingSubmission };
+  const recoveryRef = useRef({
+    value, selection, materials, turnStates, planning, replicate, interrupted: analyzingSubmission ?? pendingSubmission
+  });
+  recoveryRef.current = {
+    value, selection, materials, turnStates, planning, replicate, interrupted: analyzingSubmission ?? pendingSubmission
+  };
   const saveRecovery = useCallback(() => {
     if (!storageKey || !getSnapshot) return;
     const current = recoveryRef.current;
@@ -591,7 +680,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
       }));
       if (mountedRef.current) setRecoveryError("");
     } catch {
-      if (mountedRef.current) setRecoveryError("本地恢复暂不可用，请将成稿保存到草稿箱或复制正文后离开。");
+      if (mountedRef.current) setRecoveryError("本地恢复暂不可用，请将成稿保存到我的文稿或复制正文后离开。");
     }
   }, [storageKey, getSnapshot]);
   useEffect(() => {
@@ -604,7 +693,39 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   useEffect(() => {
     const timer = window.setTimeout(saveRecovery, 200);
     return () => window.clearTimeout(timer);
-  }, [saveRecovery, value, selection, materials, turnStates, planning, analyzingSubmission, pendingSubmission, messages]);
+  }, [saveRecovery, value, selection, materials, turnStates, planning, replicate, analyzingSubmission, pendingSubmission, messages]);
+
+  /*
+   * 模板库独立页点「使用」是带着 useTemplateId 跳回来的。写作台常驻不重挂，
+   * 初始化只吃得到第一次，之后每次导航都要在这里认一遍；首屏那次已经由初始值用掉了。
+   */
+  const requestedTemplateId = (location.state as { useTemplateId?: unknown } | null)?.useTemplateId;
+  const appliedLocationKeyRef = useRef(location.key);
+  useEffect(() => {
+    if (appliedLocationKeyRef.current === location.key) return;
+    appliedLocationKeyRef.current = location.key;
+    if (typeof requestedTemplateId !== "string" || !requestedTemplateId) return;
+    setSelection({ kind: "template", id: requestedTemplateId });
+    setComposerError("");
+  }, [location.key, requestedTemplateId]);
+
+  const voiceInput = useVoiceInput({
+    onAudioReady: async (audio, signal) => {
+      const text = await transcribeVoice(audio, signal);
+      if (signal.aborted) return;
+      setValue((current) => appendVoiceTranscript(current, text));
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  });
+  const cancelVoice = voiceInput.cancel;
+  /* 人切去别的模块了：麦克风不该还在后台开着，弹窗也别等人回来时又自己冒出来。 */
+  useEffect(() => {
+    if (onScreen) return;
+    cancelVoice();
+    setTemplatesOpen(false);
+    setUploadOpen(false);
+    setReplicateUploadOpen(false);
+  }, [cancelVoice, onScreen]);
 
   const viewerState = viewerTurnId ? turnStates[viewerTurnId] : undefined;
   const viewer = viewerState?.artifact
@@ -622,7 +743,12 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     ));
   };
 
-  const resolvedMaterials = useMemo(() => resolveComposeMaterials(materials), [materials]);
+  /* 复刻时原文先占参考资料额度，芯片上的「已截断」要按真正发出去的算。 */
+  const resolvedMaterials = useMemo(() => (
+    replicate
+      ? resolveComposeMaterials([replicateSourceMaterial(replicate), ...materials]).slice(1)
+      : resolveComposeMaterials(materials)
+  ), [materials, replicate]);
 
   const mentionGroups = useMemo<OfficialDocumentMentionGroup[]>(() => [
     {
@@ -631,10 +757,10 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
       items: [
         {
           key: MENTION_TEMPLATES_ACTION,
-          label: "模板库",
-          description: "浏览全部结构模板",
+          label: "公文模板",
+          description: "浏览、使用或新建模板",
           icon: <img src={mentionLibraryIcon} alt="" aria-hidden="true" />,
-          searchText: "模板库 template library"
+          searchText: "公文模板 模板库 template library"
         },
         {
           key: MENTION_MATERIAL_ACTION,
@@ -662,7 +788,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     },
     {
       key: "drafts",
-      title: "参考草稿",
+      title: "参考文稿",
       items: referenceableDrafts.map((draft) => ({
         key: `draft:${draft.id}`,
         label: draft.title,
@@ -698,18 +824,35 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     materialInputRef.current?.click();
   };
 
-  const useTemplate = (template: OfficialDocumentTemplate) => {
+  const openTemplates = () => {
+    setMention(null);
+    setTemplatesOpen(true);
+  };
+
+  const closeTemplates = () => {
+    setTemplatesOpen(false);
+    focusInput();
+  };
+
+  const applyTemplate = (template: OfficialDocumentTemplate) => {
     setSelection({ kind: "template", id: template.id });
-    setGalleryOpen(false);
+    setTemplatesOpen(false);
     setComposerError("");
     focusInput();
+  };
+
+  /* 从写作台进模板详情，细头部原路返回写作台；弹窗先关，不然它会跟着盖在详情页上。 */
+  const openTemplateDetail = (template: OfficialDocumentTemplate) => {
+    setTemplatesOpen(false);
+    const state: OfficialDocumentReturnState = { returnTo: onSessionPage ? WRITING_SESSION_PATH : WRITING_HOME_PATH };
+    navigate(`/writing/templates/${template.id}`, { state });
   };
 
   const selectMention = (item: OfficialDocumentMentionItem) => {
     if (mention) setValue((current) => removeMentionQuery(current, mention));
     setMention(null);
     if (item.key === MENTION_TEMPLATES_ACTION) {
-      setGalleryOpen(true);
+      setTemplatesOpen(true);
       return;
     }
     if (item.key === MENTION_MATERIAL_ACTION) {
@@ -724,7 +867,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   };
 
   /**
-   * 每轮结束整理为可编辑草稿；模型格式不规整时保留原文为文字草稿。
+   * 每轮结束整理为可编辑文稿；模型格式不规整时保留原文为文字草稿。
    * 旧会话中曾解析失败的成稿会在重新打开时用当前解析规则重新整理。
    */
   useEffect(() => {
@@ -798,12 +941,20 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     const startedAt = Date.now();
     const token = ++generationTokenRef.current;
     const template = turnReference.template;
-    setPendingSubmission({ requirement, reference: turnReference, startedAt, materials: input.materials });
+    const replicateTurn: ReplicateTurn | undefined = input.replicate
+      ? { sourceName: input.replicate.sourceName, bodyOnlySectionIds: input.replicate.bodyOnlySectionIds }
+      : undefined;
+    setPendingSubmission({ requirement, reference: turnReference, startedAt, materials: input.materials, replicate: replicateTurn });
     try {
-      /* 模板引用没有旧正文可读：章节骨架直接由结构节点的标题推出来。 */
-      const content = turnReference.kind === "draft"
-        ? await getOfficialDocumentDraftContent(turnReference.draft.id)
-        : { revision: 0, fixedValues: [], blocks: [] };
+      /*
+       * 模板引用没有旧正文可读：章节骨架直接由结构节点的标题推出来。
+       * 内容复刻的文风样本是原文正文，引用的文稿只提供模板，不再去读它的正文。
+       */
+      const content = input.replicate
+        ? input.replicate.styleContent ?? EMPTY_CONTENT
+        : turnReference.kind === "draft"
+          ? await getOfficialDocumentDraftContent(turnReference.draft.id)
+          : EMPTY_CONTENT;
       if (!mountedRef.current || generationTokenRef.current !== token) return;
       const templateNodes = template.currentVersion.analysis!.structureNodes;
       const materialPayload = input.materials ?? composeMaterialPayload(resolvedMaterials);
@@ -818,7 +969,11 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         userRequirement: requirement,
         ...(materialPayload.length ? { referenceMaterials: materialPayload } : {}),
         /* 走过大纲确认环时章节骨架以用户拍板的方案为准：改过的标题、删掉的节、purpose/keyPoints 都在这里进上下文。 */
-        ...(research ? { confirmedPlan: research.plan } : {})
+        ...(research ? { confirmedPlan: research.plan } : {}),
+        ...(replicateTurn ? {
+          bodyOnlySectionIds: replicateTurn.bodyOnlySectionIds,
+          replicateSourceName: replicateTurn.sourceName
+        } : {})
       };
       /* 研究结果按内容大纲标注章节，先建一次计划拿到参考章节锚点再做映射注入。 */
       const basePlan = buildOfficialDocumentReferenceWritingPlan(planInput);
@@ -850,9 +1005,10 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
           research,
           ...(plan.writingContext.contextTruncation ? { status: {
             tone: "success" as const,
-            message: "材料较长，本次生成采用部分节选；本轮资料和大纲仍会随草稿保存。"
+            message: "材料较长，本次生成采用部分节选；本轮资料和大纲仍会随文稿保存。"
           } } : {}),
-          ...(materialPayload.length ? { materials: materialPayload } : {})
+          ...(materialPayload.length ? { materials: materialPayload } : {}),
+          ...(replicateTurn ? { replicate: replicateTurn } : {})
         }
       }));
       setPendingSubmission(undefined);
@@ -864,6 +1020,39 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     }
   };
 
+  /** 没选模板时告诉用户去哪儿选；连一份能用的都没有，就指向新建。 */
+  const missingReferenceMessage = () => {
+    if (selection) return "这份引用绑定的模板结构不可用，请在模板库中检查该版本";
+    return usableTemplates.length
+      ? "请先选择公文模板：点输入框下方的「公文模板」，或输入 @ 选择"
+      : "还没有可用的公文模板：点输入框下方的「公文模板」新建一份，发布后就能用";
+  };
+
+  /**
+   * 内容复刻不走分析：左侧框架就是用户拍过板的大纲，直接按它生成。
+   * 原文排在参考资料第一位，和用户另外加的资料一起受单篇、总量两道上限约束。
+   */
+  const submitReplicate = async (requirement: string, turnReference: ComposeReference, framework: ReplicateFramework) => {
+    const token = generationTokenRef.current;
+    const { plan, bodyOnlySectionIds } = replicateWritingPlan(framework);
+    const replicateTurn = { sourceName: framework.source.name, bodyOnlySectionIds };
+    setPendingSubmission({ requirement, reference: turnReference, startedAt: Date.now(), replicate: replicateTurn });
+    await Promise.allSettled([...materialTasksRef.current.values()]);
+    /* 等资料读完的这会儿用户可能已经点了停止 */
+    if (!mountedRef.current || generationTokenRef.current !== token) return;
+    const materialPayload = composeMaterialPayload(resolveComposeMaterials([
+      replicateSourceMaterial(framework),
+      ...materialsRef.current
+    ]));
+    await runGeneration({
+      requirement,
+      reference: turnReference,
+      research: { plan, results: [] },
+      materials: materialPayload,
+      replicate: { ...replicateTurn, styleContent: replicateStyleContent(framework) }
+    });
+  };
+
   /**
    * 提交先走大纲确认环：分析出章节与研究清单让用户拍板，确认后自动补资料再生成。
    * 分析失败或返回空大纲时退回一步到位的老路径，不挡用户。
@@ -872,13 +1061,16 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     const requirement = value.trim();
     if (composerBusy) return;
     if (!reference) {
-      setComposerError(selection
-        ? "这份引用绑定的模板结构不可用，请在模板库中检查该版本"
-        : "请先通过 @ 选择模板或参考草稿");
+      setComposerError(missingReferenceMessage());
       return;
     }
     if (!requirement) {
-      setComposerError("请描述要生成的公文内容");
+      setComposerError(replicate ? "说说这次要写什么，比如「按这个框架写 2026 年版本」" : "请描述要生成的公文内容");
+      return;
+    }
+    const untitledIndex = replicate?.sections.findIndex((section) => section.level !== "BODY" && !section.title.trim()) ?? -1;
+    if (untitledIndex >= 0) {
+      setComposerError(`内容框架第 ${untitledIndex + 1} 节是标题但还没写名字：补上标题，或把层级改成「无标题段落」`);
       return;
     }
 
@@ -887,6 +1079,10 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     setMention(null);
     /* 首页只管开头：一提交就进会话页看过程，已有的会话在那边接着往下写。 */
     if (!onSessionPage) navigate(WRITING_SESSION_PATH);
+    if (replicate) {
+      await submitReplicate(requirement, reference, replicate);
+      return;
+    }
     const turnReference = reference;
     const structureNodes = turnReference.template.currentVersion.analysis!.structureNodes;
     const token = ++analyzeTokenRef.current;
@@ -1100,6 +1296,22 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     const state = turnStates[turnId];
     if (!state || composerBusy) return;
     setComposerError("");
+    if (state.replicate) {
+      /* 同一份原文还在左侧就用最新的框架；已经退出或换了原文，按那一轮当时的框架重来。 */
+      const current = replicate?.source.name === state.replicate.sourceName ? replicate : null;
+      const latest = current ? replicateWritingPlan(current) : null;
+      await runGeneration({
+        requirement: state.requirement,
+        reference: state.reference,
+        extraInstruction,
+        research: latest ? { plan: latest.plan, results: [] } : state.research,
+        materials: state.materials ?? [],
+        replicate: latest
+          ? { sourceName: state.replicate.sourceName, bodyOnlySectionIds: latest.bodyOnlySectionIds, styleContent: replicateStyleContent(current!) }
+          : state.replicate
+      });
+      return;
+    }
     if (state.research?.results.some((result) => result.status !== "SUCCESS")) {
       await runPlannedGeneration({
         requirement: state.requirement,
@@ -1137,60 +1349,33 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     updateMaterials((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
 
-  /** DOCX 资料复用内容方案抽取管线，所以必须先有一份模板结构可以挂靠。 */
-  const extractDocxMaterial = async (template: OfficialDocumentTemplate, file: File) => {
-    let profile = await uploadOfficialDocumentContentProfile(
-      template.id,
-      template.currentVersion.id,
-      file,
-      file.name
-    );
-    for (let attempt = 0; profile.status === "EXTRACTING" && attempt < MATERIAL_POLL_LIMIT; attempt += 1) {
-      await delay(ANALYZING_POLL_INTERVAL_MS);
-      profile = await getOfficialDocumentContentProfile(profile.id);
-    }
-    if (profile.status === "FAILED") {
-      throw new Error(profile.profile.failureMessage || "这份 DOCX 没能解析出正文");
-    }
-    const text = joinContentProfileBlocks(profile.profile.source?.blocks ?? []);
-    if (!text) throw new Error("这份 DOCX 没能解析出正文");
-    return text;
-  };
-
+  /**
+   * 参考资料都在浏览器本地读：文本直接读，DOCX 就地解析成纯文本。
+   * 不经过模板和 Word 引擎，所以没选模板、引擎不可用时照样能加资料。
+   */
   const addMaterial = async (file: File) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const base = { id, name: file.name, size: file.size };
     const kind = classifyMaterialFile(file);
-    if (kind === "unsupported") {
-      updateMaterials((current) => [...current, {
-        ...base,
-        status: "failed",
-        message: "暂不支持解析该格式，请转为 DOCX 或文本"
-      }]);
-      return;
-    }
-    if (kind === "text" && file.size > MAX_TEXT_MATERIAL_BYTES) {
-      updateMaterials((current) => [...current, {
-        ...base,
-        status: "failed",
-        message: `文本资料不能超过 ${formatFileSize(MAX_TEXT_MATERIAL_BYTES)}`
-      }]);
-      return;
-    }
-    if (kind === "docx" && !reference) {
-      updateMaterials((current) => [...current, {
-        ...base,
-        status: "failed",
-        message: "请先 @ 选择模板或参考草稿，再上传 DOCX 资料"
-      }]);
+    const rejection = kind === "pdf"
+      ? DOCX_PDF_UNSUPPORTED_MESSAGE
+      : kind === "unsupported"
+        ? "暂不支持解析该格式，请转为 DOCX 或文本"
+        : kind === "text" && file.size > MAX_TEXT_MATERIAL_BYTES
+          ? `文本资料不能超过 ${formatFileSize(MAX_TEXT_MATERIAL_BYTES)}`
+          : kind === "docx" && file.size > MAX_DOCX_MATERIAL_BYTES
+            ? `DOCX 资料不能超过 ${formatFileSize(MAX_DOCX_MATERIAL_BYTES)}`
+            : "";
+    if (rejection) {
+      updateMaterials((current) => [...current, { ...base, status: "failed", message: rejection }]);
       return;
     }
 
-    const template = reference?.template;
     updateMaterials((current) => [...current, { ...base, status: "reading" }]);
     const task = (async () => {
       try {
-        const content = kind === "text" ? await file.text() : await extractDocxMaterial(template!, file);
+        const content = kind === "text" ? await file.text() : docxPlainText(await parseDocx(file));
+        if (!content.trim()) throw new Error("这份文档里没有读到正文");
         if (mountedRef.current) patchMaterial(id, { status: "ready", content });
       } catch (caught) {
         if (mountedRef.current) patchMaterial(id, { status: "failed", message: operationErrorMessage(caught) });
@@ -1201,14 +1386,43 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     materialTasksRef.current.delete(id);
   };
 
+  /* 新建完留在弹窗里：分析结果和「去发布」都在这里接着给，不把人甩去详情页。 */
   const handleUploadTemplate = async (file: File) => {
     const result = await uploadOfficialDocumentTemplate(file);
     updateWorkspaceCache((current) => ({
       ...current,
       templates: [result.template, ...current.templates.filter((item) => item.id !== result.template.id)]
     }));
+    setUploadedTemplate({ id: result.template.id, persisted: result.persisted, message: result.message });
     setUploadOpen(false);
-    setGalleryOpen(true);
+    setTemplatesOpen(true);
+  };
+
+  /**
+   * 内容复刻的入口。PDF、旧版 .doc 和加载失败抛回上传弹窗就地提示，换个文件就能重试；
+   * 读得出来但没章节、甚至什么都没读出来，照样进左右结构，让用户在左边手动搭。
+   */
+  const handleReplicateUpload = async (file: File) => {
+    let parsed: ParsedDocx | undefined;
+    let parseError: string | undefined;
+    try {
+      parsed = await parseDocx(file);
+    } catch (caught) {
+      if (caught instanceof DocxParseError && caught.code !== "NOT_DOCX") throw caught;
+      parseError = operationErrorMessage(caught);
+    }
+    setReplicate(buildReplicateFramework(parsed, file, parseError));
+    setReplicateUploadOpen(false);
+    setComposerError("");
+    if (!onSessionPage) navigate(WRITING_SESSION_PATH);
+    focusInput();
+  };
+
+  /* 退出只收起框架；已经生成的成稿留在对话里。没有对话可看就回首页。 */
+  const exitReplicate = () => {
+    setReplicate(null);
+    setComposerError("");
+    if (onSessionPage && !hasSession) navigate(WRITING_HOME_PATH);
   };
 
   const copyAnswer = async (turnId: string, answer: string) => {
@@ -1281,9 +1495,9 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
       patchTurn(turnId, {
         savedDraft: created,
         recoveryDraft: undefined,
-        status: { tone: "success", message: "已保存到草稿箱" }
+        status: { tone: "success", message: "已保存到我的文稿" }
       });
-      // 成稿可编辑是主路径：保存成功直接进入草稿编辑页继续加工
+      // 成稿可编辑是主路径：保存成功直接进入文稿编辑页继续加工
       navigate(`/writing/drafts/${created.id}`);
     } catch (caught) {
       patchTurn(turnId, {
@@ -1291,7 +1505,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         status: {
           tone: "error",
           message: created
-            ? `草稿已创建，但正文保存失败：${operationErrorMessage(caught)}`
+            ? `文稿已创建，但正文保存失败：${operationErrorMessage(caught)}`
             : `保存失败：${operationErrorMessage(caught)}`
         }
       });
@@ -1302,7 +1516,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
 
   const downloadGeneratedDraft = async (turnId: string, format: OfficialDocumentExportFormat) => {
     const state = turnStates[turnId];
-    if (!state?.artifact || busyAction) return;
+    if (!state?.artifact || busyAction || engineDown) return;
     setBusyAction({ turnId, kind: "exporting", format });
     patchTurn(turnId, { status: undefined });
     try {
@@ -1338,6 +1552,11 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
   const ensurePreview = async (turnId: string) => {
     const state = turnStatesRef.current[turnId];
     if (!state?.artifact || state.previewUrl || state.previewLoading) return;
+    /* 引擎明说不可用就不白跑一趟：直接给结构化预览，并说清楚是为什么。 */
+    if (engineDown) {
+      patchTurn(turnId, { previewError: `${WORD_ENGINE_UNAVAILABLE_ACTION_HINT}，先看结构化预览` });
+      return;
+    }
     patchTurn(turnId, { previewLoading: true, previewError: undefined });
     try {
       const blob = state.savedDraft
@@ -1385,11 +1604,34 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     }
   };
 
+  /* 文件卡和预览侧栏共用一个下载入口；引擎不可用时提前置灰并说明原因，别让人点了再失败。 */
+  const renderDownload = (turnId: string, placement: "card" | "panel") => (
+    <Dropdown
+      trigger={["click"]}
+      disabled={engineDown}
+      menu={{
+        items: (query.data?.capabilities.exportFormats ?? ["DOCX"]).map((format) => ({
+          key: format,
+          label: format === "PDF" ? "下载 PDF" : "下载 Word"
+        })),
+        onClick: ({ key }) => void downloadGeneratedDraft(turnId, key as OfficialDocumentExportFormat)
+      }}
+    >
+      <Button
+        type={placement === "card" ? "text" : "default"}
+        size={placement === "panel" ? "small" : undefined}
+        disabled={engineDown}
+        title={engineDown ? WORD_ENGINE_UNAVAILABLE_ACTION_HINT : undefined}
+        loading={busyAction?.turnId === turnId && busyAction.kind === "exporting"}
+        icon={<DownloadSimple size={placement === "card" ? 17 : 15} aria-hidden="true" />}
+      >下载</Button>
+    </Dropdown>
+  );
+
   const renderArtifact = (turnId: string, state: ComposeTurnState) => {
     if (!state.artifact) return null;
     const previewing = Boolean(state.previewLoading);
     const saving = busyAction?.turnId === turnId && busyAction.kind === "saving";
-    const exporting = busyAction?.turnId === turnId && busyAction.kind === "exporting";
     const tableCount = state.artifact.blocks.filter((block) => block.role === "TABLE").length;
     const chartCount = state.artifact.blocks.filter((block) => block.role === "CHART_IMAGE").length;
     const mixedMeta = [
@@ -1406,7 +1648,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         badge={state.version > 1 ? `v${state.version}` : undefined}
         meta={[
           state.artifact.templateName,
-          state.savedDraft ? "已进入草稿箱" : "未保存",
+          state.savedDraft ? "已进入我的文稿" : "未保存",
           mixedMeta
         ].filter(Boolean).join(" · ")}
         active={viewerTurnId === turnId}
@@ -1419,8 +1661,8 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                 className="xs-artifact-card__action"
                 type="text"
                 shape="circle"
-                aria-label="打开已保存草稿"
-                title="已保存到草稿箱，点击打开"
+                aria-label="打开已保存文稿"
+                title="已保存到我的文稿，点击打开"
                 data-on
                 icon={<Star size={20} weight="fill" aria-hidden="true" />}
                 onClick={() => navigate(`/writing/drafts/${state.savedDraft!.id}`)}
@@ -1430,8 +1672,8 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                 className="xs-artifact-card__action"
                 type="text"
                 shape="circle"
-                aria-label="重试保存到草稿箱"
-                title="复用已创建的草稿，重试保存完整正文"
+                aria-label="重试保存到我的文稿"
+                title="复用已创建的文稿，重试保存完整正文"
                 loading={saving}
                 icon={<Star size={20} aria-hidden="true" />}
                 onClick={() => void saveGeneratedArtifact(turnId)}
@@ -1441,29 +1683,14 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                 className="xs-artifact-card__action"
                 type="text"
                 shape="circle"
-                aria-label="保存到草稿箱"
-                title="保存到草稿箱"
+                aria-label="保存到我的文稿"
+                title="保存到我的文稿"
                 loading={saving}
                 icon={<Star size={20} aria-hidden="true" />}
                 onClick={() => void saveGeneratedArtifact(turnId)}
               />
             )}
-            <Dropdown
-              trigger={["click"]}
-              menu={{
-                items: (query.data?.capabilities.exportFormats ?? ["DOCX"]).map((format) => ({
-                  key: format,
-                  label: format === "PDF" ? "下载 PDF" : "下载 Word"
-                })),
-                onClick: ({ key }) => void downloadGeneratedDraft(turnId, key as OfficialDocumentExportFormat)
-              }}
-            >
-              <Button
-                type="text"
-                loading={exporting}
-                icon={<DownloadSimple size={17} aria-hidden="true" />}
-              >下载</Button>
-            </Dropdown>
+            {renderDownload(turnId, "card")}
           </>
         }
       />
@@ -1618,6 +1845,339 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
     </>
   );
 
+  const voiceState = voiceInput.state;
+  const voiceActive = voiceState === "permission" || voiceState === "recording" || voiceState === "processing";
+  const voiceStatus = voiceState === "recording"
+    ? { tone: "loading" as const, message: "正在听取语音，再点一次麦克风结束" }
+    : voiceState === "permission"
+      ? { tone: "loading" as const, message: "正在请求麦克风权限" }
+      : voiceState === "processing"
+        ? { tone: "loading" as const, message: "正在转写语音" }
+        : voiceState === "error" && voiceInput.error
+          ? { tone: "error" as const, message: voiceInput.error }
+          : null;
+  const generating = writingBusy || planning?.phase === "researching" || Boolean(pendingSubmission);
+
+  const chatSection = (
+    <section
+      className="xs-chat"
+      aria-label="公文生成对话"
+      tabIndex={-1}
+      {...conversation.containerProps}
+    >
+      {messages.map((message) => {
+        const state = turnStates[message.id];
+        return (
+          <XsChatTurn key={message.id}>
+            <XsChatUserBubble
+              meta={state ? <ComposeReferenceMeta reference={state.reference} replicate={state.replicate} /> : undefined}
+            >
+              {message.question}
+            </XsChatUserBubble>
+            <XsChatAssistant error={message.status === "error"}>
+              {renderAssistantTurn(message)}
+            </XsChatAssistant>
+          </XsChatTurn>
+        );
+      })}
+
+      {analyzingSubmission ? (
+        <XsChatTurn>
+          <XsChatUserBubble meta={<ComposeReferenceMeta reference={analyzingSubmission.reference} />}>
+            {analyzingSubmission.requirement}
+          </XsChatUserBubble>
+          <XsChatAssistant>
+            <ComposeAnalyzingCard
+              startedAt={analyzingSubmission.startedAt}
+              templateName={analyzingSubmission.reference.template.name}
+              templateNodes={analyzingSubmission.templateNodes}
+              onSkip={() => void skipAnalyzing()}
+              onCancel={cancelAnalyzing}
+            />
+          </XsChatAssistant>
+        </XsChatTurn>
+      ) : null}
+
+      {planning ? (
+        <XsChatTurn>
+          <XsChatUserBubble meta={<ComposeReferenceMeta reference={planning.reference} />}>
+            {planning.requirement}
+          </XsChatUserBubble>
+          <XsChatAssistant>
+            <ComposeOutlineCard
+              plan={planning.plan}
+              phase={planning.phase}
+              progressText={planning.progressText}
+              failureCount={planning.failureCount}
+              completedCount={planning.results?.filter((result) => result.status === "SUCCESS").length}
+              researchStarted={planning.researchStarted}
+              onChangeResearchQuestion={updateResearchQuestion}
+              onChangeSectionTitle={(sectionId, title) => updatePlanningSection(sectionId, { title })}
+              onChangeSectionLogic={updatePlanningSection}
+              onRemoveSection={removePlanningSection}
+              onConfirm={() => void confirmPlanning()}
+              onSkip={() => void skipPlanning()}
+              onCancel={cancelPlanning}
+            />
+          </XsChatAssistant>
+        </XsChatTurn>
+      ) : null}
+
+      {pendingSubmission ? (
+        <XsChatTurn>
+          <XsChatUserBubble
+            meta={<ComposeReferenceMeta reference={pendingSubmission.reference} replicate={pendingSubmission.replicate} />}
+          >
+            {pendingSubmission.requirement}
+          </XsChatUserBubble>
+          <XsChatAssistant>
+            <p>
+              {pendingSubmission.replicate
+                ? `正在按“${pendingSubmission.replicate.sourceName}”的内容框架准备生成…`
+                : `正在读取“${referenceTitle(pendingSubmission.reference)}”的结构与文风…`}
+            </p>
+            <small>
+              <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
+              正在处理
+              <ComposeElapsed startedAt={pendingSubmission.startedAt} />
+            </small>
+          </XsChatAssistant>
+        </XsChatTurn>
+      ) : null}
+    </section>
+  );
+
+  const composer = (
+    <OfficialDocumentComposer
+      mode={composerMode}
+      label="公文写作输入"
+      value={value}
+      ariaLabel="公文写作要求"
+      placeholder={replicateLayout ? REPLICATE_PLACEHOLDER : conversationVisible ? CHAT_PLACEHOLDER : HERO_PLACEHOLDER}
+      maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
+      busy={composerBusy}
+      textareaRef={inputRef}
+      showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
+      onScrollToBottom={conversation.scrollToBottom}
+      overlay={mention ? (
+        <OfficialDocumentMentionMenu
+          groups={visibleMentionGroups}
+          activeKey={activeMentionKey}
+          emptyText="没有匹配的模板或文稿"
+          onHover={setActiveMentionKey}
+          onSelect={selectMention}
+        />
+      ) : null}
+      lead={(
+        <>
+          <Button
+            className="official-document-composer__plus"
+            type="text"
+            shape="circle"
+            aria-label="上传参考资料"
+            title="上传参考资料：TXT、MD、CSV、JSON 或 DOCX"
+            disabled={composerBusy}
+            icon={<Plus size={16} aria-hidden="true" />}
+            onClick={openMaterialPicker}
+          />
+          <Button
+            className="official-document-composer__tool"
+            type="text"
+            disabled={composerBusy}
+            icon={<FileDoc size={16} aria-hidden="true" />}
+            onClick={openTemplates}
+          >公文模板</Button>
+          <Button
+            className="official-document-composer__tool"
+            type="text"
+            aria-pressed={replicate !== null}
+            title={replicate ? "换一份原文重新复刻" : "上传一篇范文，按它的内容框架写新的"}
+            disabled={composerBusy}
+            icon={<Files size={16} aria-hidden="true" />}
+            onClick={() => setReplicateUploadOpen(true)}
+          >内容复刻</Button>
+        </>
+      )}
+      chips={composerChips}
+      tail={(
+        <>
+          {voiceActive ? (
+            <Button
+              className="official-document-composer__icon"
+              type="text"
+              shape="circle"
+              aria-label="取消语音输入"
+              title="取消语音输入"
+              icon={<X size={16} aria-hidden="true" />}
+              onClick={cancelVoice}
+            />
+          ) : null}
+          <Button
+            className="official-document-composer__icon"
+            type="text"
+            shape="circle"
+            aria-label={VOICE_LABELS[voiceState]}
+            title={VOICE_LABELS[voiceState]}
+            aria-pressed={voiceState === "recording"}
+            disabled={voiceState === "permission" || voiceState === "processing"}
+            icon={<Microphone size={18} aria-hidden="true" />}
+            onClick={voiceInput.toggle}
+          />
+          {onSessionPage && generating ? (
+            <Button
+              className="official-document-composer__stop"
+              type="text"
+              shape="circle"
+              aria-label="停止"
+              title="停止"
+              icon={<Square size={12} weight="fill" aria-hidden="true" />}
+              onClick={cancel}
+            />
+          ) : (
+            <Button
+              className="official-document-composer__send"
+              type="primary"
+              shape="circle"
+              aria-label="生成完整公文"
+              title={reference ? "生成完整公文" : "先选公文模板再生成"}
+              disabled={composerBusy || !value.trim()}
+              icon={<ArrowUp size={18} weight="bold" />}
+              onClick={() => void submit()}
+            />
+          )}
+        </>
+      )}
+      footnote={!onSessionPage && composerBusy
+        ? "正在生成中，完成后可继续提交。"
+        : "写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到我的文稿。"}
+      onChange={(next) => {
+        setValue(next);
+        syncMention(next);
+      }}
+      onKeyDown={handleComposerKeyDown}
+      onSelectionChange={() => syncMention(inputRef.current?.value ?? "")}
+      onBlur={() => setMention(null)}
+    />
+  );
+
+  /* 复刻时没选模板要当面说清：成稿按模板排成 Word，这一步躲不开，但不该靠置灰发送让人猜。 */
+  const templateMissingNotice = replicateLayout && !reference ? (
+    <XsStatusBar
+      tone="warning"
+      message="还没选公文模板"
+      detail="成稿要按模板排成 Word：点输入框下方的「公文模板」选一份，或输入 @ 选择。"
+      action={<Button size="small" onClick={openTemplates}>选择模板</Button>}
+    />
+  ) : null;
+
+  const statusBars = (
+    <>
+      {voiceStatus ? <XsStatusBar tone={voiceStatus.tone} message={voiceStatus.message} transitionKey={voiceStatus.message} /> : null}
+      {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
+      {recoveryError ? <XsStatusBar tone="error" message={recoveryError} /> : null}
+    </>
+  );
+
+  const homeExtras = (
+    <>
+      {engineDown ? (
+        <XsStatusBar
+          tone="warning"
+          message="Word 引擎暂不可用"
+          detail="新建模板、下载 Word/PDF 和排版预览会失败，写作和保存到我的文稿不受影响。请联系管理员检查 Word 引擎许可证或服务状态，恢复后刷新页面即可。"
+        />
+      ) : null}
+      {replicate ? (
+        <div className="official-document-compose__replicate-notice" role="group" aria-label="内容复刻进行中">
+          <Files size={18} aria-hidden="true" />
+          <span className="official-document-compose__replicate-notice-text">
+            <span title={replicate.source.name}>内容复刻进行中：{replicate.source.name}</span>
+            <small>{replicate.sections.length} 节框架 · 在这里提交也会按这份框架写</small>
+          </span>
+          <Button type="text" size="small" onClick={() => navigate(WRITING_SESSION_PATH)}>继续复刻</Button>
+          <Button type="text" size="small" onClick={exitReplicate}>退出</Button>
+        </div>
+      ) : null}
+      <WritingSessionNotice onOpen={() => navigate(WRITING_SESSION_PATH)} />
+    </>
+  );
+
+  const recentDraftsBlock = recentDrafts.length ? (
+    <section className="official-document-compose__recent" aria-labelledby="official-document-recent-title">
+      <div className="official-document-compose__recent-head">
+        <h3 id="official-document-recent-title">我的文稿</h3>
+        <Link className="xs-action-link" to={OFFICIAL_DOCUMENT_DRAFTS_PATH} aria-label="查看全部文稿">
+          更多
+          <CaretRight size={14} aria-hidden="true" />
+        </Link>
+      </div>
+      <ul className="official-document-compose__recent-list">
+        {recentDrafts.map((draft) => (
+          <li key={draft.id}>
+            <Link className="official-document-compose__recent-item" to={`${OFFICIAL_DOCUMENT_DRAFTS_PATH}/${draft.id}`}>
+              <FileText size={16} aria-hidden="true" />
+              <span title={draft.title}>{draft.title}</span>
+              <time dateTime={draft.updatedAt}>{formatDate(draft.updatedAt)}</time>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null;
+
+  const uploadedTemplateRecord = uploadedTemplate
+    ? templates.find((template) => template.id === uploadedTemplate.id)
+    : undefined;
+  const uploadedTemplateNotice = (() => {
+    if (!uploadedTemplate) return null;
+    const template = uploadedTemplateRecord;
+    if (!uploadedTemplate.persisted || !template) {
+      return <XsStatusBar tone="warning" message={uploadedTemplate.message || "模板没有保存成功，请重新上传"} />;
+    }
+    const name = `《${template.name}》`;
+    const detailAction = (label: string) => (
+      <Button size="small" onClick={() => openTemplateDetail(template)}>{label}</Button>
+    );
+    if (template.status === "ANALYZING") {
+      return <XsStatusBar tone="loading" message={`${name}正在分析结构`} detail="分析完成后要在模板详情里核对并发布，发布后才能用来写。" />;
+    }
+    if (template.status === "NEEDS_REVIEW") {
+      return <XsStatusBar tone="info" message={`${name}已分析完，待发布`} detail="核对结构没问题就发布，发布后就能在这里使用。" action={detailAction("去发布")} />;
+    }
+    if (template.status === "FAILED" || template.status === "BLOCKED") {
+      return <XsStatusBar tone="error" message={`${name}${template.status === "FAILED" ? "分析失败" : "有需要处理的问题"}`} action={detailAction("查看原因")} />;
+    }
+    if (templateFileIsMissing(template)) {
+      return <XsStatusBar tone="warning" message={`${name}的文件已从服务器丢失，请重新上传`} />;
+    }
+    return (
+      <XsStatusBar
+        tone="success"
+        message={`${name}已发布，可以使用`}
+        action={<Button size="small" type="primary" onClick={() => applyTemplate(template)}>使用</Button>}
+      />
+    );
+  })();
+
+  const newTemplateButton = (label: string, primary = false) => (
+    <Button
+      type={primary ? "primary" : "default"}
+      icon={<UploadSimple size={16} aria-hidden="true" />}
+      disabled={engineDown}
+      title={engineDown ? WORD_ENGINE_UNAVAILABLE_ACTION_HINT : "上传一份结构 DOCX，分析后发布为模板"}
+      onClick={() => setUploadOpen(true)}
+    >{label}</Button>
+  );
+
+  const templateModalNotice: ReactNode = (
+    <>
+      {engineDown ? (
+        <XsStatusBar tone="warning" message="Word 引擎暂不可用，暂时不能新建模板" detail="已发布的模板照常可以使用。请联系管理员处理后再新建。" />
+      ) : null}
+      {uploadedTemplateNotice}
+    </>
+  );
+
   return (
     <section
       className="official-document-compose"
@@ -1628,203 +2188,71 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         status={status}
         empty={false}
         errorTitle="公文写作暂不可用"
-        error={query.error instanceof Error ? query.error.message : "无法加载报告草稿。"}
+        error={query.error instanceof Error ? query.error.message : "无法加载公文模板和文稿。"}
         onRetry={() => void query.refetch()}
         loadingVariant="cards"
-        contentKey={query.dataUpdatedAt}
+        /*
+         * 不按 dataUpdatedAt 换 key：有模板在分析时列表每 2 秒轮询一次，
+         * 换 key 会把整个写作台重挂——输入框和左侧框架正打着字就丢焦点。
+         */
       >
-        <div
-          className="official-document-compose__content xs-page-enter"
-          data-conversation={conversationVisible || undefined}
-        >
-          {!conversationVisible ? (
-            <header>
-              <img src={promptStar} alt="" width={24} height={24} aria-hidden="true" />
-              <h2>想写一篇什么公文？</h2>
-            </header>
-          ) : null}
+        {/* 预览全文时让出左栏：公文本身比框架更需要地方，关掉预览框架就回来。 */}
+        {replicateLayout && replicate && !viewer ? (
+          <div className="official-document-compose__content official-document-compose__split xs-page-enter" data-replicate="">
+            <ReplicateFrameworkPanel
+              framework={replicate}
+              busy={composerBusy}
+              onChange={setReplicate}
+              onReupload={() => setReplicateUploadOpen(true)}
+              onExit={exitReplicate}
+            />
+            <div className="official-document-compose__split-main" data-conversation={hasSession || undefined}>
+              {hasSession ? chatSection : (
+                <div className="official-document-compose__replicate-intro">
+                  <h2>按左侧框架写一篇新的</h2>
+                  <p>
+                    左边是从原文读出的内容框架，可以改标题、调层级、增删章节、写要点。
+                    在下面说明这次要写什么，每次生成都按左侧最新的框架出稿；原文会作为参考资料一起发给模型。
+                  </p>
+                  {reference ? (
+                    <p className="official-document-compose__replicate-template">
+                      <FileDoc size={15} aria-hidden="true" />
+                      成稿模板：{referenceTitle(reference)}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+              <div className="official-document-compose__composer-block">
+                {templateMissingNotice}
+                {composer}
+                {statusBars}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="official-document-compose__content xs-page-enter"
+            data-conversation={conversationVisible || undefined}
+          >
+            {!conversationVisible ? (
+              <header>
+                <img src={appWritingIcon} alt="" width={28} height={28} aria-hidden="true" />
+                <h2>公文模板化复刻</h2>
+              </header>
+            ) : null}
 
-          {conversationVisible ? (
-            <section
-              className="xs-chat"
-              aria-label="公文生成对话"
-              tabIndex={-1}
-              {...conversation.containerProps}
-            >
-              {messages.map((message) => {
-                const state = turnStates[message.id];
-                return (
-                  <XsChatTurn key={message.id}>
-                    <XsChatUserBubble
-                      meta={state ? <ComposeReferenceMeta reference={state.reference} /> : undefined}
-                    >
-                      {message.question}
-                    </XsChatUserBubble>
-                    <XsChatAssistant error={message.status === "error"}>
-                      {renderAssistantTurn(message)}
-                    </XsChatAssistant>
-                  </XsChatTurn>
-                );
-              })}
+            {conversationVisible ? chatSection : null}
 
-              {analyzingSubmission ? (
-                <XsChatTurn>
-                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={analyzingSubmission.reference} />}>
-                    {analyzingSubmission.requirement}
-                  </XsChatUserBubble>
-                  <XsChatAssistant>
-                    <ComposeAnalyzingCard
-                      startedAt={analyzingSubmission.startedAt}
-                      templateName={analyzingSubmission.reference.template.name}
-                      templateNodes={analyzingSubmission.templateNodes}
-                      onSkip={() => void skipAnalyzing()}
-                      onCancel={cancelAnalyzing}
-                    />
-                  </XsChatAssistant>
-                </XsChatTurn>
-              ) : null}
-
-              {planning ? (
-                <XsChatTurn>
-                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={planning.reference} />}>
-                    {planning.requirement}
-                  </XsChatUserBubble>
-                  <XsChatAssistant>
-                    <ComposeOutlineCard
-                      plan={planning.plan}
-                      phase={planning.phase}
-                      progressText={planning.progressText}
-                      failureCount={planning.failureCount}
-                      completedCount={planning.results?.filter((result) => result.status === "SUCCESS").length}
-                      researchStarted={planning.researchStarted}
-                      onChangeResearchQuestion={updateResearchQuestion}
-                      onChangeSectionTitle={(sectionId, title) => updatePlanningSection(sectionId, { title })}
-                      onChangeSectionLogic={updatePlanningSection}
-                      onRemoveSection={removePlanningSection}
-                      onConfirm={() => void confirmPlanning()}
-                      onSkip={() => void skipPlanning()}
-                      onCancel={cancelPlanning}
-                    />
-                  </XsChatAssistant>
-                </XsChatTurn>
-              ) : null}
-
-              {pendingSubmission ? (
-                <XsChatTurn>
-                  <XsChatUserBubble meta={<ComposeReferenceMeta reference={pendingSubmission.reference} />}>
-                    {pendingSubmission.requirement}
-                  </XsChatUserBubble>
-                  <XsChatAssistant>
-                    <p>正在读取“{referenceTitle(pendingSubmission.reference)}”的结构与文风…</p>
-                    <small>
-                      <CircleNotch className="xs-chat__spinner" size={15} aria-hidden="true" />
-                      正在处理
-                      <ComposeElapsed startedAt={pendingSubmission.startedAt} />
-                    </small>
-                  </XsChatAssistant>
-                </XsChatTurn>
-              ) : null}
-            </section>
-          ) : null}
-
-          {templates.length || drafts.length ? (
             <div className="official-document-compose__composer-block">
-              <OfficialDocumentComposer
-                mode={conversationVisible ? "chat" : "hero"}
-                label="公文写作输入"
-                value={value}
-                ariaLabel="公文写作要求"
-                placeholder={conversationVisible
-                  ? "继续描述，输入 @ 更换模板或参考草稿"
-                  : "描述你想写的公文，输入 @ 选择模板或参考草稿"}
-                maxLength={MAX_REFERENCE_REQUIREMENT_CHARS}
-                busy={composerBusy}
-                textareaRef={inputRef}
-                showScrollToBottom={conversationVisible && conversation.showScrollToBottom}
-                onScrollToBottom={conversation.scrollToBottom}
-                overlay={mention ? (
-                  <OfficialDocumentMentionMenu
-                    groups={visibleMentionGroups}
-                    activeKey={activeMentionKey}
-                    emptyText="没有匹配的模板或草稿"
-                    onHover={setActiveMentionKey}
-                    onSelect={selectMention}
-                  />
-                ) : null}
-                lead={(
-                  <Dropdown
-                    trigger={["click"]}
-                    menu={{
-                      items: [
-                        { key: "material", label: "上传参考资料" },
-                        { key: "template", label: "上传结构 DOCX" },
-                        { key: "library", label: "模板库" }
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "material") openMaterialPicker();
-                        if (key === "template") setUploadOpen(true);
-                        if (key === "library") setGalleryOpen(true);
-                      }
-                    }}
-                  >
-                    <Button
-                      className="official-document-composer__plus"
-                      type="text"
-                      shape="circle"
-                      aria-label="添加模板或参考资料"
-                      disabled={composerBusy}
-                      icon={<Plus size={16} aria-hidden="true" />}
-                    />
-                  </Dropdown>
-                )}
-                chips={composerChips}
-                tail={onSessionPage && (writingBusy || planning?.phase === "researching" || pendingSubmission) ? (
-                  <Button
-                    className="official-document-composer__stop"
-                    type="text"
-                    shape="circle"
-                    aria-label="停止"
-                    title="停止"
-                    icon={<Square size={12} weight="fill" aria-hidden="true" />}
-                    onClick={cancel}
-                  />
-                ) : (
-                  <Button
-                    className="official-document-composer__send"
-                    type="primary"
-                    shape="circle"
-                    aria-label="生成完整公文"
-                    disabled={composerBusy || !reference || !value.trim()}
-                    icon={<ArrowUp size={18} weight="bold" />}
-                    onClick={() => void submit()}
-                  />
-                )}
-                footnote={!onSessionPage && composerBusy
-                  ? "正在生成中，完成后可继续提交。"
-                  : "写作内容自动保留在当前标签页，可刷新后继续；正式留存请保存到草稿箱。"}
-                onChange={(next) => {
-                  setValue(next);
-                  syncMention(next);
-                }}
-                onKeyDown={handleComposerKeyDown}
-                onSelectionChange={() => syncMention(inputRef.current?.value ?? "")}
-                onBlur={() => setMention(null)}
-              />
-              {/* 首页不展开会话，那边有活在跑或有成稿就在这里给一条回去的路。 */}
-              {!onSessionPage ? <WritingSessionNotice onOpen={() => navigate(WRITING_SESSION_PATH)} /> : null}
+              {composer}
+              {/* 首页不展开会话，那边有活在跑、有成稿或复刻做到一半，就在这里给一条回去的路。 */}
+              {!onSessionPage ? homeExtras : null}
+              {statusBars}
             </div>
-          ) : (
-            <div className="official-document-compose__empty">
-              <FileDoc size={28} aria-hidden="true" />
-              <strong>还没有可用的结构模板</strong>
-              <p>上传一份结构 DOCX，分析完成后就能在这里 @ 它，直接生成公文。</p>
-              <Button type="primary" onClick={() => setUploadOpen(true)}>上传结构 DOCX</Button>
-            </div>
-          )}
 
-          {composerError ? <XsStatusBar tone="error" message={composerError} /> : null}
-          {recoveryError ? <XsStatusBar tone="error" message={recoveryError} /> : null}
-        </div>
+            {!conversationVisible && !onSessionPage ? recentDraftsBlock : null}
+          </div>
+        )}
       </XsAsyncPanel>
 
       <input
@@ -1841,53 +2269,63 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
         }}
       />
 
-      {galleryOpen ? (
+      <Modal
+        open={templatesOpen && onScreen}
+        title="公文模板"
+        width={1040}
+        footer={null}
+        centered
+        destroyOnHidden
+        className="official-document-template-modal"
+        onCancel={closeTemplates}
+      >
         <TemplateGallery
-          overlay
           label="模板库"
           templates={templates}
-          actions={(
-            <>
-              <Button icon={<UploadSimple size={16} aria-hidden="true" />} onClick={() => setUploadOpen(true)}>
-                上传结构 DOCX
-              </Button>
-              <Button
-                className="official-document-templates__close"
-                type="text"
-                shape="circle"
-                aria-label="关闭模板库"
-                icon={<X size={16} aria-hidden="true" />}
-                onClick={() => {
-                  setGalleryOpen(false);
-                  focusInput();
-                }}
-              />
-            </>
-          )}
+          autoFocusSearch
+          notice={templateModalNotice}
+          toolbarActions={newTemplateButton("新建模板")}
           empty={(
             <div className="official-document-compose__empty">
               <FileDoc size={28} aria-hidden="true" />
-              <strong>还没有可用的结构模板</strong>
-              <p>上传一份结构 DOCX，分析完成后它就会出现在这里。</p>
+              <strong>还没有公文模板</strong>
+              <p>上传一份结构 DOCX，分析并发布后就能在这里使用。</p>
+              {newTemplateButton("新建模板", true)}
             </div>
           )}
-          onUse={useTemplate}
-          onOpen={(template) => navigate(`/writing/templates/${template.id}`)}
+          onUse={applyTemplate}
+          onOpen={openTemplateDetail}
         />
-      ) : null}
+      </Modal>
 
       <XsUploadDialog
-        open={uploadOpen}
-        title="上传结构 DOCX"
-        description="上传后自动做安全检查和结构分析；示例文字只用于识别结构。"
+        open={uploadOpen && onScreen}
+        title="新建模板"
+        description="上传一份结构 DOCX：自动做安全检查和结构分析，核对后发布即可使用；示例文字只用于识别结构。"
         accept={[".docx"]}
-        acceptMimeTypes={["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}
+        acceptMimeTypes={[DOCX_MIME_TYPE]}
         maxBytes={25 * 1024 * 1024}
         submitLabel="上传并分析"
         hint="结构角色与问数槽位可在发布前校准"
         inputTestId="official-document-template-file"
         onUpload={handleUploadTemplate}
         onClose={() => setUploadOpen(false)}
+      />
+
+      <XsUploadDialog
+        open={replicateUploadOpen && onScreen}
+        title="内容复刻"
+        description={replicate
+          ? "上传新的原文会替换左侧当前的内容框架；已经生成的成稿保留在对话里。"
+          : "上传一篇范文，读出它的章节框架。之后左边改框架、右边对话写新的，成稿仍按所选公文模板排版。"}
+        accept={[".docx"]}
+        acceptMimeTypes={[DOCX_MIME_TYPE]}
+        maxBytes={MAX_DOCX_MATERIAL_BYTES}
+        submitLabel="读取框架"
+        hint={DOCX_PDF_UNSUPPORTED_MESSAGE}
+        inputTestId="official-document-replicate-file"
+        onUpload={handleReplicateUpload}
+        onClose={() => setReplicateUploadOpen(false)}
       />
 
       {viewer ? (
@@ -1900,7 +2338,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
             <>
               {viewer.state.artifact?.templateName}
               {viewer.state.version > 1 ? ` · 第 ${viewer.state.version} 版` : ""}
-              {viewer.state.savedDraft ? " · 已进入草稿箱" : " · 未保存"}
+              {viewer.state.savedDraft ? " · 已进入我的文稿" : " · 未保存"}
             </>
           )}
           onClose={() => setViewerTurnId("")}
@@ -1911,7 +2349,7 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                   size="small"
                   icon={<Star size={15} weight="fill" aria-hidden="true" />}
                   onClick={() => navigate(`/writing/drafts/${viewer.state.savedDraft!.id}`)}
-                >打开草稿</Button>
+                >打开文稿</Button>
               ) : (
                 <Button
                   size="small"
@@ -1919,24 +2357,9 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                   icon={<Star size={15} aria-hidden="true" />}
                   loading={busyAction?.turnId === viewer.turnId && busyAction.kind === "saving"}
                   onClick={() => void saveGeneratedArtifact(viewer.turnId)}
-                >保存到草稿箱</Button>
+                >保存到我的文稿</Button>
               )}
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  items: (query.data?.capabilities.exportFormats ?? ["DOCX"]).map((format) => ({
-                    key: format,
-                    label: format === "PDF" ? "下载 PDF" : "下载 Word"
-                  })),
-                  onClick: ({ key }) => void downloadGeneratedDraft(viewer.turnId, key as OfficialDocumentExportFormat)
-                }}
-              >
-                <Button
-                  size="small"
-                  loading={busyAction?.turnId === viewer.turnId && busyAction.kind === "exporting"}
-                  icon={<DownloadSimple size={15} aria-hidden="true" />}
-                >下载</Button>
-              </Dropdown>
+              {renderDownload(viewer.turnId, "panel")}
             </>
           )}
         >
@@ -1955,7 +2378,12 @@ function ComposeWorkspace({ storageKey }: { storageKey: string | null }) {
                   </p>
                 ))}
               </article>
-              <Button size="small" onClick={() => void ensurePreview(viewer.turnId)}>重新渲染</Button>
+              <Button
+                size="small"
+                disabled={engineDown}
+                title={engineDown ? WORD_ENGINE_UNAVAILABLE_ACTION_HINT : undefined}
+                onClick={() => void ensurePreview(viewer.turnId)}
+              >重新渲染</Button>
             </div>
           ) : (
             <p className="official-document-viewer__loading" role="status">

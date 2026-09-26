@@ -128,8 +128,8 @@ test("模板详情和校准视图保留定位、只读状态及小屏滚动", as
   await expect(page.getByRole("checkbox", { name: "允许问数绑定" })).toBeDisabled();
   await expect(view.getByText("该模板已发布，结构只读。需要改角色请上传新版本。")).toBeVisible();
   await page.screenshot({ path: "outputs/template-detail-codex/readonly-1440.png" });
-  await page.getByRole("button", { name: "按此结构新建草稿" }).click();
-  await expect(page.getByRole("dialog", { name: "按结构创建报告草稿" })).toBeVisible();
+  await page.getByRole("button", { name: "按此结构新建文稿" }).click();
+  await expect(page.getByRole("dialog", { name: "按结构新建文稿" })).toBeVisible();
   await page.screenshot({ path: "outputs/template-detail-codex/create-dialog-1440.png" });
   await page.getByRole("button", { name: "取消", exact: true }).click();
   expect(pageErrors).toEqual([]);
@@ -183,7 +183,7 @@ test("其他模板分析轮询保留未发布校准，发布后使用服务端�
   await expect(heading).toHaveAttribute("data-role", "HEADING_2");
   await page.screenshot({ path: "outputs/template-detail-codex/calibration-poll-preserved.png" });
   await page.getByRole("button", { name: "发布结构", exact: true }).click();
-  await expect(page.getByRole("button", { name: "按此结构新建草稿" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "按此结构新建文稿" })).toBeVisible();
   expect(await heading.getAttribute("data-role")).toBe("HEADING_2");
   await page.getByRole("button", { name: /二级标题 一、总体经营情况/ }).click();
   await expect(picker).toBeDisabled();

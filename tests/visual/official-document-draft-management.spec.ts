@@ -78,74 +78,75 @@ async function noOverflow(page: Page) {
 }
 
 async function manage(page: Page, title: string, action: string) {
-  await page.getByRole("button", { name: `管理草稿 ${title}`, exact: true }).click();
+  await page.getByRole("button", { name: `管理文稿 ${title}`, exact: true }).click();
   await page.getByRole("menuitem", { name: action, exact: true }).click();
 }
 
 test("draft management preserves rename failures, explicit saves, reopen and confirmed deletion", async ({ page }) => {
   const state = await fixture(page);
   await page.goto("/writing");
-  await page.getByRole("link", { name: "草稿管理", exact: true }).click();
-  const list = page.getByRole("list", { name: "报告草稿列表" });
+  // 二级导航已撤：从首页「我的文稿」的「更多」进列表
+  await page.getByRole("link", { name: "查看全部文稿", exact: true }).click();
+  const list = page.getByRole("list", { name: "文稿列表" });
   await expect(list.getByRole("listitem").first()).toContainText("最新工作报告");
-  await page.getByRole("textbox", { name: "搜索草稿标题" }).fill("年度报告格式");
+  await page.getByRole("textbox", { name: "搜索文稿标题" }).fill("年度报告格式");
   await expect(list.getByRole("listitem")).toHaveCount(2);
-  await page.getByRole("textbox", { name: "搜索草稿标题" }).fill("最新");
+  await page.getByRole("textbox", { name: "搜索文稿标题" }).fill("最新");
   await expect(list.getByRole("listitem")).toHaveCount(1);
-  await page.getByRole("textbox", { name: "搜索草稿标题" }).clear();
+  await page.getByRole("textbox", { name: "搜索文稿标题" }).clear();
   for (const width of [1440, 1672, 1920, 2200, 390]) {
     await page.setViewportSize({ width, height: 1050 });
     await noOverflow(page);
-    await expect(page.getByRole("button", { name: "打开草稿 最新工作报告", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "打开文稿 最新工作报告", exact: true })).toBeVisible();
     const grid = list;
     const columns = await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
     expect(columns).toBe(width >= 1840 ? 4 : width >= 1200 ? 3 : width > 640 ? 2 : 1);
-    const manageBox = (await page.getByRole("button", { name: "管理草稿 最新工作报告", exact: true }).boundingBox())!;
+    const manageBox = (await page.getByRole("button", { name: "管理文稿 最新工作报告", exact: true }).boundingBox())!;
     expect(manageBox.x + manageBox.width).toBeLessThanOrEqual(width + 1);
-    await page.getByRole("button", { name: "管理草稿 最新工作报告", exact: true }).click();
+    await page.getByRole("button", { name: "管理文稿 最新工作报告", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "重命名", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("textbox", { name: "搜索草稿标题" }).click();
+    await page.getByRole("textbox", { name: "搜索文稿标题" }).click();
     await expect(page.getByRole("menuitem", { name: "重命名", exact: true })).toBeHidden();
     await page.screenshot({ path: `outputs/draft-management/list-${width}.png`, animations: "disabled", fullPage: true });
   }
   await page.setViewportSize({ width: 1672, height: 1050 });
   await manage(page, "最新工作报告", "重命名");
-  await page.getByRole("textbox", { name: "草稿名称" }).fill("已重命名工作报告");
+  await page.getByRole("textbox", { name: "文稿名称" }).fill("已重命名工作报告");
   await page.getByRole("button", { name: "保存名称", exact: true }).click();
   await expect(page.getByText("模拟重命名失败，可重试", { exact: true })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "草稿名称" })).toHaveValue("已重命名工作报告");
+  await expect(page.getByRole("textbox", { name: "文稿名称" })).toHaveValue("已重命名工作报告");
   await expect(list).toContainText("最新工作报告");
   await page.getByRole("button", { name: "保存名称", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "打开草稿 已重命名工作报告", exact: true }).click();
+  await page.getByRole("button", { name: "打开文稿 已重命名工作报告", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "正文节点 1", exact: true });
   await expect(editor).toHaveValue("原始正文内容。");
   await editor.fill("已在编辑页补充工作进展，点击保存草稿持久保存。");
   for (const width of [1440, 1672, 1920, 2200, 390]) {
     await page.setViewportSize({ width, height: 1050 });
     await noOverflow(page);
-    await expect(page.getByRole("button", { name: "保存草稿", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "保存草稿", exact: true }).click();
-    await expect(page.getByRole("button", { name: "保存草稿", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "保存文稿", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "保存文稿", exact: true }).click();
+    await expect(page.getByRole("button", { name: "保存文稿", exact: true })).toBeEnabled();
     await page.screenshot({ path: `outputs/draft-management/editor-${width}.png`, animations: "disabled", fullPage: true });
   }
   await editor.fill("手工编辑并显式保存的新正文，重新打开后必须保留。");
-  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await page.getByRole("button", { name: "保存文稿", exact: true }).click();
   await expect.poll(() => state.content().blocks[0].text).toBe("手工编辑并显式保存的新正文，重新打开后必须保留。");
-  await page.getByRole("link", { name: "返回草稿管理", exact: true }).click();
-  await page.getByRole("button", { name: "打开草稿 已重命名工作报告", exact: true }).click();
+  await page.getByRole("link", { name: "返回我的文稿", exact: true }).click();
+  await page.getByRole("button", { name: "打开文稿 已重命名工作报告", exact: true }).click();
   await expect(editor).toHaveValue("手工编辑并显式保存的新正文，重新打开后必须保留。");
-  await page.getByRole("link", { name: "返回草稿管理", exact: true }).click();
+  await page.getByRole("link", { name: "返回我的文稿", exact: true }).click();
   await manage(page, "已重命名工作报告", "删除");
   await expect(page.getByRole("dialog")).toContainText("导出的文件链接也将无法访问");
   await page.getByRole("button", { name: "取消", exact: true }).click();
   expect(state.deletes()).toBe(0);
   await manage(page, "已重命名工作报告", "删除");
-  await page.getByRole("button", { name: "删除草稿", exact: true }).click();
+  await page.getByRole("button", { name: "删除文稿", exact: true }).click();
   await expect(page.getByText("模拟删除失败，可重试", { exact: true })).toBeVisible();
   await expect(list).toContainText("已重命名工作报告");
-  await page.getByRole("button", { name: "删除草稿", exact: true }).click();
+  await page.getByRole("button", { name: "删除文稿", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(list.getByRole("listitem")).toHaveCount(1);
   await expect(list).toContainText("较早报告");
@@ -181,7 +182,7 @@ test("writing outline exposes editable purpose and key points without crowding",
 });
 
 
-test("草稿管理复用格式模板的卡片、筛选与响应式轨道", async ({ page }) => {
+test("我的文稿复用模板库的卡片、筛选与响应式轨道", async ({ page }) => {
   await fixture(page, true);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const readLayout = () => page.locator(".official-document-templates").evaluate((element) => {
@@ -203,24 +204,31 @@ test("草稿管理复用格式模板的卡片、筛选与响应式轨道", async
     await page.mouse.move(0, 0);
     const reference = await readLayout();
     await page.screenshot({ path: `outputs/draft-template-alignment-2026-09-07/templates-${width}.png`, fullPage: true, animations: "disabled" });
-    await page.getByRole("link", { name: "草稿管理", exact: true }).click();
-    await expect(page.getByRole("list", { name: "报告草稿列表" }).getByRole("listitem")).toHaveCount(12);
+    await page.goto("/writing/drafts");
+    await expect(page.getByRole("list", { name: "文稿列表" }).getByRole("listitem")).toHaveCount(12);
     await page.mouse.move(0, 0);
     expect(await readLayout()).toEqual(reference);
     await noOverflow(page);
-    await expect(page.getByRole("heading", { name: "草稿管理", exact: true })).toBeVisible();
-    const filters = page.getByRole("group", { name: "草稿状态筛选" });
+    const pageTitle = page.getByRole("heading", { level: 1, name: "我的文稿", exact: true });
+    if (width > 760) {
+      await expect(pageTitle).toBeVisible();
+    } else {
+      // 窄屏细头部把标题位让给返回和动作：h1 只做视觉隐藏、仍留在无障碍树里，页面名由移动端顶栏显示
+      await expect(pageTitle).toHaveCount(1);
+      await expect(page.getByRole("banner").getByText("我的文稿", { exact: true })).toBeVisible();
+    }
+    const filters = page.getByRole("group", { name: "文稿状态筛选" });
     for (const label of ["全部", "编辑中", "校验中", "可导出", "有错误"]) {
       await expect(filters.getByRole("button", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
     expect(await page.locator(".official-document-template-card").evaluateAll((cards) => cards.every((card) => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
     await page.screenshot({ path: `outputs/draft-template-alignment-2026-09-07/drafts-${width}.png`, fullPage: true, animations: "disabled" });
   }
-  await page.getByRole("group", { name: "草稿状态筛选" }).getByRole("button", { name: /^有错误/ }).click();
-  await expect(page.getByRole("list", { name: "报告草稿列表" }).getByRole("listitem")).toHaveCount(2);
-  await page.getByRole("textbox", { name: "搜索草稿标题" }).fill("找不到的草稿");
-  await expect(page.getByText("没有符合条件的草稿", { exact: true })).toBeVisible();
+  await page.getByRole("group", { name: "文稿状态筛选" }).getByRole("button", { name: /^有错误/ }).click();
+  await expect(page.getByRole("list", { name: "文稿列表" }).getByRole("listitem")).toHaveCount(2);
+  await page.getByRole("textbox", { name: "搜索文稿标题" }).fill("找不到的草稿");
+  await expect(page.getByText("没有符合条件的文稿", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "清除筛选", exact: true }).click();
-  await expect(page.getByRole("list", { name: "报告草稿列表" }).getByRole("listitem")).toHaveCount(12);
+  await expect(page.getByRole("list", { name: "文稿列表" }).getByRole("listitem")).toHaveCount(12);
   expect((await new AxeBuilder({ page }).include(".official-document-drafts").analyze()).violations).toEqual([]);
 });

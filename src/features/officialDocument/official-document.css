@@ -1,5 +1,5 @@
 /* ---------- 公文详情工作区：模板校准与结构化起草 ----------
-   应用壳、模板库与草稿箱列表样式见 official-document-workspace.css。 */
+   应用壳、模板库与我的文稿列表样式见 official-document-workspace.css。 */
 
 .official-document-canvas-panel,
 .official-document-canvas-panel .xs-async-panel__content {
@@ -320,8 +320,7 @@
   gap: 14px;
 }
 
-.official-document-section-title h3,
-.official-document-section-title h4 {
+.official-document-section-title h2 {
   margin: 0;
   color: var(--xs-text);
   font-size: var(--xs-fs-body);
@@ -1480,7 +1479,7 @@
   border-bottom: 1px solid #e7eef7;
 }
 
-.official-document-workspace-panel-head h4 {
+.official-document-workspace-panel-head h2 {
   margin: 0;
   color: var(--xs-text);
   font-size: var(--xs-fs-control);
@@ -2676,13 +2675,13 @@
   gap: 10px;
 }
 
-.content-profile-workspace__head h3,
-.content-profile-review h4 {
+.content-profile-workspace__head h2,
+.content-profile-review h3 {
   margin: 0;
   color: var(--xs-text);
 }
 
-.content-profile-workspace__head h3 {
+.content-profile-workspace__head h2 {
   font-size: var(--xs-fs-section);
 }
 
@@ -2975,7 +2974,7 @@
   background: #fff;
 }
 
-.content-profile-review h4 {
+.content-profile-review h3 {
   margin-bottom: 10px;
   font-size: var(--xs-fs-control);
 }

@@ -53,6 +53,8 @@ import { ContentProfileWorkspace } from "./ContentProfileWorkspace";
 import {
   bindingsAreExportable,
   draftStatusAllowsExport,
+  WORD_ENGINE_UNAVAILABLE_ACTION_HINT,
+  wordEngineUnavailable,
   formatDate,
   operationErrorMessage,
   useOfficialDocumentWorkspaceKey,
@@ -74,9 +76,9 @@ function DraftNotFound() {
   return (
     <div className="official-document-detail__empty xs-card xs-page-enter">
       <FileText size={30} aria-hidden="true" />
-      <strong>未找到该报告草稿</strong>
-      <p>草稿可能已被移除，或不属于当前登录用户。</p>
-      <Link to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>返回草稿箱</Link>
+      <strong>未找到这篇文稿</strong>
+      <p>文稿可能已被移除，或不属于当前登录用户。</p>
+      <Link to={OFFICIAL_DOCUMENT_DRAFTS_PATH}>返回我的文稿</Link>
     </div>
   );
 }
@@ -144,7 +146,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
   useOfficialDocumentAppChrome({
     stage: "draft",
-    context: draft?.title ?? "编辑草稿",
+    context: draft?.title ?? "编辑文稿",
     contextDetail: draft
       ? `格式模板：${structureTemplateName} · ${structureVersionNo ? `v${structureVersionNo}` : "版本不可用"}`
       : undefined
@@ -154,22 +156,27 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const statusAllowsExport = draft ? draftStatusAllowsExport(draft.status) : false;
   const pdfExportAvailable = (workspaceQuery.data?.capabilities.exportFormats ?? ["DOCX", "PDF"]).includes("PDF")
     && !(workspaceQuery.data?.capabilities.wordEngine.detail ?? "").includes("LIBREOFFICE");
+  /* 导出要走 Word 引擎；引擎明说不可用时提前置灰，理由写在按钮上。 */
+  const engineDown = wordEngineUnavailable(workspaceQuery.data?.capabilities);
   const canExportDocx = draft?.source === "LIVE"
     && statusAllowsExport
     && contentSaveState === "saved"
-    && bindingsReady;
+    && bindingsReady
+    && !engineDown;
   const canExportPdf = canExportDocx && pdfExportAvailable;
   const exportDisabledReason = !draft
     ? undefined
     : contentSaveState !== "saved"
-      ? "草稿内容保存完成后才能导出"
+      ? "文稿内容保存完成后才能导出"
       : !statusAllowsExport
-        ? "草稿通过服务端校验后才能导出"
+        ? "文稿通过服务端校验后才能导出"
         : !bindingsReady
           ? "请在导出检查中处理未就绪的问数绑定"
           : draft.source !== "LIVE"
             ? "正式服务不可用，不能导出"
-            : undefined;
+            : engineDown
+              ? WORD_ENGINE_UNAVAILABLE_ACTION_HINT
+              : undefined;
   const pdfDisabledReason = exportDisabledReason
     ?? (canExportDocx && !pdfExportAvailable ? "PDF 暂时不能生成，请先导出 Word" : undefined);
   const latestExport = draft ? latestExports[draft.id] : undefined;
@@ -226,9 +233,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   const chartAllowed = standaloneChartCount + researchChartCount < MAX_OFFICIAL_DOCUMENT_CHARTS;
   const canGenerateFullDraft = Boolean(contentProfile && draftContent) && researchReady;
   const generateDisabledReason = !contentProfile
-    ? "草稿没有可用的已确认内容方案"
+    ? "文稿没有可用的已确认内容方案"
     : !draftContent
-      ? "草稿内容仍在加载"
+      ? "文稿内容仍在加载"
       : !researchReady
         ? "请先完成资料补全，必需任务失败时需重试或保留待补充"
         : undefined;
@@ -243,7 +250,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
     setIsSaving(true);
     try {
       await editorRef.current.save();
-      announce("success", "草稿已保存");
+      announce("success", "文稿已保存");
       void workspaceQuery.refetch();
     } catch (error) {
       announce("error", `保存失败：${operationErrorMessage(error)}`);
@@ -254,7 +261,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
 
   const restoreHistoricalContent = async (version: OfficialDocumentDraftContentVersion) => {
     const editor = editorRef.current;
-    if (!editor || !draft) throw new Error("草稿编辑器尚未就绪");
+    if (!editor || !draft) throw new Error("文稿编辑器尚未就绪");
     await editor.save();
     const current = editor.getContent();
     if (!current) throw new Error("当前正文尚未加载");
@@ -304,7 +311,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
   }) => {
     const editor = editorRef.current;
     const content = editor?.getContent();
-    if (!editor || !content) throw new Error("草稿编辑器尚未就绪");
+    if (!editor || !content) throw new Error("文稿编辑器尚未就绪");
     if (!input.result.table || !input.result.querySource) throw new Error("查询结果缺少可回填的数据表");
     const blocks = [...content.blocks];
     let insertionIndex = blocks.length;
@@ -349,20 +356,20 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
     announce(
       "success",
       input.result.chart && !includeChart
-        ? "数据表已回填；草稿已达到3张图表上限，本次未插入图表。"
+        ? "数据表已回填；文稿已达到3张图表上限，本次未插入图表。"
         : `数据表${includeChart ? "和图表" : ""}已回填到${input.sectionId ? "所选章节" : "文末"}。`
     );
   };
 
   const persistResearchResults = async (results: NonNullable<OfficialDocumentDraftContent["researchResults"]>) => {
     const editor = editorRef.current;
-    if (!editor) throw new Error("草稿编辑器尚未就绪");
+    if (!editor) throw new Error("文稿编辑器尚未就绪");
     await editor.saveResearchResults(results);
   };
 
   const bindContentProfile = async (profile: OfficialDocumentContentProfile) => {
-    if (!draft || !draftContent) throw new Error("草稿内容仍在加载");
-    if (contentSaveState !== "saved") throw new Error("请等待草稿内容保存完成后再绑定内容方案");
+    if (!draft || !draftContent) throw new Error("文稿内容仍在加载");
+    if (contentSaveState !== "saved") throw new Error("请等待文稿内容保存完成后再绑定内容方案");
     const saved = await bindOfficialDocumentContentProfile(draft.id, {
       expectedRevision: draftContent.revision,
       contentProfileId: profile.id
@@ -510,8 +517,8 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
         className="official-document-canvas-panel"
         status={workspaceStatus}
         empty={false}
-        errorTitle="报告草稿不可用"
-        error={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "无法加载报告草稿。"}
+        errorTitle="文稿暂不可用"
+        error={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "无法加载文稿。"}
         onRetry={() => void workspaceQuery.refetch()}
         loadingVariant="cards"
         contentKey={draftId}
@@ -563,7 +570,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                 loading={isSaving}
                 disabled={contentSaveState === "loading" || Boolean(isExporting)}
                 onClick={() => void handleSave()}
-              >保存草稿</Button>
+              >保存文稿</Button>
               <Button
                 className="official-document-app__chat-toggle"
                 icon={<Sparkle size={16} />}
@@ -630,7 +637,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
             {draftContent.factReview.issues.length ? <ul>{draftContent.factReview.issues.map((issue, index) => <li key={index}>
               <p>{issue.sentence}</p><small>建议核对：{issue.additions.join("、")}</small>
             </li>)}</ul> : <p>本次自动校对未发现上述类型的新增事实，仍需结合原始来源判断。</p>}
-          </> : <p>此草稿尚无保存的事实校对记录。</p>}
+          </> : <p>此文稿尚无保存的事实校对记录。</p>}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <Button aria-label="重新校对" aria-busy={isReviewingFacts} loading={isReviewingFacts} onClick={() => void reviewFacts(false)}>重新校对</Button>
             <Button aria-label="我已核对当前正文来源" aria-busy={isReviewingFacts} loading={isReviewingFacts} onClick={() => void reviewFacts(true)}>我已核对当前正文来源</Button>
@@ -660,7 +667,7 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
             </p>
             <section className="official-document-bindings" aria-labelledby="binding-list-heading">
               <div className="official-document-section-title">
-                <div><h4 id="binding-list-heading">历史问数快照</h4><p>仅兼容旧草稿；新流程统一从“资料补全”执行问数。</p></div>
+                <div><h2 id="binding-list-heading">历史问数快照</h2><p>仅兼容旧文稿；新流程统一从“资料补全”执行问数。</p></div>
               </div>
               {draft.bindings.length ? (
                 <ul>
@@ -697,14 +704,14 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
                     </li>
                   ))}
                 </ul>
-              ) : <div className="official-document-inline-empty">当前草稿没有历史问数绑定。</div>}
+              ) : <div className="official-document-inline-empty">当前文稿没有历史问数绑定。</div>}
             </section>
 
             <section className="official-document-export-checks" aria-label="导出前检查">
-              <div className="official-document-section-title"><div><h4>导出前检查</h4><p>内容保存、草稿状态和绑定快照满足条件后可正式导出。</p></div></div>
+              <div className="official-document-section-title"><div><h2>导出前检查</h2><p>内容保存、文稿状态和绑定快照满足条件后可正式导出。</p></div></div>
               <ul>
                 <li data-ok={contentSaveState === "saved"}><span />结构化内容已保存</li>
-                <li data-ok={draftStatusAllowsExport(draft.status)}><span />草稿内容可导出</li>
+                <li data-ok={draftStatusAllowsExport(draft.status)}><span />文稿内容可导出</li>
                 <li data-ok={bindingsReady}><span />数据绑定无异常</li>
                 <li data-ok={draft.source === "LIVE"}><span />正式服务与模板版本可追溯</li>
               </ul>
@@ -761,9 +768,9 @@ export function DraftDetailView({ draftId }: { draftId: string }) {
           onCancel={() => setContentProfileOpen(false)}
         >
           {!draftTemplate ? (
-            <XsStatusBar tone="error" message="当前草稿绑定的结构版本不可用" />
+            <XsStatusBar tone="error" message="当前文稿绑定的结构版本不可用" />
           ) : !draftContent ? (
-            <XsStatusBar tone="loading" message="正在加载草稿内容" />
+            <XsStatusBar tone="loading" message="正在加载文稿内容" />
           ) : (
             <ContentProfileWorkspace
               template={draftTemplate}

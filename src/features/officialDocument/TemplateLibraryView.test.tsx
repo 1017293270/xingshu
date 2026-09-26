@@ -118,10 +118,25 @@ describe("TemplateLibraryView", () => {
 
     expect(screen.getByLabelText("结构模板库")).toBeInTheDocument();
     expect(await screen.findByText("还没有可用的结构模板")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "上传结构 DOCX" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "新建模板" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("请联系管理员上传并发布报告模板。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /打开模板/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/功能示例|演示/)).not.toBeInTheDocument();
+  });
+
+  it("disables 新建模板 ahead of time when the Word engine says it is unavailable", async () => {
+    loadOfficialDocumentWorkspace.mockResolvedValue({
+      ...populatedWorkspace,
+      capabilities: { ...populatedWorkspace.capabilities, wordEngine: { available: false, code: "ENGINE_UNAVAILABLE" } }
+    });
+    renderLibrary();
+
+    expect(await screen.findByText("Word 引擎暂不可用，暂时不能新建模板")).toBeInTheDocument();
+    const create = screen.getByRole("button", { name: "新建模板" });
+    expect(create).toBeDisabled();
+    expect(create).toHaveAttribute("title", "Word 引擎暂不可用，请联系管理员处理后再试");
+    // 已发布的模板照常能用
+    expect(screen.getByRole("button", { name: "使用模板 季度工作通知" })).toBeEnabled();
   });
 
   it("opens the drag-and-drop upload dialog from the header button", async () => {
@@ -131,7 +146,7 @@ describe("TemplateLibraryView", () => {
     await screen.findByText("还没有可用的结构模板");
     expect(screen.queryByText("把文件拖到这里")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getAllByRole("button", { name: "上传结构 DOCX" })[0]);
+    await userEvent.click(screen.getAllByRole("button", { name: "新建模板" })[0]);
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("把文件拖到这里")).toBeInTheDocument();
