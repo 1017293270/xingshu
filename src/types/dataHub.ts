@@ -73,6 +73,10 @@ export type DataHubChatSession = {
   spaceId?: number;
   userId?: number;
   title?: string;
+  /**
+   * 会话列表接口目前不返回模式（ai_chat_session 只有 id、标题与时间）。
+   * 保留这个字段是为了后端补上之后前端能直接优先采用。
+   */
   chatMode?: DataHubRequestChatMode;
   createdAt?: string;
   updatedAt?: string;
@@ -359,6 +363,52 @@ export type DataHubBusinessMeasure = {
   aggregation: string;
 };
 
+/** 查询依据里的一个字段。member 只作合并与补名的内部键，展示只用 field。 */
+export type DataHubBusinessField = {
+  member: string;
+  /** 业务名；语义层没有中文名时是成员名去掉 cube 前缀，从不为空。 */
+  field: string;
+};
+
+export type DataHubBusinessCondition = DataHubBusinessField & {
+  /** Cube 原始操作符（lt、inDateRange…），中文说法在展示时再翻译。 */
+  operator: string;
+  values: string[];
+};
+
+/** Cube 的 and / or 条件组，按原样保留嵌套关系。 */
+export type DataHubBusinessConditionGroup = {
+  logic: "and" | "or";
+  conditions: DataHubBusinessConditionNode[];
+};
+
+export type DataHubBusinessConditionNode =
+  | DataHubBusinessCondition
+  | DataHubBusinessConditionGroup;
+
+/**
+ * 一次查询可逐项核对的结构化依据，供回答末尾的「查询依据」逐条翻译。
+ * 字段叫不出中文名时用成员名兜底，条件不丢；表和数据源叫不出名字时留空，不硬造。
+ */
+export type DataHubBusinessQueryBasis = {
+  /** 查询涉及的每个 cube 及其业务表名；叫不出名字时 table 缺席。 */
+  tables: Array<{ cube: string; table?: string }>;
+  /** filters 与时间维度的 dateRange，时间范围按 inDateRange 条件记录。 */
+  conditions: DataHubBusinessConditionNode[];
+  /** 分组字段；时间维度带上粒度（day、month…）。 */
+  groups: Array<DataHubBusinessField & { granularity?: string }>;
+  /** aggregation 是中文动作（求和、计数…）；语义层没说、名字也看不出时为空串。 */
+  measures: Array<DataHubBusinessField & { aggregation: string }>;
+  /** 语义层预设的命名条件（Cube segments）。 */
+  segments: DataHubBusinessField[];
+  sorts: Array<DataHubBusinessField & { direction: "asc" | "desc" }>;
+  /** 只保留查询真正要求的条数上限，Cube 自动补的默认上限不算。 */
+  limit?: number;
+  offset?: number;
+  /** ungrouped 明细查询：只列出字段，不分组汇总。 */
+  ungrouped?: boolean;
+};
+
 /**
  * 一次数据查询的结构化要素。
  * 已拼好的字符串数组只够罗列，写不出「按X分组对Y计数」这种句子，
@@ -379,6 +429,8 @@ export type DataHubBusinessQuery = {
   preview?: Array<{ label: string; value: string }>;
   /** grouped=按维度分组统计，single=单行单值，list=只有明细行。 */
   rowKind?: "grouped" | "single" | "list";
+  /** 后端返回了可解析的 Cube Query 时才有；上面的字符串数组仍供查询过程面板使用。 */
+  basis?: DataHubBusinessQueryBasis;
 };
 
 export type DataHubBusinessQueryContext = {

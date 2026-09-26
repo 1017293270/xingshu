@@ -9,7 +9,8 @@ import { XsStatusBar, type XsStatusTone } from "@/components/xs/XsStatusBar";
 import {
   filterHistorySessionList,
   listHistorySessions,
-  loadDataHubHistoryReplay
+  loadDataHubHistoryReplay,
+  withRememberedHistoryKinds
 } from "@/services/historyService";
 import { useUiStore } from "@/stores/uiStore";
 import type { DataHubChatMode } from "@/types/dataHub";
@@ -32,6 +33,17 @@ const historyTypeLabel: Record<HistoryCategory, string> = {
   文档处理: "找文档"
 };
 
+const historyModeByCategory: Record<HistoryCategory, DataHubChatMode> = {
+  知识快查: "rag",
+  数据洞察: "ask",
+  文档处理: "document_lookup"
+};
+
+/** 编排会话用到几种能力就列几个，如「查数据 · 查知识」；类型未知时返回空串，不打标签。 */
+function historyTypeText(session: HistorySession) {
+  return session.categories.map((category) => historyTypeLabel[category]).join(" · ");
+}
+
 export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
   if (chatMode === "rag") return "/ask-knowledge";
   if (chatMode === "document_lookup") return "/document-lookup";
@@ -41,9 +53,8 @@ export function getHistoryReplayRoute(chatMode: DataHubChatMode) {
 
 function getHistoryFallbackMode(session: HistorySession): DataHubChatMode {
   if (session.chatMode) return session.chatMode;
-  if (session.category === "知识快查") return "rag";
-  if (session.category === "文档处理") return "document_lookup";
-  return "ask";
+  // 只有一种能力时才能据此猜页面；多类别或未知先进问数页，回放认出模式后再换过去。
+  return session.categories.length === 1 ? historyModeByCategory[session.categories[0]] : "ask";
 }
 
 function resolveStatusTone(message: string, isFetching: boolean): XsStatusTone {
@@ -79,13 +90,18 @@ export function HistoryPage() {
     queryFn: listHistorySessions,
     placeholderData: keepPreviousData
   });
+  // 每次进入页面都重新读一次本机记下的类型：刚打开过的旧会话不必等列表缓存过期。
+  const knownSessions = useMemo(
+    () => withRememberedHistoryKinds(historyQuery.data ?? []),
+    [historyQuery.data]
+  );
   const sessions = useMemo(
     () =>
-      filterHistorySessionList(historyQuery.data ?? [], {
+      filterHistorySessionList(knownSessions, {
         keyword: deferredKeyword,
         category
       }),
-    [category, deferredKeyword, historyQuery.data]
+    [category, deferredKeyword, knownSessions]
   );
   const totalPages = Math.max(1, Math.ceil(sessions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -220,24 +236,28 @@ export function HistoryPage() {
         staggerLimit={8}
       >
         <section ref={historyListRef} className="history-list" aria-label="历史对话列表">
-          {visibleSessions.map((session, index) => (
-            <button
-              className={`history-card xs-card-button${index < 8 ? " history-card--enter" : ""}`}
-              style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
-              key={session.id}
-              type="button"
-              aria-label={`${session.title}，${historyTypeLabel[session.category]}，${session.updatedAt}`}
-              onClick={() => void handleRestoreSession(session)}
-            >
-              <div className="history-card__body">
-                <Tooltip title={session.title} placement="topLeft">
-                  <h2 className="history-card__title">{session.title}</h2>
-                </Tooltip>
-              </div>
-              <span className="history-card__type">{historyTypeLabel[session.category]}</span>
-              <span className="history-card__time">{session.updatedAt}</span>
-            </button>
-          ))}
+          {visibleSessions.map((session, index) => {
+            const typeText = historyTypeText(session);
+            return (
+              <button
+                className={`history-card xs-card-button${index < 8 ? " history-card--enter" : ""}`}
+                style={index < 8 ? { animationDelay: `${Math.min(index * 32, 256)}ms` } : undefined}
+                key={session.id}
+                type="button"
+                aria-label={[session.title, typeText, session.updatedAt].filter(Boolean).join("，")}
+                onClick={() => void handleRestoreSession(session)}
+              >
+                <div className="history-card__body">
+                  <Tooltip title={session.title} placement="topLeft">
+                    <h2 className="history-card__title">{session.title}</h2>
+                  </Tooltip>
+                </div>
+                {/* 类型未知也保留空占位，时间列才能和其他行对齐 */}
+                <span className="history-card__type" aria-hidden={typeText ? undefined : true}>{typeText}</span>
+                <span className="history-card__time">{session.updatedAt}</span>
+              </button>
+            );
+          })}
         </section>
         {sessions.length > defaultPageSize ? (
           <nav className="history-page__pagination" aria-label="历史对话分页">

@@ -1708,10 +1708,12 @@ test.describe("desktop content density", () => {
         json: {
           code: 200,
           message: "history density fixture",
+          // 与后端会话列表同形：没有 chatMode，类型由 sessionId 前缀决定。
           data: [1, 2, 3, 4].map((index) => ({
-            sessionId: `density-session-${index}`,
+            id: index,
+            sessionId: `ask-data-density-${index}`,
             title: `经营分析会话 ${index}`,
-            chatMode: "ask",
+            createdAt: `2026-08-0${index}T09:00:00`,
             updatedAt: `2026-08-0${index}T10:00:00`
           }))
         }

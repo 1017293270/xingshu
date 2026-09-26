@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { AttachmentQueueItem } from "@/services/attachmentService";
-import { createDataHubClientId } from "@/services/dataHubAskDataService";
+import { createDataHubClientId, createDataHubSessionId } from "@/services/dataHubAskDataService";
 import type {
   DataHubAskDataStatus,
   DataHubAskRunId,
@@ -196,6 +196,20 @@ function abortAllAskDataControllers() {
   controllers.forEach((controller) => controller.abort());
 }
 
+/**
+ * 一轮结束时记下会话实际用到的能力。后端会话列表不返回模式，编排又会按需调用问数、问知、
+ * 找文档子智能体，历史对话只能靠这份记录给编排会话分类。首页发起的运行也走这里结束。
+ * 记录模块按需加载：它只在一轮结束时用到，不必挤进首页首屏的模块图。
+ */
+function rememberFinishedTurn(runId: DataHubAskRunId) {
+  const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId);
+  if (!turn?.sessionId || turn.events.length === 0) return;
+  const { sessionId, chatMode, events } = turn;
+  void import("@/services/historySessionKind")
+    .then(({ rememberHistorySessionKind }) => rememberHistorySessionKind(sessionId, [{ chatMode, events }]))
+    .catch(() => undefined);
+}
+
 export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
   ...initialState,
   toggleSidebarCollapsed: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
@@ -240,7 +254,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
       const nextSessionId =
         (sessionId && sessionId.trim()) ||
         (!startsNewConversation ? state.activeAnalysisSessionId : null) ||
-        createDataHubClientId("session");
+        createDataHubSessionId(chatMode);
       const nextTurn: AnalysisTurnState = {
         id: runId,
         question,
@@ -286,6 +300,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         : { analysisTurns };
     });
     releaseAskDataController(runId);
+    rememberFinishedTurn(runId);
   },
   failAskDataRun: (runId, message) => {
     flushPendingAskDataEvents(runId);
@@ -306,6 +321,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         : { analysisTurns };
     });
     releaseAskDataController(runId);
+    rememberFinishedTurn(runId);
   },
   cancelAskDataRun: (runId) => {
     flushPendingAskDataEvents(runId);
@@ -332,6 +348,7 @@ export const useUiStore = create<UiStoreState & UiStoreActions>((set, get) => ({
         : { analysisTurns };
     });
     releaseAskDataController(runId, true);
+    rememberFinishedTurn(runId);
   },
   /**
    * 让一个已经结束的回合重新开始收事件。受控澄清续跑要落回原来那一轮：

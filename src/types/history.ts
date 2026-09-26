@@ -7,7 +7,11 @@ export type HistorySession = {
   sessionId?: string;
   title: string;
   summary: string;
-  category: HistoryCategory;
+  /**
+   * 会话实际用到的能力，按「查数据 · 查知识 · 找文档」排序；编排会话可能有多个。
+   * 空数组表示还不知道（后端列表不返回模式的旧会话），只出现在「全部」里。
+   */
+  categories: HistoryCategory[];
   updatedAt: string;
   source?: "mock" | "data-hub";
   messageCount?: number;

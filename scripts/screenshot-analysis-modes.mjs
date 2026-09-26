@@ -7,17 +7,19 @@ import { chromium } from "@playwright/test";
  * 四种分析模式（查数据 / 查知识 / 找文档 / 智能编排）的过程区骨架比对图。
  * 会话与图表使用本地夹具，SSE 按阶段由本地服务推送，不依赖业务后端。
  */
-const base = process.env.ANALYSIS_QA_URL || "http://127.0.0.1:4175";
+const base = process.env.XS_QA_BASE_URL || process.env.ANALYSIS_QA_URL || "http://127.0.0.1:4175";
 const dir = process.env.ANALYSIS_QA_DIR || "outputs/beta03";
 const backendPort = Number(process.env.ANALYSIS_QA_BACKEND_PORT || 65534);
 const streamPath = "**/api/agentScore/chat/completions/stream";
+// 流式请求直接改投本地夹具服务，Vite 的代理目标可以指向不可达地址，截图不会碰到真实后端。
+const backendStreamUrl = `http://127.0.0.1:${backendPort}/api/agentScore/chat/completions/stream`;
 
 const mockSessions = [
   {
     id: 1,
-    sessionId: "shot-session-1",
+    // 与后端会话列表同形：没有 chatMode，类型看 sessionId 前缀。
+    sessionId: "ask-data-shot-1",
     title: "本月经营数据速览",
-    chatMode: "ask",
     createdAt: "2026-08-30T09:32:00",
     updatedAt: "2026-08-30T09:32:00"
   }
@@ -111,48 +113,60 @@ const askEvents = (sessionId, chatId) => {
       agentName: "问数智能体",
       sessionId,
       chatId,
+      // 与 load_data 真实结果同形：Cube /load 响应 + datasourceId + 规范化后的 query + 实际执行的 SQL。
+      // 注解只覆盖选中的成员，只用来筛选的 orderDate / orderStatus 没有中文名；度量 type 只有 number。
       content: {
-        columns: [
-          { name: "SalesOrder.region", title: "销售明细表，记录各区域月度销售额。区域" },
-          { name: "SalesOrder.revenue", title: "销售明细表，记录各区域月度销售额。销售额（万元）", type: "number" },
-          { name: "SalesOrder.rate", title: "销售明细表，记录各区域月度销售额。目标完成率", type: "number" }
+        datasourceId: 1000002,
+        query: {
+          measures: ["SalesOrder.revenue", "SalesOrder.rate"],
+          dimensions: ["SalesOrder.region"],
+          timeDimensions: [{ dimension: "SalesOrder.orderDate", dateRange: ["2026-08-01", "2026-08-31"] }],
+          filters: [
+            { member: "SalesOrder.orderStatus", operator: "equals", values: ["已确认"] },
+            { member: "SalesOrder.rate", operator: "lt", values: ["1.05"] }
+          ],
+          order: [{ id: "SalesOrder.revenue", desc: true }],
+          limit: 10
+        },
+        data: [
+          { "SalesOrder.region": "华东", "SalesOrder.revenue": "486.2", "SalesOrder.rate": "1.04" },
+          { "SalesOrder.region": "华南", "SalesOrder.revenue": "331.7", "SalesOrder.rate": "0.92" },
+          { "SalesOrder.region": "华北", "SalesOrder.revenue": "268.4", "SalesOrder.rate": "0.87" },
+          { "SalesOrder.region": "西南", "SalesOrder.revenue": "155.9", "SalesOrder.rate": "0.78" }
         ],
-        rows: [
-          { "SalesOrder.region": "华东", "SalesOrder.revenue": 486.2, "SalesOrder.rate": 1.04 },
-          { "SalesOrder.region": "华南", "SalesOrder.revenue": 331.7, "SalesOrder.rate": 0.92 },
-          { "SalesOrder.region": "华北", "SalesOrder.revenue": 268.4, "SalesOrder.rate": 0.87 },
-          { "SalesOrder.region": "西南", "SalesOrder.revenue": 155.9, "SalesOrder.rate": 0.78 }
-        ],
-        totalRows: 4,
-        source: "cube",
-        tableComment: "销售明细表，记录各区域月度销售额与目标完成率",
         annotation: {
           measures: {
             "SalesOrder.revenue": {
-              title: "销售明细表，记录各区域月度销售额。销售额（万元）",
+              title: "销售明细表，记录各区域月度销售额 销售额（万元）",
               shortTitle: "销售额（万元）",
-              type: "sum",
+              type: "number",
               businessDefinition: "已确认收入的销售额合计，单位万元",
               businessTerms: ["营收", "销售收入"]
+            },
+            "SalesOrder.rate": {
+              title: "销售明细表，记录各区域月度销售额 目标完成率",
+              shortTitle: "目标完成率",
+              type: "number"
             }
           },
           dimensions: {
             "SalesOrder.region": {
-              title: "销售明细表，记录各区域月度销售额。区域",
+              title: "销售明细表，记录各区域月度销售额 区域",
               shortTitle: "区域"
-            },
-            "SalesOrder.month": {
-              title: "销售明细表，记录各区域月度销售额。统计月份"
             }
-          }
+          },
+          segments: {},
+          timeDimensions: {}
         },
-        query: {
-          measures: ["SalesOrder.revenue"],
-          dimensions: ["SalesOrder.region"],
-          filters: [
-            { member: "SalesOrder.month", operator: "equals", values: ["2026-08"] }
-          ]
-        }
+        sql: [
+          'SELECT "sales_order".region "sales_order__region", sum("sales_order".revenue) "sales_order__revenue",',
+          '  sum("sales_order".actual) / NULLIF(sum("sales_order".target), 0) "sales_order__rate"',
+          'FROM sales_order AS "sales_order"',
+          'WHERE ("sales_order".order_date >= $1::timestamptz AND "sales_order".order_date <= $2::timestamptz)',
+          '  AND ("sales_order".order_status = $3)',
+          'GROUP BY 1 HAVING (sum("sales_order".actual) / NULLIF(sum("sales_order".target), 0) < $4)',
+          'ORDER BY 2 DESC LIMIT 10'
+        ].join("\n")
       }
     },
     {
@@ -174,6 +188,45 @@ const askEvents = (sessionId, chatId) => {
       content: { mode: "ask", summary: "本月销售额 1242.2 万元，整体完成率 92%。", totalDurationMs: 18400 }
     }
   ];
+};
+
+// 同一轮先后两次查询：查询依据按条列出；第二次查询给出的中文名也回填到第一次的筛选字段上。
+const askMultiEvents = (sessionId, chatId) => {
+  const events = askEvents(sessionId, chatId);
+  const tableIndex = events.findIndex((event) => event.type === "table");
+  const statusTable = {
+    type: "table",
+    agentName: "问数智能体",
+    sessionId,
+    chatId,
+    content: {
+      datasourceId: 1000002,
+      query: {
+        measures: ["SalesOrder.count"],
+        dimensions: ["SalesOrder.orderStatus"],
+        timeDimensions: [{ dimension: "SalesOrder.orderDate", dateRange: "this month" }],
+        order: [{ id: "SalesOrder.count", desc: true }],
+        limit: 10000
+      },
+      data: [
+        { "SalesOrder.orderStatus": "已确认", "SalesOrder.count": "1286" },
+        { "SalesOrder.orderStatus": "待审核", "SalesOrder.count": "74" },
+        { "SalesOrder.orderStatus": "已取消", "SalesOrder.count": "31" }
+      ],
+      annotation: {
+        measures: {
+          "SalesOrder.count": { title: "销售明细表，记录各区域月度销售额 订单数", shortTitle: "订单数", type: "number" }
+        },
+        dimensions: {
+          "SalesOrder.orderStatus": { title: "销售明细表，记录各区域月度销售额 订单状态", shortTitle: "订单状态" }
+        },
+        segments: {},
+        timeDimensions: {}
+      },
+      sql: 'SELECT "sales_order".order_status "sales_order__order_status", count(*) "sales_order__count" FROM sales_order AS "sales_order" WHERE ("sales_order".order_date >= $1::timestamptz AND "sales_order".order_date <= $2::timestamptz) GROUP BY 1 ORDER BY 2 DESC LIMIT 10000'
+    }
+  };
+  return [...events.slice(0, tableIndex), statusTable, ...events.slice(tableIndex)];
 };
 
 const ragEvents = (sessionId, chatId) => [
@@ -523,6 +576,12 @@ const modes = [
     events: askEvents
   },
   {
+    name: "ask-multi",
+    route: "/ask-data",
+    question: "先看本月订单状态分布，再看各区域销售额与目标完成率",
+    events: askMultiEvents
+  },
+  {
     name: "knowledge",
     route: "/ask-knowledge",
     question: "公司合同审批需要经过哪些环节？",
@@ -568,7 +627,9 @@ const browser = await chromium.launch();
 try {
 
 
-for (const mode of modes) {
+// ANALYSIS_QA_MODES=ask,ask-multi 只跑其中几种，便于局部复查。
+const onlyModes = process.env.ANALYSIS_QA_MODES?.split(",").map((name) => name.trim()).filter(Boolean);
+for (const mode of modes.filter((item) => !onlyModes?.length || onlyModes.includes(item.name))) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await page.addInitScript(() => {
     const user = { token: "playwright-visual-token", userId: 1, username: "张三", isAdmin: true };
@@ -603,7 +664,7 @@ for (const mode of modes) {
       dimensionKey: dimension?.key, metricKeys: metric ? [metric.key] : []
     } } });
   });
-  await page.route(streamPath, (route) => route.continue());
+  await page.route(streamPath, (route) => route.continue({ url: backendStreamUrl }));
 
   await page.goto(`${base}${mode.route}`, { waitUntil: "networkidle" });
   await page.getByRole("textbox", { name: "命令输入" }).fill(mode.question);
@@ -641,6 +702,21 @@ for (const mode of modes) {
     assert(metrics.alignment <= 2, `${mode.name} ${width}: 问题与回答右侧不对齐 ${metrics.alignment}px`);
     assert(metrics.sameFontSize, "问题与回答字号一致");
     await page.screenshot({ path: `${dir}/analysis-${mode.name}-${width}.png` });
+  }
+  // 回答末尾的查询依据：一条查询一句，脚注级别，不压过回答正文。
+  const basis = page.getByRole("region", { name: "查询依据" });
+  if (mode.name.startsWith("ask")) assert.equal(await basis.count(), 1, "问数回答下给出查询依据");
+  if (mode.name === "ask-multi") assert.equal(await basis.getByRole("listitem").count(), 2, "两次查询各一句");
+  if (await basis.count()) {
+    console.log(`${mode.name} 查询依据：${(await basis.innerText()).replace(/\s+/g, " ")}`);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      // 换宽度后图表会重排，等它落定再滚一次，免得依据被挤出视野。
+      await page.waitForTimeout(600);
+      await basis.evaluate((node) => node.scrollIntoView({ block: "center" }));
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${dir}/analysis-${mode.name}-basis-${width}.png` });
+    }
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   const tableSwitch = page.getByRole("radio", { name: "表格", exact: true });

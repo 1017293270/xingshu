@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDataHubAskTurn,
+  describeDataHubCondition,
   getDataHubActionLabel,
   normalizeDataHubTableResult,
   resolveDataHubFinalAnswer
@@ -820,7 +821,24 @@ describe("buildDataHubBusinessTrace 查询过程", () => {
         preview: [
           { label: "永安镇人民政府", value: "2 条" },
           { label: "双流区水务局", value: "1 条" }
-        ]
+        ],
+        // 查询依据用的结构：叙事丢掉的无名条件在这里用成员名兜底保留。
+        basis: {
+          tables: [{ cube: "Contract", table: "合同主数据清单" }],
+          conditions: [
+            {
+              member: "Contract.partyA",
+              field: "合同甲方单位名称",
+              operator: "contains",
+              values: ["善治数字科技（成都）有限公司"]
+            },
+            { member: "Contract.unnamedColumn", field: "unnamedColumn", operator: "contains", values: ["永安镇"] }
+          ],
+          groups: [{ member: "Contract.partyB", field: "合同乙方单位名称" }],
+          measures: [{ member: "Contract.count", field: "记录数", aggregation: "计数" }],
+          segments: [],
+          sorts: []
+        }
       }
     ]);
   });
@@ -1105,4 +1123,215 @@ it("keeps only received public text when a failed terminal summary is present", 
   expect(turn.answerBlocks).toEqual([{ content: "本年度总收入为" }]);
   expect(turn.status).toBe("error");
   expect(resolveDataHubFinalAnswer("失败摘要", "", true)).toBe("");
+});
+
+describe("查询依据的结构化解析", () => {
+  // 真实 load_data 结果：Cube /load 回显的 query 是规范化后的形状（order 为 [{ id, desc }]，
+  // 没写 limit 时自动补 10000），注解只覆盖选中的成员，度量 type 只有 number。
+  const rankingTable = {
+    datasourceId: 1000002,
+    source: "cube",
+    query: {
+      measures: ["ContractList.contractAmount"],
+      dimensions: ["ContractList.salesPerson"],
+      filters: [
+        { member: "ContractList.signStatus", operator: "equals", values: ["已签"] },
+        {
+          or: [
+            { member: "ContractList.bizCategory", operator: "startsWith", values: ["采购"] },
+            { member: "ContractList.remark", operator: "notSet" }
+          ]
+        }
+      ],
+      timeDimensions: [
+        { dimension: "ContractList.signDate", dateRange: ["2026-01-01T00:00:00.000", "2026-06-30T23:59:59.999"] }
+      ],
+      order: [{ id: "ContractList.contractAmount", desc: true }],
+      limit: 10,
+      rowLimit: 10,
+      timezone: "UTC"
+    },
+    data: [
+      { "ContractList.salesPerson": "张三", "ContractList.contractAmount": "1280.5" },
+      { "ContractList.salesPerson": "李四", "ContractList.contractAmount": "960" }
+    ],
+    annotation: {
+      measures: {
+        "ContractList.contractAmount": {
+          title: "合同主数据清单，记录合同编号、名称、年度及金额 合同金额",
+          shortTitle: "合同金额",
+          type: "number"
+        }
+      },
+      dimensions: {
+        "ContractList.salesPerson": {
+          title: "合同主数据清单，记录合同编号、名称、年度及金额 销售人员",
+          shortTitle: "销售人员",
+          type: "string"
+        }
+      },
+      segments: {},
+      timeDimensions: {}
+    },
+    usedAssets: [{ assetId: "t-1", assetName: "contract_list", assetType: "TABLE" }],
+    sql: [
+      "SELECT",
+      '      "contract_list".sales_person "contract_list__sales_person", sum("contract_list".contract_amount) "contract_list__contract_amount"',
+      "    FROM",
+      '      public.contract_list AS "contract_list"  WHERE ("contract_list".sign_status = $1) GROUP BY 1 ORDER BY 2 DESC LIMIT 10'
+    ].join("\n")
+  };
+
+  it("keeps every filter, the real aggregation, the sort and the limit of one query", () => {
+    const table = normalizeDataHubTableResult(rankingTable);
+
+    expect(table?.business?.query?.basis).toEqual({
+      tables: [{ cube: "ContractList", table: "合同主数据清单" }],
+      conditions: [
+        // 时间范围是整条查询的口径，排在其他筛选前面。
+        {
+          member: "ContractList.signDate",
+          field: "signDate",
+          operator: "inDateRange",
+          values: ["2026-01-01T00:00:00.000", "2026-06-30T23:59:59.999"]
+        },
+        // 只出现在筛选里的成员没有注解，用成员名兜底，不再整条丢掉。
+        { member: "ContractList.signStatus", field: "signStatus", operator: "equals", values: ["已签"] },
+        {
+          logic: "or",
+          conditions: [
+            { member: "ContractList.bizCategory", field: "bizCategory", operator: "startsWith", values: ["采购"] },
+            { member: "ContractList.remark", field: "remark", operator: "notSet", values: [] }
+          ]
+        }
+      ],
+      groups: [{ member: "ContractList.salesPerson", field: "销售人员" }],
+      // 度量名看不出聚合方式，注解也只有 type: number，SQL 里实际执行的是 sum。
+      measures: [{ member: "ContractList.contractAmount", field: "合同金额", aggregation: "求和" }],
+      segments: [],
+      sorts: [{ member: "ContractList.contractAmount", field: "合同金额", direction: "desc" }],
+      limit: 10
+    });
+    // 查询过程面板沿用的字符串也跟着认出 /load 回显的排序与 SQL 里的聚合。
+    expect(table?.business?.calculations).toEqual(["合同金额：求和", "按合同金额降序排列"]);
+  });
+
+  it("drops Cube's automatic default limit and reads MySQL SQL aliases", () => {
+    const table = normalizeDataHubTableResult({
+      ...rankingTable,
+      query: { ...rankingTable.query, limit: 10000, rowLimit: 10000, measures: ["ContractList.customerNum"] },
+      annotation: {
+        ...rankingTable.annotation,
+        measures: { "ContractList.customerNum": { title: "合同主数据清单 客户数", shortTitle: "客户数", type: "number" } }
+      },
+      sql: "SELECT `contract_list`.sales_person `contract_list__sales_person`, count(distinct `contract_list`.customer_id) `contract_list__customer_num` FROM contract_list AS `contract_list` GROUP BY 1"
+    });
+
+    expect(table?.business?.query?.basis?.limit).toBeUndefined();
+    expect(table?.business?.query?.basis?.measures).toEqual([
+      { member: "ContractList.customerNum", field: "客户数", aggregation: "去重计数" }
+    ]);
+  });
+
+  it("does not claim one aggregation for a calculated measure or an outer select", () => {
+    const table = normalizeDataHubTableResult({
+      ...rankingTable,
+      query: { ...rankingTable.query, measures: ["ContractList.avgPrice", "ContractList.passRate"] },
+      annotation: { measures: {}, dimensions: rankingTable.annotation.dimensions },
+      sql: [
+        'SELECT q_0."contract_list__pass_rate" "contract_list__pass_rate", q_0."contract_list__avg_price" "contract_list__avg_price"',
+        'FROM (SELECT sum(CASE WHEN "contract_list".score >= 60 THEN 1 ELSE 0 END) / NULLIF(count(*), 0) "contract_list__pass_rate",',
+        '  sum("contract_list".amount) / count("contract_list".id) "contract_list__avg_price" FROM contract_list AS "contract_list") q_0'
+      ].join("\n")
+    });
+
+    // SQL 说明两者都是计算指标：不写成某一种聚合，也不再按 avg 这类命名去猜。
+    expect(table?.business?.query?.basis?.measures.map((measure) => measure.aggregation)).toEqual(["", ""]);
+  });
+
+  it("reads a wrapped single aggregation but not arithmetic on top of it", () => {
+    const table = normalizeDataHubTableResult({
+      ...rankingTable,
+      query: { ...rankingTable.query, measures: ["ContractList.paidAmount", "ContractList.totalRate", "ContractList.amountWan"] },
+      annotation: { measures: {}, dimensions: rankingTable.annotation.dimensions },
+      sql: [
+        'SELECT coalesce(round(sum("contract_list".paid_amount), 2), 0) "contract_list__paid_amount",',
+        '  sum("contract_list".paid) / NULLIF(sum("contract_list".amount), 0) "contract_list__total_rate",',
+        '  sum("contract_list".amount) / 10000 "contract_list__amount_wan"',
+        'FROM contract_list AS "contract_list"'
+      ].join("\n")
+    });
+
+    // totalRate 名字里有 total，但 SQL 是两次求和相除，不能说成「求和」。
+    expect(table?.business?.query?.basis?.measures.map((measure) => measure.aggregation)).toEqual(["求和", "", ""]);
+  });
+
+  it("borrows a filter's business name from another table of the same turn and matches data sources by id", async () => {
+    const { buildDataHubBusinessTrace } = await import("./dataHubAskDataPresenter");
+    const statusProbe = {
+      datasourceId: 8,
+      query: { measures: ["ContractList.count"], dimensions: ["ContractList.signStatus"] },
+      data: [{ "ContractList.signStatus": "已签", "ContractList.count": 12 }],
+      annotation: {
+        measures: { "ContractList.count": { title: "合同主数据清单 记录数", shortTitle: "记录数", type: "number" } },
+        dimensions: {
+          "ContractList.signStatus": { title: "合同主数据清单 合同签订状态", shortTitle: "合同签订状态" }
+        }
+      }
+    };
+    const turn = createDataHubAskTurn("销售人员签约合同金额排名", [
+      { type: "data_source_selected", data: { datasourceId: 7, datasourceName: "甲库" } },
+      { type: "data_source_selected", data: { datasourceId: 8, datasourceName: "合同数据系统" } },
+      { type: "table", data: statusProbe },
+      { type: "table", data: { ...rankingTable, datasourceId: 9 } }
+    ], "done");
+
+    const trace = buildDataHubBusinessTrace(turn, "销售人员签约合同金额排名", "ASK_DATA");
+
+    // 表带着 datasourceId 就按 id 对名字，对不上的宁可空着。
+    expect(trace.queries?.map((query) => query.dataSource)).toEqual(["合同数据系统", undefined]);
+    expect(trace.queries?.[1].basis?.conditions[1]).toEqual({
+      member: "ContractList.signStatus",
+      field: "合同签订状态",
+      operator: "equals",
+      values: ["已签"]
+    });
+  });
+});
+
+describe("describeDataHubCondition", () => {
+  it.each([
+    ["lt", ["60"], "小于 60"],
+    ["gte", ["10"], "大于等于 10"],
+    ["equals", ["已签"], "等于 已签"],
+    ["notEquals", ["华东", "华南"], "不等于 华东、华南"],
+    ["contains", ["采购"], "包含 采购"],
+    ["notContains", ["测试"], "不包含 测试"],
+    ["startsWith", ["采购"], "以 采购 开头"],
+    ["notStartsWith", ["测试"], "不以 测试 开头"],
+    ["endsWith", ["合同"], "以 合同 结尾"],
+    ["notEndsWith", ["草稿"], "不以 草稿 结尾"],
+    ["set", [], "不为空"],
+    ["notSet", [], "为空"],
+    ["beforeDate", ["2026-01-01"], "早于 2026-01-01"],
+    ["afterDate", ["2026-01-01T00:00:00.000"], "晚于 2026-01-01"],
+    ["beforeOrOnDate", ["2026-06-30"], "不晚于 2026-06-30"],
+    ["afterOrOnDate", ["2026-01-01"], "不早于 2026-01-01"],
+    ["inDateRange", ["2026-01-01T00:00:00.000", "2026-03-31T23:59:59.999"], "在 2026-01-01 至 2026-03-31 之间"],
+    ["notInDateRange", ["2026-01-01", "2026-03-31"], "不在 2026-01-01 至 2026-03-31 之间"],
+    ["inDateRange", ["from 2026-01-01 to 2026-02-01"], "在 2026-01-01 至 2026-02-01 之间"],
+    ["inDateRange", ["last month"], "上月"],
+    ["inDateRange", ["last 30 days"], "最近 30 天"],
+    ["notInDateRange", ["this year"], "今年以外"],
+    ["equals", ["甲", "乙", "丙", "丁", "戊", "己", "庚"], "等于 甲、乙、丙、丁、戊 等 7 个值"]
+  ])("translates %s %j into plain Chinese", (operator, values, expected) => {
+    expect(describeDataHubCondition(operator, values)).toBe(expected);
+  });
+
+  it("keeps the quoted wording used by the query-process panel", () => {
+    expect(describeDataHubCondition("lt", ["60"], "quoted")).toBe("小于“60”");
+    expect(describeDataHubCondition("startsWith", ["采购"], "quoted")).toBe("以“采购”开头");
+    expect(describeDataHubCondition("set", [], "quoted")).toBe("不为空");
+    expect(describeDataHubCondition("inDateRange", ["a", "b"], "quoted")).toBe("在“a 至 b”之间");
+  });
 });

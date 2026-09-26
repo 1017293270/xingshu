@@ -373,6 +373,48 @@ describe("analysis response phases", () => {
     expect(result.queryByRole("table")).not.toBeInTheDocument();
     expect(window.fetch).not.toHaveBeenCalled();
   });
+  it("footnotes each query under the answer in business words, never physical names", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("考核不及格的销售人员合同金额排名", null, "ask");
+    const annotation = {
+      measures: {
+        "ContractList.contractAmount": { title: "合同主数据清单，记录合同编号、名称 合同金额", shortTitle: "合同金额", type: "number" }
+      },
+      dimensions: {
+        "ContractList.salesPerson": { title: "合同主数据清单，记录合同编号、名称 销售人员", shortTitle: "销售人员" }
+      }
+    };
+    const loadResult = (score: number) => ({
+      datasourceId: 1000002,
+      query: {
+        measures: ["ContractList.contractAmount"],
+        dimensions: ["ContractList.salesPerson"],
+        filters: [{ member: "ContractList.assessScore", operator: "lt", values: [String(score)] }],
+        order: [{ id: "ContractList.contractAmount", desc: true }],
+        limit: 10
+      },
+      data: [{ "ContractList.salesPerson": "张三", "ContractList.contractAmount": "1280.5" }],
+      annotation,
+      sql: 'SELECT "contract_list".sales_person "contract_list__sales_person", sum("contract_list".contract_amount) "contract_list__contract_amount" FROM contract_list AS "contract_list" GROUP BY 1 ORDER BY 2 DESC LIMIT 10'
+    });
+    store.appendAskDataEvent(runId, { type: "data_source_selected", data: { datasourceId: 1000002, datasourceName: "合同数据系统" } });
+    [60, 70, 80, 90].forEach((score) => store.appendAskDataEvent(runId, { type: "table", data: loadResult(score) }));
+    store.appendAskDataEvent(runId, { type: "text", content: "根据考核结果统计，张三合同金额最高。" });
+    store.completeAskDataRun(runId);
+    renderPage("ask");
+
+    const basis = screen.getByRole("region", { name: "查询依据" });
+    const items = within(basis).getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent(
+      "根据“合同数据系统”数据源“合同主数据清单”数据表，对“assessScore”按“小于 60”筛选，按“销售人员”分组，"
+        + "对“合同金额”求和，按“合同金额”倒序排列，取前 10 条。"
+    );
+    expect(basis).toHaveTextContent("等 4 条查询");
+    expect(basis).not.toHaveTextContent("contract_list");
+    expect(screen.getByLabelText("正式回答").compareDocumentPosition(basis) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("keeps a returned scalar visible even when the model sends no answer text", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("合同多少份", null, "ask");

@@ -6,6 +6,13 @@ import {
 import { isAskTableSession } from "@/services/dataHubAskTable";
 import { isWritingSessionId } from "@/services/dataHubWriting";
 import { readDataHubSession } from "@/services/dataHubSession";
+import {
+  identifyDataHubChatMode,
+  readRememberedHistorySessionKinds,
+  rememberHistorySessionKind,
+  resolveHistorySessionKind,
+  type RememberedHistorySessionKinds
+} from "@/services/historySessionKind";
 import type {
   DataHubChatEvent,
   DataHubChatMessage,
@@ -13,7 +20,7 @@ import type {
   DataHubChatSession,
   DataHubStreamEvent
 } from "@/types/dataHub";
-import type { HistoryCategory, HistoryFilter, HistorySession } from "@/types/history";
+import type { HistoryFilter, HistorySession } from "@/types/history";
 import { historySessions } from "./mock/historyMock";
 
 type DataHubHistoryReplay = {
@@ -39,34 +46,6 @@ function shouldUseMockHistory() {
   return import.meta.env.MODE === "test";
 }
 
-function inferCategory(text: string): HistoryCategory {
-  if (/文档|报告|写作|材料|附件/.test(text)) {
-    return "文档处理";
-  }
-
-  if (/数据|分析|统计|趋势|问数|指标|报表|经营/.test(text)) {
-    return "数据洞察";
-  }
-
-  return "知识快查";
-}
-
-export function resolveHistoryCategory(
-  chatMode: DataHubChatMode | null | undefined,
-  fallbackText: string
-): HistoryCategory {
-  if (chatMode === "document_lookup") {
-    return "文档处理";
-  }
-  if (chatMode === "rag") {
-    return "知识快查";
-  }
-  if (chatMode === "ask" || chatMode === "agent") {
-    return "数据洞察";
-  }
-  return inferCategory(fallbackText);
-}
-
 function formatDateTime(value?: string) {
   if (!value) {
     return "-";
@@ -86,28 +65,56 @@ function replayableChatMode(session: DataHubChatSession): DataHubChatMode | unde
   return chatMode;
 }
 
-function mapDataHubSession(session: DataHubChatSession): HistorySession {
+/** 会话类型的判定规则与后端缺口见 resolveHistorySessionKind。 */
+function mapDataHubSession(
+  session: DataHubChatSession,
+  remembered: RememberedHistorySessionKinds
+): HistorySession {
   const title = session.title?.trim() || "未命名对话";
-  const chatMode = replayableChatMode(session);
+  const kind = resolveHistorySessionKind(
+    { sessionId: session.sessionId, chatMode: replayableChatMode(session) },
+    remembered
+  );
 
   return {
     id: session.sessionId,
     sessionId: session.sessionId,
     title,
     summary: "来自 data-hub 的历史会话，点击后查看完整过程与结果。",
-    category: resolveHistoryCategory(chatMode ?? "ask", title),
+    categories: kind.categories,
     updatedAt: formatDateTime(session.updatedAt || session.createdAt),
     source: "data-hub",
-    chatMode
+    chatMode: kind.chatMode
   };
+}
+
+/**
+ * 列表缓存之后才记下的类型（刚打开过的旧会话、刚跑完的编排）在渲染时补上，
+ * 不必为了一个标签重新拉列表。已经认出类型的会话保持不变。
+ */
+export function withRememberedHistoryKinds(sessions: HistorySession[]): HistorySession[] {
+  const remembered = readRememberedHistorySessionKinds();
+  return sessions.map((session) => {
+    if (session.source !== "data-hub" || !session.sessionId || session.categories.length) {
+      return session;
+    }
+    const kind = resolveHistorySessionKind(
+      { sessionId: session.sessionId, chatMode: session.chatMode },
+      remembered
+    );
+    return kind.categories.length || (kind.chatMode && !session.chatMode)
+      ? { ...session, chatMode: session.chatMode ?? kind.chatMode, categories: kind.categories }
+      : session;
+  });
 }
 
 export function filterHistorySessionList(sessions: HistorySession[], filter: HistoryFilter) {
   const keyword = filter.keyword?.trim();
 
   return sessions.filter((session) => {
+    // 用到多种能力的编排会话在任一对应页签下都能找到；类型未知的只在「全部」里。
     const matchesCategory =
-      !filter.category || filter.category === "全部" || session.category === filter.category;
+      !filter.category || filter.category === "全部" || session.categories.includes(filter.category);
     const matchesKeyword =
       !keyword || session.title.includes(keyword) || session.summary.includes(keyword);
 
@@ -160,57 +167,12 @@ function toStreamEvent(event: DataHubChatEvent): DataHubStreamEvent | null {
   });
 }
 
+/** 回放走哪个页面只看根会话；子智能体用到了什么由 rememberHistorySessionKind 另记。 */
 function inferChatMode(
   events: DataHubStreamEvent[],
   fallbackMode: DataHubChatMode = "ask"
 ): DataHubChatMode {
-  const rootEvents = events.filter(
-    (event) => !event.parentSessionId && event.type !== "subagent_exposed"
-  );
-
-  for (const event of rootEvents) {
-    if (event.type !== "done") continue;
-    const payload = getDataHubEventPayload(event);
-    if (!isRecord(payload)) continue;
-    if (payload.documentLookup === true || payload.mode === "document_lookup") {
-      return "document_lookup";
-    }
-    if (payload.adaptiveTeam === true || payload.mode === "agent") {
-      return "agent";
-    }
-  }
-
-  if (
-    rootEvents.some(
-      (event) =>
-        event.agentName === "编排智能体" ||
-        event.agentName === "编排 Agent" ||
-        event.agentName === "OrchestratorAgent"
-    )
-  ) {
-    return "agent";
-  }
-
-  for (const event of rootEvents) {
-    if (
-      event.type === "citation_document" ||
-      event.agentName === "问知智能体" ||
-      event.agentName === "ask-knowledge"
-    ) {
-      return "rag";
-    }
-
-    if (event.type !== "done") continue;
-    const payload = getDataHubEventPayload(event);
-    if (
-      isRecord(payload) &&
-      (payload.mode === "rag" || payload.askKnowledge === true)
-    ) {
-      return "rag";
-    }
-  }
-
-  return fallbackMode;
+  return identifyDataHubChatMode(events) ?? fallbackMode;
 }
 
 export async function listHistorySessions(): Promise<HistorySession[]> {
@@ -229,11 +191,12 @@ export async function listHistorySessions(): Promise<HistorySession[]> {
     spaceId: session.spaceId
   });
 
+  const remembered = readRememberedHistorySessionKinds();
   return sessions
     .filter((item) => !isAskTableSession(item)
       && item.chatMode !== "writing"
       && !isWritingSessionId(item.sessionId || item.id))
-    .map(mapDataHubSession);
+    .map((item) => mapDataHubSession(item, remembered));
 }
 
 export async function filterHistorySessions(filter: HistoryFilter) {
@@ -356,6 +319,9 @@ export async function loadDataHubHistoryReplay(
   const firstOriginalTurn = turns.find((turn) => turn.question && turn.question !== "历史对话");
   const events = firstOriginalTurn?.events ?? [];
   const chatMode = turns[0]?.chatMode ?? fallbackMode;
+  // 打开会话本来就拉回了全部事件，顺手记下它实际用到的能力：
+  // 后端列表不返回模式，旧会话打开过一次之后历史页就能分对类。只认事件里的证据，不用兜底模式。
+  rememberHistorySessionKind(sessionId, turns.map((turn) => ({ events: turn.events })));
 
   return {
     sessionId,

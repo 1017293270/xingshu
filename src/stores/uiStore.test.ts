@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAttachmentQueue } from "@/services/attachmentService";
+import { readRememberedHistorySessionKinds } from "@/services/historySessionKind";
 import { useUiStore } from "./uiStore";
 
 describe("useUiStore", () => {
@@ -77,8 +78,31 @@ describe("useUiStore", () => {
       data: { intent: "ASK_DATA" }
     });
 
-    expect(mainSessionId).toMatch(/^session-/);
+    expect(mainSessionId).toMatch(/^ask-data-/);
     expect(useUiStore.getState().activeAnalysisSessionId).toBe(mainSessionId);
+  });
+
+  it("names new sessions by mode and remembers the subagents an orchestration run used", async () => {
+    localStorage.removeItem("xingshu_history_session_kinds");
+    const runId = useUiStore.getState().startAskDataRun("核对合同数据与制度", null, "agent");
+    const sessionId = useUiStore.getState().activeAnalysisSessionId ?? "";
+    for (const [agentId, agentName] of [["ask-data", "问数智能体"], ["ask-knowledge", "问知智能体"]]) {
+      useUiStore.getState().appendAskDataEvent(runId, {
+        type: "subagent_exposed",
+        sessionId: `child-${agentId}`,
+        parentSessionId: sessionId,
+        agentName,
+        content: { sessionId: `child-${agentId}`, agentId }
+      });
+    }
+    useUiStore.getState().completeAskDataRun(runId);
+
+    expect(sessionId).toMatch(/^agent-/);
+    await vi.waitFor(() => expect(readRememberedHistorySessionKinds()[sessionId]).toMatchObject({
+      chatMode: "agent",
+      categories: ["数据洞察", "知识快查"]
+    }));
+    localStorage.removeItem("xingshu_history_session_kinds");
   });
 
   it("keeps the current data-hub session when asking a follow-up", () => {

@@ -6,6 +6,7 @@ import {
 } from "@/services/dataHubSession";
 import { adaptDataHubStreamEvent } from "@/services/dataHubEventAdapter";
 import type {
+  DataHubChatMode,
   DataHubChatRequest,
   DataHubInteractionChatMode,
   DataHubRequestChatMode,
@@ -35,15 +36,49 @@ export function createDataHubClientId(prefix: "session" | "chat") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * 会话表不存模式（ai_chat_session 只有 id、标题与时间），历史列表只能靠 sessionId 前缀分辨，
+ * 与问表 `ask-table-`、智写 `writing-` 同一做法。四个前缀与这两个互不为前缀，
+ * 后端问表历史的 `LIKE 'ask-table-%'` 不会误命中；加上 UUID 最长 52 字符，在 64 字符列宽内。
+ */
+export const DATA_HUB_SESSION_PREFIXES: Record<DataHubChatMode, string> = {
+  ask: "ask-data-",
+  rag: "ask-knowledge-",
+  document_lookup: "document-lookup-",
+  agent: "agent-"
+};
+
+export function createDataHubSessionId(chatMode: DataHubChatMode) {
+  const prefix = DATA_HUB_SESSION_PREFIXES[chatMode];
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** 按前缀认出会话创建时的模式；`session-` 开头的旧会话与其他来源的会话返回 undefined。 */
+export function dataHubChatModeFromSessionId(sessionId: string | number | null | undefined) {
+  const id = String(sessionId ?? "");
+  return (Object.entries(DATA_HUB_SESSION_PREFIXES) as Array<[DataHubChatMode, string]>)
+    .find(([, prefix]) => id.startsWith(prefix))?.[0];
+}
+
+function isAnalysisChatMode(chatMode: DataHubRequestChatMode): chatMode is DataHubChatMode {
+  return Object.hasOwn(DATA_HUB_SESSION_PREFIXES, chatMode);
+}
+
 export function buildDataHubChatRequest(input: DataHubAskDataInput): DataHubChatRequest {
-  const sessionId = input.sessionId || createDataHubClientId("session");
+  const chatMode = input.chatMode ?? "ask";
+  const sessionId = input.sessionId
+    || (isAnalysisChatMode(chatMode) ? createDataHubSessionId(chatMode) : createDataHubClientId("session"));
 
   return {
     message: input.message,
     sessionId,
     globalSessionId: input.globalSessionId || sessionId,
     chatId: input.chatId || createDataHubClientId("chat"),
-    chatMode: input.chatMode ?? "ask",
+    chatMode,
     ...(input.writingContext === undefined ? {} : { writingContext: input.writingContext })
   };
 }

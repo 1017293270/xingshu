@@ -1339,13 +1339,22 @@ async function installDataHubFixture(
   return state;
 }
 
+/** 新会话按模式带前缀，历史页靠它分类；与 src/services/dataHubAskDataService 的 DATA_HUB_SESSION_PREFIXES 一致。 */
+const sessionPrefixByMode: Record<StreamRequest["chatMode"], string> = {
+  ask: "ask-data-",
+  rag: "ask-knowledge-",
+  document_lookup: "document-lookup-",
+  agent: "agent-"
+};
+
 function expectStrictStreamRequest(
   request: StreamRequest,
-  mode: StreamRequest["chatMode"]
+  mode: StreamRequest["chatMode"],
+  sessionPrefix = sessionPrefixByMode[mode]
 ) {
   expect(Object.keys(request).sort()).toEqual(expectedStreamRequestKeys);
   expect(request.chatMode).toBe(mode);
-  expect(request.sessionId).toMatch(/^session-/);
+  expect(request.sessionId.startsWith(sessionPrefix)).toBe(true);
   expect(request.chatId).toMatch(/^chat-/);
   expect(request.globalSessionId).toBe(request.sessionId);
 }
@@ -2569,7 +2578,8 @@ test("persisted agent history reruns ask mode before favoriting when no executab
     }
   ]);
   expect(fixture.streamRequests).toHaveLength(1);
-  expectStrictStreamRequest(fixture.streamRequests[0], "ask");
+  // 结果物化在后台另起一个不进历史的问数会话，仍用通用的 session- 前缀。
+  expectStrictStreamRequest(fixture.streamRequests[0], "ask", "session-");
   expect(fixture.streamRequests[0]).toEqual({
     message: "恢复销售数据分析",
     sessionId: expect.stringMatching(/^session-/),

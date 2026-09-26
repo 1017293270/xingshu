@@ -1782,6 +1782,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       (session) => session.dataSources
                     )
                   ],
+                  // 查询依据要逐条对应查询过程里展示的那几张结果表。
+                  ...(isAskMode ? { tableResults: visibleTables } : {}),
                   ...(isAgentMode
                     ? {
                         tableResults: visibleTables,
@@ -1915,8 +1917,31 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 streaming={displayStatus === "streaming"}
                                 incomplete={displayStatus === "error" || displayStatus === "cancelled"}
                               />
-                              {answerPreamble ? (
-                                <p className="analysis-answer-preamble">{answerPreamble}</p>
+                              {/* 查询还可能继续追加，跑完再给出处，免得依据在读者眼前一条条变化 */}
+                              {answerPreamble && displayStatus !== "streaming" ? (
+                                <section
+                                  className="analysis-answer-preamble"
+                                  aria-labelledby={`${turn.id}-answer-basis`}
+                                >
+                                  <span className="analysis-answer-preamble__label" id={`${turn.id}-answer-basis`}>
+                                    查询依据
+                                  </span>
+                                  {answerPreamble.queries.length > 1 ? (
+                                    <ol className="analysis-answer-preamble__list">
+                                      {answerPreamble.queries.map((sentence) => (
+                                        <li key={sentence}>{sentence}</li>
+                                      ))}
+                                    </ol>
+                                  ) : (
+                                    answerPreamble.queries.map((sentence) => <p key={sentence}>{sentence}</p>)
+                                  )}
+                                  {answerPreamble.queryCount > answerPreamble.queries.length ? (
+                                    <p className="analysis-answer-preamble__more">
+                                      等 {answerPreamble.queryCount} 条查询
+                                    </p>
+                                  ) : null}
+                                  {answerPreamble.knowledge ? <p>{answerPreamble.knowledge}</p> : null}
+                                </section>
                               ) : null}
                               {answerText ? (
                                 <button

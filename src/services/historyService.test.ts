@@ -3,11 +3,43 @@ import {
   filterHistorySessionList,
   listHistorySessions,
   loadDataHubHistoryReplay,
-  resolveHistoryCategory
+  withRememberedHistoryKinds
 } from "./historyService";
+import {
+  readRememberedHistorySessionKinds,
+  rememberHistorySessionKind,
+  resolveHistorySessionKind
+} from "./historySessionKind";
 import { createDataHubAskTurn } from "./dataHubAskDataPresenter";
 import { projectDataHubExecutionEvents } from "./dataHubExecutionProjector";
 import { writeDataHubAuth, writeDataHubSpaceId } from "./dataHubSession";
+import type { DataHubStreamEvent } from "@/types/dataHub";
+import type { HistorySession } from "@/types/history";
+
+const HISTORY_KIND_KEY = "xingshu_history_session_kinds";
+
+/** 与后端 /sessions/list 一致：只有 id、标题与时间，没有 chatMode。 */
+function backendSession(id: number, sessionId: string, title: string) {
+  return {
+    id,
+    sessionId,
+    spaceId: 7,
+    userId: 1,
+    title,
+    createdAt: "2026-09-20T09:00:00",
+    updatedAt: "2026-09-20T10:00:00"
+  };
+}
+
+function subagentEvent(agentId: string, agentName: string): DataHubStreamEvent {
+  return {
+    type: "subagent_exposed",
+    sessionId: `child-${agentId}`,
+    parentSessionId: "root",
+    agentName,
+    content: { sessionId: `child-${agentId}`, agentId }
+  };
+}
 
 describe("historyService data-hub replay", () => {
   beforeEach(() => {
@@ -28,16 +60,50 @@ describe("historyService data-hub replay", () => {
       code: 200,
       message: "success",
       data: [
-        { id: 1, sessionId: "session-normal", chatMode: "ask", title: "经营分析" },
-        { id: 2, sessionId: "ask-table-1", title: "临时制表" },
-        { id: 3, sessionId: "writing-1", title: "智写助手" },
-        { id: 4, sessionId: "legacy-session", title: "旧会话" }
+        backendSession(1, "ask-data-1", "经营分析"),
+        backendSession(2, "ask-table-1", "临时制表"),
+        backendSession(3, "writing-1", "智写助手"),
+        backendSession(4, "session-legacy", "旧会话")
       ]
     }))));
 
     expect((await listHistorySessions()).map((session) => session.id)).toEqual([
-      "session-normal",
-      "legacy-session"
+      "ask-data-1",
+      "session-legacy"
+    ]);
+  });
+
+  it("classifies listed sessions by id prefix and local memory, never by title", async () => {
+    vi.stubEnv("MODE", "development");
+    localStorage.setItem(HISTORY_KIND_KEY, JSON.stringify({
+      "agent-4": { chatMode: "agent", categories: ["知识快查", "数据洞察"], updatedAt: 2 },
+      "session-opened": { chatMode: "rag", categories: ["知识快查"], updatedAt: 1 }
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      code: 200,
+      message: "success",
+      data: [
+        backendSession(1, "ask-data-1", "制度咨询"),
+        backendSession(2, "ask-knowledge-2", "销售数据分析"),
+        backendSession(3, "document-lookup-3", "经营报表"),
+        backendSession(4, "agent-4", "分析数据并核对制度"),
+        backendSession(5, "agent-5", "刚开始的编排"),
+        backendSession(6, "session-opened", "打开过的旧会话"),
+        backendSession(7, "session-legacy", "经营数据分析")
+      ]
+    }))));
+
+    const sessions = await listHistorySessions();
+
+    expect(sessions.map(({ id, chatMode, categories }) => ({ id, chatMode, categories }))).toEqual([
+      { id: "ask-data-1", chatMode: "ask", categories: ["数据洞察"] },
+      { id: "ask-knowledge-2", chatMode: "rag", categories: ["知识快查"] },
+      { id: "document-lookup-3", chatMode: "document_lookup", categories: ["文档处理"] },
+      { id: "agent-4", chatMode: "agent", categories: ["数据洞察", "知识快查"] },
+      { id: "agent-5", chatMode: "agent", categories: [] },
+      { id: "session-opened", chatMode: "rag", categories: ["知识快查"] },
+      // 标题里有「经营数据分析」也不猜，未知就是未知。
+      { id: "session-legacy", chatMode: undefined, categories: [] }
     ]);
   });
 
@@ -375,6 +441,8 @@ describe("historyService data-hub replay", () => {
     expect(
       createDataHubAskTurn(replay.question, replay.events, "done").assistantContent
     ).toBe("制度要求先完成审批。");
+    // 兜底模式只决定回放页面，没有事件证据就不记进历史分类。
+    expect(readRememberedHistorySessionKinds()["message-only-rag"]).toBeUndefined();
   });
 
   it("does not let child text suppress the persisted main assistant fallback", async () => {
@@ -547,41 +615,168 @@ describe("historyService data-hub replay", () => {
     expect(projection.mainSession.done?.adaptiveTeam).toBe(true);
     expect(projection.mainSession.citationDocuments).toEqual([]);
     expect(projection.subagentSessions[0]?.citationDocuments).toHaveLength(1);
+    // 回放页面仍按编排走，历史分类记的是编排实际调用的问知子智能体，而不是笼统的「查数据」。
+    expect(resolveHistorySessionKind({ sessionId: "agent-mode-history" })).toEqual({
+      chatMode: "agent",
+      categories: ["知识快查"]
+    });
   });
 });
 
-describe("resolveHistoryCategory", () => {
-  it("uses the backend chat mode before title heuristics", () => {
-    expect(resolveHistoryCategory("ask", "客户政策咨询")).toBe("数据洞察");
-    expect(resolveHistoryCategory("rag", "本月营收趋势")).toBe("知识快查");
-    expect(resolveHistoryCategory("document_lookup", "销售数据分析")).toBe("文档处理");
+describe("resolveHistorySessionKind", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it("prefers a backend chat mode once the list returns one", () => {
+    expect(resolveHistorySessionKind({ sessionId: "session-1", chatMode: "rag" }, {})).toEqual({
+      chatMode: "rag",
+      categories: ["知识快查"]
+    });
+    // 写作等非问数模式不是历史分类的依据，退回前缀判断。
+    expect(resolveHistorySessionKind({ sessionId: "ask-data-1", chatMode: "writing" }, {})).toEqual({
+      chatMode: "ask",
+      categories: ["数据洞察"]
+    });
+  });
+
+  it("reads single-mode sessions from the id prefix and orchestration from local memory", () => {
+    const remembered = {
+      "agent-2": { chatMode: "agent" as const, categories: ["数据洞察" as const, "文档处理" as const], updatedAt: 1 }
+    };
+
+    expect(resolveHistorySessionKind({ sessionId: "document-lookup-1" }, remembered).categories).toEqual(["文档处理"]);
+    expect(resolveHistorySessionKind({ sessionId: "agent-2" }, remembered).categories).toEqual(["数据洞察", "文档处理"]);
+    expect(resolveHistorySessionKind({ sessionId: "agent-3" }, remembered)).toEqual({ chatMode: "agent", categories: [] });
+    expect(resolveHistorySessionKind({ sessionId: "session-legacy" }, remembered)).toEqual({
+      chatMode: undefined,
+      categories: []
+    });
+  });
+});
+
+describe("rememberHistorySessionKind", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it("collects the subagents an orchestration actually used across runs", () => {
+    rememberHistorySessionKind("agent-1", [{ chatMode: "agent", events: [
+      subagentEvent("datasource-selection", "数据源选择智能体"),
+      subagentEvent("ask-knowledge", "问知智能体")
+    ] }]);
+    rememberHistorySessionKind("agent-1", [{ chatMode: "agent", events: [subagentEvent("ask-data", "问数智能体")] }]);
+
+    expect(readRememberedHistorySessionKinds()["agent-1"]).toMatchObject({
+      chatMode: "agent",
+      categories: ["数据洞察", "知识快查"]
+    });
+  });
+
+  it("only records sessions whose kind the list cannot tell by itself", () => {
+    const askEvents = [{ type: "table", sessionId: "x", data: {} }];
+    rememberHistorySessionKind("ask-data-1", [{ events: askEvents }]);
+    rememberHistorySessionKind("ask-table-1", [{ events: askEvents }]);
+    rememberHistorySessionKind("writing-1", [{ events: askEvents }]);
+    rememberHistorySessionKind("agent-empty", [{ chatMode: "agent", events: [] }]);
+    rememberHistorySessionKind("session-legacy", [{ events: askEvents }]);
+
+    expect(Object.keys(readRememberedHistorySessionKinds()).sort()).toEqual(["agent-empty", "session-legacy"]);
+    expect(readRememberedHistorySessionKinds()["session-legacy"]).toMatchObject({
+      chatMode: "ask",
+      categories: ["数据洞察"]
+    });
+  });
+
+  it("keeps only the most recent sessions", () => {
+    localStorage.setItem(HISTORY_KIND_KEY, JSON.stringify(Object.fromEntries(
+      Array.from({ length: 300 }, (_, index) => [
+        `agent-old-${index}`,
+        { chatMode: "agent", categories: ["数据洞察"], updatedAt: index + 1 }
+      ])
+    )));
+
+    rememberHistorySessionKind("agent-new", [{ chatMode: "agent", events: [subagentEvent("ask-data", "问数智能体")] }]);
+    const remembered = readRememberedHistorySessionKinds();
+
+    expect(Object.keys(remembered)).toHaveLength(300);
+    expect(remembered["agent-new"]).toBeDefined();
+    expect(remembered["agent-old-0"]).toBeUndefined();
+    expect(remembered["agent-old-1"]).toBeDefined();
+  });
+
+  it("treats broken or unavailable storage as unknown instead of failing", () => {
+    localStorage.setItem(HISTORY_KIND_KEY, "{not json");
+    expect(readRememberedHistorySessionKinds()).toEqual({});
+
+    localStorage.setItem(HISTORY_KIND_KEY, JSON.stringify({
+      "agent-1": { chatMode: "agent", categories: ["未知类别", "知识快查"], updatedAt: 1 },
+      "agent-2": { categories: ["编造"] }
+    }));
+    expect(readRememberedHistorySessionKinds()).toEqual({
+      "agent-1": { chatMode: "agent", categories: ["知识快查"], updatedAt: 1 }
+    });
+
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    expect(() => rememberHistorySessionKind("agent-3", [{
+      chatMode: "agent",
+      events: [subagentEvent("ask-data", "问数智能体")]
+    }])).not.toThrow();
+    expect(readRememberedHistorySessionKinds()).toEqual({});
+  });
+});
+
+describe("withRememberedHistoryKinds", () => {
+  afterEach(() => localStorage.clear());
+
+  it("fills in kinds remembered after the list was cached, leaving known and mock sessions alone", () => {
+    const sessions: HistorySession[] = [
+      { id: "agent-1", sessionId: "agent-1", title: "编排", summary: "", categories: [], chatMode: "agent", updatedAt: "-", source: "data-hub" },
+      { id: "ask-data-2", sessionId: "ask-data-2", title: "问数", summary: "", categories: ["数据洞察"], chatMode: "ask", updatedAt: "-", source: "data-hub" },
+      { id: "session-3", sessionId: "session-3", title: "旧会话", summary: "", categories: [], updatedAt: "-", source: "data-hub" },
+      { id: "mock", title: "演示", summary: "", categories: [], updatedAt: "-", source: "mock" }
+    ];
+    rememberHistorySessionKind("agent-1", [{ chatMode: "agent", events: [subagentEvent("document-lookup", "找文档智能体")] }]);
+
+    const result = withRememberedHistoryKinds(sessions);
+
+    expect(result[0]).toMatchObject({ chatMode: "agent", categories: ["文档处理"] });
+    expect(result[1]).toBe(sessions[1]);
+    expect(result[2]).toBe(sessions[2]);
+    expect(result[3]).toBe(sessions[3]);
   });
 });
 
 describe("filterHistorySessionList", () => {
-  it("filters an already-loaded session list without issuing another request", () => {
-    const sessions = [
-      {
-        id: "knowledge",
-        title: "制度查询",
-        summary: "查询企业制度",
-        category: "知识快查" as const,
-        updatedAt: "2026-07-24 10:00"
-      },
-      {
-        id: "insight",
-        title: "经营分析",
-        summary: "查看经营趋势",
-        category: "数据洞察" as const,
-        updatedAt: "2026-07-24 09:00"
-      }
-    ];
+  const session = (id: string, title: string, categories: HistorySession["categories"]): HistorySession => ({
+    id,
+    title,
+    summary: "",
+    categories,
+    updatedAt: "2026-07-24 10:00"
+  });
+  const sessions = [
+    session("knowledge", "制度查询", ["知识快查"]),
+    session("insight", "经营分析", ["数据洞察"]),
+    session("mixed", "经营数据与制度核对", ["数据洞察", "知识快查"]),
+    session("unknown", "经营旧会话", [])
+  ];
+  const ids = (filter: Parameters<typeof filterHistorySessionList>[1]) =>
+    filterHistorySessionList(sessions, filter).map((item) => item.id);
 
-    expect(
-      filterHistorySessionList(sessions, {
-        keyword: "经营",
-        category: "数据洞察"
-      }).map((session) => session.id)
-    ).toEqual(["insight"]);
+  it("filters an already-loaded session list without issuing another request", () => {
+    expect(ids({ keyword: "经营", category: "数据洞察" })).toEqual(["insight", "mixed"]);
+  });
+
+  it("matches multi-capability sessions under every tab they used and keeps unknown sessions in 全部 only", () => {
+    expect(ids({ category: "知识快查" })).toEqual(["knowledge", "mixed"]);
+    expect(ids({ category: "文档处理" })).toEqual([]);
+    expect(ids({ category: "全部" })).toEqual(["knowledge", "insight", "mixed", "unknown"]);
   });
 });

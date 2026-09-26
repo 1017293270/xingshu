@@ -10,7 +10,7 @@ describe("domain services", () => {
     expect(sessions[0]).toMatchObject({
       id: "expense-policy",
       title: "员工报销流程说明",
-      category: "知识快查"
+      categories: ["知识快查"]
     });
   });
 
