@@ -3,7 +3,9 @@ import { projectDataHubExecutionEvents } from "./dataHubExecutionProjector";
 import {
   getDataHubAskTableResults,
   getDataHubChildAnswerBlocks,
-  getDataHubQueryAssetTargets
+  getDataHubQueryAssetAnswerText,
+  getDataHubQueryAssetTargets,
+  getDataHubSessionAnswerText
 } from "./dataHubQueryAssetTargetService";
 
 describe("dataHubQueryAssetTargetService", () => {
@@ -349,4 +351,71 @@ it("cleans separate child model-call envelopes without retaining the raw block",
     { type: "done", sessionId: "child", parentSessionId: "root", content: {} }
   ], { mainSessionId: "root" });
   expect(getDataHubChildAnswerBlocks(projection).map((block) => block.content).join("")).toBe("先查询。正式答案");
+});
+
+describe("query asset answers", () => {
+  function twoChildResults() {
+    const child = (sessionId: string, askRunId: string, question: string, answer: string) => [
+      { type: "subagent_exposed", sessionId, parentSessionId: "root", chatId: "chat", content: { sessionId, agentId: "ask-data" } },
+      { type: "table", sessionId, parentSessionId: "root", chatId: "chat", content: { columns: ["数值"], rows: [[1]] } },
+      { type: "ask_artifact", sessionId, parentSessionId: "root", chatId: "chat",
+        content: { askRunId, resolvedQuestion: question, canFavorite: true } },
+      { type: "text", sessionId, parentSessionId: "root", chatId: "chat", content: answer },
+      { type: "done", sessionId, parentSessionId: "root", chatId: "chat", content: { mode: "ask" } }
+    ];
+    return projectDataHubExecutionEvents([
+      { type: "agent_start", sessionId: "root", chatId: "chat" },
+      ...child("child-total", "run-total", "统计全年合同总额", "全年合同总额为 1,280 万元。"),
+      ...child("child-rank", "run-rank", "按部门排行合同额", "合同额排行：销售部 520 万元，工程部 410 万元。"),
+      { type: "text", sessionId: "root", chatId: "chat", content: "综合来看，全年合同 1,280 万元，销售部最高。" },
+      { type: "done", sessionId: "root", chatId: "chat", content: { mode: "agent", adaptiveTeam: true }, finished: true }
+    ], { mainSessionId: "root", globalSessionId: "root", chatId: "chat" });
+  }
+
+  it("returns one child's own conclusion by session id", () => {
+    const projection = twoChildResults();
+    expect(getDataHubSessionAnswerText(projection, "child-total")).toBe("全年合同总额为 1,280 万元。");
+    expect(getDataHubSessionAnswerText(projection, "child-rank")).toBe("合同额排行：销售部 520 万元，工程部 410 万元。");
+    expect(getDataHubSessionAnswerText(projection, "root")).toBe("");
+    expect(getDataHubSessionAnswerText(projection, "missing")).toBe("");
+    expect(getDataHubChildAnswerBlocks(projection).map((block) => block.content)).toEqual([
+      "全年合同总额为 1,280 万元。",
+      "合同额排行：销售部 520 万元，工程部 410 万元。"
+    ]);
+  });
+
+  it("gives each orchestration target its own child conclusion", () => {
+    const projection = twoChildResults();
+    const turnAnswer = "综合来看，全年合同 1,280 万元，销售部最高。";
+    const targets = getDataHubQueryAssetTargets(projection, "合同情况");
+
+    expect(targets.map((target) => target.sessionId)).toEqual(["child-total", "child-rank"]);
+    expect(targets.map((target) => getDataHubQueryAssetAnswerText(projection, target, turnAnswer))).toEqual([
+      "全年合同总额为 1,280 万元。",
+      "合同额排行：销售部 520 万元，工程部 410 万元。"
+    ]);
+  });
+
+  it("uses the turn answer for a single ask session target", () => {
+    const projection = projectDataHubExecutionEvents([
+      { type: "table", sessionId: "ask-root", chatId: "chat", content: { columns: ["总额"], rows: [[1280]] } },
+      { type: "ask_artifact", sessionId: "ask-root", chatId: "chat",
+        content: { askRunId: "run-root", resolvedQuestion: "统计全年合同总额", canFavorite: true } },
+      { type: "done", sessionId: "ask-root", chatId: "chat", content: { summary: "全年合同总额为 1,280 万元。" }, finished: true }
+    ], { mainSessionId: "ask-root", globalSessionId: "ask-root", chatId: "chat" });
+    const [target] = getDataHubQueryAssetTargets(projection, "全年合同总额", { mainSessionIsAskData: true });
+
+    expect(target.sessionId).toBe("ask-root");
+    expect(getDataHubQueryAssetAnswerText(projection, target, "  全年合同总额为 1,280 万元。\n")).toBe(
+      "全年合同总额为 1,280 万元。"
+    );
+  });
+
+  it("falls back to the turn answer when the child target has no conclusion", () => {
+    const projection = twoChildResults();
+    projection.subagentSessions[0].status = "error";
+
+    expect(getDataHubQueryAssetAnswerText(projection, { sessionId: "child-total" }, "本轮回答")).toBe("本轮回答");
+    expect(getDataHubQueryAssetAnswerText(projection, {}, "本轮回答")).toBe("本轮回答");
+  });
 });

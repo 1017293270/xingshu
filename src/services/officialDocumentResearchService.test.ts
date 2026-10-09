@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { streamDataHubAskData, type DataHubAskDataStreamHandlers } from "./dataHubAskDataService";
-import { ensureAskArtifact, favoriteAskArtifact } from "./queryAssetService";
+import { attachQueryAssetAnswer, ensureAskArtifact, favoriteAskArtifact } from "./queryAssetService";
 import { executeOfficialDocumentResearch, executeOfficialDocumentResearchPlan } from "./officialDocumentResearchService";
 import type { OfficialDocumentWritingLogicPlan } from "@/types/officialDocument";
 
 vi.mock("./dataHubAskDataService", async (actual) => ({
   ...await actual<typeof import("./dataHubAskDataService")>(), streamDataHubAskData: vi.fn()
 }));
-vi.mock("./queryAssetService", () => ({ ensureAskArtifact: vi.fn(), favoriteAskArtifact: vi.fn(), previewQueryAsset: vi.fn() }));
+vi.mock("./queryAssetService", () => ({
+  attachQueryAssetAnswer: vi.fn(async (asset: unknown) => asset),
+  ensureAskArtifact: vi.fn(),
+  favoriteAskArtifact: vi.fn(),
+  previewQueryAsset: vi.fn()
+}));
 const stream = vi.mocked(streamDataHubAskData);
 const need: OfficialDocumentWritingLogicPlan["researchNeeds"][number] = {
   id: "need-1", sectionId: "sec-1", kind: "ASK_KNOWLEDGE", question: "查找报销制度", reason: "说明口径", required: true, preferredOutput: "FACT"
@@ -143,4 +148,26 @@ it("records zero frozen rows as NO_RESULT and continues the next research task",
   const results = await pending;
   expect(results[0]).toMatchObject({ status: "NO_RESULT", summary: "查询执行成功，但未返回数据行", table: { rows: [] } });
   expect(results[1].status).toBe("SUCCESS");
+});
+
+it("stores the research answer on the favorite and keeps freezing the from-ask asset", async () => {
+  const { previewQueryAsset } = await import("./queryAssetService");
+  vi.mocked(ensureAskArtifact).mockResolvedValue({ canFavorite: true, askRunId: "run-1", resolvedQuestion: "收入" });
+  vi.mocked(favoriteAskArtifact).mockResolvedValue({ id: "asset-1", stableVersionId: "v1" } as never);
+  vi.mocked(attachQueryAssetAnswer).mockResolvedValueOnce({ id: "asset-1" } as never);
+  vi.mocked(previewQueryAsset).mockResolvedValue({ id: "execution-2", status: "SUCCESS",
+    outputs: [{ outputKey: "out", columns: [{ key: "revenue" }], rows: [{ revenue: 120 }], totalRows: 1 }] } as never);
+  const pending = executeOfficialDocumentResearch({ ...need, kind: "ASK_DATA" }, false);
+  finish("收入100万元");
+  await pending;
+  expect(attachQueryAssetAnswer).toHaveBeenCalledExactlyOnceWith({ id: "asset-1", stableVersionId: "v1" }, "收入100万元");
+  expect(previewQueryAsset).toHaveBeenCalledWith("asset-1", { versionId: "v1", force: true });
+});
+
+it("does not store an answer for knowledge research, which creates no favorite", async () => {
+  const task = executeOfficialDocumentResearch(need, false);
+  finish("报销须留存凭证");
+  await task;
+  expect(favoriteAskArtifact).not.toHaveBeenCalled();
+  expect(attachQueryAssetAnswer).not.toHaveBeenCalled();
 });

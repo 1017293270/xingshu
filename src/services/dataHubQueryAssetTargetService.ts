@@ -177,44 +177,76 @@ function readExecutionBlockText(content: unknown) {
   return "";
 }
 
+/** 一个已成功完成的子会话给出的结论；未完成、失败或没有结论时为空。 */
+function getSessionAnswerBlocks(session: DataHubExecutionSession): DataHubContentBlock[] {
+  if (session.status !== "done" || session.error || session.done?.failed === true) {
+    return [];
+  }
+  const sessionBlocks: DataHubContentBlock[] = [];
+  for (const card of session.cards) {
+    for (const block of card.blocks) {
+      if (block.isThinking || (block.type !== "text" && block.type !== "content")) {
+        continue;
+      }
+      const content = readExecutionBlockText(block.content);
+      if (!content.trim()) {
+        continue;
+      }
+      sessionBlocks.push({
+        content,
+        replyId: block.replyId,
+        modelCallIndex: block.modelCallIndex
+      });
+    }
+  }
+  const streamedBlocks = dedupeDataHubAnswerBlocks(cleanDataHubAnswerBlocks(sessionBlocks).blocks);
+  const streamedText = streamedBlocks.map((block) => block.content).join("");
+  const answer = resolveDataHubFinalAnswer(session.done?.summary, streamedText, false, {
+    keepRicherStreamedAnswer: session.done?.mode === "agent" || session.done?.adaptiveTeam === true
+  });
+  if (!answer) {
+    return [];
+  }
+  return answer === streamedText ? streamedBlocks : [{ content: answer }];
+}
+
+/** 按会话 id 取某一个子会话自己的结论文本；找不到该子会话或它没有结论时返回空串。 */
+export function getDataHubSessionAnswerText(
+  projection: DataHubExecutionProjection,
+  sessionId: string
+): string {
+  const session = projection.subagentSessions.find((item) => item.sessionId === sessionId);
+  if (!session) {
+    return "";
+  }
+  return dedupeDataHubAnswerBlocks(getSessionAnswerBlocks(session))
+    .map((block) => block.content)
+    .join("")
+    .trim();
+}
+
 export function getDataHubChildAnswerBlocks(
   projection: DataHubExecutionProjection
 ): DataHubContentBlock[] {
-  const blocks: DataHubContentBlock[] = [];
-
-  for (const session of projection.subagentSessions) {
-    if (session.status !== "done" || session.error || session.done?.failed === true) {
-      continue;
-    }
-    const sessionBlocks: DataHubContentBlock[] = [];
-    for (const card of session.cards) {
-      for (const block of card.blocks) {
-        if (block.isThinking || (block.type !== "text" && block.type !== "content")) {
-          continue;
-        }
-        const content = readExecutionBlockText(block.content);
-        if (!content.trim()) {
-          continue;
-        }
-        sessionBlocks.push({
-          content,
-          replyId: block.replyId,
-          modelCallIndex: block.modelCallIndex
-        });
-      }
-    }
-    const streamedBlocks = dedupeDataHubAnswerBlocks(cleanDataHubAnswerBlocks(sessionBlocks).blocks);
-    const streamedText = streamedBlocks.map((block) => block.content).join("");
-    const answer = resolveDataHubFinalAnswer(session.done?.summary, streamedText, false, {
-      keepRicherStreamedAnswer: session.done?.mode === "agent" || session.done?.adaptiveTeam === true
-    });
-    if (answer) {
-      blocks.push(...(answer === streamedText ? streamedBlocks : [{ content: answer }]));
-    }
-  }
+  const blocks = projection.subagentSessions.flatMap(getSessionAnswerBlocks);
 
   // 子会话完成时会把去掉思考标签的结论整段重发一遍，同一段话在这里会收到两份。
   return dedupeDataHubAnswerBlocks(blocks);
+}
+
+/**
+ * 一条收藏对应的回答：目标是某个子会话且它有结论时取该子会话的结论，
+ * 否则取这一轮用户看到的回答（turnAnswerText）。
+ */
+export function getDataHubQueryAssetAnswerText(
+  projection: DataHubExecutionProjection,
+  target: Pick<DataHubQueryAssetTarget, "sessionId">,
+  turnAnswerText: string
+): string {
+  const childAnswer = target.sessionId
+    ? getDataHubSessionAnswerText(projection, target.sessionId)
+    : "";
+  return childAnswer || turnAnswerText.trim();
 }
 
 function createTarget(

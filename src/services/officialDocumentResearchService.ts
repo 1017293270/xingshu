@@ -13,6 +13,7 @@ import {
 } from "@/services/dataHubAskDataPresenter";
 import { formatDataHubColumnTitle } from "@/services/dataHubFormat";
 import {
+  attachQueryAssetAnswer,
   ensureAskArtifact,
   favoriteAskArtifact,
   previewQueryAsset
@@ -214,6 +215,9 @@ export async function executeOfficialDocumentResearch(
   checkResearchAbort(signal);
   if (!artifact.canFavorite) throw new Error("问数未形成可冻结的结构化查询");
   const asset = await awaitResearch(favoriteAskArtifact(artifact, need.question), signal);
+  checkResearchAbort(signal);
+  // 调研建的收藏同样进看板收藏列表，存下这条问题的回答；存不上不影响调研，后续仍用 from-ask 的资产。
+  await awaitResearch(attachQueryAssetAnswer(asset, summary), signal);
   checkResearchAbort(signal);
   const versionId = asset.stableVersionId || asset.stableVersion?.id;
   if (!versionId) throw new Error("问数资产没有稳定版本");

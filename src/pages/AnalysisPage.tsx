@@ -67,11 +67,16 @@ import {
 import {
   getDataHubAskTableResults,
   getDataHubChildAnswerBlocks,
+  getDataHubQueryAssetAnswerText,
   getDataHubQueryAssetTargets,
   type DataHubQueryAssetTarget
 } from "@/services/dataHubQueryAssetTargetService";
 import { materializeAskArtifact } from "@/services/dataHubQueryAssetMaterializationService";
-import { ensureAskArtifact, favoriteAskArtifact } from "@/services/queryAssetService";
+import {
+  attachQueryAssetAnswer,
+  ensureAskArtifact,
+  favoriteAskArtifact
+} from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
 import { buildDataHubResultSummary } from "@/services/dataHubResultSummary";
@@ -1205,7 +1210,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     turn: DataHubAskTurn,
     target: DataHubQueryAssetTarget,
     allowRootHistoryFallback: boolean,
-    materializationQuestion?: string
+    materializationQuestion?: string,
+    answerText?: string
   ) => {
     const existing = favoriteStates[stateKey]?.asset;
     if (existing) return existing;
@@ -1259,10 +1265,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       }
     }
     if (!artifact?.canFavorite) throw new Error("该问数没有可复用的结构化查询，请重新问数后再收藏");
-    const asset = await favoriteAskArtifact(
+    const favoritedAsset = await favoriteAskArtifact(
       artifact,
       artifact.resolvedQuestion || target.label || turn.question
     );
+    // 看板展示的是这条问题的答案，收藏时把用户看到的回答一并存下；存不上时收藏照常成功。
+    const asset = await attachQueryAssetAnswer(favoritedAsset, answerText);
     setFavoriteStates((current) => ({ ...current, [stateKey]: { status: "saved", asset } }));
     return asset;
   };
@@ -1272,7 +1280,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     turn: DataHubAskTurn,
     target: DataHubQueryAssetTarget,
     allowRootHistoryFallback: boolean,
-    materializationQuestion?: string
+    materializationQuestion?: string,
+    answerText?: string
   ) => {
     const stateKey = `${turnId}::${target.key}`;
     setFavoriteStates((current) => ({
@@ -1285,7 +1294,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         turn,
         target,
         allowRootHistoryFallback,
-        materializationQuestion
+        materializationQuestion,
+        answerText
       );
       setFavoriteStates((current) => ({ ...current, [stateKey]: { status: "saved", asset } }));
       setWorkflowStatus(`已收藏问数「${asset.name}」，可直接加入看板`);
@@ -1830,7 +1840,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 turnAsk,
                                 target,
                                 queryAssetTargets.length === 1,
-                                materializationQuestion
+                                materializationQuestion,
+                                getDataHubQueryAssetAnswerText(executionProjection, target, answerText)
                               )
                             }
                             onOpenDashboard={(asset) =>

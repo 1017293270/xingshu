@@ -140,6 +140,7 @@ describe("workflow page actions", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("运行阶段先显示思考占位，真实执行事件到达后显示查询，结果等待完成", () => {
@@ -1529,6 +1530,216 @@ describe("workflow page actions", () => {
     expect(
       await screen.findByRole("button", { name: "已收藏问数" })
     ).toBeDisabled();
+  });
+
+  describe("saving the answer with a favorite", () => {
+    const rankAsset = {
+      id: "asset-rank",
+      name: "各项目咨询数排名前5名",
+      originalQuestion: "各项目咨询数排名前5名",
+      resolvedQuestion: "各项目咨询数排名前5名",
+      ownerUserId: 1,
+      visibility: "PRIVATE" as const,
+      stableVersionId: "version-rank",
+      status: "ACTIVE" as const,
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z"
+    };
+
+    function seedAskRankTurn() {
+      const store = useUiStore.getState();
+      const runId = store.startAskDataRun("各项目咨询数排名前5名", null);
+      store.appendAskDataEvent(runId, {
+        type: "ask_artifact",
+        sessionId: "session-rank",
+        chatId: "chat-rank",
+        data: { askRunId: "ask-run-rank", resolvedQuestion: rankAsset.resolvedQuestion, canFavorite: true }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "table",
+        sessionId: "session-rank",
+        chatId: "chat-rank",
+        data: {
+          columns: [
+            { name: "projectName", title: "项目名称" },
+            { name: "count", title: "咨询数", type: "number" }
+          ],
+          rows: [{ projectName: "演示账号", count: 676 }],
+          totalRows: 1
+        }
+      });
+      store.appendAskDataEvent(runId, {
+        type: "done",
+        sessionId: "session-rank",
+        chatId: "chat-rank",
+        data: { summary: "咨询数排名第一的是演示账号，共 676 次。" }
+      });
+      store.completeAskDataRun(runId);
+    }
+
+    function answerRequests(fetchMock: ReturnType<typeof vi.fn>) {
+      return fetchMock.mock.calls
+        .filter(([url]) => String(url).endsWith("/answer"))
+        .map(([url, init]) => ({
+          url: String(url),
+          body: JSON.parse(String((init as RequestInit).body)) as unknown
+        }));
+    }
+
+    it("stores the answer the user saw on a single ask favorite", async () => {
+      const user = userEvent.setup();
+      seedAskRankTurn();
+      const favoriteSpy = vi.spyOn(queryAssetService, "favoriteAskArtifact").mockResolvedValue(rankAsset);
+      const fetchMock = vi.fn(async () =>
+        new Response(JSON.stringify({
+          code: 200,
+          message: "success",
+          data: { ...rankAsset, answerText: "咨询数排名第一的是演示账号，共 676 次。" }
+        }))
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderPageWithLocation(<AnalysisPage mode="ask" />);
+      await user.click(screen.getByRole("button", { name: "收藏问数" }));
+
+      expect(await screen.findByRole("button", { name: "已收藏问数" })).toBeDisabled();
+      expect(favoriteSpy).toHaveBeenCalledWith(
+        { askRunId: "ask-run-rank", resolvedQuestion: rankAsset.resolvedQuestion, canFavorite: true },
+        rankAsset.resolvedQuestion
+      );
+      expect(answerRequests(fetchMock)).toEqual([
+        {
+          url: "/api/analytics/query-assets/asset-rank/answer",
+          body: { answerText: "咨询数排名第一的是演示账号，共 676 次。" }
+        }
+      ]);
+    });
+
+    it.each([
+      ["an older backend without the answer endpoint", async () =>
+        new Response(JSON.stringify({ message: "Not Found" }), { status: 404, statusText: "Not Found" })],
+      ["an answer request that throws", async () => {
+        throw new TypeError("Failed to fetch");
+      }],
+      ["an answer response without an asset", async () =>
+        new Response(JSON.stringify({ code: 200, message: "success", data: null }))]
+    ])("still completes the favorite for %s", async (_label, respond) => {
+      const user = userEvent.setup();
+      seedAskRankTurn();
+      vi.spyOn(queryAssetService, "favoriteAskArtifact").mockResolvedValue(rankAsset);
+      const fetchMock = vi.fn(respond);
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderPageWithLocation(<AnalysisPage mode="ask" />);
+      await user.click(screen.getByRole("button", { name: "收藏问数" }));
+
+      expect(await screen.findByRole("button", { name: "已收藏问数" })).toBeDisabled();
+      expect(answerRequests(fetchMock)).toHaveLength(1);
+      expect(screen.getAllByText(/已收藏问数「各项目咨询数排名前5名」，可直接加入看板/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Not Found|Failed to fetch|收藏问数失败/)).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "加入看板" }));
+      expect(screen.getByRole("status", { name: "当前测试路由" })).toHaveTextContent(
+        "/dashboard-editor?source=favorites&asset=asset-rank&returnTo=%2Fask-agent"
+      );
+    });
+
+    it("stores each orchestration child's own conclusion on its favorite", async () => {
+      const user = userEvent.setup();
+      const store = useUiStore.getState();
+      const runId = store.startAskDataRun("合同总额和部门排行", null, "agent");
+      const turn = useUiStore.getState().analysisTurns.find((item) => item.id === runId)!;
+      const rootSessionId = turn.sessionId!;
+      const children = [
+        {
+          sessionId: "child-contract-total",
+          label: "合同总额问数",
+          artifact: { askRunId: "ask-run-contract-total", resolvedQuestion: "统计合同总额", canFavorite: true },
+          answer: "合同总额为 1,280 万元。"
+        },
+        {
+          sessionId: "child-contract-rank",
+          label: "部门排行问数",
+          artifact: { askRunId: "ask-run-contract-rank", resolvedQuestion: "按部门排行合同额", canFavorite: true },
+          answer: "合同额排行：销售部 520 万元，工程部 410 万元。"
+        }
+      ];
+      vi.spyOn(queryAssetService, "favoriteAskArtifact").mockImplementation(async (artifact, name) => ({
+        ...rankAsset,
+        id: `asset-${artifact.askRunId}`,
+        name: name || artifact.resolvedQuestion,
+        resolvedQuestion: artifact.resolvedQuestion
+      }));
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 200, message: "success", data: null })));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const childEvent = (child: (typeof children)[number]) => ({
+        agentName: child.label,
+        sessionId: child.sessionId,
+        globalSessionId: rootSessionId,
+        parentSessionId: rootSessionId,
+        chatId: turn.chatId
+      });
+      store.appendAskDataEvent(runId, {
+        type: "agent_start",
+        agentName: "编排智能体",
+        sessionId: rootSessionId,
+        globalSessionId: rootSessionId,
+        chatId: turn.chatId
+      });
+      for (const child of children) {
+        store.appendAskDataEvent(runId, {
+          type: "subagent_exposed",
+          ...childEvent(child),
+          content: { sessionId: child.sessionId, subagentId: `subagent-${child.sessionId}`, label: child.label }
+        });
+        store.appendAskDataEvent(runId, {
+          type: "table",
+          ...childEvent(child),
+          content: { columns: ["名称", "金额"], rows: [[child.label, 100]], totalRows: 1 }
+        });
+        store.appendAskDataEvent(runId, { type: "ask_artifact", ...childEvent(child), content: child.artifact });
+        store.appendAskDataEvent(runId, { type: "text", ...childEvent(child), content: child.answer });
+        store.appendAskDataEvent(runId, { type: "done", ...childEvent(child), content: { mode: "ask" } });
+      }
+      store.appendAskDataEvent(runId, {
+        type: "text",
+        agentName: "编排智能体",
+        sessionId: rootSessionId,
+        globalSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: "综合来看，全年合同 1,280 万元，销售部最高。"
+      });
+      store.appendAskDataEvent(runId, {
+        type: "done",
+        agentName: "编排智能体",
+        sessionId: rootSessionId,
+        globalSessionId: rootSessionId,
+        chatId: turn.chatId,
+        content: { mode: "agent", adaptiveTeam: true },
+        finished: true
+      });
+      store.completeAskDataRun(runId);
+
+      renderPage(<AnalysisPage mode="agent" />);
+
+      await user.click(screen.getByRole("button", { name: "收藏数据结果（2）" }));
+      await user.click(screen.getByRole("menuitem", { name: "收藏：按部门排行合同额" }));
+      await waitFor(() => expect(answerRequests(fetchMock)).toHaveLength(1));
+      await user.click(screen.getByRole("button", { name: "收藏数据结果（2）" }));
+      await user.click(screen.getByRole("menuitem", { name: "收藏：统计合同总额" }));
+      await waitFor(() => expect(answerRequests(fetchMock)).toHaveLength(2));
+
+      expect(answerRequests(fetchMock)).toEqual([
+        {
+          url: "/api/analytics/query-assets/asset-ask-run-contract-rank/answer",
+          body: { answerText: "合同额排行：销售部 520 万元，工程部 410 万元。" }
+        },
+        {
+          url: "/api/analytics/query-assets/asset-ask-run-contract-total/answer",
+          body: { answerText: "合同总额为 1,280 万元。" }
+        }
+      ]);
+    });
   });
 
   it("shows a completed query phase without exposing internal process details", () => {
