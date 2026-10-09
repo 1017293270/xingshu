@@ -442,6 +442,10 @@ test("a selected favorite result adds one chart and survives save/reload", async
     fullPage: true
   });
 
+  // 打开编辑器、加组件都不落库，第一次点保存才建出这块看板
+  expect(fixture.getRecord()).toBeNull();
+  expect(new URL(page.url()).searchParams.get("draft")).toBeNull();
+
   const titleField = page.locator(".property-field").filter({ hasText: "标题" }).locator("input");
   await titleField.fill("经营收入月度趋势");
   await page.getByRole("button", { name: "保存", exact: true }).click();
@@ -449,6 +453,11 @@ test("a selected favorite result adds one chart and survives save/reload", async
 
   const stored = fixture.getRecord();
   expect(stored).not.toBeNull();
+  expect(stored!.revision).toBe(1);
+  const savedParams = new URL(page.url()).searchParams;
+  expect(savedParams.get("draft")).toBe(stored!.id);
+  expect(savedParams.get("source")).toBe("favorites");
+  expect(savedParams.get("asset")).toBe(asset.id);
   expect(stored!.schema.widgets).toHaveLength(1);
   expect(Object.values(stored!.schema.modules ?? {})).toHaveLength(1);
   expect(Object.values(stored!.schema.modules ?? {})[0]?.widgetIds).toEqual([

@@ -2350,14 +2350,11 @@ test("agent mode shows real orchestration events and nested child-agent sessions
 
   await page.getByRole("button", { name: "加入看板" }).click();
   await expect(page).toHaveURL(/\/dashboard-editor\?/);
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("draft"))
-    .not.toBeNull();
   const editorUrl = new URL(page.url());
   expect(editorUrl.searchParams.get("source")).toBe("favorites");
   expect(editorUrl.searchParams.get("asset")).toBe("asset-playwright-revenue");
   expect(editorUrl.searchParams.get("returnTo")).toBe("/ask-agent");
-  expect(editorUrl.searchParams.get("draft")).toBeTruthy();
+  expect(editorUrl.searchParams.get("draft")).toBeNull();
   await expect(page.getByRole("complementary", { name: "组件库" }).getByRole("button", { name: "收藏问数", exact: true })).toBeVisible();
   await expect(page.locator(".query-asset-panel__list > button.is-active")).toContainText(
     "统计本月收入"
