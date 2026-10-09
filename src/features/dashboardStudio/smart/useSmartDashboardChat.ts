@@ -7,6 +7,7 @@ import {
 import {
   dashboardAnswerCandidates,
   dashboardAnswerIntent,
+  dashboardAnswerMetric,
   orderMetricsByQuestion
 } from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
 import { cleanDashboardQueryExecution } from "@/features/dashboardStudio/core/dashboardColumnLabels";
@@ -143,7 +144,9 @@ export function buildLocalDesignSpec(
     for (const output of dashboardAnswerCandidates(asset, execution.outputs).slice(0, 1)) {
       const ref = `${asset.id}:${output.outputKey}`;
       const base = { assetId: asset.id, outputKey: output.outputKey };
-      const metrics = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows));
+      // 收藏带着回答原文时，回答引用的那一列排第一，回答的数是列合计时指标卡按列求和。
+      const answer = dashboardAnswerMetric(asset, execution.outputs, output.outputKey);
+      const metrics = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows), answer);
       const metric = metrics[0];
       const time = output.columns.find((column) => classifyColumn(column, output.rows) === "time");
       const dimension = pickDimension(output.columns, output.rows);
@@ -188,6 +191,11 @@ export function buildLocalDesignSpec(
       }
       if (shape === "scalar") {
         kpis.push({ widget: kpi("first"), priority: metricColumnPriority(metric) });
+        continue;
+      }
+      // 先查明细、回答里自己加总：答案就是这一列的合计，一张按列求和的指标卡即可，明细不上板。
+      if (answer?.valueMode === "sum" && answer.metricKey === metric.key) {
+        kpis.push({ widget: kpi("sum", { qualifier: "合计" }), priority: metricColumnPriority(metric) });
         continue;
       }
       // 真正的时间序列每行一个时间点；八十行合同挤在三个年度上不是趋势，是一张明细表。

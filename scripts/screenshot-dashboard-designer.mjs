@@ -256,7 +256,31 @@ async function pickFavorite(name) {
   console.log(`「${name}」默认 ${await outputSelect.inputValue()}：\n  ${options.map((text) => text.trim()).join("\n  ")}`);
 }
 
+/** 收藏时的回答：列表每项一行摘要，详情区最多三行、完整原文在 title；左栏不许出现横向溢出。 */
+async function captureAnswerPanel(name) {
+  const panel = feedbackPage.locator(".query-asset-panel");
+  await panel.screenshot({ path: `${dir}/${name}.png` });
+  const report = await panel.evaluate((node) => {
+    const browser = node.querySelector(".query-asset-panel__browser");
+    const detail = node.querySelector(".query-asset-panel__answer-text");
+    const paragraph = detail?.querySelector("p");
+    return {
+      summaries: [...node.querySelectorAll(".query-asset-panel__asset-answer")].map((item) => ({
+        text: item.textContent?.trim(),
+        ellipsis: item.scrollWidth > item.clientWidth
+      })),
+      detailLines: paragraph ? Math.round(paragraph.clientHeight / parseFloat(getComputedStyle(paragraph).lineHeight)) : 0,
+      detailTitleLength: detail?.getAttribute("title")?.length ?? 0,
+      horizontalOverflow: browser ? browser.scrollWidth > browser.clientWidth : false
+    };
+  });
+  console.log(`${name}：${JSON.stringify(report, null, 2)}`);
+  if (report.horizontalOverflow) throw new Error("收藏列表出现横向溢出");
+  if (report.detailLines > 3) throw new Error("收藏时的回答超过三行");
+}
+
 await pickFavorite("善治今年的销售额");
+await captureAnswerPanel("designer-feedback-0-answer-panel");
 await feedbackPage.screenshot({ path: `${dir}/designer-feedback-1-default-output.png` });
 await feedbackPage.getByRole("button", { name: /添加到画布|再次添加/ }).click();
 await feedbackPage.waitForTimeout(900);
@@ -267,6 +291,7 @@ for (const name of ["善治今年的项目预签金额", "善治今年的必签�
 }
 // 用户手动改选联表明细：表头照样是短业务名。
 await pickFavorite("善治每月收入");
+await captureAnswerPanel("designer-feedback-0-answer-long");
 await outputSelect.selectOption("output_001");
 await feedbackPage.waitForTimeout(400);
 await feedbackPage.getByRole("button", { name: /添加到画布|再次添加/ }).click();

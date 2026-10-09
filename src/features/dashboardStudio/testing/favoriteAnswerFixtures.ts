@@ -6,6 +6,9 @@ import type { QueryAsset, QueryColumnDefinition, QueryExecution, QueryExecutionO
  * - 「善治今年的销售额」：先查了一行带「4」的探查结果，最后一次才是销售额合计 → 旧口径挑中探查，指标卡显示 4；
  * - 「善治今年的必签项目金额」：几次查询全是 0 行 → 旧口径照样画成「0 个周期」的趋势卡；
  * - 「善治每月收入」：先联表拉了合同与流水明细，最后按月汇总 → 旧口径挑中明细，表头是一串表描述。
+ * 带回答原文（answerText）的几份同样是推测的形状，用来验证「按回答认答案」：
+ * - 合计在前、探查在后，或者答案只能由明细列求和得到 → 只看问题形状会挑中探查里的「4」；
+ * - 问「最高的三家客户」，最后补了一行三家合计 → 只看问题形状会挑中那一行合计。
  */
 
 export const PROJECT_CUBE = "项目签约台账，记录项目名称、客户与签约金额";
@@ -128,12 +131,102 @@ const monthlyIncomeOutputs = [
   })))
 ];
 
+const probeOutput = (outputKey: string) => favoriteOutput(outputKey, [
+  favoriteColumn("ProjectSign.projectName", `${PROJECT_CUBE} 项目名称，项目的中文全称`),
+  favoriteColumn("ProjectSign.customerName", `${PROJECT_CUBE} 客户名称`),
+  favoriteColumn("ProjectSign.projectCount", `${PROJECT_CUBE} 项目数量`, "number")
+], [{
+  "ProjectSign.projectName": "四川才子数字化运营服务项目",
+  "ProjectSign.customerName": "善治科技",
+  "ProjectSign.projectCount": 4
+}]);
+
+/** 先查了合计（合同金额与签约金额同一行），又补了一次带「4」的探查：两张都是单行。 */
+const salesRecheckOutputs = [
+  favoriteOutput("output_001", [
+    favoriteColumn("ProjectSign.contractAmount", `${PROJECT_CUBE} 合同金额（万元），含税合同总价`, "number"),
+    favoriteColumn("ProjectSign.signAmount", `${PROJECT_CUBE} 签约金额（万元），含税`, "number")
+  ], [{ "ProjectSign.contractAmount": 3520, "ProjectSign.signAmount": 1286.5 }]),
+  probeOutput("output_002")
+];
+
+/** 只查了项目明细，回答里的 1,286.5 万元是模型自己把签约金额加总出来的。 */
+const salesDetailOutputs = [
+  probeOutput("output_001"),
+  favoriteOutput("output_002", [
+    favoriteColumn("ProjectSign.projectName", `${PROJECT_CUBE} 项目名称，项目的中文全称`),
+    favoriteColumn("ProjectSign.signAmount", `${PROJECT_CUBE} 签约金额（万元），含税`, "number")
+  ], [
+    ["四川才子数字化运营服务项目", 520],
+    ["成都蓉城数据治理项目", 386.5],
+    ["绵阳智汇园区平台项目", 210],
+    ["德阳政务云运维项目", 120],
+    ["乐山文旅数据中台项目", 50]
+  ].map(([name, amount]) => ({ "ProjectSign.projectName": name, "ProjectSign.signAmount": amount }))),
+  favoriteOutput("output_003", [favoriteColumn("ProjectSign.status", `${PROJECT_CUBE} 项目状态`)], [])
+];
+
+/** 客户排行在前，后面又按月看了一次，最后补了一行三家合计。 */
+const customerRankingOutputs = [
+  favoriteOutput("output_001", [
+    favoriteColumn("ProjectSign.customerName", `${PROJECT_CUBE} 客户名称`),
+    favoriteColumn("ProjectSign.signAmount", `${PROJECT_CUBE} 签约金额（万元），含税`, "number")
+  ], [
+    ["四川才子科技", 520],
+    ["成都蓉城数据", 386.5],
+    ["绵阳智汇科技", 210],
+    ["德阳政务云", 120],
+    ["乐山文旅集团", 50],
+    ["宜宾临港实业", 30]
+  ].map(([name, amount]) => ({ "ProjectSign.customerName": name, "ProjectSign.signAmount": amount }))),
+  favoriteOutput("output_002", [
+    favoriteColumn("ProjectSign.signMonth", `${PROJECT_CUBE} 签约月份`, "time"),
+    favoriteColumn("ProjectSign.signAmount", `${PROJECT_CUBE} 签约金额（万元），含税`, "number")
+  ], [180, 240, 150, 300, 195, 252].map((amount, index) => ({
+    "ProjectSign.signMonth": `2026-0${index + 1}`,
+    "ProjectSign.signAmount": amount
+  }))),
+  favoriteOutput("output_003", [
+    favoriteColumn("ProjectSign.signAmount", `${PROJECT_CUBE} 签约金额（万元），含税`, "number")
+  ], [{ "ProjectSign.signAmount": 1116.5 }])
+];
+
 const favoriteOutputs: Record<string, QueryExecutionOutput[]> = {
   "asset-sales": salesOutputs,
   "asset-must-sign": mustSignOutputs,
-  "asset-monthly-income": monthlyIncomeOutputs
+  "asset-monthly-income": monthlyIncomeOutputs,
+  "asset-sales-recheck": salesRecheckOutputs,
+  "asset-sales-detail": salesDetailOutputs,
+  "asset-customer-ranking": customerRankingOutputs
 };
 
 export const salesAsset = favoriteAsset("asset-sales", "善治今年的销售额", salesOutputs);
 export const mustSignAsset = favoriteAsset("asset-must-sign", "善治今年的必签项目金额", mustSignOutputs);
 export const monthlyIncomeAsset = favoriteAsset("asset-monthly-income", "善治每月收入", monthlyIncomeOutputs);
+
+/** 带上收藏时的回答原文：老收藏与老后端没有这个字段。 */
+export function withAnswer(asset: QueryAsset, answerText: string): QueryAsset {
+  return { ...asset, answerText };
+}
+
+export const SALES_ANSWER = "善治今年的销售额为 **1,286.5 万元**（含税）。";
+export const RANKING_ANSWER = [
+  "善治今年签约金额最高的三家客户：",
+  "",
+  "1. **四川才子科技**：520 万元",
+  "2. **成都蓉城数据**：386.5 万元",
+  "3. **绵阳智汇科技**：210 万元",
+  "",
+  "三家合计 1,116.5 万元。"
+].join("\n");
+
+/** 「善治今年的销售额」：合计行在前、探查在后，合计行里合同金额排在签约金额前面。 */
+export const salesRecheckAsset = favoriteAsset("asset-sales-recheck", "善治今年的销售额", salesRecheckOutputs);
+/** 「善治今年的销售额」：只有明细，答案是签约金额列的合计。 */
+export const salesDetailAsset = favoriteAsset("asset-sales-detail", "善治今年的销售额", salesDetailOutputs);
+/** 「善治今年签约金额最高的三家客户」：看不出形状的问题，旧口径取最后那行三家合计。 */
+export const customerRankingAsset = favoriteAsset(
+  "asset-customer-ranking",
+  "善治今年签约金额最高的三家客户",
+  customerRankingOutputs
+);

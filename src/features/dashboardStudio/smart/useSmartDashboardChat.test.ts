@@ -9,10 +9,15 @@ import {
   CONTRACT_CUBE,
   FLOW_CUBE,
   PROJECT_CUBE,
+  RANKING_ANSWER,
+  SALES_ANSWER,
+  customerRankingAsset,
   favoriteExecution,
   monthlyIncomeAsset,
   mustSignAsset,
-  salesAsset
+  salesAsset,
+  salesDetailAsset,
+  withAnswer
 } from "@/features/dashboardStudio/testing/favoriteAnswerFixtures";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { streamDashboardDesign } from "@/services/dashboardDesignService";
@@ -367,6 +372,29 @@ describe("buildLocalDesignSpec · 收藏里的多次查询", () => {
     expect(columnTitles.length).toBeGreaterThan(0);
     for (const title of columnTitles) expect(title).not.toMatch(/台账，|清单，|明细，/);
     expect(applied.schema.widgets.some((widget) => widget.subtitle?.includes("0 个周期"))).toBe(false);
+  });
+});
+
+describe("buildLocalDesignSpec · 收藏带着回答原文", () => {
+  it("答案是明细列合计时只出一张按列求和的指标卡；排行落在包含这几家公司的表上", () => {
+    const detail = withAnswer(salesDetailAsset, SALES_ANSWER);
+    const ranking = withAnswer(customerRankingAsset, RANKING_ANSWER);
+    const answered: DashboardDesignAssetData = {
+      [detail.id]: { asset: detail, execution: favoriteExecution(detail) },
+      [ranking.id]: { asset: ranking, execution: favoriteExecution(ranking) }
+    };
+    const local = buildLocalDesignSpec(createBlankDashboard({ title: "空板" }), answered, "经营总览");
+    const widgetsOf = (assetId: string) => local.widgets.filter((widget) => widget.assetId === assetId);
+
+    expect(widgetsOf(detail.id).map((widget) => [widget.role, widget.outputKey, widget.metricKey, widget.valueMode])).toEqual([
+      ["kpi", "output_002", "ProjectSign.signAmount", "sum"]
+    ]);
+    expect(new Set(widgetsOf(ranking.id).map((widget) => widget.outputKey))).toEqual(new Set(["output_001"]));
+
+    const applied = applyDashboardDesignSpec(createBlankDashboard({ title: "空板" }), local, answered);
+    expect(applied.rejected).toEqual([]);
+    const kpi = applied.schema.widgets.find((widget) => widget.type === "metric")!;
+    expect(resolveDashboardMetric(kpi, applied.schema.dataBindings[kpi.bindingId!])).toBe(1286.5);
   });
 });
 

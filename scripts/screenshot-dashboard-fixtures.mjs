@@ -85,6 +85,24 @@ const favoriteOutputs = {
   ]
 };
 
+/**
+ * 收藏时用户看到的回答原文（markdown）。「项目预签金额」故意不给：它代表没存回答的老收藏，
+ * 设计器里不该出现回答那一块。
+ */
+const favoriteAnswers = {
+  "asset-sales": "善治今年的销售额为 **1,286.5 万元**（含税），共涉及 4 个签约项目。",
+  "asset-must-sign": "未查询到善治今年的必签项目记录，必签项目金额暂无数据。",
+  "asset-monthly-income": [
+    "善治 2025 年 1–9 月每月收入如下：",
+    "",
+    "| 月份 | 收入（元） |",
+    "| --- | ---: |",
+    ...monthlyRows.map((row, index) => `| ${index + 1} 月 | ${row["BankFlow.amount"].toLocaleString("en-US")} |`),
+    "",
+    "9 月收入最高，为 **188,800 元**；1 月最低，为 120,000 元。"
+  ].join("\n")
+};
+
 const favoriteMeta = [
   ["asset-sales", "善治今年的销售额", "2026-09-20T06:30:00.000Z"],
   ["asset-presign", "善治今年的项目预签金额", "2026-09-21T02:10:00.000Z"],
@@ -119,6 +137,7 @@ export const feedbackAssets = favoriteMeta.map(([id, question, createdAt]) => ({
     status: "VALIDATED",
     createdAt
   },
+  ...(favoriteAnswers[id] ? { answerText: favoriteAnswers[id] } : {}),
   createdAt,
   updatedAt: createdAt
 }));

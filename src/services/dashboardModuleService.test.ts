@@ -7,13 +7,20 @@ import type {
 } from "@/types/analytics";
 import type { DashboardSchema, DashboardWidgetType } from "@/types/dashboardStudio";
 import { pickDashboardAnswerOutputKey } from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
+import { resolveDashboardMetric } from "@/features/dashboardStudio/core/dashboardWidgetData";
 import {
   CONTRACT_CUBE,
   FLOW_CUBE,
+  RANKING_ANSWER,
+  SALES_ANSWER,
+  customerRankingAsset,
   favoriteExecution,
   monthlyIncomeAsset,
   mustSignAsset,
-  salesAsset
+  salesAsset,
+  salesDetailAsset,
+  salesRecheckAsset,
+  withAnswer
 } from "@/features/dashboardStudio/testing/favoriteAnswerFixtures";
 import { createBlankDashboard } from "./dashboardGenerationService";
 import { appendQueryAssetChart, moduleIdForBinding, removeQueryAssetChart } from "./dashboardModuleService";
@@ -690,6 +697,68 @@ describe("收藏问数落到看板（beta0.4 反馈的三张卡）", () => {
     ]);
     expect(binding.table.columns[1]?.fullTitle).toBe(`${CONTRACT_CUBE} 合同名称，合同的中文全称`);
     expect(binding.table.columns[4]?.fullTitle).toBe(`${FLOW_CUBE} 对方户名`);
+  });
+});
+
+describe("收藏带着回答原文时，加入看板的模块跟着回答走", () => {
+  function addAnswer(asset: QueryAsset) {
+    const preview = favoriteExecution(asset);
+    return appendQueryAssetChart(blankDashboard(), asset, preview, pickDashboardAnswerOutputKey(asset, preview.outputs));
+  }
+
+  it("合计行在前、探查在后：指标卡取合计行里回答引用的签约金额", () => {
+    const added = addAnswer(withAnswer(salesRecheckAsset, SALES_ANSWER));
+    const widget = added.schema.widgets[0]!;
+    const binding = added.schema.dataBindings[added.bindingId]!;
+
+    expect(binding.sourceRef?.outputKey).toBe("output_001");
+    expect(widget.type).toBe("metric");
+    expect(widget.mapping).toMatchObject({ metricKeys: ["ProjectSign.signAmount"], valueMode: "first", displayUnit: "万元" });
+    expect(binding.metricLabel).toBe("签约金额");
+    expect(resolveDashboardMetric(widget, binding)).toBe(1286.5);
+  });
+
+  it("答案是明细签约金额的合计：落成按列求和的指标卡，卡上的数就是回答里的 1,286.5", () => {
+    const added = addAnswer(withAnswer(salesDetailAsset, SALES_ANSWER));
+    const widget = added.schema.widgets[0]!;
+    const binding = added.schema.dataBindings[added.bindingId]!;
+
+    expect(binding.sourceRef?.outputKey).toBe("output_002");
+    expect(binding.resultKind).toBe("metric");
+    expect(widget.type).toBe("metric");
+    expect(widget.mapping).toMatchObject({ metricKeys: ["ProjectSign.signAmount"], valueMode: "sum", displayUnit: "万元" });
+    expect(widget.props).toMatchObject({ valueSuffix: "万元", precision: 1 });
+    expect(binding.table.rows).toHaveLength(5);
+    expect(resolveDashboardMetric(widget, binding)).toBe(1286.5);
+  });
+
+  it("排行：落在包含三家公司的那张表上画对比图，不是一行合计的指标卡", () => {
+    const added = addAnswer(withAnswer(customerRankingAsset, RANKING_ANSWER));
+    const widget = added.schema.widgets[0]!;
+
+    expect(added.schema.dataBindings[added.bindingId]!.sourceRef?.outputKey).toBe("output_001");
+    expect(widget.type).toBe("bar");
+    expect(widget.mapping).toMatchObject({ dimensionKey: "ProjectSign.customerName", metricKeys: ["ProjectSign.signAmount"] });
+  });
+
+  it("回答对不上任何表时，与没有回答原文时落出同样的组件", () => {
+    const strip = (result: ReturnType<typeof addAnswer>) => {
+      const widget = result.schema.widgets[0]!;
+      const binding = result.schema.dataBindings[result.bindingId]!;
+      return {
+        type: widget.type,
+        title: widget.title,
+        subtitle: widget.subtitle,
+        props: widget.props,
+        mapping: widget.mapping,
+        outputKey: binding.sourceRef?.outputKey,
+        metricLabel: binding.metricLabel,
+        columns: binding.table.columns
+      };
+    };
+    for (const asset of [salesAsset, salesRecheckAsset, salesDetailAsset, customerRankingAsset, monthlyIncomeAsset]) {
+      expect(strip(addAnswer(withAnswer(asset, "善治今年的销售额约为 3,000 万元。")))).toEqual(strip(addAnswer(asset)));
+    }
   });
 });
 

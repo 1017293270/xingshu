@@ -1,18 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
+  RANKING_ANSWER,
+  SALES_ANSWER,
+  customerRankingAsset,
   favoriteColumn,
+  favoriteExecution,
   favoriteOutput,
   monthlyIncomeAsset,
   mustSignAsset,
-  salesAsset
+  salesAsset,
+  salesDetailAsset,
+  salesRecheckAsset,
+  withAnswer
 } from "../testing/favoriteAnswerFixtures";
 import {
   dashboardAnswerCandidates,
   dashboardAnswerIntent,
+  dashboardAnswerMetric,
   orderMetricsByQuestion,
   pickDashboardAnswerOutputKey,
   rankDashboardAnswerOutputs
 } from "./dashboardAnswerOutputs";
+import { numericMetricColumns } from "./dashboardColumnSemantics";
 
 function question(text: string) {
   return { name: text, originalQuestion: text, resolvedQuestion: text };
@@ -136,5 +145,77 @@ describe("orderMetricsByQuestion", () => {
       "presignAmount",
       "projectCount"
     ]);
+  });
+});
+
+describe("收藏带着回答原文时按回答认答案", () => {
+  const outputsOf = (asset: typeof salesAsset) => favoriteExecution(asset).outputs;
+  const keysOf = (asset: typeof salesAsset) => rankDashboardAnswerOutputs(asset, outputsOf(asset)).map((output) => output.outputKey);
+  const metricOrder = (asset: typeof salesAsset, outputKey: string) => {
+    const output = rankDashboardAnswerOutputs(asset, outputsOf(asset)).find((item) => item.outputKey === outputKey)!;
+    const answer = dashboardAnswerMetric(asset, outputsOf(asset), outputKey);
+    return orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows), answer).map((column) => column.key);
+  };
+
+  it("「善治今年的销售额」选合计那张、指标列是签约金额，不是探查里的 4", () => {
+    const answered = withAnswer(salesAsset, SALES_ANSWER);
+    expect(pickDashboardAnswerOutputKey(answered, outputsOf(answered))).toBe("output_003");
+    expect(dashboardAnswerMetric(answered, outputsOf(answered), "output_003")).toEqual({ metricKey: "ProjectSign.signAmount" });
+
+    // 合计在前、探查在后：只看问题形状会取后调用的探查；合计行里合同金额排在前面，也只有回答认得出要的是签约金额。
+    expect(pickDashboardAnswerOutputKey(salesRecheckAsset, outputsOf(salesRecheckAsset))).toBe("output_002");
+    const recheck = withAnswer(salesRecheckAsset, SALES_ANSWER);
+    expect(keysOf(recheck)).toEqual(["output_001", "output_002"]);
+    expect(metricOrder(salesRecheckAsset, "output_001")[0]).toBe("ProjectSign.contractAmount");
+    expect(metricOrder(recheck, "output_001")).toEqual(["ProjectSign.signAmount", "ProjectSign.contractAmount"]);
+  });
+
+  it("回答里同时提到「4 个项目」时，精度更高的 1,286.5 万元说了算", () => {
+    const recheck = withAnswer(salesRecheckAsset, "善治今年的销售额为 1,286.5 万元，共涉及 4 个签约项目。");
+    expect(pickDashboardAnswerOutputKey(recheck, outputsOf(recheck))).toBe("output_001");
+  });
+
+  it("答案只能由明细的签约金额列求和得到：选明细表，按列求和", () => {
+    expect(pickDashboardAnswerOutputKey(salesDetailAsset, outputsOf(salesDetailAsset))).toBe("output_001");
+    const detail = withAnswer(salesDetailAsset, SALES_ANSWER);
+    expect(keysOf(detail)).toEqual(["output_002", "output_001", "output_003"]);
+    expect(dashboardAnswerMetric(detail, outputsOf(detail), "output_002")).toEqual({
+      metricKey: "ProjectSign.signAmount",
+      valueMode: "sum"
+    });
+    // 求和只给只要一个数的问题：问「每月」「列出」时仍按图表或明细落，只借回答认指标列。
+    const grouped = withAnswer({ ...salesDetailAsset, name: "善治各项目签约金额", resolvedQuestion: "善治各项目签约金额", originalQuestion: "善治各项目签约金额" }, SALES_ANSWER);
+    expect(dashboardAnswerMetric(grouped, outputsOf(grouped), "output_002")).toEqual({ metricKey: "ProjectSign.signAmount" });
+  });
+
+  it("排行：选包含这三家公司的多行表，不是收尾补的一行三家合计", () => {
+    expect(dashboardAnswerIntent(customerRankingAsset)).toBe("neutral");
+    expect(pickDashboardAnswerOutputKey(customerRankingAsset, outputsOf(customerRankingAsset))).toBe("output_003");
+    const ranking = withAnswer(customerRankingAsset, RANKING_ANSWER);
+    expect(keysOf(ranking)).toEqual(["output_001", "output_003", "output_002"]);
+    expect(dashboardAnswerMetric(ranking, outputsOf(ranking), "output_001")).toEqual({ metricKey: "ProjectSign.signAmount" });
+  });
+
+  it("回答里的数与任何表都对不上时，结果与没有回答原文时完全一致", () => {
+    const unmatched = "善治今年的销售额约为 3,000 万元，2026 年第 1 季度贡献最多。";
+    for (const asset of [salesAsset, salesRecheckAsset, salesDetailAsset, customerRankingAsset, monthlyIncomeAsset, mustSignAsset]) {
+      const answered = withAnswer(asset, unmatched);
+      const outputs = outputsOf(asset);
+      expect(rankDashboardAnswerOutputs(answered, outputs)).toEqual(rankDashboardAnswerOutputs(asset, outputs));
+      expect(dashboardAnswerCandidates(answered, outputs)).toEqual(dashboardAnswerCandidates(asset, outputs));
+      for (const output of outputs) {
+        expect(dashboardAnswerMetric(answered, outputs, output.outputKey)).toBeUndefined();
+      }
+    }
+  });
+
+  it("没有回答原文、回答为空或为 null 时不看回答", () => {
+    const outputs = outputsOf(salesRecheckAsset);
+    const expected = rankDashboardAnswerOutputs(salesRecheckAsset, outputs);
+    for (const answerText of ["", "   ", null]) {
+      const asset = { ...salesRecheckAsset, answerText } as unknown as typeof salesAsset;
+      expect(rankDashboardAnswerOutputs(asset, outputs)).toEqual(expected);
+      expect(dashboardAnswerMetric(asset, outputs, "output_001")).toBeUndefined();
+    }
   });
 });

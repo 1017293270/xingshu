@@ -78,6 +78,7 @@ import {
 } from "../core/dashboardDesignerGeometry";
 import { validateDashboardForPublish } from "../core/dashboardValidation";
 import { clampDashboardWidgetPosition } from "../core/dashboardFreeLayout";
+import { dashboardAnswerPlainText } from "../core/dashboardAnswerEvidence";
 import { pickDashboardAnswerOutputKey } from "../core/dashboardAnswerOutputs";
 import { cleanDashboardQueryExecution } from "../core/dashboardColumnLabels";
 import {
@@ -387,6 +388,26 @@ const queryAssetCharts = computed<QueryAssetChartEntry[]>(() => {
   });
 });
 const selectedAsset = computed(() => queryAssets.value.find((asset) => asset.id === selectedAssetId.value));
+/** 列表里的回答摘要只占一行，截一段够省略号用就行。 */
+const ANSWER_SUMMARY_LENGTH = 120;
+/**
+ * 收藏时的回答（去掉 markdown 符号的纯文本）与列表摘要，按资产缓存：整张设计器模板随拖拽频繁重渲染，
+ * 不能每次都把两万字的回答重新清洗一遍。没存回答的老收藏不在表里。
+ */
+const assetAnswers = computed(() => new Map(
+  queryAssets.value.flatMap((asset) => {
+    const text = dashboardAnswerPlainText(asset.answerText);
+    if (!text) return [];
+    const summary = text.slice(0, ANSWER_SUMMARY_LENGTH * 2).replace(/\s+/g, " ").slice(0, ANSWER_SUMMARY_LENGTH);
+    return [[asset.id, { text, summary }] as const];
+  })
+));
+function assetAnswerSummary(assetId: string) {
+  return assetAnswers.value.get(assetId)?.summary ?? "";
+}
+const selectedAssetAnswer = computed(() =>
+  selectedAsset.value ? assetAnswers.value.get(selectedAsset.value.id)?.text ?? "" : ""
+);
 const selectedModuleAsset = computed(() => {
   const assetId = selectedBinding.value?.sourceRef?.assetId;
   return assetId ? queryAssets.value.find((asset) => asset.id === assetId) : undefined;
@@ -2366,6 +2387,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
                   <span class="query-asset-panel__asset-body">
                     <strong>{{ asset.name }}</strong>
                     <span v-if="asset.resolvedQuestion?.trim() && asset.resolvedQuestion.trim() !== asset.name.trim()">{{ asset.resolvedQuestion }}</span>
+                    <span v-if="assetAnswerSummary(asset.id)" class="query-asset-panel__asset-answer">{{ assetAnswerSummary(asset.id) }}</span>
                     <small>
                       <i>{{ asset.visibility === 'SPACE' ? '空间可用' : '仅自己' }}</i>
                       <i>v{{ asset.stableVersion?.versionNo ?? 1 }}</i>
@@ -2379,6 +2401,10 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
           <section v-if="selectedAsset" class="query-asset-panel__preview">
             <header><strong>组件配置</strong><span>固定 v{{ selectedAsset.stableVersion?.versionNo ?? 1 }}</span></header>
             <div class="query-asset-panel__preview-body">
+              <div v-if="selectedAssetAnswer" class="query-asset-panel__answer">
+                <span>收藏时的回答</span>
+                <div class="query-asset-panel__answer-text" :title="selectedAssetAnswer"><p>{{ selectedAssetAnswer }}</p></div>
+              </div>
               <label v-for="parameter in selectedAsset.stableVersion?.parameters ?? []" :key="parameter.key">
                 <span>{{ parameter.label }}</span>
                 <template v-if="parameter.type === 'DATE' || parameter.type === 'DATETIME'">
@@ -4275,6 +4301,14 @@ textarea:focus-visible {
 .query-asset-panel__asset-body strong { color: var(--studio-text); font-size: 12px; font-weight: 600; }
 .query-asset-panel__asset-body > span { color: var(--studio-text-3); font-size: 11px; }
 
+/* 回答摘要只占一行：比问题多一档对比度，读得出这是答案而不是又一遍问题 */
+.query-asset-panel__asset-body > .query-asset-panel__asset-answer {
+  display: block;
+  color: var(--studio-text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .query-asset-panel__asset-body small {
   display: flex;
   flex-wrap: wrap;
@@ -4387,6 +4421,37 @@ textarea:focus-visible {
   color: var(--studio-text-2);
   font-size: 11px;
   font-weight: 600;
+}
+
+.query-asset-panel__answer {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.query-asset-panel__answer > span {
+  color: var(--studio-text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 底色与内边距放在外层，三行截断放在里层：截断层带内边距时第四行会从下边距里露出半截 */
+.query-asset-panel__answer-text {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--studio-surface-soft);
+}
+
+.query-asset-panel__answer-text p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--studio-text-2);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .query-asset-panel__time-parameter { display: grid; gap: 6px; min-width: 0; }

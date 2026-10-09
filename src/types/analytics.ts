@@ -76,6 +76,8 @@ export type QueryAsset = {
   status: "ACTIVE" | "ARCHIVED";
   stableVersion?: QueryVersion;
   versions?: QueryVersion[];
+  /** 收藏时用户看到的回答原文（markdown，≤20000 字符）；老收藏与老后端没有，后端也可能给 null。 */
+  answerText?: string;
   createdAt: string;
   updatedAt: string;
 };

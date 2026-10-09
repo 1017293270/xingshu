@@ -1,6 +1,8 @@
 import {
   dashboardAnswerIntent,
-  orderMetricsByQuestion
+  dashboardAnswerMetric,
+  orderMetricsByQuestion,
+  type DashboardAnswerMetric
 } from "@/features/dashboardStudio/core/dashboardAnswerOutputs";
 import {
   cleanDashboardQueryOutput,
@@ -73,12 +75,19 @@ function toFiniteNumber(value: unknown) {
   return parseNumericCell(value);
 }
 
-/** 列名必须先清洗再分类：表描述里的「年度」会把整张表的列都判成时间列。 */
-function analyzeOutput(asset: QueryAsset, output: QueryExecutionOutput): OutputAnalysis {
+/**
+ * 列名必须先清洗再分类：表描述里的「年度」会把整张表的列都判成时间列。
+ * answer 是收藏回答引用的那一列，有它时排第一，指标卡与图表都先取它。
+ */
+function analyzeOutput(
+  asset: QueryAsset,
+  output: QueryExecutionOutput,
+  answer?: DashboardAnswerMetric
+): OutputAnalysis {
   const roleByColumnId = new Map(
     output.columns.map((column) => [column.columnId, classifyColumn(column, output.rows)])
   );
-  const numericColumns = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows));
+  const numericColumns = orderMetricsByQuestion(asset, numericMetricColumns(output.columns, output.rows), answer);
   const timeColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "time");
   // 真分类列优先，实在没有才退到编号列：拿「合同编号」当维度只会画出一排各不相同的柱子。
   const categoryColumn = output.columns.find((column) => roleByColumnId.get(column.columnId) === "dimension");
@@ -127,10 +136,16 @@ function selectedOutputIntent(asset: QueryAsset, outputKey: string) {
   return hasDetailIntent(asset) ? "detail" : "neutral";
 }
 
+/** 回答的数是首选指标列的合计：这张卡要按列求和。 */
+function isSumAnswer(analysis: OutputAnalysis, answer?: DashboardAnswerMetric) {
+  return answer?.valueMode === "sum" && analysis.numericColumns[0]?.key === answer.metricKey;
+}
+
 function inferWidgetType(
   asset: QueryAsset,
   output: QueryExecutionOutput,
-  analysis: OutputAnalysis
+  analysis: OutputAnalysis,
+  answer?: DashboardAnswerMetric
 ): DashboardWidgetType {
   if (selectedOutputIntent(asset, output.outputKey) === "detail") return "table";
   // 0 行结果画不出趋势或对比：单值问题落指标卡如实显示「暂无数据」，其余落空表，不再生成「0 个周期」的空图。
@@ -138,6 +153,8 @@ function inferWidgetType(
     return dashboardAnswerIntent(asset) === "single" && analysis.numericColumns.length > 0 ? "metric" : "table";
   }
   if (output.rows.length === 1 && analysis.numericColumns.length > 0) return "metric";
+  // 先查明细、回答里自己加总：卡上要的是那一个合计数，不是明细表或逐行的图。
+  if (isSumAnswer(analysis, answer)) return "metric";
   // 列名清洗后联表明细也认得出日期与金额了，但逐条记录按日期连线只会是一条锯齿线，仍按明细落表格。
   if (analysis.rowLevel) return "table";
   if (analysis.timeColumn && analysis.numericColumns.length > 0) return "line";
@@ -192,14 +209,15 @@ function scaleCompatibleMetricColumns(
 function createMapping(
   type: DashboardWidgetType,
   output: QueryExecutionOutput,
-  analysis: OutputAnalysis
+  analysis: OutputAnalysis,
+  answer?: DashboardAnswerMetric
 ): DashboardWidgetMapping {
   if (type === "metric") {
     const metric = analysis.numericColumns[0];
     return metric ? {
       metricColumnIds: [metric.columnId],
       metricKeys: [metric.key],
-      valueMode: "first",
+      valueMode: isSumAnswer(analysis, answer) ? "sum" : "first",
       displayUnit: displayUnit(metric) || undefined
     } : {};
   }
@@ -217,22 +235,27 @@ function createMapping(
   return {};
 }
 
+function decimalsOf(value: number | null) {
+  return value === null || Number.isInteger(value) ? 0 : Math.min(2, String(value).split(".")[1]?.length ?? 0);
+}
+
 /**
  * 收藏问数的指标卡按「metric」结果渲染，只认 props 里的精度与后缀，不看 mapping.displayUnit。
  * 默认精度 0、无后缀时，「1286.5 万元」会显示成光秃秃的「1,287」，和问数给的答案对不上，
- * 所以把列名里的单位带成后缀，小数最多保留两位。
+ * 所以把列名里的单位带成后缀，小数最多保留两位。按列求和的卡取各行里最多的小数位，
+ * 免得浮点加总的尾差把精度撑到两位。
  */
 function createMetricProps(
   defaults: DashboardWidget["props"],
   output: QueryExecutionOutput,
-  analysis: OutputAnalysis
+  analysis: OutputAnalysis,
+  answer?: DashboardAnswerMetric
 ): DashboardWidget["props"] {
   const metric = analysis.numericColumns[0];
   if (!metric) return defaults;
-  const value = toFiniteNumber(output.rows[0]?.[metric.key]);
-  const decimals = value === null || Number.isInteger(value)
-    ? 0
-    : Math.min(2, String(value).split(".")[1]?.length ?? 0);
+  const decimals = isSumAnswer(analysis, answer)
+    ? output.rows.reduce((maximum, row) => Math.max(maximum, decimalsOf(toFiniteNumber(row[metric.key]))), 0)
+    : decimalsOf(toFiniteNumber(output.rows[0]?.[metric.key]));
   return { ...defaults, valueSuffix: displayUnit(metric), precision: decimals };
 }
 
@@ -354,8 +377,10 @@ export function appendQueryAssetChart(
   if (selected.columns.length === 0) throw new Error("该结果表没有可用字段，无法生成组件");
   const output = cleanDashboardQueryOutput(selected);
 
-  const analysis = analyzeOutput(asset, output);
-  const type = inferWidgetType(asset, output, analysis);
+  // 收藏带着回答原文时，指标列与取值方式跟着回答走；没有回答原文时 answer 为 undefined，按问题形状推断。
+  const answer = dashboardAnswerMetric(asset, execution.outputs, outputKey);
+  const analysis = analyzeOutput(asset, output, answer);
+  const type = inferWidgetType(asset, output, analysis, answer);
   const definition = getDashboardComponentDefinition(type);
   const bindingId = createId("binding");
   const moduleId = createId("module");
@@ -406,9 +431,9 @@ export function appendQueryAssetChart(
     title,
     subtitle: createSubtitle(type, output, asset),
     props: type === "metric"
-      ? createMetricProps(definition.defaultProps ? clone(definition.defaultProps) : undefined, output, analysis)
+      ? createMetricProps(definition.defaultProps ? clone(definition.defaultProps) : undefined, output, analysis, answer)
       : definition.defaultProps ? clone(definition.defaultProps) : undefined,
-    mapping: createMapping(type, output, analysis),
+    mapping: createMapping(type, output, analysis, answer),
     position,
     style: createWidgetStyle(type, analysis.numericColumns.length, nextZIndex)
   };
