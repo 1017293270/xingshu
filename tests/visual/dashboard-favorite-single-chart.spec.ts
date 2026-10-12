@@ -427,6 +427,8 @@ test("a selected favorite result adds one chart and survives save/reload", async
   await page.goto(`/dashboard-editor?source=favorites&asset=${asset.id}`);
   await expect(page.getByRole("combobox", { name: "结果表" })).toHaveValue("revenue");
   await expect(page.getByText("3 行", { exact: true })).toBeVisible();
+  // 还没落库的新板不能自称草稿已就绪
+  await expect(page.getByRole("status", { name: "尚未保存" })).toBeVisible();
   const addButton = page.getByRole("button", { name: "添加到画布", exact: true });
   await expect(addButton).toBeEnabled();
   await addButton.click();
@@ -434,6 +436,7 @@ test("a selected favorite result adds one chart and survives save/reload", async
   const cards = page.locator(".dashboard-widget-card");
   await expect(cards).toHaveCount(1);
   await expect(cards.first().getByText("今年每月收入趋势", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: "有未保存改动" })).toBeVisible();
   await expect(page.getByText("固定版本", { exact: true })).toBeVisible();
   await expect(page.locator(".vue-echart[data-echarts-ready='true'] canvas")).toHaveCount(1);
   await page.screenshot({

@@ -491,11 +491,16 @@ const runtimePreviewHref = computed(() => canPreviewPublished.value
   : undefined
 );
 const hasValidName = computed(() => schema.title.trim().length > 0);
+/** revision 0 是还没落库的新板：首次保存前不能说草稿已就绪，状态点也不亮绿。 */
+const statusState = computed(() =>
+  lifecycle.value === "saved" && revision.value === 0 ? "unsaved" : lifecycle.value
+);
 const statusLabel = computed(() => {
   if (lifecycle.value === "saving" && activeSaveIntent.value === "publish") return "发布中";
   if (lifecycle.value === "saving") return "正在保存草稿";
   if (lifecycle.value === "dirty") return "有未保存改动";
   if (lifecycle.value === "error") return errorMessage.value || "保存失败";
+  if (statusState.value === "unsaved") return "尚未保存";
   return "草稿已就绪";
 });
 
@@ -2150,7 +2155,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
           <span
             class="designer-toolbar__status"
             :class="{ 'is-saving': lifecycle === 'saving' }"
-            :data-state="lifecycle"
+            :data-state="statusState"
             role="status"
             aria-live="polite"
             aria-atomic="true"
@@ -2158,7 +2163,7 @@ defineExpose({ getSchema: plainSchema, applySchema, setSmartPanelOpen });
             :title="statusLabel"
           >
             <i aria-hidden="true" />
-            <span :key="lifecycle" class="designer-toolbar__status-text">{{ statusLabel }}</span>
+            <span :key="statusState" class="designer-toolbar__status-text">{{ statusLabel }}</span>
           </span>
         </span>
       </div>
@@ -2942,6 +2947,11 @@ textarea:focus-visible {
 .designer-toolbar__status[data-state="error"] > i {
   background: #ff4d4f;
   box-shadow: 0 0 0 4px rgba(255, 77, 79, .1);
+}
+
+.designer-toolbar__status[data-state="unsaved"] > i {
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, .14);
 }
 
 .designer-toolbar__status-text {
