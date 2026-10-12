@@ -17,7 +17,8 @@ import type {
 } from "@/types/dashboardDesign";
 import { dashboardDesignArchetypes } from "@/types/dashboardDesign";
 import type { DashboardSchema, DashboardWidget } from "@/types/dashboardStudio";
-import { dashboardAnswerCandidates } from "./dashboardAnswerOutputs";
+import { dashboardAnswerPlainText } from "./dashboardAnswerEvidence";
+import { dashboardAnswerCandidates, dashboardAnswerMetric, type DashboardAnswerMetric } from "./dashboardAnswerOutputs";
 import { dashboardBoardThemes, getMatchingDashboardBoardThemeId } from "./dashboardBoardThemes";
 import { dashboardCanvasPresets, resolveDashboardCanvasPreset } from "./dashboardCanvas";
 import { dashboardChartVariants } from "./dashboardChartPresets";
@@ -27,9 +28,9 @@ import { dashboardOutputLabel } from "./dashboardDesignTitles";
 import { widgetSemanticRole } from "./dashboardLayoutSolver";
 
 /**
- * 发给模型的上下文：只有列名、样本行和当前板的语义摘要，不带 SQL、不带全量结果。
- * 预算是硬约束——后端超过 64k 字符直接拒收，所以这里先按份数/列数/样本行裁剪，
- * 仍然超标时依次丢样本行、丢历史，宁可少给上下文也不让整轮请求失败。
+ * 发给模型的上下文：只有列名、样本行、收藏时的回答摘要和当前板的语义摘要，不带 SQL、不带全量结果。
+ * 预算是硬约束——后端超过 64k 字符直接拒收，所以这里先按份数/列数/样本行/回答长度裁剪，
+ * 仍然超标时依次丢样本行、丢历史、丢回答原文，宁可少给上下文也不让整轮请求失败。
  */
 
 const MAX_ASSETS = 8;
@@ -39,6 +40,8 @@ const MAX_SAMPLE_ROWS = 3;
 const MAX_HISTORY_TURNS = 6;
 const MAX_HISTORY_CHARS = 300;
 const MAX_TEXT_CONTENT_CHARS = 120;
+/** 回答摘要的上限（含省略号）：够装下结论句和几家排行，八份资产全满也只占预算的零头。 */
+const MAX_ANSWER_CHARS = 300;
 const MAX_REQUEST_CHARS = 60_000;
 const FALLBACK_CANVAS = { width: 1920, height: 1080 };
 
@@ -76,11 +79,29 @@ function outputLabel(asset: QueryAsset, output: QueryExecutionOutput, likelyAnsw
   return likelyAnswer ? `${label} · 最可能是问题的答案` : label;
 }
 
-/** output 须已清洗列名（dashboardAnswerCandidates 给出的就是）：列种类与形状都按短业务名判。 */
+/** 截到 limit 个 UTF-16 码元以内（含省略号），不把代理对劈成两半。 */
+function truncateText(text: string, limit: number) {
+  if (text.length <= limit) return text;
+  let end = limit - 1;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${text.slice(0, end).trimEnd()}…`;
+}
+
+/** 收藏时的回答：markdown 转纯文本、压成一行再截短；老收藏没有回答时是空串。 */
+function answerSummaryText(answerText?: string) {
+  return truncateText(dashboardAnswerPlainText(answerText).replace(/\s+/g, " ").trim(), MAX_ANSWER_CHARS);
+}
+
+/**
+ * output 须已清洗列名（dashboardAnswerCandidates 给出的就是）：列种类与形状都按短业务名判。
+ * answer 是回答引用的那一列，只在它确实是本表的列时才写进摘要。
+ */
 function summarizeOutput(
   asset: QueryAsset,
   output: QueryExecutionOutput,
-  likelyAnswer: boolean
+  likelyAnswer: boolean,
+  answer?: DashboardAnswerMetric
 ): DashboardDesignOutputSummary {
   const columns = output.columns.map((column) => ({
     columnId: column.columnId,
@@ -89,6 +110,7 @@ function summarizeOutput(
     kind: inferDashboardDesignColumnKind(column, output.rows)
   }));
   const keys = columns.map((column) => column.key);
+  const answerMetric = answer && keys.includes(answer.metricKey) ? answer : undefined;
   return {
     outputKey: output.outputKey,
     label: outputLabel(asset, output, likelyAnswer),
@@ -97,24 +119,34 @@ function summarizeOutput(
     sampleRows: output.rows.slice(0, MAX_SAMPLE_ROWS).map((row) =>
       Object.fromEntries(keys.map((key) => [key, row[key]]))
     ),
-    shape: inferDashboardDesignOutputShape(output)
+    shape: inferDashboardDesignOutputShape(output),
+    ...(answerMetric ? { answerMetricKey: answerMetric.metricKey } : {}),
+    ...(answerMetric?.valueMode ? { answerValueMode: answerMetric.valueMode } : {})
   };
 }
 
 /**
  * 收藏里存着整轮问数的每一次查询。给模型的只留非空结果，最可能是答案的那张排第一并在 label 里点明，
  * 探查查询与 0 行结果不再挤占每份资产六张表的名额。
+ * 收藏带着回答原文时再给两样：回答摘要（answer），以及排第一那张表上回答引用的列与合计口径
+ * （answerMetricKey / answerValueMode，与「加入看板」、本地兜底同一套 dashboardAnswerMetric）。
+ * 老收藏没有回答，这几个键一个都不出，请求体与以前逐字节一致。
  */
 export function summarizeDashboardDesignAsset(
   asset: QueryAsset,
   execution: QueryExecution
 ): DashboardDesignAssetSummary {
   const outputs = dashboardAnswerCandidates(asset, execution.outputs);
+  const answer = answerSummaryText(asset.answerText);
+  const answerMetric = outputs[0] ? dashboardAnswerMetric(asset, execution.outputs, outputs[0].outputKey) : undefined;
   return {
     assetId: asset.id,
     name: asset.name,
     question: asset.resolvedQuestion || asset.originalQuestion,
-    outputs: outputs.map((output, index) => summarizeOutput(asset, output, index === 0 && outputs.length > 1))
+    ...(answer ? { answer } : {}),
+    outputs: outputs.map((output, index) =>
+      summarizeOutput(asset, output, index === 0 && outputs.length > 1, index === 0 ? answerMetric : undefined)
+    )
   };
 }
 
@@ -216,12 +248,21 @@ export function buildDashboardDesignCatalog(): DashboardDesignCatalog {
   };
 }
 
+/** 列裁到上限；回答引用的那一列落在上限之外时顶替最后一列留下，answerMetricKey 不能指向模型看不到的列。 */
+function trimColumns(output: DashboardDesignOutputSummary) {
+  const columns = output.columns.slice(0, MAX_COLUMNS_PER_OUTPUT);
+  const answerKey = output.answerMetricKey;
+  if (!answerKey || columns.some((column) => column.key === answerKey)) return columns;
+  const answerColumn = output.columns.find((column) => column.key === answerKey);
+  return answerColumn ? [...columns.slice(0, -1), answerColumn] : columns;
+}
+
 /** 列裁剪后要顺手把样本行里失效的 key 抹掉，否则模型会引用一个它看不到定义的列。 */
 function trimAssetSummary(asset: DashboardDesignAssetSummary): DashboardDesignAssetSummary {
   return {
     ...asset,
     outputs: asset.outputs.slice(0, MAX_OUTPUTS_PER_ASSET).map((output) => {
-      const columns = output.columns.slice(0, MAX_COLUMNS_PER_OUTPUT);
+      const columns = trimColumns(output);
       const keys = columns.map((column) => column.key);
       return {
         ...output,
@@ -248,6 +289,15 @@ function withoutSampleRows(assets: DashboardDesignAssetSummary[]): DashboardDesi
   }));
 }
 
+/** 只丢回答摘要；answerMetricKey / answerValueMode 只有几十字，留着照样能把模型引到对的列与口径。 */
+function withoutAnswers(assets: DashboardDesignAssetSummary[]): DashboardDesignAssetSummary[] {
+  return assets.map((asset) => {
+    const next = { ...asset };
+    delete next.answer;
+    return next;
+  });
+}
+
 export function buildDashboardDesignRequest(input: {
   brief: string;
   schema?: DashboardSchema;
@@ -269,11 +319,17 @@ export function buildDashboardDesignRequest(input: {
     history: trimHistory(input.history)
   };
 
+  // 超预算时按「丢了损失最小」的顺序裁：样本行最占地方，列定义还在，模型照样认得出每列是什么；
+  // 历史是对话上下文，当前板摘要已经带着前几轮落下来的结果；回答原文是用户看到的结论，
+  // 模型据此挑表、写标题与洞察，最后才丢，丢了也还有 answerMetricKey / answerValueMode 兜着。
   if (JSON.stringify(request).length > MAX_REQUEST_CHARS) {
     request = { ...request, assets: withoutSampleRows(request.assets) };
   }
   if (JSON.stringify(request).length > MAX_REQUEST_CHARS) {
     request = { ...request, history: [] };
+  }
+  if (JSON.stringify(request).length > MAX_REQUEST_CHARS) {
+    request = { ...request, assets: withoutAnswers(request.assets) };
   }
   return request;
 }

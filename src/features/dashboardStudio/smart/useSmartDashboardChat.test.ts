@@ -12,23 +12,34 @@ import {
   RANKING_ANSWER,
   SALES_ANSWER,
   customerRankingAsset,
+  favoriteAsset,
+  favoriteColumn,
   favoriteExecution,
+  favoriteOutput,
   monthlyIncomeAsset,
   mustSignAsset,
   salesAsset,
   salesDetailAsset,
+  salesRecheckAsset,
   withAnswer
 } from "@/features/dashboardStudio/testing/favoriteAnswerFixtures";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import { streamDashboardDesign } from "@/services/dashboardDesignService";
 import { contractDesignData, standardDesignData } from "@/test/dashboardDesignFixtures";
+import type { QueryAsset, QueryExecution, QueryExecutionOutput } from "@/types/analytics";
 import type {
   DashboardDesignAssetData,
   DashboardDesignSpec,
+  DashboardDesignSpecWidget,
   DashboardDesignStreamEvent
 } from "@/types/dashboardDesign";
 import type { DashboardSchema } from "@/types/dashboardStudio";
-import { boundAssetIds, buildLocalDesignSpec, useSmartDashboardChat } from "./useSmartDashboardChat";
+import {
+  boundAssetIds,
+  buildLocalDesignSpec,
+  fillAnswerMetricDefaults,
+  useSmartDashboardChat
+} from "./useSmartDashboardChat";
 
 vi.mock("@/services/dashboardDesignService", () => ({
   streamDashboardDesign: vi.fn()
@@ -395,6 +406,150 @@ describe("buildLocalDesignSpec · 收藏带着回答原文", () => {
     expect(applied.rejected).toEqual([]);
     const kpi = applied.schema.widgets.find((widget) => widget.type === "metric")!;
     expect(resolveDashboardMetric(kpi, applied.schema.dataBindings[kpi.bindingId!])).toBe(1286.5);
+  });
+});
+
+/** 指标卡落板后显示的数：新增的那张（排除 before 里已有的组件）。 */
+function metricValueOf(schema: DashboardSchema, before = new Set<string>()) {
+  const kpi = schema.widgets.find((widget) => widget.type === "metric" && !before.has(widget.id))!;
+  return resolveDashboardMetric(kpi, schema.dataBindings[kpi.bindingId!]);
+}
+
+function kpiSpecOf(widgets: DashboardDesignSpecWidget[]): DashboardDesignSpec {
+  return { narrative: "", title: "销售总览", themeId: "ice-light", archetype: "kpi-led", widgets };
+}
+
+describe("useSmartDashboardChat · 收藏带着回答原文", () => {
+  const recheck = withAnswer(salesRecheckAsset, SALES_ANSWER);
+  const recheckData: DashboardDesignAssetData = { [recheck.id]: { asset: recheck, execution: favoriteExecution(recheck) } };
+  /** 模型挑对了表，却没写指标列和口径：引擎默认取第一张金额列，会显示合同金额 3520。 */
+  const bareKpi: DashboardDesignSpecWidget = {
+    ref: "sales",
+    role: "kpi",
+    assetId: recheck.id,
+    outputKey: "output_001",
+    title: "今年销售额"
+  };
+
+  function answeredSetup(schema: DashboardSchema, selected: string[]) {
+    const applySchema = vi.fn(async () => undefined);
+    const listAssets = vi.fn(async () => [recheck]);
+    const previewAsset = vi.fn(async () => favoriteExecution(recheck));
+    return renderHook(() => useSmartDashboardChat({
+      getSchema: () => schema,
+      applySchema,
+      listAssets,
+      previewAsset,
+      initialAssetIds: selected
+    }));
+  }
+
+  beforeEach(() => {
+    streamMock.mockReset();
+  });
+
+  it("请求带上回答摘要与证据；模型漏写指标列时指标卡取回答引用的签约金额", async () => {
+    expect(metricValueOf(applyDashboardDesignSpec(createBlankDashboard({ title: "空板" }), kpiSpecOf([bareKpi]), recheckData).schema))
+      .toBe(3520);
+    scriptStream([{ type: "spec", spec: kpiSpecOf([bareKpi]) }, { type: "done" }]);
+    const { result } = answeredSetup(createBlankDashboard({ title: "空板" }), [recheck.id]);
+
+    await waitFor(() => expect(result.current.assets).toHaveLength(1));
+    act(() => {
+      result.current.send("做一块销售大屏");
+    });
+    await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
+
+    const request = streamMock.mock.calls[0]![1];
+    expect(request.assets[0]).toMatchObject({ answer: "善治今年的销售额为 1,286.5 万元（含税）。" });
+    expect(request.assets[0]!.outputs[0]).toMatchObject({ outputKey: "output_001", answerMetricKey: "ProjectSign.signAmount" });
+    const candidate = result.current.turns[0]!.candidate!;
+    expect(candidate.rejected).toEqual([]);
+    expect(metricValueOf(candidate.schema)).toBe(1286.5);
+  });
+
+  it("改版时 add_widget 新增的指标卡同样按回答补齐", async () => {
+    const seeded = applyDashboardDesignSpec(
+      createBlankDashboard({ title: "空板" }),
+      kpiSpecOf([{ ref: "probe", role: "detail", assetId: recheck.id, outputKey: "output_002", title: "项目明细" }]),
+      recheckData
+    ).schema;
+    const before = new Set(seeded.widgets.map((widget) => widget.id));
+    scriptStream([{ type: "ops", ops: { narrative: "", ops: [{ op: "add_widget", widget: bareKpi }] } }, { type: "done" }]);
+    const { result } = answeredSetup(seeded, []);
+
+    await waitFor(() => expect(result.current.assets).toHaveLength(1));
+    act(() => {
+      result.current.send("加一张今年销售额的指标卡");
+    });
+    await waitFor(() => expect(result.current.turns[0]?.status).toBe("ready"));
+
+    expect(result.current.turns[0]?.kind).toBe("edit");
+    const candidate = result.current.turns[0]!.candidate!;
+    expect(candidate.rejected).toEqual([]);
+    expect(metricValueOf(candidate.schema, before)).toBe(1286.5);
+  });
+});
+
+describe("fillAnswerMetricDefaults", () => {
+  function executionOf(asset: QueryAsset, outputs: QueryExecutionOutput[]): QueryExecution {
+    return {
+      id: `${asset.id}-preview`,
+      assetId: asset.id,
+      versionId: asset.stableVersionId,
+      status: "SUCCESS",
+      triggerType: "PREVIEW",
+      durationMs: 0,
+      createdAt: "2026-09-23T10:20:00.000Z",
+      outputs
+    };
+  }
+
+  /** 「善治今年的收入」只按月查了一次，回答的 1,317 万元是六个月的合计：时间序列默认取最新一期会显示 252。 */
+  const monthly = favoriteOutput("output_001", [
+    favoriteColumn("ProjectSign.signMonth", "签约月份", "time"),
+    favoriteColumn("ProjectSign.signAmount", "签约金额（万元）", "number")
+  ], [180, 240, 150, 300, 195, 252].map((amount, index) => ({
+    "ProjectSign.signMonth": `2026-0${index + 1}`,
+    "ProjectSign.signAmount": amount
+  })));
+  const legacy = favoriteAsset("asset-yearly-income", "善治今年的收入", [monthly]);
+  const yearly = withAnswer(legacy, "善治今年的收入合计 **1,317 万元**。");
+  const yearlyData: DashboardDesignAssetData = { [yearly.id]: { asset: yearly, execution: executionOf(yearly, [monthly]) } };
+  const kpiOf = (overrides: Partial<DashboardDesignSpecWidget> = {}): DashboardDesignSpecWidget => ({
+    ref: "income",
+    role: "kpi",
+    assetId: yearly.id,
+    outputKey: "output_001",
+    title: "今年收入",
+    ...overrides
+  });
+
+  it("漏了指标列与口径时按回答补上那一列和合计口径", () => {
+    expect(fillAnswerMetricDefaults(kpiOf(), yearlyData)).toEqual(
+      kpiOf({ metricKey: "ProjectSign.signAmount", valueMode: "sum" })
+    );
+  });
+
+  it("指标列就是回答那一列、只漏了口径时补 sum，落板后的数与回答一致", () => {
+    const named = kpiOf({ metricKey: "ProjectSign.signAmount" });
+    const blank = createBlankDashboard({ title: "空板" });
+
+    expect(metricValueOf(applyDashboardDesignSpec(blank, kpiSpecOf([named]), yearlyData).schema)).toBe(252);
+    const filled = fillAnswerMetricDefaults(named, yearlyData);
+    expect(filled).toEqual({ ...named, valueMode: "sum" });
+    expect(metricValueOf(applyDashboardDesignSpec(blank, kpiSpecOf([filled]), yearlyData).schema)).toBe(1317);
+  });
+
+  it("模型写明的口径、别的列、非指标卡与老收藏一律不动", () => {
+    const explicit = kpiOf({ metricKey: "ProjectSign.signAmount", valueMode: "latest" });
+    expect(fillAnswerMetricDefaults(explicit, yearlyData)).toBe(explicit);
+    expect(fillAnswerMetricDefaults(kpiOf({ metricKeys: ["ProjectSign.other"] }), yearlyData))
+      .toEqual(kpiOf({ metricKeys: ["ProjectSign.other"] }));
+    const trend = kpiOf({ role: "trend" });
+    expect(fillAnswerMetricDefaults(trend, yearlyData)).toBe(trend);
+    const legacyData: DashboardDesignAssetData = { [legacy.id]: { asset: legacy, execution: executionOf(legacy, [monthly]) } };
+    expect(fillAnswerMetricDefaults(kpiOf(), legacyData)).toEqual(kpiOf());
   });
 });
 

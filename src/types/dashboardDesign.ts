@@ -34,12 +34,18 @@ export type DashboardDesignOutputSummary = {
   sampleRows: Record<string, unknown>[];
   /** 有时间列 → time-series；有维度列 → category；只有数值且 1 行 → scalar；其余 table。 */
   shape: DashboardDesignOutputShape;
+  /** 收藏时用户看到的回答引用的就是这一列的数（必是本表 columns 里的 key）；只标在最可能是答案的那张表上，没有回答证据时不出。 */
+  answerMetricKey?: string;
+  /** 只在回答里的数是 answerMetricKey 整列的合计时出现，值为 sum：指标卡要 valueMode: "sum" 才和回答一致。 */
+  answerValueMode?: "sum";
 };
 
 export type DashboardDesignAssetSummary = {
   assetId: string;
   name: string;
   question: string;
+  /** 收藏时用户看到的回答：转纯文本、压空白、截到 300 字；老收藏没有回答时不出这个键。 */
+  answer?: string;
   outputs: DashboardDesignOutputSummary[];
 };
 

@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { createBlankDashboard } from "@/services/dashboardGenerationService";
 import type { QueryAsset, QueryColumnDefinition, QueryExecution, QueryExecutionOutput } from "@/types/analytics";
-import type { DashboardDesignAssetData } from "@/types/dashboardDesign";
+import type { DashboardDesignAssetData, DashboardDesignRequest } from "@/types/dashboardDesign";
 import type { DashboardSchema, DashboardWidget, DashboardWidgetType } from "@/types/dashboardStudio";
 import {
   PROJECT_CUBE,
+  RANKING_ANSWER,
+  SALES_ANSWER,
+  customerRankingAsset,
+  favoriteAsset,
+  favoriteColumn,
   favoriteExecution,
+  favoriteOutput,
+  monthlyIncomeAsset,
   mustSignAsset,
-  salesAsset
+  salesAsset,
+  salesDetailAsset,
+  salesRecheckAsset,
+  withAnswer
 } from "../testing/favoriteAnswerFixtures";
 import {
   buildDashboardDesignCatalog,
@@ -175,6 +185,113 @@ describe("summarizeDashboardDesignAsset · 收藏里的多次查询", () => {
   });
 });
 
+describe("summarizeDashboardDesignAsset · 收藏带着回答原文", () => {
+  const answerKeys = /"answer(?:MetricKey|ValueMode)?":/;
+
+  it("回答转纯文本压成一行；排第一的表标上回答引用的列，单元格直接引用时不带口径", () => {
+    const recheck = withAnswer(salesRecheckAsset, SALES_ANSWER);
+    const summary = summarizeDashboardDesignAsset(recheck, favoriteExecution(recheck));
+
+    expect(summary.answer).toBe("善治今年的销售额为 1,286.5 万元（含税）。");
+    expect(Object.keys(summary)).toEqual(["assetId", "name", "question", "answer", "outputs"]);
+    expect(summary.outputs.map((item) => item.outputKey)).toEqual(["output_001", "output_002"]);
+    expect(summary.outputs[0]).toMatchObject({ answerMetricKey: "ProjectSign.signAmount" });
+    expect(summary.outputs[0]).not.toHaveProperty("answerValueMode");
+    expect(summary.outputs[0]!.columns.map((item) => item.key)).toContain(summary.outputs[0]!.answerMetricKey);
+    expect(JSON.stringify(summary.outputs[1])).not.toMatch(answerKeys);
+  });
+
+  it("回答的数是明细列合计时带上 answerValueMode: sum", () => {
+    const detail = withAnswer(salesDetailAsset, SALES_ANSWER);
+    const summary = summarizeDashboardDesignAsset(detail, favoriteExecution(detail));
+
+    expect(summary.outputs[0]).toMatchObject({
+      outputKey: "output_002",
+      answerMetricKey: "ProjectSign.signAmount",
+      answerValueMode: "sum"
+    });
+  });
+
+  it("排行回答的列表合成一行，证据只标在排第一的那张表上", () => {
+    const ranking = withAnswer(customerRankingAsset, RANKING_ANSWER);
+    const summary = summarizeDashboardDesignAsset(ranking, favoriteExecution(ranking));
+
+    expect(summary.answer).toBe(
+      "善治今年签约金额最高的三家客户： 1. 四川才子科技：520 万元 2. 成都蓉城数据：386.5 万元 3. 绵阳智汇科技：210 万元 三家合计 1,116.5 万元。"
+    );
+    expect(summary.outputs[0]).toMatchObject({ outputKey: "output_001", answerMetricKey: "ProjectSign.signAmount" });
+    for (const item of summary.outputs.slice(1)) expect(JSON.stringify(item)).not.toMatch(answerKeys);
+  });
+
+  it("没有回答（老收藏）时与改动前的摘要逐字节一致", () => {
+    // 改动前 summarizeDashboardDesignAsset(salesRecheckAsset, …) 的原样输出，键序也要一致。
+    const before = {
+      assetId: "asset-sales-recheck",
+      name: "善治今年的销售额",
+      question: "善治今年的销售额",
+      outputs: [
+        {
+          outputKey: "output_002",
+          label: "结果表 2 · 项目名称、客户名称 · 最可能是问题的答案",
+          columns: [
+            { columnId: "column-ProjectSign.projectName", key: "ProjectSign.projectName", label: "项目名称", kind: "dimension" },
+            { columnId: "column-ProjectSign.customerName", key: "ProjectSign.customerName", label: "客户名称", kind: "dimension" },
+            { columnId: "column-ProjectSign.projectCount", key: "ProjectSign.projectCount", label: "项目数量", kind: "number" }
+          ],
+          totalRows: 1,
+          sampleRows: [{
+            "ProjectSign.projectName": "四川才子数字化运营服务项目",
+            "ProjectSign.customerName": "善治科技",
+            "ProjectSign.projectCount": 4
+          }],
+          shape: "scalar"
+        },
+        {
+          outputKey: "output_001",
+          label: "结果表 1 · 合同金额（万元）、签约金额（万元）",
+          columns: [
+            { columnId: "column-ProjectSign.contractAmount", key: "ProjectSign.contractAmount", label: "合同金额（万元）", kind: "number" },
+            { columnId: "column-ProjectSign.signAmount", key: "ProjectSign.signAmount", label: "签约金额（万元）", kind: "number" }
+          ],
+          totalRows: 1,
+          sampleRows: [{ "ProjectSign.contractAmount": 3520, "ProjectSign.signAmount": 1286.5 }],
+          shape: "scalar"
+        }
+      ]
+    };
+
+    expect(JSON.stringify(summarizeDashboardDesignAsset(salesRecheckAsset, favoriteExecution(salesRecheckAsset))))
+      .toBe(JSON.stringify(before));
+  });
+
+  it("没有回答、回答为空白时整个请求体与老收藏逐字节一致", () => {
+    const fixtures = [salesAsset, mustSignAsset, monthlyIncomeAsset, salesRecheckAsset, salesDetailAsset, customerRankingAsset];
+    const requestOf = (assets: QueryAsset[]) => JSON.stringify(buildDashboardDesignRequest({
+      brief: "经营总览",
+      schema: boardOf([widget("bar-1", "bar")]),
+      data: Object.fromEntries(assets.map((item) => [item.id, { asset: item, execution: favoriteExecution(item) }])),
+      history: [{ role: "user", content: "上一轮" }]
+    }));
+    const legacy = requestOf(fixtures);
+
+    expect(legacy).not.toMatch(answerKeys);
+    expect(requestOf(fixtures.map((item) => withAnswer(item, "")))).toBe(legacy);
+    expect(requestOf(fixtures.map((item) => withAnswer(item, "  \n\t ")))).toBe(legacy);
+  });
+
+  it("超长回答截到三百字并以省略号收尾，不劈开代理对", () => {
+    const long = withAnswer(salesRecheckAsset, `${SALES_ANSWER}\n\n${"详".repeat(1_000)}`);
+    expect(summarizeDashboardDesignAsset(long, favoriteExecution(long)).answer).toMatch(/^善治今年的销售额为 1,286\.5 万元（含税）。 详+…$/);
+    expect(summarizeDashboardDesignAsset(long, favoriteExecution(long)).answer).toHaveLength(300);
+
+    // 第 299 个码元正好是「𠀀」的高位代理：整字退出去，宁可短一位也不留半个字。
+    const astral = withAnswer(salesRecheckAsset, `${"详".repeat(298)}${"𠀀".repeat(10)}`);
+    const answer = summarizeDashboardDesignAsset(astral, favoriteExecution(astral)).answer!;
+    expect(answer).toBe(`${"详".repeat(298)}…`);
+    expect(answer).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+});
+
 describe("summarizeDashboardDesignBoard", () => {
   it("角色按图种映射，饼图归入占比族", () => {
     const schema = boardOf([
@@ -322,6 +439,28 @@ describe("buildDashboardDesignRequest", () => {
     expect(JSON.stringify(request).length).toBeLessThanOrEqual(60_000);
   });
 
+  it("回答引用的列在第二十四列之外时顶替最后一列留下", () => {
+    const columns = Array.from({ length: 30 }, (_, index) => favoriteColumn(`Wide.metric${index}`, `指标${index}`, "number"));
+    const wide = favoriteOutput("output_001", columns, [
+      Object.fromEntries(columns.map((item, index) => [item.key, 1_000 + index + 0.25]))
+    ]);
+    const item = withAnswer(favoriteAsset("asset-wide", "善治第二十九项指标", [wide]), "第二十九项指标为 1,029.25。");
+    const request = buildDashboardDesignRequest({
+      brief: "试试",
+      data: { [item.id]: { asset: item, execution: execution(item, [wide]) } },
+      history: []
+    });
+    const summary = request.assets[0]!.outputs[0]!;
+
+    expect(summary.answerMetricKey).toBe("Wide.metric29");
+    expect(summary.columns).toHaveLength(24);
+    expect(summary.columns.map((column) => column.key)).toEqual([
+      ...columns.slice(0, 23).map((column) => column.key),
+      "Wide.metric29"
+    ]);
+    expect(Object.keys(summary.sampleRows[0]!)).toContain("Wide.metric29");
+  });
+
   it("丢完样本行仍超预算时再丢历史", () => {
     const request = buildDashboardDesignRequest({
       brief: "试试",
@@ -331,5 +470,69 @@ describe("buildDashboardDesignRequest", () => {
 
     expect(request.assets[0].outputs[0].sampleRows).toEqual([]);
     expect(request.history).toEqual([]);
+  });
+
+  describe("带回答原文时的裁剪顺序：样本行 → 历史 → 回答", () => {
+    const answered = [
+      withAnswer(salesRecheckAsset, SALES_ANSWER),
+      withAnswer(salesDetailAsset, SALES_ANSWER),
+      withAnswer(customerRankingAsset, RANKING_ANSWER)
+    ];
+    const answeredData: DashboardDesignAssetData = Object.fromEntries(
+      answered.map((item) => [item.id, { asset: item, execution: favoriteExecution(item) }])
+    );
+    const history = [{ role: "user" as const, content: "上一轮" }, { role: "assistant" as const, content: "已按区域对比编排" }];
+    const sizeOf = (request: DashboardDesignRequest) => JSON.stringify(request).length;
+    const withoutSamples = (request: DashboardDesignRequest): DashboardDesignRequest => ({
+      ...request,
+      assets: request.assets.map((item) => ({
+        ...item,
+        outputs: item.outputs.map((summary) => ({ ...summary, sampleRows: [] }))
+      }))
+    });
+    // brief 不参与裁剪、也不需要转义：用它把请求体垫到预算线上下，逐级验证每一档刚好够用时就停手。
+    const base = buildDashboardDesignRequest({ brief: "", data: answeredData, history });
+    const build = (padding: number) => buildDashboardDesignRequest({
+      brief: "垫".repeat(padding),
+      data: answeredData,
+      history
+    });
+    const answersOf = (request: DashboardDesignRequest) => request.assets.map((item) => item.answer);
+    const evidenceOf = (request: DashboardDesignRequest) =>
+      request.assets.map((item) => [item.outputs[0]?.answerMetricKey, item.outputs[0]?.answerValueMode]);
+
+    it("丢了样本行就够时，历史与回答都留着", () => {
+      const request = build(60_000 - sizeOf(withoutSamples(base)));
+
+      expect(sizeOf(request)).toBe(60_000);
+      expect(request.assets.every((item) => item.outputs.every((summary) => summary.sampleRows.length === 0))).toBe(true);
+      expect(request.history).toEqual(history);
+      expect(answersOf(request).every(Boolean)).toBe(true);
+    });
+
+    it("再丢历史就够时，回答仍然留着", () => {
+      const request = build(60_000 - sizeOf({ ...withoutSamples(base), history: [] }));
+
+      expect(sizeOf(request)).toBe(60_000);
+      expect(request.history).toEqual([]);
+      expect(answersOf(request)).toEqual(answersOf(base));
+    });
+
+    it("丢完样本行和历史仍超预算时最后丢回答，结构化证据保留", () => {
+      const request = build(60_000 - sizeOf({ ...withoutSamples(base), history: [] }) + 1);
+
+      expect(sizeOf(request)).toBeLessThanOrEqual(60_000);
+      expect(request.history).toEqual([]);
+      expect(answersOf(request)).toEqual([undefined, undefined, undefined]);
+      expect(request.assets.map((item) => Object.keys(item))).toEqual(
+        Array(3).fill(["assetId", "name", "question", "outputs"])
+      );
+      expect(evidenceOf(request)).toEqual(evidenceOf(base));
+      expect(evidenceOf(base)).toEqual([
+        ["ProjectSign.signAmount", undefined],
+        ["ProjectSign.signAmount", "sum"],
+        ["ProjectSign.signAmount", undefined]
+      ]);
+    });
   });
 });

@@ -29,6 +29,7 @@ import type {
   DashboardDesignChange,
   DashboardDesignHistoryTurn,
   DashboardDesignIssue,
+  DashboardDesignOps,
   DashboardDesignRejection,
   DashboardDesignSpec,
   DashboardDesignSpecWidget,
@@ -296,6 +297,44 @@ export function buildLocalDesignSpec(
   };
 }
 
+/**
+ * 模型给指标卡挑了回答引用过的结果表、却漏写了指标列或口径时，按回答证据补齐（与请求里的
+ * answerMetricKey / answerValueMode 同源）：没写 metricKey / metricKeys 就取回答引用的那一列；
+ * 取到的正是那一列、没写 valueMode、回答的数又是这一列的合计时补 sum。模型写明了的一律不动。
+ * 不补的话引擎会取排第一的金额列、时间序列默认取最新一期，和用户看到的回答对不上。
+ */
+export function fillAnswerMetricDefaults(
+  widget: DashboardDesignSpecWidget,
+  data: DashboardDesignAssetData
+): DashboardDesignSpecWidget {
+  if (widget.role !== "kpi" || !widget.assetId || !widget.outputKey || (widget.metricKey && widget.valueMode)) {
+    return widget;
+  }
+  const entry = data[widget.assetId] ?? Object.values(data).find((item) => item.asset.id === widget.assetId);
+  const answer = entry ? dashboardAnswerMetric(entry.asset, entry.execution.outputs, widget.outputKey) : undefined;
+  if (!answer) return widget;
+  // 与引擎取指标列的先后一致：metricKey，其次 metricKeys 的第一列。
+  const requested = widget.metricKey ?? widget.metricKeys?.[0];
+  const metricKey = requested ?? answer.metricKey;
+  const valueMode = widget.valueMode ?? (metricKey === answer.metricKey ? answer.valueMode : undefined);
+  return {
+    ...widget,
+    ...(requested ? {} : { metricKey }),
+    ...(valueMode ? { valueMode } : {})
+  };
+}
+
+function specWithAnswerMetrics(spec: DashboardDesignSpec, data: DashboardDesignAssetData): DashboardDesignSpec {
+  return { ...spec, widgets: spec.widgets.map((widget) => fillAnswerMetricDefaults(widget, data)) };
+}
+
+function opsWithAnswerMetrics(ops: DashboardDesignOps, data: DashboardDesignAssetData): DashboardDesignOps {
+  return {
+    ...ops,
+    ops: ops.ops.map((op) => (op.op === "add_widget" ? { ...op, widget: fillAnswerMetricDefaults(op.widget, data) } : op))
+  };
+}
+
 function historyOf(turns: SmartDashboardTurn[]): DashboardDesignHistoryTurn[] {
   return turns
     .filter((turn) => turn.kind !== "fix" && (turn.status === "ready" || turn.status === "applied" || turn.status === "discarded"))
@@ -494,7 +533,7 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
           } else if (event.type === "spec") {
             const parsed = parseDashboardDesignSpec(event.spec);
             if (parsed.spec) {
-              const applied = applyDashboardDesignSpec(schema, parsed.spec, data);
+              const applied = applyDashboardDesignSpec(schema, specWithAnswerMetrics(parsed.spec, data), data);
               candidate = { ...applied, rejected: [...parsed.rejected, ...applied.rejected] };
             } else {
               failure = parsed.rejected[0]?.reason ?? "模型没有返回可用的设计稿";
@@ -502,7 +541,7 @@ export function useSmartDashboardChat(input: UseSmartDashboardChatInput) {
           } else if (event.type === "ops") {
             const parsed = parseDashboardDesignOps(event.ops);
             if (parsed.ops) {
-              const applied = applyDashboardDesignOps(schema, parsed.ops, data);
+              const applied = applyDashboardDesignOps(schema, opsWithAnswerMetrics(parsed.ops, data), data);
               candidate = { ...applied, rejected: [...parsed.rejected, ...applied.rejected] };
             } else {
               failure = parsed.rejected[0]?.reason ?? "模型没有返回可用的修改清单";
