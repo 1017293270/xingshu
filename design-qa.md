@@ -1266,3 +1266,23 @@ final result: passed
   - 历史对话 1440。
 - 截图证据归档在 `outputs/beta04-final/`（`home/`、`ui/`、`history/`）。截图用隔离夹具，代理指向死端口 `127.0.0.1:9`，不代表线上数据验收。
 - 未修改环境文件、后端或依赖；未提交、推送或部署。
+
+## 2026-10-26 beta0.5 问数回答：表格、图表、数据洞察与引导问题
+
+- 范围、接口契约与上线步骤见 [beta0.5 问数回答](docs/superpowers/specs/2026-10-26-beta05-answer-insight.md)。本轮只做需求里的数据洞察、引导问题，以及「表格和图表只在结果是一组数据时出现」。
+- 回答区顺序：文字回答 → 表格回答 → 图表 → 数据洞察 → 你可能还想问。
+  - 结果是一组数据（任一结果表 ≥ 2 行）时，最多 3 张结果表进回答区，查询过程在本轮完成后自动收起，避免同一张表出现两次。
+  - 单个数值时不画表、不画图、不显示洞察；正文里只有一行的 Markdown 表改写成「列：值」一句话。
+  - 图表卡去掉「表格」切换，只剩一种图形时不显示切换。
+- 视觉沿用冰蓝底、白卡、细边框和低阴影，只用现有 token：洞察正文 14px，蓝色圆点；引导问题是 `--xs-radius-control` 圆角的浅底按钮，带 Phosphor 图标。没有新增图标或插画。
+- 洞察和引导问题由 ai-service 新接口 `POST /api/v1/chat/answer-insight` 生成，模型只引用前端算好的 facts 里的数字。接口 404/501（后端还没部署这一版）时不显示任何相关内容；其他失败显示一行灰字和「重新生成」。
+- 验证：
+  - Vitest 180 个文件、1794 项通过；构建、视觉类型检查通过；ESLint 0 error（28 个存量 warning）；`git diff --check` 通过。
+  - ai-service 定向测试通过：`AnswerInsightControllerTest` 4、`ScenePromptServiceTest` 14、`ChartPlanControllerTest` 1。
+  - 新增 `tests/visual/datahub-answer-insight.spec.ts` 2/2：一组数据的五段顺序、查询过程收起、点引导问题发起下一轮；单值只有引导问题。1440/1672/1920/2200/390 无横向溢出。
+  - `datahub-chat-flows` 中 8 个依赖旧布局的用例已按新布局改写（结果表从「查询过程里展开」改为「回答区可见、查询过程收起后可再展开」，单行 Markdown 表改为断言句子），改写的用例重复跑两轮均通过。
+  - `datahub-chat-flows`、`datahub-answer-insight`、`datahub-readable-chart` 合跑 34 个用例，31 个通过。`datahub-readable-chart` 原来点图表卡里的「表格」，已改为检查表格回答，现在通过。
+  - 剩余 3 个失败（文档查找 2 个、查询步骤 1 个）在基线 HEAD 5e11cce 上同样失败，不是本轮引入。基线上「thinking envelope agent mode」的断言本身前后矛盾，随新布局一起改正后通过。
+- 人工查看的截图：一组数据 1440、390，单值 1440。
+- 截图证据在 `outputs/beta05-answer-insight/`（`set-{1440,1672,1920,2200,390}.png`、`scalar-{1440,390}.png`）。截图用隔离夹具，接口全部 mock，不代表真实模型的洞察质量。
+- 未修改环境文件或依赖；前端与 ai-service 改动均未提交、推送或部署。

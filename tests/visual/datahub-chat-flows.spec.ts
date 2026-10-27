@@ -1458,6 +1458,16 @@ async function expandQueryProcess(page: Page) {
   return query;
 }
 
+// 回答区已经展示结果表时，查询过程会在本轮完成后自动收起；先等收起再点开，避免和自动收起抢时序。
+async function expandFinishedQueryProcess(page: Page) {
+  const query = page.getByRole("region", { name: "查询过程" });
+  const toggle = query.getByRole("button", { name: /查询过程/ });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(query.getByRole("region", { name: "查询结果", exact: true }).getByRole("table").first()).toBeVisible();
+  return query;
+}
+
 async function expandQueryTables(page: Page) {
   const query = await expandQueryProcess(page);
   const results = query.getByRole("region", { name: "查询结果", exact: true });
@@ -1520,9 +1530,8 @@ test("returned query tables preview inside query process while the summary stays
   const answer = page.getByLabel("正式回答", { exact: true });
   await expect(answer).toBeVisible();
   const result = page.getByRole("region", { name: "分析结果", exact: true });
-  await expect(result.getByRole("table")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "true");
-  const query = await expandQueryProcess(page);
+  await expect(result.getByRole("region", { name: "表格回答", exact: true }).getByRole("table")).toHaveCount(2);
+  const query = await expandFinishedQueryProcess(page);
   const tables = query.getByRole("region", { name: "查询结果", exact: true });
   await expect(tables.locator('[data-result-kind="table"]')).toHaveCount(2);
   await expect(tables.getByRole("table")).toHaveCount(2);
@@ -1692,8 +1701,10 @@ test("streaming child query results preview mixed evidence before root completio
   await modal.getByRole("button", { name: "Close" }).click();
   await page.evaluate(() => (window as Window & { __finishQueryFixture?: () => void }).__finishQueryFixture?.());
   await expect(page.locator('.analysis-turn[data-status="done"]')).toHaveCount(1);
-  await expect(query.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "true");
-  await expect(results.getByRole("cell", { name: "合同第1条", exact: true })).toBeVisible();
+  await expect(query.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "false");
+  const tableAnswer = page.getByRole("region", { name: "表格回答", exact: true });
+  await expect(tableAnswer.getByRole("table")).toHaveCount(1);
+  await expect(tableAnswer.getByRole("cell", { name: "合同第1条", exact: true })).toBeVisible();
   await expect(page.getByLabel("正式回答", { exact: true })).not.toContainText("确认命中的原文");
   await page.screenshot({ path: "outputs/query-process/mixed-child-results-1672.png", animations: "disabled", fullPage: true });
 });
@@ -1719,7 +1730,7 @@ test("query results explain a returned table and show readable date conditions",
   await page.goto("/ask-agent");
   await page.getByRole("textbox", { name: "命令输入" }).fill("按事件类别统计8月8日至9月8日的记录数");
   await page.getByRole("button", { name: "发送" }).click();
-  const query = page.getByRole("region", { name: "查询过程", exact: true });
+  const query = await expandFinishedQueryProcess(page);
   const results = query.getByRole("region", { name: "查询结果", exact: true });
   await expect(results.getByRole("status")).toHaveText("查到了 1 张结果表，下面是查询结果。");
   await expect(results.locator(".datahub-query-result__conditions summary")).toContainText("创建时间：2026-08-08 至 2026-09-08");
@@ -1804,20 +1815,19 @@ test("ask-data sends the strict v2 request and supports table to favorite", asyn
   await page.getByRole("button", { name: "发送" }).click();
 
   await expect(page.getByText("本月收入为 128 万元。", { exact: false }).first()).toBeVisible();
-  const queryProcess = await expandQueryProcess(page);
+  const tableAnswer = page.getByRole("region", { name: "表格回答", exact: true });
+  await expect(tableAnswer.getByRole("cell", { name: "7月", exact: true })).toBeVisible();
+  await expect(tableAnswer.getByRole("cell", { name: "128", exact: true })).toBeVisible();
+  const queryProcess = await expandFinishedQueryProcess(page);
   await expect(queryProcess.getByRole("region", { name: "查询结果" })).toContainText("经营分析库");
   await expect(page.getByText("子任务已完成。", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("正式回答", { exact: true })).not.toContainText("子任务已完成。");
   const chartCard = page.getByRole("region", { name: "智能图表建议" });
   await expect(chartCard.getByRole("heading", { name: "月度收入趋势" })).toBeVisible();
   await expect(chartCard.locator('[data-echarts-ready="true"]')).toBeVisible();
-  await chartCard.getByText("表格", { exact: true }).click();
-  await expect(chartCard.getByRole("cell", { name: "7月" })).toBeVisible();
-  await expect(chartCard.getByRole("cell", { name: "128" })).toBeVisible();
-  await expect(chartCard.getByRole("heading", { name: /月度收入趋势数据/ })).toBeVisible();
+  await expect(chartCard.getByText("表格", { exact: true })).toHaveCount(0);
   const originalTables = queryProcess.getByRole("region", { name: "查询结果", exact: true });
   await expect(originalTables.getByRole("cell", { name: "7月", exact: true })).toBeVisible();
-  await expect(chartCard.getByRole("cell", { name: "7月", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
 
   expect(fixture.streamRequests).toHaveLength(1);
@@ -2385,9 +2395,10 @@ test("a single ask child and root artifact share one favorite action", async ({ 
   const query = await expandQueryProcess(page);
   // 该夹具只返回模型Markdown，不能冒充已执行查询；答复表与收藏仍必须可用。
   await expect(query.locator('.datahub-query-result[data-result-kind="table"]')).toHaveCount(0);
-  await expect(page.getByLabel("正式回答", { exact: true }).getByRole("table")).toHaveCount(1);
-  await expect(page.getByRole("cell", { name: "小治" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "456" })).toBeVisible();
+  // 只有一行的 Markdown 表改写成一句话，不再单独画表。
+  const formalAnswer = page.getByLabel("正式回答", { exact: true });
+  await expect(formalAnswer.getByRole("table")).toHaveCount(0);
+  await expect(formalAnswer).toContainText("排名：1；咨询对象：小治；咨询量：456");
   await expect(page.getByRole("button", { name: "收藏问数" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "收藏数据结果（2）" })
@@ -2777,8 +2788,8 @@ for (const answerSource of ["text", "summary", "none"] as const) {
       await expect(answer).toContainText("9");
     }
     const output = page.getByRole("region", { name: "分析结果", exact: true });
-    await expect(output.getByRole("table")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "true");
+    await expect(output.getByRole("region", { name: "表格回答", exact: true }).getByRole("table")).toHaveCount(1);
+    await expandFinishedQueryProcess(page);
     const tables = await expandQueryTables(page);
     const table = tables.getByRole("table");
     await expect(table).toHaveCount(1);
@@ -2852,7 +2863,8 @@ for (const markerMode of ["ask", "agent"] as const) {
       await expect(answer).toContainText(/数据|结果|记录/);
       await expect(answer).toContainText("成都卓一科技有限公司");
       await expect(answer).toContainText("9");
-      await expect(page.getByRole("region", { name: "分析结果", exact: true }).getByRole("table")).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "表格回答", exact: true }).getByRole("table")).toHaveCount(1);
+      await expandFinishedQueryProcess(page);
       const tables = await expandQueryTables(page);
       await expect(tables.getByRole("table")).toHaveCount(1);
       await page.getByRole("button", { name: /^查询过程/ }).click();
@@ -2870,7 +2882,8 @@ for (const markerMode of ["ask", "agent"] as const) {
       // Agent夹具只有空协议壳，无公开思考；不应凭空创建完成阶段。
       await expect(page.getByRole("region", { name: "思考过程", exact: true })).toHaveCount(0);
     }
-    await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", "true");
+    // 单值结果不进回答区，查询过程保持展开；agent 夹具有多行结果表，上面已手动收起。
+    await expect(page.getByRole("button", { name: /^查询过程/ })).toHaveAttribute("aria-expanded", markerMode === "ask" ? "true" : "false");
     for (const width of [1440, 1672, 1920, 2200, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
       await expectNoHorizontalOverflow(page);
@@ -3089,7 +3102,7 @@ test("production query explains scope grouping count and actual sorting as reada
   await page.getByRole("textbox", { name: "命令输入" }).fill(`甲方为${company}的合同，按乙方分组统计合同数量并降序排列`);
   await page.getByRole("button", { name: "发送" }).click();
   await expect(page.getByLabel("正式回答", { exact: true })).toContainText(finalAnswer);
-  const query = await expandQueryProcess(page);
+  const query = await expandFinishedQueryProcess(page);
   const steps = query.getByRole("list", { name: "查询步骤", exact: true });
   await expect(steps.getByRole("listitem")).toHaveCount(4);
   await expect(steps).toContainText("限定查询范围");

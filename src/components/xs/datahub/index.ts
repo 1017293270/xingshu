@@ -1,4 +1,6 @@
 export { DataHubAgentExecutionCard } from "./DataHubAgentExecutionCard";
+export { DataHubAnswerInsightSection, DataHubFollowUpQuestions } from "./DataHubAnswerInsights";
+export type { DataHubAnswerInsightState } from "./DataHubAnswerInsights";
 export { DataHubCitationChips } from "./DataHubCitationChips";
 export { citationDisplayTitle, citationLocationText } from "./citationLabels";
 export { DataHubCitationFragments } from "./DataHubCitationFragments";

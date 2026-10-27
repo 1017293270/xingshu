@@ -40,6 +40,8 @@ export type DataHubBusinessExplanationProps = {
   /** 数据结果以完整表格下拉展示，替代重复的表格摘要卡；文档来源仍保留。 */
   resultTables?: ReactNode;
   queryProcess?: DataHubQueryProcess;
+  /** 结果表已在回答区展示时，查询过程跑完就收起，免得同一张表出现两次。 */
+  collapseWhenDone?: boolean;
   onStatus?: (message: string) => void;
   onOpenDocument?: (document: DataHubCitationDocument, group: DataHubCitationDocument[]) => void;
   children?: ReactNode;
@@ -102,6 +104,7 @@ export function DataHubBusinessExplanation({
   startedAt,
   resultTables,
   queryProcess,
+  collapseWhenDone = false,
   onStatus,
   onOpenDocument,
   children
@@ -110,22 +113,28 @@ export function DataHubBusinessExplanation({
   const now = useNow(1000, status === "running" && startedAt != null);
   const elapsedMs = status === "running" && startedAt != null ? Math.max(0, now - startedAt) : durationMs;
   const compact = queryProcess !== undefined;
-  const [expanded, setExpanded] = useState(compact || status === "running");
+  const [expanded, setExpanded] = useState(
+    compact ? !(collapseWhenDone && status === "done") : status === "running"
+  );
   const [selectedDocument, setSelectedDocument] = useState<DataHubBusinessDocument>();
   /* running 自动展开、结束自动收成一行；用户点过折叠头后交还控制权（有粘性）。 */
   const userPinnedRef = useRef(false);
   const prevStatusRef = useRef(status);
   useEffect(() => {
-    // 查询结果一旦可见就保留，折叠由用户控制；智写的旧过程调用保持原行为。
-    if (compact) return;
     if (prevStatusRef.current === status) {
       return;
     }
     prevStatusRef.current = status;
-    if (!userPinnedRef.current) {
-      setExpanded(status === "running");
+    if (userPinnedRef.current) {
+      return;
     }
-  }, [status, compact]);
+    // 问数页的查询结果默认保留可见；只有结果表已移到回答区时才在完成后收起。智写的旧过程调用保持原行为。
+    if (compact) {
+      if (collapseWhenDone && status === "done") setExpanded(false);
+      return;
+    }
+    setExpanded(status === "running");
+  }, [status, compact, collapseWhenDone]);
   const bodyMountedRef = useRef(expanded);
   if (expanded) bodyMountedRef.current = true;
   const content = trace ?? basicTrace({

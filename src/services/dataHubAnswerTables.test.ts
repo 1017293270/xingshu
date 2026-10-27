@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendDataHubAnswerTables, splitDataHubAnswerTables } from "./dataHubAnswerTables";
+import { appendDataHubAnswerTables, inlineDataHubSingleRowTables, splitDataHubAnswerTables } from "./dataHubAnswerTables";
 
 describe("splitDataHubAnswerTables", () => {
   it("does not repeat a returned table in the dropdown or merge independent query results", () => {
@@ -51,5 +51,20 @@ describe("splitDataHubAnswerTables", () => {
     expect(result.answer).toContain("正文保留");
     expect(result.answer).not.toContain("|");
     expect(result.answer).not.toContain(">");
+  });
+});
+
+describe("inlineDataHubSingleRowTables", () => {
+  it("rewrites a one-row table as a sentence and leaves real tables alone", () => {
+    expect(inlineDataHubSingleRowTables("全市养老机构数量：\n\n| 养老机构数量（家） |\n| --- |\n| **97** |\n\n以上。"))
+      .toBe("全市养老机构数量：\n\n养老机构数量（家）：97\n\n以上。");
+    expect(inlineDataHubSingleRowTables("- | 名称 | 状态 |\n  | --- | --- |\n  | 合同甲 | 已签署 |"))
+      .toBe("- 名称：合同甲；状态：已签署");
+
+    const ranking = "| 名称 | 数量 |\n| --- | --- |\n| 甲 | 12 |\n| 乙 | 8 |";
+    expect(inlineDataHubSingleRowTables(ranking)).toBe(ranking);
+    const wide = "| 一 | 二 | 三 | 四 | 五 |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |";
+    expect(inlineDataHubSingleRowTables(wide)).toBe(wide);
+    expect(inlineDataHubSingleRowTables("```\n| a |\n| --- |\n| 1 |\n```")).toBe("```\n| a |\n| --- |\n| 1 |\n```");
   });
 });

@@ -45,6 +45,32 @@ export function splitDataHubAnswerTables(markdown: string): { answer: string; ta
   return { answer: tables.length ? answer.trim() : markdown, tables };
 }
 
+/**
+ * 正文里只有一行数据的小表（如「养老机构数量 | 97」）改写成一句「列：值」，
+ * 单个数据不需要表格；两行及以上或超过 4 列的表原样保留。
+ */
+export function inlineDataHubSingleRowTables(markdown: string): string {
+  const replacements: Array<{ start: number; end: number; text: string }> = [];
+  function visit(node: Nodes) {
+    if (node.type === "table") {
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      const [header, row] = node.children;
+      if (start == null || end == null || node.children.length !== 2 || header.children.length > 4) return;
+      const text = header.children
+        .map((cell, index) => `${visibleText(cell).trim()}：${row.children[index] ? visibleText(row.children[index]).trim() : ""}`)
+        .join("；");
+      replacements.push({ start, end, text });
+    } else if ("children" in node) {
+      node.children.forEach(visit);
+    }
+  }
+  visit(parser.parse(markdown));
+  let result = markdown;
+  for (const { start, end, text } of replacements.reverse()) result = result.slice(0, start) + text + result.slice(end);
+  return result;
+}
+
 /** 保留每个原始查询，仅避免再加入正文中复述的同一张表。 */
 export function appendDataHubAnswerTables(queried: DataHubTableResult[], answers: DataHubTableResult[]) {
   const signature = (table: DataHubTableResult) => JSON.stringify([

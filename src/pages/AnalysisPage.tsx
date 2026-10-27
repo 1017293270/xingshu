@@ -31,11 +31,14 @@ import { XsCommandBox } from "@/components/xs/XsCommandBox";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import { XsStatusBar } from "@/components/xs/XsStatusBar";
 import {
+  DataHubAnswerInsightSection,
   DataHubBusinessExplanation,
   DataHubCitationChips,
   DataHubExecutionPanel,
+  DataHubFollowUpQuestions,
   DataHubProcessDock,
-  DataHubResultTable
+  DataHubResultTable,
+  type DataHubAnswerInsightState
 } from "@/components/xs/datahub";
 import { useClarifyDock, XsClarifyCard, XsClarifyPanel } from "@/components/xs/conversation";
 import { clarifyAllModesEnabled, queryAssetFeatureEnabled } from "@/config/features";
@@ -81,17 +84,31 @@ import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService"
 import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
 import { buildDataHubResultSummary } from "@/services/dataHubResultSummary";
 import {
+  buildDataHubAnswerInsightRequest,
+  isDataHubAnswerInsightUnavailable,
+  isDataHubResultSet,
+  readRememberedAnswerInsight,
+  rememberAnswerInsight,
+  requestDataHubAnswerInsight
+} from "@/services/dataHubAnswerInsightService";
+import { inlineDataHubSingleRowTables, splitDataHubAnswerTables } from "@/services/dataHubAnswerTables";
+import {
   dataHubRootAnsweredAfterChildren,
   dedupeDataHubAnswerBlocks
 } from "@/services/dataHubAnswerDedupe";
 import { AnalysisCitationPreview, citationPreviewId } from "./AnalysisCitationPreview";
 import { citationKnowledgeBaseLabel, citationDisplayTitle, citationLocationText } from "@/components/xs/datahub/citationLabels";
-import { formatDataHubCitationFragment, formatDataHubColumnTitle } from "@/services/dataHubFormat";
+import {
+  formatDataHubCitationFragment,
+  formatDataHubColumnTitle,
+  formatDataHubTableTitle
+} from "@/services/dataHubFormat";
 import { getDataHubResponsePhases } from "@/services/dataHubResponsePhases";
 import { getDataHubThinkingSections } from "@/services/dataHubThinkingSections";
 import { buildDataHubQueryProcess } from "@/services/dataHubQueryProcessPresenter";
 import { useUiStore, type AnalysisTurnState } from "@/stores/uiStore";
 import type { AiChartType, GeneratedChartSpec } from "@/types/aiChart";
+import type { DataHubAnswerInsightRequest } from "@/types/answerInsight";
 import type {
   DataHubAskDataStatus,
   DataHubAskTurn,
@@ -126,6 +143,13 @@ type QueryAssetActionItem = {
 };
 
 const autoScrollBottomThreshold = 24;
+// 回答区最多直接展示的结果表数；更多的留在查询过程里。
+const tableAnswerLimit = 3;
+const markdownTableSeparatorPattern = /^\s*\|?\s*:?-{3,}:?\s*\|/m;
+
+function answerInsightCacheKey(turn: Pick<AnalysisTurnState, "sessionId" | "chatId">) {
+  return `${turn.sessionId}::${turn.chatId}`;
+}
 const incompleteHistoryQueryMessage =
   "历史问数缺少完整可执行查询，请重新问数后收藏";
 
@@ -760,7 +784,6 @@ function AiChartSuccessCard({
   state: Extract<AiChartUiState, { status: "success" }>;
   onTypeChange: (type: AiChartType) => void;
 }) {
-  const [showTable, setShowTable] = useState(false);
   const compactChart = useMediaQuery("(max-width: 900px)");
   const [page, setPage] = useState(1);
   const [selectedMetric, setSelectedMetric] = useState("");
@@ -800,30 +823,19 @@ function AiChartSuccessCard({
     };
   }, [state.spec]);
 
-  const viewControl = (
+  // 表格已在图表上方的表格回答里展示，这里只切换图形。
+  const viewControl = state.spec.allowedTypes.length > 1 ? (
     <Segmented
       size="small"
-      aria-label="结果展示方式"
-      value={showTable ? "table" : state.activeType}
-      options={[
-        ...state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type })),
-        { label: "表格", value: "table" }
-      ]}
-      onChange={(value) => {
-        setShowTable(value === "table");
-        if (value !== "table") onTypeChange(value as AiChartType);
-      }}
+      aria-label="图表类型"
+      value={state.activeType}
+      options={state.spec.allowedTypes.map((type) => ({ label: chartTypeLabel(type), value: type }))}
+      onChange={(value) => onTypeChange(value as AiChartType)}
     />
-  );
+  ) : undefined;
 
   return (
     <section className="ai-chart-card ai-chart-card--success" role="region" aria-label="智能图表建议">
-      {showTable ? (
-        <>
-          <div className="ai-chart-card__view-control">{viewControl}</div>
-          <DataHubResultTable table={chartTable} />
-        </>
-      ) : (
       <XsChartCard
         contained={false}
         title={state.spec.title}
@@ -871,7 +883,6 @@ function AiChartSuccessCard({
           </div>
         ) : undefined}
       />
-      )}
     </section>
   );
 }
@@ -902,6 +913,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const [workflowStatus, setWorkflowStatus] = useState("");
   const [selectedQuickQuestion, setSelectedQuickQuestion] = useState("");
   const [aiChartStates, setAiChartStates] = useState<Record<string, AiChartUiState>>({});
+  const [answerInsightStates, setAnswerInsightStates] = useState<Record<string, DataHubAnswerInsightState>>({});
   const [citationPreview, setCitationPreview] = useState<{
     citations: DataHubCitationDocument[];
     active: DataHubCitationDocument;
@@ -930,6 +942,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
   const liveChartTurnIdsRef = useRef(new Set<string>());
   const autoChartAttemptedRef = useRef(new Set<string>());
   const chartPlanInFlightRef = useRef(new Set<string>());
+  const answerInsightCheckedRef = useRef(new Set<string>());
+  const answerInsightRequestsRef = useRef(new Map<string, { cacheKey: string; request: DataHubAnswerInsightRequest }>());
   const isKnowledgeMode = mode === "rag";
   const isDocumentLookupMode = mode === "document_lookup";
   const isAgentMode = mode === "agent";
@@ -1037,6 +1051,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       liveChartTurnIdsRef.current.clear();
       autoChartAttemptedRef.current.clear();
       chartPlanInFlightRef.current.clear();
+      answerInsightCheckedRef.current.clear();
+      answerInsightRequestsRef.current.clear();
       cancelSmoothScroll(smoothScrollHandleRef.current);
       setIsScrollToBottomVisible(false);
     }
@@ -1343,6 +1359,27 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     }
   }, []);
 
+  const handleGenerateAnswerInsight = useCallback(async (turnId: string) => {
+    const pending = answerInsightRequestsRef.current.get(turnId);
+    if (!pending) {
+      return;
+    }
+
+    setAnswerInsightStates((current) => ({ ...current, [turnId]: { status: "loading" } }));
+    try {
+      const insight = await requestDataHubAnswerInsight(pending.request);
+      rememberAnswerInsight(pending.cacheKey, insight);
+      setAnswerInsightStates((current) => ({ ...current, [turnId]: { status: "success", insight } }));
+    } catch (error) {
+      setAnswerInsightStates((current) => ({
+        ...current,
+        [turnId]: isDataHubAnswerInsightUnavailable(error)
+          ? { status: "success", insight: { insights: [], followUps: [] } }
+          : { status: "error", message: error instanceof Error ? error.message : "数据洞察生成失败" }
+      }));
+    }
+  }, []);
+
   useEffect(() => {
     if (!supportsTables) {
       return;
@@ -1354,15 +1391,18 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         continue;
       }
 
-      if (
-        turn.status !== "done" ||
-        !liveChartTurnIdsRef.current.has(turn.id) ||
-        autoChartAttemptedRef.current.has(turn.id) ||
-        (aiChartStates[turn.id]?.status ?? "idle") !== "idle"
-      ) {
+      // 图表和数据洞察只为本页刚跑完的一轮生成；历史对话只取当时记下的洞察，不再调用模型。
+      const isLiveTurn = liveChartTurnIdsRef.current.has(turn.id);
+      const wantsChart =
+        isLiveTurn &&
+        !autoChartAttemptedRef.current.has(turn.id) &&
+        (aiChartStates[turn.id]?.status ?? "idle") === "idle";
+      const wantsInsight = !answerInsightCheckedRef.current.has(turn.id);
+      if (turn.status !== "done" || (!wantsChart && !wantsInsight)) {
         continue;
       }
 
+      answerInsightCheckedRef.current.add(turn.id);
       const turnAsk = createDataHubAskTurn(
         turn.question,
         turn.events,
@@ -1371,29 +1411,58 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         { sessionId: turn.sessionId, chatId: turn.chatId }
       );
       if (turnAsk.error || turnAsk.done?.failed) continue;
-      const tables = isAskMode || isAgentMode
-        ? getDataHubAskTableResults(
-            projectDataHubExecutionEvents(turn.events, {
-              mainSessionId: turn.sessionId || undefined,
-              globalSessionId: turn.sessionId || undefined,
-              chatId: turn.chatId,
-              fallbackAgentName: `${taskName}智能体`,
-              terminalStatus: "done"
-            }),
-            isAskMode
-          )
-        : [];
+      const projection = projectDataHubExecutionEvents(turn.events, {
+        mainSessionId: turn.sessionId || undefined,
+        globalSessionId: turn.sessionId || undefined,
+        chatId: turn.chatId,
+        fallbackAgentName: `${taskName}智能体`,
+        terminalStatus: "done"
+      });
+      const askTables = isAskMode || isAgentMode ? getDataHubAskTableResults(projection, isAskMode) : [];
 
-      if (!canAutoGenerateAiChart({ question: turn.question, tables, answer: turnAsk.assistantContent })) {
+      if (wantsChart && canAutoGenerateAiChart({ question: turn.question, tables: askTables, answer: turnAsk.assistantContent })) {
+        autoChartAttemptedRef.current.add(turn.id);
+        void handleGenerateAiChart(turn.id, turn.question, askTables, turnAsk.assistantContent);
+      }
+
+      if (!wantsInsight) {
         continue;
       }
 
-      autoChartAttemptedRef.current.add(turn.id);
-      void handleGenerateAiChart(turn.id, turn.question, tables, turnAsk.assistantContent);
+      const cacheKey = answerInsightCacheKey(turn);
+      const remembered = readRememberedAnswerInsight(cacheKey);
+      if (remembered) {
+        setAnswerInsightStates((current) => ({ ...current, [turn.id]: { status: "success", insight: remembered } }));
+        continue;
+      }
+
+      if (!isLiveTurn) {
+        continue;
+      }
+
+      // 与结果区同一口径：子智能体结论顶上来时，正文取子结论。
+      const childAnswerBlocks = !dataHubRootAnsweredAfterChildren(turn.events)
+        ? dedupeDataHubAnswerBlocks(getDataHubChildAnswerBlocks(projection))
+        : [];
+      const answer = (childAnswerBlocks.length ? childAnswerBlocks : turnAsk.answerBlocks)
+        .map((block) => block.content)
+        .join("\n\n");
+      const request = buildDataHubAnswerInsightRequest(
+        turn.question,
+        answer,
+        askTables.length > 0 ? askTables : turnAsk.tableResults
+      );
+      if (!request) {
+        continue;
+      }
+
+      answerInsightRequestsRef.current.set(turn.id, { cacheKey, request });
+      void handleGenerateAnswerInsight(turn.id);
     }
   }, [
     aiChartStates,
     handleGenerateAiChart,
+    handleGenerateAnswerInsight,
     isAgentMode,
     isAskMode,
     supportsTables,
@@ -1554,6 +1623,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     }
   };
 
+  const handleAskFollowUpQuestion = (question: string) => {
+    streamDataHubQuestion(question, mode);
+    setWorkflowStatus(`已继续追问：${question}`);
+  };
+
   /** 次级动作：在新标签打开原文（模态里的「新标签打开」、浏览器内嵌失败时的逃生口）。 */
   const openCitationInNewTab = async (citation: DataHubCitationDocument) => {
     const previewWindow = window.open("about:blank", "_blank");
@@ -1700,7 +1774,12 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               ).filter((block) => block.content.trim());
               // Markdown 表可能是说明或查询结果的复述，不能作为新的查询产物计数。
               // 保留正文及其表格结构；只有执行事件中的结构化结果进入查询过程。
-              const narrativeBlocks = modelAnswerBlocks;
+              // 单个数据不需要表格：正文里只有一行的小表改写成「列：值」。
+              const narrativeBlocks = modelAnswerBlocks.map((block) =>
+                markdownTableSeparatorPattern.test(block.content)
+                  ? { ...block, content: inlineDataHubSingleRowTables(block.content) }
+                  : block
+              );
               const summaryTables = !narrativeBlocks.length ? visibleTables : [];
               const resultSummary = supportsTables && displayStatus === "done"
                 ? buildDataHubResultSummary(turn.question, summaryTables)
@@ -1808,6 +1887,17 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                 }
               );
               const answerPreamble = buildDataHubAnswerPreamble(businessKind, businessTrace, answerText);
+              // 表格回答只给一组数据（两行及以上）；正文自己已经列了多行表时不再重复一张。
+              const answerListsTable = displayStatus === "done" && visibleAnswerBlocks.some((block) =>
+                markdownTableSeparatorPattern.test(block.content) &&
+                splitDataHubAnswerTables(block.content).tables.some(isDataHubResultSet)
+              );
+              const tableAnswers = supportsTables && displayStatus === "done" && !answerListsTable
+                ? visibleTables.filter(isDataHubResultSet)
+                : [];
+              const answerInsightState = displayStatus === "done" ? answerInsightStates[turn.id] : undefined;
+              const followUpQuestions =
+                isLatestTurn && answerInsightState?.status === "success" ? answerInsightState.insight.followUps : [];
 
               return (
                 <div
@@ -1888,6 +1978,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           startedAt={phases.queryStartedAt}
                           durationMs={phases.queryDurationMs}
                           queryProcess={queryProcess}
+                          collapseWhenDone={tableAnswers.length > 0}
                           onStatus={setWorkflowStatus}
                           onOpenDocument={handleOpenCitation}
                         >
@@ -2009,10 +2100,33 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               })}
                             </div>
                           ) : null}
+                          {tableAnswers.length > 0 ? (
+                            <section className="analysis-table-answer" aria-label="表格回答">
+                              {tableAnswers.slice(0, tableAnswerLimit).map((table, index) => (
+                                <div className="analysis-table-answer__item" key={`${table.tableIndex ?? "table"}-${index}`}>
+                                  <h3 className="analysis-table-answer__title">
+                                    {table.title || table.groupLabel || formatDataHubTableTitle(table, index)}
+                                  </h3>
+                                  <DataHubResultTable table={table} compact onStatus={setWorkflowStatus} />
+                                </div>
+                              ))}
+                              {tableAnswers.length > tableAnswerLimit ? (
+                                <p className="analysis-table-answer__more">
+                                  另有 {tableAnswers.length - tableAnswerLimit} 张结果表，可在上方查询过程中查看。
+                                </p>
+                              ) : null}
+                            </section>
+                          ) : null}
                           {isResultReady && aiChartState.status === "success" ? (
                             <AiChartSuccessCard
                               state={aiChartState}
                               onTypeChange={(type) => handleChartTypeChange(turn.id, type)}
+                            />
+                          ) : null}
+                          {answerInsightState ? (
+                            <DataHubAnswerInsightSection
+                              state={answerInsightState}
+                              onRetry={() => void handleGenerateAnswerInsight(turn.id)}
                             />
                           ) : null}
                           {supportsCitations &&
@@ -2039,6 +2153,11 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                               onOpen={(document) => handleOpenDocumentLookupResult(document)}
                             />
                           ) : null}
+                          <DataHubFollowUpQuestions
+                            questions={followUpQuestions}
+                            disabled={askDataStatus === "streaming"}
+                            onAsk={handleAskFollowUpQuestion}
+                          />
                           {displayStatus === "streaming" && !hasRenderableResult ? (
                             <DataHubResultLoading
                               taskName={taskName}

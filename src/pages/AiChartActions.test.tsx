@@ -156,9 +156,12 @@ describe("AI chart actions", () => {
     expect(card).toHaveTextContent("当前显示第 49–50 条");
     expect(option().series[0].data).toEqual([48000, 49000]);
     expect(within(card).getByRole("button", { name: "下一组" })).toBeDisabled();
-    await user.click(within(card).getByText("表格", { exact: true }));
-    expect(card).toHaveTextContent("已返回 50 行");
-    expect(within(card).getByRole("columnheader", { name: "合同乙方" })).toHaveAttribute("scope", "col");
+    // 表格回答在图表上方，图表卡不再切换表格。
+    expect(within(card).queryByText("表格", { exact: true })).not.toBeInTheDocument();
+    const tableAnswer = screen.getByRole("region", { name: "表格回答" });
+    expect(tableAnswer).toHaveTextContent("已返回 50 行");
+    expect(within(tableAnswer).getByRole("columnheader", { name: "合同乙方" })).toHaveAttribute("scope", "col");
+    expect(tableAnswer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   beforeEach(() => {
@@ -235,7 +238,7 @@ describe("AI chart actions", () => {
   });
 
   it("does not auto-plan a chart for a completed scalar answer", async () => {
-    const fetchSpy = vi.spyOn(window, "fetch");
+    const fetchSpy = vi.spyOn(window, "fetch").mockRejectedValue(new Error("offline"));
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("咨询总数是多少");
     renderPage(<AnalysisPage mode="ask" />);
@@ -256,7 +259,8 @@ describe("AI chart actions", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /展开结果表/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "智能图表建议" })).not.toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "表格回答" })).not.toBeInTheDocument();
+    expect(fetchSpy.mock.calls.map(([input]) => String(input))).not.toContainEqual(expect.stringContaining("chart-plan"));
   });
 
   it("generates an ECharts card from the latest ask-data table", async () => {
@@ -303,9 +307,8 @@ describe("AI chart actions", () => {
     await user.click(within(chartCard).getByText("柱状"));
     const bar = JSON.parse(within(chartCard).getByRole("img").getAttribute("data-option")!);
     expect(bar.series[0].data).toEqual([25, 50, 25]);
-    await user.click(within(chartCard).getByText("表格"));
-    expect(within(chartCard).queryByRole("img")).not.toBeInTheDocument();
-    const sourceTable = within(chartCard).getByRole("table");
+    expect(within(chartCard).queryByText("表格")).not.toBeInTheDocument();
+    const sourceTable = within(screen.getByRole("region", { name: "表格回答" })).getByRole("table");
     expect(within(sourceTable).getByRole("columnheader", { name: "收入人群" })).toHaveAttribute("scope", "col");
     expect(within(sourceTable).getByRole("cell", { name: "中收入" })).toBeInTheDocument();
     expect(within(sourceTable).getByRole("cell", { name: "50" })).toBeInTheDocument();
@@ -388,7 +391,6 @@ describe("AI chart actions", () => {
   });
 
   it("aligns the chart to the root ranking without merging unrelated child rows", async () => {
-    const user = userEvent.setup();
     const fetchSpy = vi.spyOn(window, "fetch").mockResolvedValue(new Response(JSON.stringify({
       code: 200, message: "ok", data: {
         chartable: true, chartType: "bar", allowedTypes: ["bar", "pie"], title: "最终咨询对象排名",
@@ -412,11 +414,13 @@ describe("AI chart actions", () => {
     const bar = JSON.parse(within(chartCard).getByRole("img").getAttribute("data-option")!);
     expect(bar.xAxis.data).toEqual(["小治", "Senrun"]);
     expect(bar.series[0].data).toEqual([456, 93]);
-    await user.click(within(chartCard).getByText("表格"));
-    const rows = within(chartCard).getAllByRole("row").slice(1).map((row) =>
-      within(row).getAllByRole("cell").slice(1).map((cell) => cell.textContent)
+    // 正文已经列出多行排行表，不再单独重复一张表格回答。
+    expect(within(chartCard).queryByText("表格")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "表格回答" })).not.toBeInTheDocument();
+    const answerRows = within(screen.getByLabelText("正式回答")).getAllByRole("row").slice(1).map((row) =>
+      within(row).getAllByRole("cell").map((cell) => cell.textContent)
     );
-    expect(rows).toEqual([["小治", "456"], ["Senrun", "93"]]);
+    expect(answerRows).toEqual([["小治", "456"], ["Senrun", "93"]]);
     expect(within(chartCard).queryByText("合同咨询")).not.toBeInTheDocument();
   });
 
@@ -435,11 +439,14 @@ describe("AI chart actions", () => {
       store.completeAskDataRun(runId);
     });
     await screen.findByRole("region", { name: "智能图表建议" });
-    const result = within(screen.getByRole("region", { name: "分析结果" }));
-    expect(result.queryByRole("table")).not.toBeInTheDocument();
+    const answerTables = within(screen.getByRole("region", { name: "表格回答" }));
+    expect(answerTables.getAllByRole("table")).toHaveLength(2);
+    expect(answerTables.getByRole("cell", { name: "小治" })).toBeVisible();
+    // 查询过程跑完收起，展开后仍保留每一张原始结果表。
     const query = screen.getByRole("region", { name: "查询过程" });
     const queryToggle = within(query).getByRole("button", { name: /查询过程/ });
-    expect(queryToggle).toHaveAttribute("aria-expanded", "true");
+    expect(queryToggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.setup().click(queryToggle);
     const tables = within(within(query).getByRole("region", { name: "查询结果" }));
     expect(tables.getAllByRole("table")).toHaveLength(2);
     expect(tables.getByRole("cell", { name: "合同咨询" })).toBeVisible();

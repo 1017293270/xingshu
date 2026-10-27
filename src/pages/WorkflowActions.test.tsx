@@ -1922,8 +1922,10 @@ describe("workflow page actions", () => {
     expect(screen.queryByRole("heading", { name: "综合结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出结果" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
+    // 每份合同只有一行，正文里的单行表改写成一句话，不在回答区画表格。
     const result = screen.getByRole("region", { name: "分析结果" });
-    expect(within(result).getByRole("table")).toHaveTextContent("szsz-2023-cg00001");
+    expect(within(result).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(result).getByLabelText("正式回答")).toHaveTextContent("合同编号：szsz-2023-cg00001");
     const tables = openResultTables(2, 2);
     expect(tables.getAllByRole("table")).toHaveLength(2);
     expect(tables.getByRole("cell", { name: "szsz-2023-cg00001" })).toBeVisible();

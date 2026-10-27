@@ -27,6 +27,21 @@ function openResultTables(count: number, rows: number) {
   return within(tables);
 }
 
+/** 一组数据（两行及以上）放在回答区的表格回答里，查询过程跑完收起，同一张表不出现两遍。 */
+function tableAnswer(count: number, rows: number) {
+  const result = screen.getByRole("region", { name: "分析结果" });
+  const answers = within(result).getByRole("region", { name: "表格回答" });
+  expect(within(answers).getAllByRole("table")).toHaveLength(count);
+  expect(within(answers).getAllByRole("row")).toHaveLength(count + rows);
+  const query = screen.getByRole("region", { name: "查询过程" });
+  expect(within(query).getByRole("button", { name: /查询过程/ })).toHaveAttribute("aria-expanded", "false");
+  return within(answers);
+}
+
+function requestedPaths() {
+  return vi.mocked(window.fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost").pathname);
+}
+
 describe("analysis response phases", () => {
   it("restores a suspended native clarification instead of completed empty phases", () => {
     const identity = { sessionId: "history-source", chatId: "history-source-chat" };
@@ -217,17 +232,15 @@ describe("analysis response phases", () => {
     expect(screen.queryByRole("button", { name: /展开结果表/ })).not.toBeInTheDocument();
   });
 
-  it("keeps a useful summary when a model returns only a Markdown table", () => {
+  it("rewrites a one-row Markdown table in the answer as a sentence", () => {
     const store = useUiStore.getState();
     const runId = store.startAskDataRun("查询合同状态", null, "ask");
     store.appendAskDataEvent(runId, { type: "text", content: "| 名称 | 状态 |\n| --- | --- |\n| 合同甲 | 已签署 |" });
     store.completeAskDataRun(runId);
     renderPage("ask");
-    expect(screen.getByLabelText("正式回答")).toHaveTextContent("合同甲");
-    expect(screen.getByLabelText("正式回答")).toHaveTextContent("已签署");
-    const tables = within(screen.getByLabelText("正式回答"));
-    expect(tables.getByRole("cell", { name: "合同甲" })).toBeVisible();
-    expect(tables.getByRole("cell", { name: "已签署" })).toBeVisible();
+    const answer = screen.getByLabelText("正式回答");
+    expect(answer).toHaveTextContent("名称：合同甲；状态：已签署");
+    expect(within(answer).queryByRole("table")).not.toBeInTheDocument();
     expect(window.fetch).not.toHaveBeenCalled();
   });
 
@@ -302,7 +315,8 @@ describe("analysis response phases", () => {
     expect(answer).toHaveTextContent(rootSummary ? `最终核验：${conclusion}` : conclusion);
     expect(answer).not.toHaveTextContent("我来为您查询");
     expect(answer).not.toHaveTextContent("本次返回");
-    const tables = openResultTables(1, 3);
+    const tables = tableAnswer(1, 3);
+    expect(answer.compareDocumentPosition(tables.getByRole("table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tables.getByRole("cell", { name: "广州思迈特软件有限公司" })).toBeVisible();
     expect(tables.getByRole("cell", { name: "6" })).toBeVisible();
   });
@@ -335,7 +349,7 @@ describe("analysis response phases", () => {
     expect(summary).not.toHaveTextContent("第四公司");
     expect(summary.textContent!.indexOf("广州思迈特")).toBeLessThan(summary.textContent!.indexOf("杭州海康"));
     expect(summary.textContent!.indexOf("杭州海康")).toBeLessThan(summary.textContent!.indexOf("第三公司"));
-    const tables = openResultTables(1, 4);
+    const tables = tableAnswer(1, 4);
     expect(tables.getByRole("cell", { name: "第四公司" })).toBeVisible();
     expect(tables.getAllByRole("row")).toHaveLength(5);
   });
@@ -487,7 +501,8 @@ describe("analysis response phases", () => {
     expect(current.getByLabelText("正式回答")).toHaveTextContent("生效合同共 8 份。");
     expect(current.queryByRole("table")).not.toBeInTheDocument();
     expect(current.queryByRole("region", { name: "智能图表建议" })).not.toBeInTheDocument();
-    expect(window.fetch).not.toHaveBeenCalled();
+    // 单个数值不画图，但仍会请求引导问题。
+    expect(requestedPaths()).toEqual(["/api/v1/chat/answer-insight"]);
   });
 });
 

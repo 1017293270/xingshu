@@ -1984,6 +1984,45 @@
   font-size: var(--xs-fs-caption);
 }
 
+/* 表格回答紧跟文字回答：表名一行小标题，表体沿用查询结果的紧凑表格。 */
+.analysis-table-answer {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 16px 0;
+}
+
+.analysis-table-answer__item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.analysis-table-answer__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-table-answer__more {
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
+.analysis-result-stage > :is(.datahub-answer-insight, .datahub-answer-insight__pending) {
+  margin: 16px 0;
+}
+
+.analysis-result-stage > .datahub-follow-ups {
+  margin-top: 16px;
+}
+
 .knowledge-citations__chips,
 .document-lookup-results__list--names {
   display: flex;

@@ -1,0 +1,132 @@
+/* 数据洞察跟在表格和图表之后，是正文的延续：同字号同行高，只用一个小标题分段。 */
+.datahub-answer-insight {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.datahub-answer-insight__title {
+  margin: 0;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.6;
+}
+
+.datahub-answer-insight__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 1.2em;
+  color: var(--xs-text);
+  font-size: var(--xs-fs-control);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.76;
+  overflow-wrap: anywhere;
+}
+
+.datahub-answer-insight__list li::marker {
+  color: var(--xs-primary-2);
+}
+
+.datahub-answer-insight__list strong {
+  font-weight: var(--xs-fw-medium);
+}
+
+.datahub-answer-insight__pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+  line-height: 1.7;
+}
+
+.datahub-answer-insight__retry {
+  padding: 0;
+  color: var(--xs-primary-2);
+  font: inherit;
+  font-weight: var(--xs-fw-medium);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.datahub-answer-insight__retry:hover {
+  text-decoration: underline;
+}
+
+.datahub-follow-ups {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.datahub-follow-ups__label {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.6;
+}
+
+.datahub-follow-ups__list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.datahub-follow-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 5px 12px;
+  color: var(--xs-text-2);
+  font: inherit;
+  font-size: var(--xs-fs-label);
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-control);
+  background: var(--xs-surface-soft);
+  transition: color 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.datahub-follow-up svg {
+  flex: none;
+  color: var(--xs-text-3);
+}
+
+.datahub-follow-up span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.datahub-follow-up:hover:not(:disabled),
+.datahub-follow-up:focus-visible {
+  color: var(--xs-primary-2);
+  border-color: #d8eaff;
+  background: var(--xs-surface);
+}
+
+.datahub-follow-up:hover:not(:disabled) svg {
+  color: var(--xs-primary-2);
+}
+
+.datahub-follow-up:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .datahub-follow-up {
+    transition: none;
+  }
+}

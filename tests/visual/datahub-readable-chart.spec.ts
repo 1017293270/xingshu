@@ -79,8 +79,10 @@ test("dense amount comparisons remain readable, paged and faithful to their sour
   await expect(card).toContainText("当前显示第 49–50 条");
   await expect(card.getByRole("button", { name: "下一组", exact: true })).toBeDisabled();
   expect((await getChart())!.series[0].data).toEqual([144000, 147000]);
-  await card.getByText("表格", { exact: true }).click();
-  await expect(card).toContainText("全部 50 行");
-  await expect(card.getByRole("columnheader", { name: "合同乙方", exact: true })).toBeVisible();
+  // 原始记录在图表上方的表格回答里，图表卡只切换图形。
+  await expect(card.getByText("表格", { exact: true })).toHaveCount(0);
+  const tableAnswer = page.getByRole("region", { name: "表格回答", exact: true });
+  await expect(tableAnswer).toContainText("全部 50 行");
+  await expect(tableAnswer.getByRole("columnheader", { name: "合同乙方", exact: true })).toBeVisible();
   expect(streamRequests).toBe(1);
 });
