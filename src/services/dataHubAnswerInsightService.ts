@@ -1,4 +1,5 @@
 import { createAiChartPlanRequestSummary } from "@/services/aiChartPlannerService";
+import { createAnswerMemory } from "@/services/answerMemory";
 import { DataHubServiceError, requestDataHub } from "@/services/dataHubClient";
 import { formatDataHubTableCell } from "@/services/dataHubTableExport";
 import type { AiChartColumnSummary } from "@/types/aiChart";
@@ -18,9 +19,6 @@ const insightAnswerLimit = 6000;
 const insightPayloadBudget = 48_000;
 const insightLimit = 4;
 const followUpLimit = 3;
-const answerInsightStorageKey = "xingshu_answer_insights";
-const answerInsightCacheLimit = 80;
-
 const totalLabelPattern = /^(?:合计|总计|小计|共计|总数|全部|汇总|total)$/i;
 const rankLikePattern = /排名|名次|\brank\b/i;
 // 比率、均值类指标相加没有意义，只比较高低，不算合计和占比。
@@ -258,47 +256,17 @@ export function isDataHubAnswerInsightUnavailable(error: unknown) {
   return error instanceof DataHubServiceError && (error.status === 404 || error.status === 501);
 }
 
-function answerInsightStorage() {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-type RememberedAnswerInsights = Record<string, DataHubAnswerInsight & { updatedAt: number }>;
-
-function readRememberedAnswerInsights(): RememberedAnswerInsights {
-  try {
-    const raw = answerInsightStorage()?.getItem(answerInsightStorageKey);
-    const parsed: unknown = raw ? JSON.parse(raw) : undefined;
-    if (!isRecord(parsed)) return {};
-    return Object.fromEntries(Object.entries(parsed).flatMap(([key, value]) => {
-      if (!isRecord(value)) return [];
-      const updatedAt = typeof value.updatedAt === "number" ? value.updatedAt : 0;
-      return [[key, { ...normalizeDataHubAnswerInsight(value), updatedAt }]];
-    }));
-  } catch {
-    return {};
-  }
-}
+const answerInsightMemory = createAnswerMemory<DataHubAnswerInsight>(
+  "xingshu_answer_insights",
+  80,
+  (value) => normalizeDataHubAnswerInsight(value)
+);
 
 /** 历史对话重新打开时沿用当时生成的洞察，不再重复调用模型。key 用会话与 chatId。 */
 export function readRememberedAnswerInsight(key: string): DataHubAnswerInsight | undefined {
-  const remembered = readRememberedAnswerInsights()[key];
-  return remembered ? { insights: remembered.insights, followUps: remembered.followUps } : undefined;
+  return answerInsightMemory.read(key);
 }
 
 export function rememberAnswerInsight(key: string, insight: DataHubAnswerInsight) {
-  try {
-    const recent = Object.entries({
-      ...readRememberedAnswerInsights(),
-      [key]: { ...insight, updatedAt: Date.now() }
-    })
-      .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
-      .slice(0, answerInsightCacheLimit);
-    answerInsightStorage()?.setItem(answerInsightStorageKey, JSON.stringify(Object.fromEntries(recent)));
-  } catch {
-    // 存储满了或被禁用：下次打开历史时不显示洞察，回答本身不受影响。
-  }
+  answerInsightMemory.remember(key, insight);
 }

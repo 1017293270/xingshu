@@ -54,10 +54,12 @@
 - 其他失败：回答末尾一行灰字「数据洞察暂未生成。重新生成」。
 - 生成成功后按「会话 ID::chatId」记在浏览器 localStorage（最多 80 条），重新打开历史对话时直接显示，不再调用模型；
   没记过的历史对话不补生成。
+- 图表同理：生成成功后把 AI 给的图表方案记在 `xingshu_answer_chart_plans`（最多 80 条），重新打开历史对话时用它和回放出的结果表重画，
+  不再调用模型。只在同一浏览器有效；2026-10-29 之前生成的图表没有记录，打开历史时不显示。
 
 ## 代码位置
 
-- 前端：`src/services/dataHubAnswerInsightService.ts`（组装请求、统计事实、清洗响应、本地记忆）、
+- 前端：`src/services/dataHubAnswerInsightService.ts`（组装请求、统计事实、清洗响应）、`src/services/answerMemory.ts`（洞察与图表方案的本地记忆）、
   `src/components/xs/datahub/DataHubAnswerInsights.tsx`（洞察段落与引导问题）、`src/pages/AnalysisPage.tsx`（触发与排版）、
   `src/services/dataHubAnswerTables.ts` 的 `inlineDataHubSingleRowTables`、
   `DataHubBusinessExplanation` 的 `collapseWhenDone`。

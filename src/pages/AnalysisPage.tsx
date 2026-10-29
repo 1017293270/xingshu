@@ -53,6 +53,8 @@ import {
   buildGeneratedChartSpec,
   canAutoGenerateAiChart,
   planAiChart,
+  readRememberedAiChartPlan,
+  rememberAiChartPlan,
   resolveAiChartTables
 } from "@/services/aiChartPlannerService";
 import {
@@ -147,7 +149,8 @@ const autoScrollBottomThreshold = 24;
 const tableAnswerLimit = 3;
 const markdownTableSeparatorPattern = /^\s*\|?\s*:?-{3,}:?\s*\|/m;
 
-function answerInsightCacheKey(turn: Pick<AnalysisTurnState, "sessionId" | "chatId">) {
+// 一轮回答附带的图表方案与数据洞察都按「会话::chatId」记在浏览器里，重新打开历史对话时取用。
+function answerMemoryKey(turn: Pick<AnalysisTurnState, "sessionId" | "chatId">) {
   return `${turn.sessionId}::${turn.chatId}`;
 }
 const incompleteHistoryQueryMessage =
@@ -1326,7 +1329,8 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
     turnId: string,
     question: string,
     tables: DataHubTableResult[],
-    answer?: string
+    answer?: string,
+    memoryKey?: string
   ) => {
     if (chartPlanInFlightRef.current.has(turnId)) {
       return;
@@ -1346,6 +1350,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         return;
       }
 
+      if (memoryKey) rememberAiChartPlan(memoryKey, plan);
       setAiChartStates((current) => ({
         ...current,
         [turnId]: { status: "success", spec, activeType: spec.chartType }
@@ -1391,10 +1396,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         continue;
       }
 
-      // 图表和数据洞察只为本页刚跑完的一轮生成；历史对话只取当时记下的洞察，不再调用模型。
+      // 图表和数据洞察只为本页刚跑完的一轮生成；历史对话只取当时记下的图表方案和洞察，不再调用模型。
       const isLiveTurn = liveChartTurnIdsRef.current.has(turn.id);
       const wantsChart =
-        isLiveTurn &&
         !autoChartAttemptedRef.current.has(turn.id) &&
         (aiChartStates[turn.id]?.status ?? "idle") === "idle";
       const wantsInsight = !answerInsightCheckedRef.current.has(turn.id);
@@ -1403,6 +1407,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       }
 
       answerInsightCheckedRef.current.add(turn.id);
+      if (wantsChart) autoChartAttemptedRef.current.add(turn.id);
       const turnAsk = createDataHubAskTurn(
         turn.question,
         turn.events,
@@ -1420,17 +1425,31 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
       });
       const askTables = isAskMode || isAgentMode ? getDataHubAskTableResults(projection, isAskMode) : [];
 
-      if (wantsChart && canAutoGenerateAiChart({ question: turn.question, tables: askTables, answer: turnAsk.assistantContent })) {
-        autoChartAttemptedRef.current.add(turn.id);
-        void handleGenerateAiChart(turn.id, turn.question, askTables, turnAsk.assistantContent);
+      const memoryKey = answerMemoryKey(turn);
+      if (wantsChart) {
+        const rememberedPlan = readRememberedAiChartPlan(memoryKey);
+        const rememberedSpec = rememberedPlan && buildGeneratedChartSpec(
+          rememberedPlan,
+          resolveAiChartTables({ question: turn.question, tables: askTables, answer: turnAsk.assistantContent })
+        );
+        if (rememberedSpec) {
+          setAiChartStates((current) => ({
+            ...current,
+            [turn.id]: { status: "success", spec: rememberedSpec, activeType: rememberedSpec.chartType }
+          }));
+        } else if (
+          isLiveTurn &&
+          canAutoGenerateAiChart({ question: turn.question, tables: askTables, answer: turnAsk.assistantContent })
+        ) {
+          void handleGenerateAiChart(turn.id, turn.question, askTables, turnAsk.assistantContent, memoryKey);
+        }
       }
 
       if (!wantsInsight) {
         continue;
       }
 
-      const cacheKey = answerInsightCacheKey(turn);
-      const remembered = readRememberedAnswerInsight(cacheKey);
+      const remembered = readRememberedAnswerInsight(memoryKey);
       if (remembered) {
         setAnswerInsightStates((current) => ({ ...current, [turn.id]: { status: "success", insight: remembered } }));
         continue;
@@ -1456,7 +1475,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
         continue;
       }
 
-      answerInsightRequestsRef.current.set(turn.id, { cacheKey, request });
+      answerInsightRequestsRef.current.set(turn.id, { cacheKey: memoryKey, request });
       void handleGenerateAnswerInsight(turn.id);
     }
   }, [

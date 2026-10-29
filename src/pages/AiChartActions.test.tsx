@@ -23,8 +23,10 @@ function renderPage(page: ReactElement) {
 
 function appendRatioTable(runId: string) {
   const store = useUiStore.getState();
+  const { chatId } = store.analysisTurns.find((turn) => turn.id === runId)!;
   store.appendAskDataEvent(runId, {
     type: "table",
+    chatId,
     data: {
       columns: [
         { name: "income_group", title: "收入人群" },
@@ -388,6 +390,40 @@ describe("AI chart actions", () => {
 
     expect(screen.queryByRole("button", { name: "AI 生成图表" })).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("redraws the remembered chart when the conversation is reopened from history", async () => {
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      code: 200, message: "ok", data: {
+        chartable: true, reason: "比较各收入人群占比", chartType: "pie", allowedTypes: ["pie", "bar"],
+        title: "收入人群占比", tableIndex: 0, dimensionKey: "income_group", metricKeys: ["ratio"]
+      }
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const chartPlanCalls = () => fetchSpy.mock.calls.filter(([url]) => url === "/api/v1/chat/chart-plan");
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("每个收入人群占比多少");
+    const live = renderPage(<AnalysisPage mode="ask" />);
+    act(() => {
+      appendRatioTable(runId);
+      store.completeAskDataRun(runId);
+    });
+    expect(await screen.findByRole("region", { name: "智能图表建议" })).toBeInTheDocument();
+    const turn = useUiStore.getState().analysisTurns[0];
+    live.unmount();
+
+    useUiStore.getState().resetUiState();
+    useUiStore.getState().restoreAskDataHistory({
+      sessionId: turn.sessionId!,
+      question: turn.question,
+      chatMode: "ask",
+      status: "done",
+      events: turn.events
+    });
+    renderPage(<AnalysisPage mode="ask" />);
+
+    const chartCard = await screen.findByRole("region", { name: "智能图表建议" });
+    expect(within(chartCard).getByText("收入人群占比")).toBeInTheDocument();
+    expect(chartPlanCalls()).toHaveLength(1);
   });
 
   it("aligns the chart to the root ranking without merging unrelated child rows", async () => {

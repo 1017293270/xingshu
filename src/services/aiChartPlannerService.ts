@@ -15,6 +15,7 @@ import {
   type DataHubAiChartPlanner
 } from "@/services/dataHubAiChartService";
 import { formatDataHubColumnTitle, formatDataHubDateTime, formatDataHubTableTitle } from "@/services/dataHubFormat";
+import { createAnswerMemory } from "@/services/answerMemory";
 
 type PlanAiChartOptions = {
   dataHubPlanner?: DataHubAiChartPlanner;
@@ -791,6 +792,20 @@ function normalizeAiPlan(parsed: unknown): AiChartPlanResult {
     dimensionKey: typeof parsed.dimensionKey === "string" ? parsed.dimensionKey : undefined,
     metricKeys
   };
+}
+
+const aiChartPlanMemory = createAnswerMemory<AiChartPlanResult>("xingshu_answer_chart_plans", 80, (value) => {
+  const plan = normalizeAiPlan(value);
+  return plan.chartable ? plan : undefined;
+});
+
+/** 图表生成后记下 AI 给的图表方案；重新打开历史对话时用它和回放出的结果表重画，不再调用模型。 */
+export function readRememberedAiChartPlan(key: string): AiChartPlanResult | undefined {
+  return aiChartPlanMemory.read(key);
+}
+
+export function rememberAiChartPlan(key: string, plan: AiChartPlanResult) {
+  if (plan.chartable) aiChartPlanMemory.remember(key, plan);
 }
 
 export async function planAiChart(
