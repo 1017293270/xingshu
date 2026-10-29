@@ -155,6 +155,14 @@ function isEmptyDominatedTable(
   return junk / total >= emptyDominatedShare;
 }
 
+const timeTitlePattern = /date|time|日期|时间|月份|季度|年份|年度|期间|yyyymm|year|month|quarter|day/;
+// 「期间费用合计」「年度预算（万元）」是指标，列名里的时间字样不能把它们变成时间轴。
+const metricTitlePattern = /合计|总额|金额|费用|收入|成本|预算|利润|余额|数量|人数|次数|笔数|件数|率|占比|比例|平均|均值|万元|元[）)]/;
+// 编码、编号的值常是纯数字，但相加、比大小都没有意义。
+const identifierTitlePattern = /编码|编号|代码|序号|工号|单号|\bid\b|_id\b|\bcode\b/;
+// 2026年1月、2026-01、2026-01-15T00:00:00.000、2026Q1、2026年第1季度
+const periodValuePattern = /^\d{4}\s*(?:年(?:\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?)?|[-/.]\d{1,2}(?:[-/.]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?)?|\s*q[1-4]|年?\s*第?\s*[一二三四1-4]\s*季度)$/i;
+
 function inferColumnType(
   column: DataHubTableResult["columns"][number],
   rows: Record<string, unknown>[]
@@ -166,15 +174,24 @@ function inferColumnType(
     return "dimension";
   }
 
-  if (/date|time|日期|时间|月份|季度|年份|年度|year|month|day/.test(title)) {
+  const sampledValues = rows.slice(0, 8).map((row) => row[column.key]).filter((value) => value !== null && value !== undefined && value !== "");
+  if (sampledValues.length > 0 && sampledValues.every((value) => typeof value === "string" && periodValuePattern.test(value.trim()))) {
     return "time";
+  }
+
+  const metricLike = metricTitlePattern.test(title);
+  if (timeTitlePattern.test(title) && !metricLike) {
+    return "time";
+  }
+
+  if (identifierTitlePattern.test(title) && !metricLike) {
+    return "dimension";
   }
 
   if (explicitType && /int|float|double|decimal|number|numeric|long|count|ratio|percent/.test(explicitType)) {
     return "number";
   }
 
-  const sampledValues = rows.slice(0, 8).map((row) => row[column.key]).filter((value) => value !== null && value !== undefined && value !== "");
   if (sampledValues.length > 0 && sampledValues.every((value) => toNumber(value) !== null)) {
     return "number";
   }

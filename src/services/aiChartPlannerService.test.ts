@@ -98,6 +98,38 @@ describe("aiChartPlannerService", () => {
     ]);
   });
 
+  it("reads period names as time and keeps codes and period expenses in their place", () => {
+    const summary = createAiChartPlanRequestSummary({
+      question: "2026年1至3月各月营业收入和期间费用分别是多少",
+      tables: [
+        table(
+          [
+            { key: "period", title: "期间名称（冗余）" },
+            { key: "period_code", title: "会计期间编码（YYYYMM）" },
+            { key: "contract_no", title: "合同编号" },
+            { key: "expense", title: "期间费用合计（万元）" },
+            { key: "budget", title: "年度预算（万元）", type: "number" },
+            { key: "revenue", title: "营业收入合计（万元）", type: "number" }
+          ],
+          [
+            { period: "2026年1月", period_code: "202601", contract_no: "1001", expense: 320.5, budget: 9000, revenue: 10957.17 },
+            { period: "2026年2月", period_code: "202602", contract_no: "1002", expense: 298.1, budget: 9000, revenue: 13771.41 },
+            { period: "2026年3月", period_code: "202603", contract_no: "1003", expense: 341.2, budget: 9000, revenue: 16133.16 }
+          ]
+        )
+      ]
+    });
+
+    expect(summary.tables[0].columns.map(({ key, type }) => [key, type])).toEqual([
+      ["period", "time"],
+      ["period_code", "time"],
+      ["contract_no", "dimension"],
+      ["expense", "number"],
+      ["budget", "number"],
+      ["revenue", "number"]
+    ]);
+  });
+
   it("limits AI chart planning to eight tables while retaining a chartable result", () => {
     const scalarTables = Array.from({ length: 8 }, (_, index) => ({
       ...table([{ key: "count", title: "记录数", type: "number" }], [{ count: index + 1 }]),

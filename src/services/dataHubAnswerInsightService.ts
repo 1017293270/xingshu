@@ -120,10 +120,12 @@ function metricFacts(
           const step = Math.abs(points[index + 1].value - points[index].value);
           if (step > Math.abs(points[from + 1].value - points[from].value)) from = index;
         }
-        const delta = points[from + 1].value - points[from].value;
+        const base = points[from].value;
+        const delta = points[from + 1].value - base;
         if (delta !== 0) {
           facts.push(`${name}相邻两期变化最大的是“${points[from].label}”到“${points[from + 1].label}”，`
-            + `${delta > 0 ? "增加" : "减少"} ${formatNumber(Math.abs(delta))}`);
+            + `${delta > 0 ? "增加" : "减少"} ${formatNumber(Math.abs(delta))}`
+            + (base === 0 ? "" : `，${formatPercent(delta / Math.abs(base), true)}`));
         }
       }
     }

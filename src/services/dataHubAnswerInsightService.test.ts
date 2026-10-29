@@ -51,7 +51,25 @@ describe("buildDataHubAnswerInsightRequest", () => {
 
     expect(request.answer).toBeUndefined();
     expect(request.tables[0].facts).toContain("“合同额”从“2025-01”的 10 变为“2025-03”的 30，增长 200%");
-    expect(request.tables[0].facts).toContain("“合同额”相邻两期变化最大的是“2025-01”到“2025-02”，增加 15");
+    expect(request.tables[0].facts).toContain("“合同额”相邻两期变化最大的是“2025-01”到“2025-02”，增加 15，增长 150%");
+  });
+
+  it("treats a period-name column as time and never sums period codes", () => {
+    const revenue = [10957.17, 13771.41, 16133.16, 17507.71, 20174.39, 20293.24, 20039.42, 18783.81, 12027.87];
+    const request = buildDataHubAnswerInsightRequest("2026年1至9月各月营业收入分别是多少？", "", [{
+      columns: [
+        { key: "period", title: "期间名称（冗余）" },
+        { key: "code", title: "会计期间编码（YYYYMM）" },
+        { key: "revenue", title: "营业收入合计（万元）", type: "number" }
+      ],
+      rows: revenue.map((value, index) => ({ period: `2026年${index + 1}月`, code: `20260${index + 1}`, revenue: value })),
+      totalRows: 9
+    }])!;
+    const { facts } = request.tables[0];
+
+    expect(facts).toContain("“营业收入合计（万元）”从“2026年1月”的 10,957.17 变为“2026年9月”的 12,027.87，增长 9.77%");
+    expect(facts).toContain("“营业收入合计（万元）”相邻两期变化最大的是“2026年8月”到“2026年9月”，减少 6,755.94，下降 35.97%");
+    expect(facts.join("\n")).not.toContain("会计期间编码");
   });
 
   it("puts a set of data before single values and keeps the payload within budget", () => {
