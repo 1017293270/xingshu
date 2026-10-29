@@ -406,6 +406,22 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
 }
 
+// 首页整块（问候语到最后一张推荐应用卡片）在主区里的上下留白，以及主区还能滚动多少。
+async function homeVerticalFit(page: Page) {
+  return page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>(".xs-shell__main")!;
+    const mainTop = main.getBoundingClientRect().top;
+    const greeting = document.querySelector(".home-page__hero h1")!.getBoundingClientRect();
+    const cards = document.querySelectorAll(".home-page .xs-app-card");
+    const lastCard = cards[cards.length - 1].getBoundingClientRect();
+    return {
+      overflow: main.scrollHeight - main.clientHeight,
+      topSpace: greeting.top - mainTop,
+      bottomSpace: mainTop + main.clientHeight - lastCard.bottom
+    };
+  });
+}
+
 async function ensureChartsReady(page: Page, expectedCount: number) {
   const chartHosts = page.locator('[role="img"].xs-echart, [role="img"].vue-echart');
   await expect(chartHosts).toHaveCount(expectedCount);
@@ -1300,7 +1316,6 @@ test("home page matches the reference welcome workbench composition", async ({ p
     const sendStyles = window.getComputedStyle(sendButton);
 
     return {
-      commandCenterOffset: commandRect.top + commandRect.height / 2 - (mainRect.top + main.clientHeight / 2),
       greetingTop: greetingRect.top,
       greetingGap: commandRect.top - subtitleRect.bottom,
       commandWidth: commandRect.width,
@@ -1337,8 +1352,10 @@ test("home page matches the reference welcome workbench composition", async ({ p
 
   expect(metrics).not.toBeNull();
   expect(metrics!.backgroundLoaded).toBe(true);
-  // 命令框是视觉核心：中心落在滚动区可视高度的中线上
-  expect(Math.abs(metrics!.commandCenterOffset)).toBeLessThanOrEqual(8);
+  // 一屏放下：问候语到最后一张推荐卡片整块上下居中，主区不出现滚动
+  const fit = await homeVerticalFit(page);
+  expect(fit.overflow).toBeLessThanOrEqual(0);
+  expect(Math.abs(fit.topSpace - fit.bottomSpace)).toBeLessThanOrEqual(8);
   // 问候语紧贴命令框上方；推荐应用另起一段，离命令框明显更远
   expect(metrics!.greetingGap).toBeGreaterThanOrEqual(24);
   expect(metrics!.greetingGap).toBeLessThanOrEqual(40);
@@ -1379,7 +1396,7 @@ test("home page matches the reference welcome workbench composition", async ({ p
   expect(metrics!.iconSource).toBe("xingshu-home-apps-image2-v1");
 });
 
-test("home keeps the command box on the midline while modes and receipts change", async ({ page }) => {
+test("home keeps the command box in place while modes and receipts change", async ({ page }) => {
   // 按滚动内容坐标量：点下方卡片会让主区滚动，视口坐标会跟着变
   const layout = () =>
     page.evaluate(() => {
@@ -1389,10 +1406,8 @@ test("home keeps the command box on the midline while modes and receipts change"
         const rect = document.querySelector(selector)!.getBoundingClientRect();
         return { top: rect.top - mainTop + main.scrollTop, height: rect.height };
       };
-      const command = offset(".home-page .xs-command-box");
       return {
-        commandTop: command.top,
-        commandCenterOffset: command.top + command.height / 2 - main.clientHeight / 2,
+        commandTop: offset(".home-page .xs-command-box").top,
         lowerTop: offset(".home-page__apps, .home-page__questions").top
       };
     });
@@ -1403,7 +1418,12 @@ test("home keeps the command box on the midline while modes and receipts change"
     await expect(page.getByRole("heading", { name: "您好，张三", exact: true })).toBeVisible();
     await settleResponsiveLayout(page);
     const idle = await layout();
-    expect(Math.abs(idle.commandCenterOffset)).toBeLessThanOrEqual(8);
+    if (width > 900) {
+      // 桌面一屏放下：高度不够时整块往上推，主区仍不滚动
+      const fit = await homeVerticalFit(page);
+      expect(fit.overflow).toBeLessThanOrEqual(0);
+      expect(fit.topSpace).toBeLessThanOrEqual(fit.bottomSpace + 8);
+    }
 
     // 标题在两行与一行之间切换、推荐应用换成推荐问题，命令框都不动
     for (const [label, heading] of [
@@ -1805,7 +1825,7 @@ test.describe("desktop content density", () => {
 });
 
 
-test("home keeps all three tracks aligned and the command box centered across desktop tiers and short screens", async ({ page }) => {
+test("home keeps all three tracks aligned and fits one screen across desktop tiers and short screens", async ({ page }) => {
   for (const [width, height, track] of [[1440, 900, 760], [1672, 941, 760], [1920, 1080, 760], [2200, 1100, 760], [1366, 720, 760], [390, 844, 760]]) {
     await page.setViewportSize({ width, height });
     await page.goto("/");
@@ -1813,7 +1833,6 @@ test("home keeps all three tracks aligned and the command box centered across de
     await settleResponsiveLayout(page);
     const metrics = await page.evaluate(() => {
       const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-      const main = document.querySelector<HTMLElement>(".xs-shell__main")!;
       const host = rect(".home-page");
       const hero = rect(".home-page__hero");
       const command = rect(".home-page .xs-command-box");
@@ -1821,17 +1840,22 @@ test("home keeps all three tracks aligned and the command box centered across de
       const cards = document.querySelectorAll(".home-page .xs-app-card");
       return { available: host.width, widths: [hero.width, command.width, apps.width],
         lefts: [hero.left, command.left, apps.left], count: cards.length,
-        midlineOffset: command.top + command.height / 2 - (main.getBoundingClientRect().top + main.clientHeight / 2),
         columns: getComputedStyle(document.querySelector(".home-page__app-grid")!).gridTemplateColumns.split(" ").length };
     });
     for (const actual of metrics.widths) expect(actual).toBeCloseTo(Math.min(track, metrics.available), 0);
     expect(Math.max(...metrics.lefts) - Math.min(...metrics.lefts)).toBeLessThanOrEqual(1);
     expect(metrics.count).toBe(6);
     expect(metrics.columns).toBe(width > 900 ? 3 : 1);
-    expect(Math.abs(metrics.midlineOffset)).toBeLessThanOrEqual(8);
+    if (width > 900) {
+      // 桌面各档都一屏放下；够高时整块上下居中，720 这类矮屏把上方留白让掉
+      const fit = await homeVerticalFit(page);
+      expect(fit.overflow).toBeLessThanOrEqual(0);
+      expect(fit.topSpace).toBeLessThanOrEqual(fit.bottomSpace + 8);
+      if (height >= 900) expect(Math.abs(fit.topSpace - fit.bottomSpace)).toBeLessThanOrEqual(8);
+    }
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: `outputs/e2e-fixes-2026-09-07/regression/home-${width}x${height}.png`, animations: "disabled", fullPage: true });
-    // 推荐应用超出首屏是允许的，但必须能滚到最后一张
+    // 窄屏单列卡片超出首屏是允许的，但必须能滚到最后一张
     const lastCard = page.locator(".home-page .xs-app-card").last();
     await lastCard.scrollIntoViewIfNeeded();
     const lastBox = await lastCard.boundingBox();

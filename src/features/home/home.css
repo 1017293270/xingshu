@@ -1,22 +1,40 @@
 /* ---------- 首页布局基底：以命令框为锚点 ---------- */
 
-/* 命令框是首页的视觉核心：它的中心钉在滚动区可视高度的中线上，问候语压在它上方，
-   推荐内容在它下方顺排，超出一屏交给外壳主区滚动。
+/* 首页要一屏放下：问候语、命令框和两行推荐应用作为一整块，在滚动区里上下居中；
+   高度不够时先把上方留白让掉（整块往上推），只有连上方留白都让完仍放不下才出现滚动。
 
-   --home-anchor 是命令框中心到 .home-page 顶边的距离。滚动区从 --home-shell-top 开始、
-   占满余下的视口高度，页面内容还要先让出滚动区的顶部留白 --home-shell-inset，
-   所以锚点 = 滚动区高度的一半 − 顶部留白；高度单位与外壳主区一致用 dvh。
-   外壳的两个几何值抄自 xs.css（主区顶部留白、移动端顶栏高度），那边改了这里要跟，
-   视觉用例按 ±8px 校验命令框中心与中线的偏差。
+   --home-anchor 是命令框中心到 .home-page 顶边的距离 = 整块上方让出的留白
+   --home-top-space + 问候区高度 + 半个命令框。整块高度按「最高的那一套内容」算：
+   编排模式的问候语（标题 + 副标题）+ 命令框 + 两行推荐应用。换模式时问候语变短、推荐应用换成推荐问题，
+   锚点不跟着变，命令框不会被推动。
+   --home-top-space 取两者较小值：整块居中时的上方留白；不出现滚动所能留的最大上方留白
+   （滚动区高度 − 整块高度 − 外壳上下留白）。高度单位与外壳主区一致用 dvh。
+   外壳的三个几何值抄自 xs.css（主区上下留白、移动端顶栏高度），那边改了这里要跟。
    --home-command-height 由 useCommandBoxHeight 按实测写回；这里的 100px 是桌面单行
-   工具条的高度（62px 输入区 + 36px 工具条 + 2px 描边），只在测量之前兜底。 */
+   工具条的高度（62px 输入区 + 36px 工具条 + 2px 描边），只在测量之前兜底。
+   --home-lower-height 是命令框下方的总高：状态条槽位 12 + 32、外边距 24、
+   「推荐应用」标题 21 + 18、两行卡片 2 × 163.5 + 12；改了卡片或这几段间距要跟着改。 */
 .home-page {
   --home-track: 760px;
   --home-shell-top: 0px;
   --home-shell-inset: 16px;
+  --home-shell-inset-bottom: 56px;
   --home-command-height: 100px;
   --home-hero-gap: 32px;
-  --home-anchor: calc((100dvh - var(--home-shell-top)) / 2 - var(--home-shell-inset));
+  /* 编排模式问候语：标题 36 + 间距 10 + 副标题 22，再加离命令框的 --home-hero-gap */
+  --home-hero-height: calc(68px + var(--home-hero-gap));
+  --home-lower-height: 446px;
+  --home-spare: calc(
+    100dvh - var(--home-shell-top) - var(--home-hero-height) - var(--home-command-height) - var(--home-lower-height)
+  );
+  --home-top-space: max(
+    0px,
+    min(
+      calc(var(--home-spare) / 2 - var(--home-shell-inset)),
+      calc(var(--home-spare) - var(--home-shell-inset) - var(--home-shell-inset-bottom))
+    )
+  );
+  --home-anchor: calc(var(--home-top-space) + var(--home-hero-height) + var(--home-command-height) / 2);
   position: relative;
   width: 100%;
   isolation: isolate;
@@ -281,13 +299,16 @@
 
 /* ---------- 移动端：锚点同样落在滚动区中线，卡片横排 ---------- */
 
-/* 窄屏也把命令框放在首屏中线上：和桌面同一套锚点，只换外壳几何——滚动区在 64px 顶栏
-   之下、自带 24px 顶部留白。问候语离命令框收紧到 24px，给下方推荐多露一点。 */
+/* 窄屏和桌面同一套锚点，只换外壳几何：滚动区在 64px 顶栏之下、上下留白 24 / 40px。
+   卡片排成单列，一屏放不下，整块从顶部开始、下方交给滚动；下方总高按 390px 宽实测
+   （状态条槽位、「推荐应用」标题和 6 张 74px 单列卡片）共 609。问候语离命令框收紧到 24px。 */
 @media (max-width: 900px) {
   .home-page {
     --home-shell-top: 64px;
     --home-shell-inset: 24px;
+    --home-shell-inset-bottom: 40px;
     --home-hero-gap: 24px;
+    --home-lower-height: 609px;
   }
 
   /* 窄屏主区左右留白对称，按视口整宽居中铺开即可贴满滚动区；

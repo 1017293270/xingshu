@@ -210,12 +210,16 @@ describe("HomePage", () => {
 
   /* 命令框中心落在滚动区中线上是验收线：jsdom 量不了布局，这里锁住撑起这条线的几条规则，
      实际偏差由视觉用例按 ±8px 实测。 */
-  it("anchors the command box on the scroll area's midline", () => {
+  it("anchors the command box so the whole home block fits one screen", () => {
     const homeCss = readFileSync("src/features/home/home.css", "utf8").replaceAll("\r\n", "\n");
 
-    /* 锚点 = 滚动区高度的一半 − 滚动区顶部留白，高度单位跟外壳主区一样用 dvh */
+    /* 锚点 = 整块上方留白 + 问候区高度 + 半个命令框；上方留白取「整块居中」和「不出现滚动」中较小的，
+       高度单位跟外壳主区一样用 dvh */
     expect(homeCss).toContain(
-      "--home-anchor: calc((100dvh - var(--home-shell-top)) / 2 - var(--home-shell-inset));"
+      "--home-anchor: calc(var(--home-top-space) + var(--home-hero-height) + var(--home-command-height) / 2);"
+    );
+    expect(homeCss).toMatch(
+      /--home-top-space: max\(\s*0px,\s*min\(\s*calc\(var\(--home-spare\) \/ 2 - var\(--home-shell-inset\)\),\s*calc\(var\(--home-spare\) - var\(--home-shell-inset\) - var\(--home-shell-inset-bottom\)\)\s*\)\s*\);/
     );
     /* 问候区撑满锚点上方、文字贴底：各模式标题行数不同，只改变区内空白，不推动命令框 */
     expect(homeCss).toMatch(
@@ -225,7 +229,7 @@ describe("HomePage", () => {
     expect(homeCss).toMatch(
       /\.home-page__bg \{[^}]*top: calc\(var\(--home-anchor\) - var\(--home-command-height\) \/ 2 - \d+px\);/
     );
-    /* 窄屏同一套锚点，只换外壳几何：64px 顶栏、24px 顶部留白 */
+    /* 窄屏同一套锚点，只换外壳几何：64px 顶栏、24px 顶部留白、单列卡片的下方总高 */
     expect(homeCss).toMatch(
       /@media \(max-width: 900px\) \{\n\s+\.home-page \{\n\s+--home-shell-top: 64px;\n\s+--home-shell-inset: 24px;/
     );
