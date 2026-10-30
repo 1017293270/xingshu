@@ -813,6 +813,110 @@ function buildMarkdownOnlyAskAgentStream(request: StreamRequest) {
   ].join("");
 }
 
+/*
+ * textRole 新协议（AgentEventJsonConverter，2026-10-23 起）：问数智能体流式 text 全部带
+ * textRole:"progress"，正式回答在智能体结果时用同 replyId/modelCallIndex 的 text_replace
+ * （textRole:"answer"）收敛；根 done 与子 done 都不带 summary。
+ * at 是相对发问时刻的毫秒偏移，回放时换成真实时间戳。
+ */
+const protocolProgressNotes = [
+  "我需要先了解查询技能的规范，然后确定数据源和模型。",
+  "语义 SQL 报错（列数不匹配），我改用标准查询分别统计两个分项。心理测评合格按 result_level='正常' 统计，综合测评合格按总分不低于 60 分统计。",
+  "正式查询需使用公共 View 成员，我改用 View 的 count 度量重新统计两个分项。"
+];
+const protocolAnswer =
+  "学生心理测试合格数量：263；学生综合测试合格数量：424。两项均按本学期已完成测评的学生统计，心理测试以测评结论为“正常”计为合格，综合测试以总分 60 分及以上计为合格。";
+const protocolQuestion = "本学期学生心理测试合格数量和综合测试合格数量分别是多少？";
+const protocolTable = {
+  columns: [
+    { name: "psychology", title: "心理测试合格数量", type: "number" },
+    { name: "comprehensive", title: "综合测试合格数量", type: "number" }
+  ],
+  rows: [{ psychology: 263, comprehensive: 424 }],
+  totalRows: 1,
+  source: "cube"
+};
+
+type TimedEvent = Record<string, unknown> & { at: number };
+
+/** 问数模式：根就是问数智能体，过程说明与正式回答都在根会话里。 */
+function buildProtocolAskEvents(request: StreamRequest): TimedEvent[] {
+  const root = {
+    agentName: "问数智能体",
+    sessionId: request.sessionId,
+    globalSessionId: request.globalSessionId,
+    parentSessionId: null,
+    chatId: request.chatId,
+    replyId: "ask-protocol-reply"
+  };
+  const tool = (at: number, activityId: string, action: string, label: string, status: string) => ({
+    ...root, at, type: "activity",
+    content: { activityId, kind: "tool", action, label, status, startedAt: "2026-10-29T10:00:00+08:00" }
+  });
+  return [
+    { ...root, at: 0, type: "agent_start", content: {}, replyId: null },
+    { ...root, at: 400, type: "thinking", isThinking: true, modelCallIndex: 1,
+      content: "用户需要统计本学期学生心理测试合格数量和综合测试合格数量，两个指标来自同一测评数据。" },
+    { ...root, at: 900, type: "text", textRole: "progress", modelCallIndex: 1, content: protocolProgressNotes[0] },
+    tool(1300, "tool:skill", "get_skill", "读取业务语义", "running"),
+    tool(1900, "tool:skill", "get_skill", "读取业务语义", "success"),
+    { ...root, at: 2000, type: "data_source_selected", content: { datasourceId: 12, datasourceName: "学生测评库" } },
+    { ...root, at: 2600, type: "thinking", isThinking: true, modelCallIndex: 2,
+      content: "第一次语义查询列数与模型不一致，需要换一种统计方式。" },
+    { ...root, at: 3100, type: "text", textRole: "progress", modelCallIndex: 2, content: protocolProgressNotes[1] },
+    tool(3500, "tool:query", "execute_query", "执行数据查询", "running"),
+    tool(4600, "tool:query", "execute_query", "执行数据查询", "success"),
+    { ...root, at: 5000, type: "text", textRole: "progress", modelCallIndex: 3, content: protocolProgressNotes[2] },
+    { ...root, at: 6200, type: "table", modelCallIndex: 3, content: protocolTable },
+    { ...root, at: 6800, type: "text", textRole: "progress", modelCallIndex: 4, content: "学生心理测试合格数量：263；学生综合测试合格数量：424。" },
+    { ...root, at: 7400, type: "text_replace", textRole: "answer", modelCallIndex: 4, content: protocolAnswer },
+    { ...root, at: 7500, type: "done", content: {}, replyId: null, finished: true }
+  ];
+}
+
+/** 编排模式：编排根把两个指标委派给问数子会话，子会话出过程说明与正式回答，根最后综合作答。 */
+function buildProtocolAgentEvents(request: StreamRequest): TimedEvent[] {
+  const root = {
+    agentName: "编排智能体",
+    sessionId: request.sessionId,
+    globalSessionId: request.globalSessionId,
+    parentSessionId: null,
+    chatId: request.chatId
+  };
+  const child = {
+    agentName: "问数智能体",
+    agentId: "ask-data",
+    sessionId: `${request.sessionId}-ask-data`,
+    globalSessionId: request.globalSessionId,
+    parentSessionId: request.sessionId,
+    subagentId: "subagent-ask-data",
+    label: "问数智能体",
+    chatId: request.chatId,
+    replyId: "child-ask-reply"
+  };
+  return [
+    { ...root, at: 0, type: "agent_start", content: {} },
+    { ...root, at: 500, type: "thinking", isThinking: true, replyId: "root-plan", modelCallIndex: 1,
+      content: "用户需要本学期学生心理测试合格数量和综合测试合格数量。两个指标来自同一份测评数据，我将把这两个指标作为同一事项委派给问数智能体，拿到结果后再统一作答。" },
+    { ...child, at: 1200, type: "agent_start", content: {}, replyId: null },
+    { ...child, at: 1500, type: "thinking", isThinking: true, modelCallIndex: 1, content: "先确认测评数据所在的数据源和语义模型。" },
+    { ...child, at: 1900, type: "text", textRole: "progress", modelCallIndex: 1, content: protocolProgressNotes[0] },
+    { ...child, at: 2300, type: "activity", content: { activityId: "child-tool:query", kind: "tool", action: "execute_query",
+      label: "执行数据查询", status: "running", startedAt: "2026-10-29T10:00:02+08:00" } },
+    { ...child, at: 3600, type: "text", textRole: "progress", modelCallIndex: 2, content: protocolProgressNotes[1] },
+    { ...child, at: 4800, type: "text", textRole: "progress", modelCallIndex: 3, content: protocolProgressNotes[2] },
+    { ...child, at: 5600, type: "activity", content: { activityId: "child-tool:query", kind: "tool", action: "execute_query",
+      label: "执行数据查询", status: "success", startedAt: "2026-10-29T10:00:02+08:00" } },
+    { ...child, at: 5700, type: "table", modelCallIndex: 3, content: protocolTable },
+    { ...child, at: 6300, type: "text", textRole: "progress", modelCallIndex: 4, content: "学生心理测试合格数量：263；学生综合测试合格数量：424。" },
+    { ...child, at: 6900, type: "text_replace", textRole: "answer", modelCallIndex: 4, content: protocolAnswer },
+    { ...child, at: 7000, type: "done", content: {}, replyId: null },
+    { ...root, at: 7600, type: "text", replyId: "root-answer", modelCallIndex: 2,
+      content: "本学期学生心理测试合格 **263** 人，综合测试合格 **424** 人。两项均按已完成测评的学生统计。" },
+    { ...root, at: 7800, type: "done", content: {}, finished: true }
+  ];
+}
+
 async function installAuthenticatedSession(page: Page) {
   await page.addInitScript(() => {
     const user = {
@@ -1448,6 +1552,55 @@ async function installStoppableAgentStream(page: Page) {
       value: StoppableStreamXhr
     });
   });
+}
+
+/**
+ * 按真实顺序回放一条流，先发到 pauseAfter（不含）为止停住，留出运行中的截图窗口；
+ * 调 window.__finishProtocolStream() 再把剩余事件和 [DONE] 发完。
+ */
+async function installPausedProtocolStream(
+  page: Page,
+  build: (request: StreamRequest) => TimedEvent[],
+  pauseAfter: number
+) {
+  const placeholder: StreamRequest = {
+    message: "__MESSAGE__", sessionId: "__SESSION__", globalSessionId: "__SESSION__", chatId: "__CHAT__", chatMode: "ask"
+  };
+  const template = JSON.stringify(build(placeholder));
+  await page.addInitScript(({ template, pauseAfter }) => {
+    type ProtocolWindow = Window & { __finishProtocolStream?: () => void };
+    class PausedProtocolStreamXhr {
+      responseText = "";
+      status = 200;
+      onprogress: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      onloadend: (() => void) | null = null;
+      open() {}
+      setRequestHeader() {}
+      abort() { this.onabort?.(); }
+      send(body?: Document | XMLHttpRequestBodyInit | null) {
+        const request = JSON.parse(String(body)) as { sessionId: string; chatId: string };
+        const startedAt = Date.now();
+        const events = (JSON.parse(template
+          .replaceAll("__SESSION__", request.sessionId)
+          .replaceAll("__CHAT__", request.chatId)) as Array<Record<string, unknown> & { at: number }>)
+          .map(({ at, ...event }) => ({ ...event, timestamp: new Date(startedAt + at).toISOString() }));
+        const append = (list: Record<string, unknown>[]) => {
+          for (const event of list) this.responseText += `data: ${JSON.stringify(event)}\n\n`;
+          this.onprogress?.();
+        };
+        globalThis.setTimeout(() => append(events.slice(0, pauseAfter)), 30);
+        (window as ProtocolWindow).__finishProtocolStream = () => {
+          append(events.slice(pauseAfter));
+          this.responseText += "data: [DONE]\n\n";
+          this.onprogress?.();
+          this.onloadend?.();
+        };
+      }
+    }
+    Object.defineProperty(window, "XMLHttpRequest", { configurable: true, value: PausedProtocolStreamXhr });
+  }, { template, pauseAfter });
 }
 
 async function expandQueryProcess(page: Page) {
@@ -3136,3 +3289,98 @@ test("production query explains scope grouping count and actual sorting as reada
   await expandExecution(page);
   await expect(page.getByRole("button", { name: "打开 合同统计执行详情", exact: true })).toBeVisible();
 });
+
+for (const protocolMode of ["ask", "agent"] as const) {
+  test(`textRole ${protocolMode} stream keeps process notes in the collapsed thinking process`, async ({ page }) => {
+    const shots = "outputs/task-lines/L1";
+    const widths = [1440, 1672, 1920, 390];
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (text: string) => { (window as Window & { __copiedAnswer?: string }).__copiedAnswer = text; } }
+      });
+    });
+    await installDataHubFixture(page);
+    await page.route("**/api/v1/chat/chart-plan", (route) => route.fulfill({ json: envelope({ chartable: false, reason: "两个合格数量直接写在回答里。" }) }));
+    // 问数停在第二轮过程说明之后（还在分析），编排停在子会话查询进行中。
+    await installPausedProtocolStream(page, protocolMode === "ask" ? buildProtocolAskEvents : buildProtocolAgentEvents,
+      protocolMode === "ask" ? 8 : 7);
+    await page.goto(protocolMode === "ask" ? "/ask-data" : "/ask-agent");
+    await page.getByRole("textbox", { name: "命令输入" }).fill(protocolQuestion);
+    await page.getByRole("button", { name: "发送" }).click();
+
+    const dock = page.getByRole("region", { name: "思考过程", exact: true });
+    const toggle = dock.getByRole("button", { name: /^思考过程/ });
+    const runningPhase = protocolMode === "ask" ? "正在分析问题" : "正在查询数据";
+    await expect(dock).toHaveAttribute("data-status", "running");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle).toHaveAccessibleName(new RegExp(`^思考过程 （${runningPhase}，\\d+秒）$`));
+    await expect(toggle).toContainText(runningPhase);
+    for (const note of protocolProgressNotes) await expect(toggle).not.toContainText(note.slice(0, 12));
+    // 过程说明流着的时候，回答区保持加载态，过程说明不出现在页面上。
+    await expect(page.getByRole("region", { name: "分析结果", exact: true })).toHaveCount(0);
+    await expect(page.getByText(protocolProgressNotes[0]).filter({ visible: true })).toHaveCount(0);
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await dock.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${shots}/${protocolMode}-running-${width}.png`, animations: "disabled", fullPage: true });
+    }
+
+    await page.evaluate(() => (window as Window & { __finishProtocolStream?: () => void }).__finishProtocolStream?.());
+    await expect(page.locator('.analysis-turn[data-status="done"]')).toHaveCount(1);
+    const answer = page.getByLabel("正式回答", { exact: true });
+    const result = page.getByRole("region", { name: "分析结果", exact: true });
+    await expect(answer).toContainText(protocolMode === "ask" ? "学生心理测试合格数量：263" : "综合测试合格 424 人");
+    for (const note of protocolProgressNotes) await expect(result).not.toContainText(note);
+    await expect(result).not.toContainText("result_level");
+    await page.getByRole("button", { name: "复制回答", exact: true }).click();
+    const copied = await page.evaluate(() => (window as Window & { __copiedAnswer?: string }).__copiedAnswer ?? "");
+    expect(copied).toContain(protocolMode === "ask" ? "学生心理测试合格数量：263；学生综合测试合格数量：424。" : "424");
+    for (const note of protocolProgressNotes) expect(copied).not.toContain(note);
+
+    await expect(dock).toHaveAttribute("data-status", "done");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle).toContainText("已完成");
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await dock.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${shots}/${protocolMode}-done-collapsed-${width}.png`, animations: "disabled", fullPage: true });
+    }
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const notes = dock.getByLabel("模型思考", { exact: true });
+    const items = notes.locator(".datahub-process-note");
+    // 每条都带「分析说明 / 过程说明」小标签，按时间顺序排列，正式回答不在其中。
+    for (const note of protocolProgressNotes) await expect(notes).toContainText(note);
+    await expect(notes).not.toContainText(protocolAnswer);
+    await expect(items.first().locator(".datahub-process-note__kind")).toHaveText("分析说明");
+    await expect(notes.locator(".datahub-process-note__kind").filter({ hasText: "过程说明" }).first()).toBeVisible();
+    const order = (await items.evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ""))).join("\n");
+    expect(order.indexOf(protocolProgressNotes[0])).toBeLessThan(order.indexOf(protocolProgressNotes[1]));
+    expect(order.indexOf(protocolProgressNotes[1])).toBeLessThan(order.indexOf(protocolProgressNotes[2]));
+    if (protocolMode === "agent") {
+      await expect(notes.getByRole("heading", { name: "主任务", exact: true })).toBeVisible();
+      await expect(notes.getByRole("heading", { name: "问数智能体", exact: true })).toBeVisible();
+      await expect(notes).toContainText("我将把这两个指标作为同一事项委派给问数智能体");
+    }
+    const kind = notes.locator(".datahub-process-note__kind").first();
+    await expect(kind).toHaveCSS("font-size", "12px");
+    const content = notes.locator(".datahub-process-note__content").first();
+    await expect(content).toHaveCSS("font-size", "13px");
+    await expect(content).toHaveCSS("line-height", "22.1px");
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: width === 390 ? 1100 : 1050 });
+      await expectNoHorizontalOverflow(page);
+      await dock.scrollIntoViewIfNeeded();
+      // 鼠标移出页面内容，避免侧栏悬停态混进截图。
+      await page.mouse.move(width - 4, 4);
+      await page.screenshot({ path: `${shots}/${protocolMode}-done-expanded-${width}.png`, animations: "disabled", fullPage: true });
+      if (width === 1672 || width === 390) {
+        await dock.screenshot({ path: `${shots}/${protocolMode}-dock-expanded-${width}.png`, animations: "disabled" });
+      }
+    }
+  });
+}

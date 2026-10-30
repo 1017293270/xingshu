@@ -125,7 +125,11 @@ export function dataHubRootAnsweredAfterChildren(
   const textByReply = new Map<string, string>();
 
   events.forEach((event, index) => {
-    if (event.isThinking || !["text", "content", "done"].includes(event.type)) {
+    if (event.isThinking || !["text", "content", "text_replace", "done"].includes(event.type)) {
+      return;
+    }
+    // 过程说明不是结论，无论出自根还是子智能体都不参与「谁后作答」的判断。
+    if (event.textRole === "progress") {
       return;
     }
     let text = readEventText(event);
@@ -138,7 +142,8 @@ export function dataHubRootAnsweredAfterChildren(
       if (!text || /^(?:查询|任务|分析|执行|编排|均|全部|已|本次|所有|子任务|智能体|数据)*完成[。.!！\s]*$/.test(text)) return;
     } else {
       const key = `${event.sessionId ?? (event.parentSessionId ? "child" : "root")}::${event.replyId ?? ""}::${event.modelCallIndex ?? ""}`;
-      text = (textByReply.get(key) ?? "") + text;
+      // text_replace 给的是这次模型调用收敛后的全文，替换而不是续接。
+      text = event.type === "text_replace" ? text : (textByReply.get(key) ?? "") + text;
       textByReply.set(key, text);
       if (!isComparable(answerFingerprint(text))) return;
     }
@@ -219,4 +224,51 @@ export function dedupeDataHubAnswerBlocks(
   }
 
   return changed ? kept.map((item) => item.block) : blocks;
+}
+
+/** 是否带服务端的正文定性（textRole）。一个都没有的旧会话沿用旧选法。 */
+export function hasDataHubTextRoles(blocks: readonly DataHubContentBlock[]): boolean {
+  return blocks.some((block) => block.textRole !== undefined);
+}
+
+export type DataHubRoleAnswerSplit = {
+  answer?: DataHubContentBlock;
+  /** 过程说明，保持原顺序；source 是传入的原始块，调用方据此定位它在时间线上的位置。 */
+  process: Array<{ source: DataHubContentBlock; content: string }>;
+  /** 正文里夹带的思考标签内容，交回调用方并入分析说明。 */
+  thinking: string;
+};
+
+/**
+ * 带 textRole 的会话按 DataHub 平台的规则选正文：正式回答是最后一个非 progress 的非空文本块，
+ * progress 和更早的非 progress 文本都算过程说明。传入的块应已按模型调用合并。
+ * 与正式回答说的是同一段话的过程说明（正文草稿）不再重复列出。
+ */
+export function splitDataHubRoleAnswer(
+  blocks: readonly DataHubContentBlock[]
+): DataHubRoleAnswerSplit {
+  const thinking: string[] = [];
+  const texts = blocks.flatMap((block) => {
+    const parsed = splitDataHubThinkingEnvelope(block.content);
+    if (parsed.thinking) thinking.push(parsed.thinking);
+    return parsed.answer.trim() ? [{ source: block, content: parsed.answer }] : [];
+  });
+
+  let answerIndex = -1;
+  for (let index = texts.length - 1; index >= 0; index -= 1) {
+    if (texts[index].source.textRole !== "progress") {
+      answerIndex = index;
+      break;
+    }
+  }
+
+  const answerText = answerIndex >= 0 ? texts[answerIndex] : undefined;
+  const answer = answerText ? { ...answerText.source, content: answerText.content } : undefined;
+  return {
+    ...(answer ? { answer } : {}),
+    process: texts.filter((item, index) =>
+      index !== answerIndex && !(answer && dataHubAnswerCovers(answer.content, item.content))
+    ),
+    thinking: thinking.join("\n")
+  };
 }

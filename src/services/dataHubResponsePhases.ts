@@ -15,7 +15,10 @@ const queryTypes = new Set([
 const resultAttachmentTypes = new Set(["table", "chart", "document_url", "citation_document"]);
 type PhaseStatus = "running" | "done" | "error" | "cancelled";
 
-/** 用真实事件边界推进阶段；检索中间表和子智能体的回答不能提前结束根任务。 */
+/**
+ * 用真实事件边界推进阶段；检索中间表和子智能体的回答不能提前结束根任务。
+ * 结果阶段只认正式回答（answer 或旧式无 textRole 的正文）；过程说明属于分析阶段。
+ */
 export function getDataHubResponsePhases(
   events: DataHubStreamEvent[],
   status: DataHubAskDataStatus,
@@ -47,11 +50,13 @@ export function getDataHubResponsePhases(
       queryIndex = index;
       if (answerIndex < 0) thinkingIndex = -1;
     }
-    if (!child && (event.type === "thinking" || event.type === "final_thinking" || event.isThinking)) {
+    const rootProgress = !child && event.textRole === "progress"
+      && (event.type === "text" || event.type === "content" || event.type === "text_replace");
+    if (!child && (event.type === "thinking" || event.type === "final_thinking" || event.isThinking || rootProgress)) {
       thinkingIndex = index;
       answerIndex = -1;
       rootText = "";
-    } else if (!child && (event.type === "text" || event.type === "content")) {
+    } else if (!child && (event.type === "text" || event.type === "content" || event.type === "text_replace")) {
       const text = typeof payload === "string" ? payload
         : payload && typeof payload === "object" && "text" in payload ? payload.text
           : payload && typeof payload === "object" && "content" in payload ? payload.content : "";
@@ -61,7 +66,8 @@ export function getDataHubResponsePhases(
         rootReply = reply;
         answerIndex = -1;
       }
-      if (typeof text === "string") rootText += text;
+      // text_replace 给的是这次模型调用收敛后的全文。
+      if (typeof text === "string") rootText = event.type === "text_replace" ? text : rootText + text;
       if (splitDataHubThinkingEnvelope(rootText).answer.trim() && answerIndex < 0) {
         answerIndex = index;
         thinkingIndex = -1;

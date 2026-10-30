@@ -827,4 +827,23 @@ describe("DataHubExecutionPanel", () => {
 
     expect(screen.getByText(/本月收入为 128 万元/)).toBeInTheDocument();
   });
+
+  it("labels server-marked progress text as a process note rather than the formal answer", () => {
+    const root = { agentName: "问数智能体", sessionId: "progress-main", chatId: "progress-chat", replyId: "ask" };
+    const answer = "学生心理测试合格数量：263；学生综合测试合格数量：424。";
+    const projection = projectDataHubExecutionEvents([
+      { ...root, type: "agent_start" },
+      { ...root, type: "text", content: "我需要先了解查询技能的规范，然后确定数据源和模型。", modelCallIndex: 1, textRole: "progress" },
+      { ...root, type: "text", content: "学生心理测试合格数量：263", modelCallIndex: 2, textRole: "progress" },
+      { ...root, type: "text_replace", content: answer, modelCallIndex: 2, textRole: "answer" },
+      { ...root, type: "done", content: {}, finished: true }
+    ], { mainSessionId: root.sessionId, fallbackAgentName: "问数智能体" });
+
+    render(<DataHubExecutionPanel projection={projection} title="问数执行过程" preferDirectMainExecution answerText={answer} />);
+
+    expect(screen.getByText("过程说明")).toBeInTheDocument();
+    expect(screen.getByText("我需要先了解查询技能的规范，然后确定数据源和模型。")).toBeInTheDocument();
+    expect(screen.queryByText("正式回答")).not.toBeInTheDocument();
+    expect(screen.queryByText(answer)).not.toBeInTheDocument();
+  });
 });

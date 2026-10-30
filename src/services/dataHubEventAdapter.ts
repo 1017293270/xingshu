@@ -1,10 +1,11 @@
-import type { DataHubStreamEvent } from "@/types/dataHub";
+import type { DataHubStreamEvent, DataHubTextRole } from "@/types/dataHub";
 
 type UnknownRecord = Record<string, unknown>;
 
 const stringPayloadEventTypes = [
   "content",
   "text",
+  "text_replace",
   "thinking",
   "final_thinking",
   "info",
@@ -27,6 +28,7 @@ const knownDataHubEventTypes = new Set([
   "info",
   "content",
   "text",
+  "text_replace",
   "data_source_selected",
   "table",
   "chart",
@@ -54,6 +56,7 @@ export type DataHubEventDefaults = Partial<
     | "label"
     | "replyId"
     | "modelCallIndex"
+    | "textRole"
     | "chatId"
     | "eventId"
     | "sequence"
@@ -109,6 +112,11 @@ function asOptionalTimestamp(value: unknown): string | number | undefined {
   return typeof value === "string" || typeof value === "number" ? value : undefined;
 }
 
+/** 只认服务端约定的两种正文定性，其他值当作没有标记，按旧规则处理。 */
+function asOptionalTextRole(value: unknown): DataHubTextRole | undefined {
+  return value === "progress" || value === "answer" ? value : undefined;
+}
+
 function defaultsFromRecord(record: UnknownRecord, defaults: DataHubEventDefaults): DataHubEventDefaults {
   return {
     type: asOptionalString(record.type) ?? defaults.type,
@@ -122,6 +130,7 @@ function defaultsFromRecord(record: UnknownRecord, defaults: DataHubEventDefault
     label: asOptionalString(record.label) ?? defaults.label,
     replyId: asOptionalString(record.replyId) ?? defaults.replyId,
     modelCallIndex: asOptionalNumber(record.modelCallIndex) ?? defaults.modelCallIndex,
+    textRole: asOptionalTextRole(record.textRole) ?? defaults.textRole,
     chatId: asOptionalString(record.chatId) ?? defaults.chatId,
     eventId: asOptionalString(record.eventId) ?? defaults.eventId,
     sequence:
@@ -156,6 +165,7 @@ function looksLikeNestedEvent(value: unknown): boolean {
     "label",
     "replyId",
     "modelCallIndex",
+    "textRole",
     "chatId",
     "eventId",
     "sequence",
@@ -269,6 +279,7 @@ export function adaptDataHubStreamEvent(
     "label",
     "replyId",
     "modelCallIndex",
+    "textRole",
     "chatId",
     "eventId",
     "sequence",

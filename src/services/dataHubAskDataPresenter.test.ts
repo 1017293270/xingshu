@@ -1335,3 +1335,103 @@ describe("describeDataHubCondition", () => {
     expect(describeDataHubCondition("inDateRange", ["a", "b"], "quoted")).toBe("在“a 至 b”之间");
   });
 });
+
+describe("textRole 新协议的正文选法", () => {
+  const ask = { agentName: "问数智能体", sessionId: "ask-root", replyId: "ask-reply" };
+  const progress = [
+    "我需要先了解查询技能的规范，然后确定数据源和模型。",
+    "语义 SQL 报错（列数不匹配），我改用标准查询分别统计两个分项。",
+    "正式查询需使用公共 View 成员，我改用 View 的 count 度量重新统计两个分项。"
+  ];
+  const answer = "学生心理测试合格数量：263；学生综合测试合格数量：424。";
+  const protocolEvents = (final: DataHubStreamEvent[]): DataHubStreamEvent[] => [
+    { ...ask, type: "thinking", content: "用户想统计两个合格数量。", isThinking: true, modelCallIndex: 1 },
+    { ...ask, type: "text", content: progress[0], modelCallIndex: 1, textRole: "progress" },
+    { ...ask, type: "tool_call", content: { name: "get_skill" } },
+    { ...ask, type: "text", content: progress[1], modelCallIndex: 2, textRole: "progress" },
+    { ...ask, type: "thinking", content: "改用 View 成员。", isThinking: true, modelCallIndex: 3 },
+    { ...ask, type: "text", content: progress[2], modelCallIndex: 3, textRole: "progress" },
+    { ...ask, type: "table", content: { columns: ["项目", "数量"], rows: [["心理测试", 263]], totalRows: 1 } },
+    ...final
+  ];
+
+  it("takes only the replaced answer and keeps progress out of the formal answer", () => {
+    const turn = createDataHubAskTurn("统计两个合格数量", protocolEvents([
+      { ...ask, type: "text", content: "学生心理测试合格数量：263", modelCallIndex: 4, textRole: "progress" },
+      { ...ask, type: "text_replace", content: answer, modelCallIndex: 4, textRole: "answer" },
+      { ...ask, type: "done", content: {}, finished: true }
+    ]), "done");
+
+    expect(turn.assistantContent).toBe(answer);
+    expect(turn.answerBlocks).toEqual([expect.objectContaining({ content: answer, textRole: "answer" })]);
+    for (const line of progress) expect(turn.assistantContent).not.toContain(line);
+    expect(turn.processNotes).toEqual([
+      { kind: "analysis", content: "用户想统计两个合格数量。" },
+      { kind: "progress", content: progress[0] },
+      { kind: "progress", content: progress[1] },
+      { kind: "analysis", content: "改用 View 成员。" },
+      { kind: "progress", content: progress[2] }
+    ]);
+  });
+
+  it("keeps the formal answer when the replace finds no streamed draft", () => {
+    const turn = createDataHubAskTurn("统计两个合格数量", protocolEvents([
+      { ...ask, type: "text_replace", content: answer, modelCallIndex: 9, textRole: "answer" },
+      { ...ask, type: "done", content: {}, finished: true }
+    ]), "done");
+    expect(turn.assistantContent).toBe(answer);
+    expect(turn.processNotes?.filter((note) => note.kind === "progress")).toHaveLength(3);
+  });
+
+  it("accepts an answer sent as plain text when the server has no replyId", () => {
+    const turn = createDataHubAskTurn("统计两个合格数量", protocolEvents([
+      { agentName: "问数智能体", sessionId: "ask-root", type: "text", content: answer, textRole: "answer" },
+      { ...ask, type: "done", content: {}, finished: true }
+    ]), "done");
+    expect(turn.assistantContent).toBe(answer);
+  });
+
+  it("leaves the answer empty while only progress has streamed", () => {
+    const turn = createDataHubAskTurn("统计两个合格数量", protocolEvents([]), "streaming");
+    expect(turn.answerBlocks).toEqual([]);
+    expect(turn.assistantContent).toBe("");
+    expect(turn.processNotes?.map((note) => note.kind)).toEqual(["analysis", "progress", "progress", "analysis", "progress"]);
+  });
+
+  it("does not offer progress as the answer when the run fails before answering", () => {
+    const turn = createDataHubAskTurn("统计两个合格数量", protocolEvents([]), "error", "连接中断");
+    expect(turn.assistantContent).toBe("");
+    expect(turn.error?.message).toBe("连接中断");
+  });
+
+  it("treats earlier unmarked text as process notes once the session carries text roles", () => {
+    const turn = createDataHubAskTurn("统计", [
+      { ...ask, type: "text", content: "我来帮您查询这两个数量。", modelCallIndex: 1 },
+      { ...ask, type: "text", content: progress[0], modelCallIndex: 2, textRole: "progress" },
+      { ...ask, type: "text_replace", content: answer, modelCallIndex: 2, textRole: "answer" }
+    ], "done");
+    expect(turn.assistantContent).toBe(answer);
+    expect(turn.processNotes).toEqual([{ kind: "progress", content: "我来帮您查询这两个数量。" }]);
+  });
+
+  it("keeps the legacy selection for sessions without any text role", () => {
+    const events: DataHubStreamEvent[] = [
+      { type: "thinking", content: "先确认口径。", isThinking: true, replyId: "a", modelCallIndex: 1 },
+      { type: "text", content: "我来帮您查询。", replyId: "a", modelCallIndex: 1 },
+      { type: "text", content: "本月收入为 128 万元。", replyId: "b", modelCallIndex: 2 }
+    ];
+    const turn = createDataHubAskTurn("本月收入", events, "done");
+    expect(turn.assistantContent).toBe("我来帮您查询。本月收入为 128 万元。");
+    expect(turn.answerBlocks.map((block) => block.content)).toEqual(["我来帮您查询。", "本月收入为 128 万元。"]);
+    expect(turn.processNotes).toEqual([{ kind: "analysis", content: "先确认口径。" }]);
+  });
+
+  it("still converges a legacy draft replaced without a text role", () => {
+    const turn = createDataHubAskTurn("制度", [
+      { type: "text", content: "差旅费超过 5000", replyId: "r", modelCallIndex: 1 },
+      { type: "text_replace", content: "单笔差旅费超过 5000 元需复核。", replyId: "r", modelCallIndex: 1 }
+    ], "done");
+    expect(turn.assistantContent).toBe("单笔差旅费超过 5000 元需复核。");
+    expect(turn.processNotes).toEqual([]);
+  });
+});

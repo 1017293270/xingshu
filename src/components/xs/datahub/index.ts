@@ -4,6 +4,7 @@ export type { DataHubAnswerInsightState } from "./DataHubAnswerInsights";
 export { DataHubCitationChips } from "./DataHubCitationChips";
 export { citationDisplayTitle, citationLocationText } from "./citationLabels";
 export { DataHubCitationFragments } from "./DataHubCitationFragments";
+export { DataHubDataTrust } from "./DataHubDataTrust";
 export type { DataHubCitationFragmentsProps } from "./DataHubCitationFragments";
 export { DataHubResultTable } from "./DataHubResultTable";
 export { DataHubExecutionPanel } from "./DataHubExecutionPanel";

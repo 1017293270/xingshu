@@ -1,7 +1,11 @@
 import { cleanDataHubAnswerBlocks } from "./dataHubThinkingEnvelope";
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import { normalizeDataHubTableResult, resolveDataHubFinalAnswer } from "@/services/dataHubAskDataPresenter";
-import { dedupeDataHubAnswerBlocks } from "@/services/dataHubAnswerDedupe";
+import {
+  dedupeDataHubAnswerBlocks,
+  hasDataHubTextRoles,
+  splitDataHubRoleAnswer
+} from "@/services/dataHubAnswerDedupe";
 import type {
   AskArtifactRef,
   DataHubContentBlock,
@@ -195,11 +199,18 @@ function getSessionAnswerBlocks(session: DataHubExecutionSession): DataHubConten
       sessionBlocks.push({
         content,
         replyId: block.replyId,
-        modelCallIndex: block.modelCallIndex
+        modelCallIndex: block.modelCallIndex,
+        ...(block.textRole ? { textRole: block.textRole } : {})
       });
     }
   }
-  const streamedBlocks = dedupeDataHubAnswerBlocks(cleanDataHubAnswerBlocks(sessionBlocks).blocks);
+  // 与根正文同一口径：带 textRole 的子会话只取正式回答，过程说明不进结论。
+  const roleAnswer = hasDataHubTextRoles(sessionBlocks)
+    ? { block: splitDataHubRoleAnswer(sessionBlocks).answer }
+    : undefined;
+  const streamedBlocks = roleAnswer
+    ? roleAnswer.block ? [roleAnswer.block] : []
+    : dedupeDataHubAnswerBlocks(cleanDataHubAnswerBlocks(sessionBlocks).blocks);
   const streamedText = streamedBlocks.map((block) => block.content).join("");
   const answer = resolveDataHubFinalAnswer(session.done?.summary, streamedText, false, {
     keepRicherStreamedAnswer: session.done?.mode === "agent" || session.done?.adaptiveTeam === true

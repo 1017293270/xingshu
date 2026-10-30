@@ -34,6 +34,7 @@ import {
   DataHubAnswerInsightSection,
   DataHubBusinessExplanation,
   DataHubCitationChips,
+  DataHubDataTrust,
   DataHubExecutionPanel,
   DataHubFollowUpQuestions,
   DataHubProcessDock,
@@ -84,6 +85,7 @@ import {
 } from "@/services/queryAssetService";
 import { loadDataHubCitationDocument } from "@/services/dataHubKnowledgeService";
 import { buildDataHubAnswerPreamble } from "@/services/dataHubAnswerPreamble";
+import { findDataHubRootDone, readDataHubDataTrust } from "@/services/dataHubDataTrust";
 import { buildDataHubResultSummary } from "@/services/dataHubResultSummary";
 import {
   buildDataHubAnswerInsightRequest,
@@ -1819,6 +1821,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const phases = getDataHubResponsePhases(turn.events, displayStatus, turn.startedAt, turn.endedAt);
               const thinkingSections = getDataHubThinkingSections(executionProjection, turnAsk);
               const hasChildThinking = thinkingSections.some((section) => !section.main);
+              // 子智能体还在分析或查询时，思考过程跟着整轮保持运行；折叠头只说当前阶段的白话状态：
+              // 已拿到查询结果后模型重新组织语言是在整理回答，等查询时是查询数据，其余是分析问题。
+              const processDockStatus = hasChildThinking && displayStatus === "streaming" && !phases.showResult
+                ? "running"
+                : phases.thinkingStatus;
+              const processDockPhase = phases.showResult ||
+                (phases.thinkingStatus === "running" && phases.showQuery && visibleTables.length > 0)
+                ? "result"
+                : phases.thinkingStatus !== "running" && phases.showQuery ? "query" : "thinking";
               const aiChartState = aiChartStates[turn.id] ?? { status: "idle" as const };
               const queryAssetTargets =
                 isAskMode || isAgentMode
@@ -1917,6 +1928,35 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
               const answerInsightState = displayStatus === "done" ? answerInsightStates[turn.id] : undefined;
               const followUpQuestions =
                 isLatestTurn && answerInsightState?.status === "success" ? answerInsightState.insight.followUps : [];
+              // 可信指标只认根任务完成事件，实时与历史回放走同一路径；流式中、失败、取消的回答一律不显示。
+              const dataTrust = displayStatus === "done" ? readDataHubDataTrust(findDataHubRootDone(turn.events)) : null;
+              const showsAnswerBlock = !isDocumentLookupMode && isResultReady && visibleAnswerBlocks.length > 0;
+              // 查询还可能继续追加，跑完再给出处，免得依据在读者眼前一条条变化
+              const answerBasis = answerPreamble && displayStatus !== "streaming" ? (
+                <section
+                  className="analysis-answer-preamble"
+                  aria-labelledby={`${turn.id}-answer-basis`}
+                >
+                  <span className="analysis-answer-preamble__label" id={`${turn.id}-answer-basis`}>
+                    查询依据
+                  </span>
+                  {answerPreamble.queries.length > 1 ? (
+                    <ol className="analysis-answer-preamble__list">
+                      {answerPreamble.queries.map((sentence) => (
+                        <li key={sentence}>{sentence}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    answerPreamble.queries.map((sentence) => <p key={sentence}>{sentence}</p>)
+                  )}
+                  {answerPreamble.queryCount > answerPreamble.queries.length ? (
+                    <p className="analysis-answer-preamble__more">
+                      等 {answerPreamble.queryCount} 条查询
+                    </p>
+                  ) : null}
+                  {answerPreamble.knowledge ? <p>{answerPreamble.knowledge}</p> : null}
+                </section>
+              ) : null;
 
               return (
                 <div
@@ -1979,8 +2019,9 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                           thinkingContent={turnAsk.thinkingContent}
                           sections={thinkingSections}
                           decompose={turnAsk.decompose}
-                          status={hasChildThinking && displayStatus === "streaming" && !phases.showResult ? "running" : phases.thinkingStatus}
-                          startedAt={hasChildThinking ? undefined : turn.startedAt}
+                          status={processDockStatus}
+                          phase={processDockPhase}
+                          startedAt={turn.startedAt}
                           durationMs={hasChildThinking ? undefined : phases.thinkingDurationMs}
                           sourceNote={!hasChildThinking && thinkingSections.length === 1 && turnAsk.thinkingBlocks.length === 1
                             && executionProjection.subagentSessions.length > 0 && displayStatus === "done"
@@ -2027,9 +2068,7 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                       {(phases.showResult || isHistoryLoadingTurn) ? (
                       <section className="analysis-output" aria-label="分析结果">
                         <div className="analysis-result-stage" data-state={resultStageState}>
-                          {!isDocumentLookupMode &&
-                          isResultReady &&
-                          visibleAnswerBlocks.length > 0 ? (
+                          {showsAnswerBlock ? (
                             <div className="analysis-answer-block">
                               <DataHubAnswer
                                 blocks={visibleAnswerBlocks}
@@ -2038,32 +2077,15 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 streaming={displayStatus === "streaming"}
                                 incomplete={displayStatus === "error" || displayStatus === "cancelled"}
                               />
-                              {/* 查询还可能继续追加，跑完再给出处，免得依据在读者眼前一条条变化 */}
-                              {answerPreamble && displayStatus !== "streaming" ? (
-                                <section
-                                  className="analysis-answer-preamble"
-                                  aria-labelledby={`${turn.id}-answer-basis`}
-                                >
-                                  <span className="analysis-answer-preamble__label" id={`${turn.id}-answer-basis`}>
-                                    查询依据
-                                  </span>
-                                  {answerPreamble.queries.length > 1 ? (
-                                    <ol className="analysis-answer-preamble__list">
-                                      {answerPreamble.queries.map((sentence) => (
-                                        <li key={sentence}>{sentence}</li>
-                                      ))}
-                                    </ol>
-                                  ) : (
-                                    answerPreamble.queries.map((sentence) => <p key={sentence}>{sentence}</p>)
-                                  )}
-                                  {answerPreamble.queryCount > answerPreamble.queries.length ? (
-                                    <p className="analysis-answer-preamble__more">
-                                      等 {answerPreamble.queryCount} 条查询
-                                    </p>
-                                  ) : null}
-                                  {answerPreamble.knowledge ? <p>{answerPreamble.knowledge}</p> : null}
-                                </section>
-                              ) : null}
+                              {/* 出处脚注区：可信状态在第一行，查询依据紧随其后，两者共用一条细分隔线 */}
+                              {dataTrust ? (
+                                <div className="analysis-answer-trust-footnote">
+                                  <DataHubDataTrust trust={dataTrust} />
+                                  {answerBasis}
+                                </div>
+                              ) : (
+                                answerBasis
+                              )}
                               {answerText ? (
                                 <button
                                   type="button"
@@ -2118,6 +2140,10 @@ export function AnalysisPage({ mode = "agent" }: AnalysisPageProps) {
                                 );
                               })}
                             </div>
+                          ) : null}
+                          {/* 没有文字回答、只有表格回答时，可信状态放在表格回答前面 */}
+                          {dataTrust && !showsAnswerBlock && tableAnswers.length > 0 ? (
+                            <DataHubDataTrust trust={dataTrust} />
                           ) : null}
                           {tableAnswers.length > 0 ? (
                             <section className="analysis-table-answer" aria-label="表格回答">

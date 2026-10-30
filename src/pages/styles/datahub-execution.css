@@ -4192,14 +4192,65 @@ button.xs-datahub-subagent-dag__node:focus-visible {
   max-height: 260px;
   overflow-y: auto;
   padding: 4px 0;
-  color: var(--xs-text-3);
-
-  font-size: var(--xs-fs-caption);
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
   line-height: 1.7;
 }
 
-.datahub-process-dock__thinking :is(p, ul, ol) {
+/* 一条说明：左侧灰色小标签标明是分析说明还是过程说明，右侧正文与标签首行基线对齐。 */
+.datahub-process-notes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.datahub-process-note {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
+  min-width: 0;
+}
+
+.datahub-process-note__kind {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  font-weight: var(--xs-fw-regular);
+  white-space: nowrap;
+}
+
+/* 正文排版压过 .xs-safe-markdown 的回答区默认值：说明是辅助信息，字号行高都收一档。 */
+.datahub-process-note .datahub-process-note__content {
+  min-width: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.datahub-process-note .datahub-process-note__content :is(p, ul, ol, blockquote, pre) {
   margin: 0 0 6px;
+}
+
+.datahub-process-note .datahub-process-note__content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 4px;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.7;
+}
+
+.datahub-process-note .datahub-process-note__content > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 620px) {
+  .datahub-process-note {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
 }
 
 .datahub-process-dock:not([data-status="running"]) .datahub-process-dock__thinking {
@@ -4213,7 +4264,7 @@ button.xs-datahub-subagent-dag__node:focus-visible {
   border-top: 1px solid var(--xs-border);
 }
 
-.datahub-process-dock__thinking-section h4 {
+.datahub-process-dock__thinking-section > h4 {
   margin: 0 0 6px;
   color: var(--xs-text-2);
   font-size: var(--xs-fs-caption);

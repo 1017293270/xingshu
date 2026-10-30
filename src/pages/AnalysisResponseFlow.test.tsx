@@ -446,6 +446,11 @@ describe("analysis response phases", () => {
     const runId = store.startAskDataRun("查询合同", null, mode);
     renderPage(mode);
     expect(screen.getByRole("region", { name: "思考过程" })).toHaveAttribute("data-status", "running");
+    // 思考过程默认收起，折叠头只说白话状态；展开后才看到等待提示。
+    const thinkingToggle = screen.getByRole("button", { name: /^思考过程 （正在分析问题/ });
+    expect(thinkingToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("正在整理思路…")).not.toBeInTheDocument();
+    fireEvent.click(thinkingToggle);
     expect(screen.getByText("正在整理思路…")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "查询过程" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "分析结果" })).not.toBeInTheDocument();
@@ -486,6 +491,9 @@ describe("analysis response phases", () => {
     act(() => { second = store.startAskDataRun("其中生效的有多少", useUiStore.getState().analysisTurns[0].sessionId, "ask"); });
     const turns = screen.getAllByRole("region", { name: "星数分析结果" });
     const current = within(turns[1]);
+    const thinkingToggle = current.getByRole("button", { name: /^思考过程 （正在分析问题/ });
+    expect(thinkingToggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(thinkingToggle);
     expect(current.getByText("正在整理思路…")).toBeInTheDocument();
     act(() => {
       store.appendAskDataEvent(second, {
@@ -518,4 +526,83 @@ it("keeps incomplete received text readable alongside its error without favorite
   expect(screen.queryByLabelText("正式回答")).not.toBeInTheDocument();
   expect(screen.getByRole("alert")).toHaveTextContent("回答未完成");
   expect(screen.queryByRole("button", { name: "收藏问数" })).not.toBeInTheDocument();
+});
+
+describe("server-marked process notes", () => {
+  const progress = [
+    "我需要先了解查询技能的规范，然后确定数据源和模型。",
+    "语义 SQL 报错（列数不匹配），我改用标准查询分别统计两个分项。",
+    "正式查询需使用公共 View 成员，我改用 View 的 count 度量重新统计两个分项。"
+  ];
+  const answer = "学生心理测试合格数量：263；学生综合测试合格数量：424。";
+  const table = { columns: [{ name: "item", title: "项目" }, { name: "count", title: "合格数量", type: "number" }],
+    rows: [{ item: "心理测试", count: 263 }, { item: "综合测试", count: 424 }], totalRows: 2, source: "cube" };
+
+  it("keeps ask-mode process notes out of the answer and inside the collapsed thinking process", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("学生心理测试和综合测试合格数量", null, "ask");
+    const sessionId = useUiStore.getState().analysisTurns[0].sessionId!;
+    const root = { sessionId, agentName: "问数智能体", replyId: "ask-reply" };
+    renderPage("ask");
+    act(() => {
+      store.appendAskDataEvent(runId, { ...root, type: "thinking", content: "用户要统计两个合格数量。", isThinking: true, modelCallIndex: 1 });
+      progress.forEach((content, index) => {
+        store.appendAskDataEvent(runId, { ...root, type: "text", content, modelCallIndex: index + 1, textRole: "progress" });
+        store.appendAskDataEvent(runId, { ...root, type: "activity", content: { activityId: `tool-${index}`, kind: "tool", action: "execute_query", label: "执行数据查询", status: "success" } });
+      });
+      store.appendAskDataEvent(runId, { ...root, type: "table", content: table });
+      store.appendAskDataEvent(runId, { ...root, type: "text", content: "学生心理测试合格数量：263", modelCallIndex: 4, textRole: "progress" });
+    });
+    // 过程说明流着的时候，回答区保持加载态，不出现过程说明。
+    expect(screen.queryByRole("region", { name: "分析结果" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("正式回答")).not.toBeInTheDocument();
+    const dock = screen.getByRole("region", { name: "思考过程" });
+    expect(within(dock).getByRole("button", { name: /^思考过程/ })).toHaveAttribute("aria-expanded", "false");
+    expect(dock).not.toHaveTextContent(progress[1]);
+
+    act(() => {
+      store.appendAskDataEvent(runId, { ...root, type: "text_replace", content: answer, modelCallIndex: 4, textRole: "answer" });
+      store.appendAskDataEvent(runId, { ...root, type: "done", content: {}, finished: true });
+      store.completeAskDataRun(runId);
+    });
+    const formal = screen.getByLabelText("正式回答");
+    expect(formal).toHaveTextContent(answer);
+    for (const line of progress) expect(formal).not.toHaveTextContent(line);
+    const toggle = within(dock).getByRole("button", { name: /^思考过程 （已完成/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    const notes = within(dock).getByLabelText("模型思考");
+    for (const line of progress) expect(notes).toHaveTextContent(line);
+    expect(notes).not.toHaveTextContent("424");
+    expect(within(notes).getAllByText("过程说明").length).toBeGreaterThan(0);
+    expect(within(notes).getAllByText("分析说明").length).toBeGreaterThan(0);
+  });
+
+  it("falls back to the child's formal answer only when the orchestration root has not answered", () => {
+    const store = useUiStore.getState();
+    const runId = store.startAskDataRun("学生心理测试和综合测试合格数量", null, "agent");
+    const sessionId = useUiStore.getState().analysisTurns[0].sessionId!;
+    const child = { sessionId: "ask-child", parentSessionId: sessionId, globalSessionId: sessionId, agentId: "ask-data",
+      subagentId: "ask-data-1", agentName: "问数智能体", label: "问数智能体", replyId: "child-reply" };
+    store.appendAskDataEvent(runId, { sessionId, agentName: "编排智能体", type: "thinking", isThinking: true, replyId: "root", modelCallIndex: 1,
+      content: "用户需要两个合格数量，我将把这两个指标作为同一事项委派给问数智能体。" });
+    store.appendAskDataEvent(runId, { ...child, type: "subagent_exposed", content: { sessionId: child.sessionId, agentId: "ask-data", label: "问数智能体" } });
+    progress.forEach((content, index) => store.appendAskDataEvent(runId, { ...child, type: "text", content, modelCallIndex: index + 1, textRole: "progress" }));
+    store.appendAskDataEvent(runId, { ...child, type: "table", content: table });
+    store.appendAskDataEvent(runId, { ...child, type: "text_replace", content: answer, modelCallIndex: 3, textRole: "answer" });
+    store.appendAskDataEvent(runId, { ...child, type: "done", content: {} });
+    store.appendAskDataEvent(runId, { sessionId, agentName: "编排智能体", type: "done", content: {}, finished: true });
+    store.completeAskDataRun(runId);
+    renderPage("agent");
+
+    const formal = screen.getByLabelText("正式回答");
+    expect(formal).toHaveTextContent(answer);
+    for (const line of progress.slice(0, 2)) expect(formal).not.toHaveTextContent(line);
+    const dock = screen.getByRole("region", { name: "思考过程" });
+    fireEvent.click(within(dock).getByRole("button", { name: /^思考过程/ }));
+    const notes = within(dock).getByLabelText("模型思考");
+    expect(within(notes).getByRole("heading", { name: "问数智能体" })).toBeInTheDocument();
+    expect(notes).toHaveTextContent(progress[0]);
+    expect(notes).toHaveTextContent("我将把这两个指标作为同一事项委派给问数智能体");
+  });
 });

@@ -103,3 +103,20 @@ it("does not use the previous model call's opening text to validate a new marker
     { type: "text", replyId: "final", content: "think>" }
   ], "streaming").showResult).toBe(false);
 });
+
+it("keeps process notes in the analysis stage until the formal answer arrives", () => {
+  const root = { agentName: "问数智能体", replyId: "ask", timestamp: 2000 };
+  const events: DataHubStreamEvent[] = [
+    { ...root, type: "thinking", content: "确认两个分项", isThinking: true, modelCallIndex: 1 },
+    { ...root, type: "text", content: "我需要先了解查询技能的规范。", modelCallIndex: 1, textRole: "progress" },
+    { type: "tool_call", timestamp: 3000 },
+    { type: "table", timestamp: 4000 },
+    { ...root, type: "text", content: "学生心理测试合格数量：263", modelCallIndex: 2, textRole: "progress", timestamp: 5000 }
+  ];
+  expect(getDataHubResponsePhases(events, "streaming", 1000)).toMatchObject({
+    showResult: false, showQuery: true, thinkingStatus: "running", queryStatus: "running"
+  });
+  expect(getDataHubResponsePhases([...events,
+    { ...root, type: "text_replace", content: "学生心理测试合格数量：263；综合测试合格数量：424。", modelCallIndex: 2, textRole: "answer", timestamp: 6000 }
+  ], "streaming", 1000)).toMatchObject({ showResult: true, queryStatus: "done", queryDurationMs: 3000 });
+});

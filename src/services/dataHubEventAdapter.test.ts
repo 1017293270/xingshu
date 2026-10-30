@@ -306,4 +306,54 @@ describe("dataHubEventAdapter", () => {
       })
     );
   });
+
+  it("keeps the server textRole and text_replace in live and persisted formats", () => {
+    const live = adaptDataHubStreamEvent({
+      agentName: "问数智能体",
+      type: "text_replace",
+      content: "学生心理测试合格数量：263。",
+      sessionId: "session-main",
+      replyId: "reply-ask",
+      modelCallIndex: 4,
+      textRole: "answer",
+      parentSessionId: null,
+      finished: false
+    });
+    expect(live).toEqual(expect.objectContaining({
+      type: "text_replace",
+      content: "学生心理测试合格数量：263。",
+      replyId: "reply-ask",
+      modelCallIndex: 4,
+      textRole: "answer"
+    }));
+
+    // 历史回放：外层 type/data，data 是整条事件的 JSON 字符串。
+    const persisted = adaptDataHubStreamEvent({
+      type: "text",
+      data: JSON.stringify({
+        agentName: "问数智能体",
+        type: "text",
+        content: "{\"note\": \"我需要先了解查询技能的规范\"}",
+        replyId: "reply-ask",
+        modelCallIndex: 1,
+        textRole: "progress"
+      })
+    });
+    expect(persisted).toEqual(expect.objectContaining({
+      type: "text",
+      content: "{\"note\": \"我需要先了解查询技能的规范\"}",
+      textRole: "progress",
+      modelCallIndex: 1
+    }));
+    const persistedReplace = adaptDataHubStreamEvent({
+      type: "text_replace",
+      data: JSON.stringify({ type: "text_replace", content: "正式回答", replyId: "r", modelCallIndex: 2, textRole: "answer" })
+    });
+    expect(persistedReplace).toEqual(expect.objectContaining({ type: "text_replace", content: "正式回答", textRole: "answer" }));
+  });
+
+  it("drops unknown text roles so the session keeps the legacy selection", () => {
+    const event = adaptDataHubStreamEvent({ type: "text", content: "旧正文", textRole: "summary" });
+    expect(event).not.toHaveProperty("textRole");
+  });
 });

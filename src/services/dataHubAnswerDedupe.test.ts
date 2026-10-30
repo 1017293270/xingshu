@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   dataHubAnswerCovers,
   dataHubRootAnsweredAfterChildren,
+  hasDataHubTextRoles,
+  splitDataHubRoleAnswer,
   dedupeDataHubAnswerBlocks,
   mergeRepeatedAnswerChunk,
   normalizeDataHubAnswerText
@@ -200,4 +202,33 @@ it.each([
   expect(dataHubAnswerCovers(first, second)).toBe(false);
   expect(mergeRepeatedAnswerChunk(first, second)).toBeUndefined();
   expect(dedupeDataHubAnswerBlocks([{ content: first }, { content: first }])).toHaveLength(1);
+});
+
+describe("text roles", () => {
+  it("ignores process notes and counts a replaced answer when deciding who answered last", () => {
+    const root = { sessionId: "root-session", replyId: "root-reply", modelCallIndex: 1 };
+    const child = { sessionId: "child-session", parentSessionId: "root-session", replyId: "child-reply", modelCallIndex: 2 };
+    expect(dataHubRootAnsweredAfterChildren([
+      { type: "text", ...child, content: "我需要先了解查询技能的规范，然后确定数据源。", textRole: "progress" },
+      { type: "text_replace", ...child, content: "学生心理测试合格数量：263；综合测试合格数量：424。", textRole: "answer" },
+      { type: "text", ...root, content: "正式查询需使用公共 View 成员，我改用 View 的 count 度量。", textRole: "progress" }
+    ])).toBe(false);
+    expect(dataHubRootAnsweredAfterChildren([
+      { type: "text", ...child, content: "我需要先了解查询技能的规范，然后确定数据源。", textRole: "progress" },
+      { type: "text_replace", ...root, content: "两项合格数量分别为 263 和 424。", textRole: "answer" }
+    ])).toBe(true);
+  });
+
+  it("splits a marked session into the last formal answer and earlier process notes", () => {
+    const split = splitDataHubRoleAnswer([
+      { content: "我来帮您查询。", replyId: "r", modelCallIndex: 1 },
+      { content: "我需要先了解查询技能的规范。", replyId: "r", modelCallIndex: 2, textRole: "progress" },
+      { content: "<mm:think>核对口径</mm:think>合格数量为 263。", replyId: "r", modelCallIndex: 3, textRole: "answer" },
+      { content: "合格数量为 263。", replyId: "draft", modelCallIndex: 1, textRole: "progress" }
+    ]);
+    expect(split.answer).toEqual({ content: "合格数量为 263。", replyId: "r", modelCallIndex: 3, textRole: "answer" });
+    expect(split.process.map((item) => item.content)).toEqual(["我来帮您查询。", "我需要先了解查询技能的规范。"]);
+    expect(split.thinking).toBe("核对口径");
+    expect(hasDataHubTextRoles([{ content: "旧正文" }])).toBe(false);
+  });
 });

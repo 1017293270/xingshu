@@ -876,4 +876,51 @@ describe("dataHubExecutionProjector", () => {
       finished: true
     });
   });
+
+  it("converges a streamed draft with text_replace and keeps progress apart from the answer", () => {
+    const ask = { agentName: "问数智能体", replyId: "reply-ask" };
+    const projection = projectDataHubExecutionEvents([
+      event("text", { ...ask, content: "我需要先了解", modelCallIndex: 1, textRole: "progress" }),
+      event("text", { ...ask, content: "查询技能的规范。", modelCallIndex: 1, textRole: "progress" }),
+      event("text", { ...ask, content: "学生心理测试", modelCallIndex: 2, textRole: "progress" }),
+      event("thinking", { ...ask, content: "核对两个分项口径。", isThinking: true, modelCallIndex: 2 }),
+      event("text_replace", {
+        ...ask,
+        content: "学生心理测试合格数量：263；学生综合测试合格数量：424。",
+        modelCallIndex: 2,
+        textRole: "answer",
+        timestamp: "2026-07-28T10:00:09+08:00"
+      })
+    ]);
+
+    const blocks = projection.mainSession.cards[0].blocks;
+    expect(blocks.map((block) => [block.type, block.textRole, block.content])).toEqual([
+      ["text", "progress", "我需要先了解查询技能的规范。"],
+      ["text", "answer", "学生心理测试合格数量：263；学生综合测试合格数量：424。"],
+      ["thinking", undefined, "核对两个分项口径。"]
+    ]);
+    expect(blocks[1].timestamp).toBe("2026-07-28T10:00:09+08:00");
+  });
+
+  it("does not merge progress and answer text from the same model call", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("text", { content: "过程", replyId: "r", modelCallIndex: 1, textRole: "progress" }),
+      event("text", { content: "回答", replyId: "r", modelCallIndex: 1, textRole: "answer" })
+    ]);
+    expect(projection.mainSession.cards[0].blocks.map((block) => block.content)).toEqual(["过程", "回答"]);
+  });
+
+  it("appends a text_replace that has no streamed draft and ignores one without identity", () => {
+    const projection = projectDataHubExecutionEvents([
+      event("text", { content: "过程说明", replyId: "r", modelCallIndex: 1, textRole: "progress" }),
+      event("text_replace", { content: "没有身份的替换", textRole: "answer" }),
+      event("text_replace", { content: "缺少调用序号", replyId: "r", textRole: "answer" }),
+      event("text_replace", { content: "历史缺口里的正式回答", replyId: "r", modelCallIndex: 3, textRole: "answer" })
+    ]);
+    const blocks = projection.mainSession.cards[0].blocks;
+    expect(blocks.map((block) => [block.type, block.sourceType, block.textRole, block.content])).toEqual([
+      ["text", "text", "progress", "过程说明"],
+      ["text", "text_replace", "answer", "历史缺口里的正式回答"]
+    ]);
+  });
 });

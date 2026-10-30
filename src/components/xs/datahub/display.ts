@@ -176,9 +176,17 @@ function isFinalThinkingBlock(block: DataHubExecutionBlock): boolean {
   return block.type === "final_thinking" || block.sourceType === "final_thinking";
 }
 
+/** 服务端标明的过程说明：工具轮次之间的解说，不是正式回答。 */
+function isProgressTextBlock(block: DataHubExecutionBlock): boolean {
+  return block.textRole === "progress" && (block.type === "text" || block.type === "content");
+}
+
 export function executionBlockLabel(block: DataHubExecutionBlock): string {
   if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
     return isFinalThinkingBlock(block) ? "结果复核" : "任务分析";
+  }
+  if (isProgressTextBlock(block)) {
+    return "过程说明";
   }
   return (
     executionBlockLabels[block.type] ?? executionBlockLabels[block.sourceType] ?? block.type
@@ -203,7 +211,7 @@ function executionActionLabel(block: DataHubExecutionBlock): string | undefined 
       asString(record?.action)
     );
   }
-  if (block.isThinking || block.type === "thinking" || block.type === "final_thinking") {
+  if (block.isThinking || block.type === "thinking" || block.type === "final_thinking" || isProgressTextBlock(block)) {
     return executionBlockLabel(block);
   }
   return executionBlockLabels[block.type] ?? executionBlockLabels[block.sourceType];
@@ -534,6 +542,9 @@ export function executionBlockSummary(block: DataHubExecutionBlock): string {
   }
   if (block.type === "citation_document" || block.type === "document_url") {
     return "已复核知识来源";
+  }
+  if (isProgressTextBlock(block)) {
+    return "正在分析问题";
   }
   if (block.type === "content" || block.type === "text") {
     return "正在整理最终回答";

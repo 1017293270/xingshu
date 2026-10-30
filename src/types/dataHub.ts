@@ -136,6 +136,7 @@ export type DataHubSseEventType =
   | "info"
   | "content"
   | "text"
+  | "text_replace"
   | "data_source_selected"
   | "table"
   | "chart"
@@ -168,6 +169,12 @@ export type DataHubActivityData = {
   durationMs?: number;
 };
 
+/**
+ * 服务端对正文的定性：progress 是工具轮次里的过程说明，answer 是终态正式回答。
+ * 旧会话没有这个字段，按原有规则选正文。
+ */
+export type DataHubTextRole = "progress" | "answer";
+
 export type DataHubStreamEvent = {
   type: DataHubSseEventType | string;
   data?: unknown;
@@ -182,6 +189,7 @@ export type DataHubStreamEvent = {
   parentSessionId?: string;
   replyId?: string;
   modelCallIndex?: number;
+  textRole?: DataHubTextRole;
   chatId?: string;
   eventId?: string;
   sequence?: number;
@@ -280,6 +288,28 @@ export type DataHubDocumentLookupResult = {
   markdownAvailable?: boolean;
 };
 
+/** 可信指标等级。后端汇总时还有 NOT_APPLICABLE，但它不会出现在完成事件里。 */
+export type DataHubDataTrustLevel = "TRUSTED" | "PARTIAL" | "NOT_TRUSTED";
+
+/** 本次回答用到的一项度量。后端另有 queryMember、trustHash、source、semanticCommit，前端不读。 */
+export type DataHubUsedTrustMeasure = {
+  datasourceId?: number;
+  model: string;
+  member: string;
+  title: string;
+  trusted: boolean;
+};
+
+/** 根任务完成事件上的可信指标快照，由各张结果表的 usedMeasures 汇总而来。 */
+export type DataHubDataTrust = {
+  level: DataHubDataTrustLevel;
+  usedMeasures: DataHubUsedTrustMeasure[];
+  /** 是否有结果缺少可识别的度量信息。 */
+  unstructuredData: boolean;
+  trustedCount: number;
+  untrustedCount: number;
+};
+
 export type DataHubDoneData = {
   mode?: string;
   summary?: string;
@@ -299,6 +329,8 @@ export type DataHubDoneData = {
   completion?: "complete" | "partial" | "unknown" | string;
   coverage?: DataHubAdaptiveCoverageData;
   sourceResults?: DataHubAdaptiveSourceResult[];
+  /** 只挂在根任务完成事件上；子智能体的完成事件、失败与取消的回答都没有。 */
+  dataTrust?: DataHubDataTrust;
 };
 
 /**
@@ -333,6 +365,13 @@ export type DataHubContentBlock = {
   content: string;
   replyId?: string;
   modelCallIndex?: number;
+  textRole?: DataHubTextRole;
+};
+
+/** 「思考过程」里的一条：analysis=分析说明（thinking），progress=过程说明（非正式回答的正文）。 */
+export type DataHubProcessNote = {
+  kind: "analysis" | "progress";
+  content: string;
 };
 
 export type DataHubDataSourceSelected = {
@@ -513,6 +552,8 @@ export type DataHubAskTurn = {
   answerBlocks: DataHubContentBlock[];
   thinkingContent: string;
   thinkingBlocks: DataHubContentBlock[];
+  /** 按到达顺序排列的分析说明与过程说明；分析说明与 thinkingBlocks 同源。 */
+  processNotes?: DataHubProcessNote[];
   infoMessages: string[];
   dataSources: DataHubDataSourceSelected[];
   citationDocuments: DataHubCitationDocument[];
@@ -548,6 +589,7 @@ export type DataHubExecutionBlock = {
   timestamp?: number | string;
   replyId?: string;
   modelCallIndex?: number;
+  textRole?: DataHubTextRole;
   eventId?: string;
   sequence?: number;
   toolCallId?: string;

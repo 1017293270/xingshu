@@ -215,7 +215,7 @@ function normalizedBlockType(event: DataHubStreamEvent): string {
   if (event.type === "thinking" || event.type === "final_thinking" || event.isThinking) {
     return "thinking";
   }
-  return event.type === "content" ? "text" : event.type;
+  return event.type === "content" || event.type === "text_replace" ? "text" : event.type;
 }
 
 function createBlock(event: DataHubStreamEvent): DataHubExecutionBlock {
@@ -229,6 +229,7 @@ function createBlock(event: DataHubStreamEvent): DataHubExecutionBlock {
     ...(optionalNumber(event.modelCallIndex) === undefined
       ? {}
       : { modelCallIndex: optionalNumber(event.modelCallIndex) }),
+    ...(event.textRole ? { textRole: event.textRole } : {}),
     ...(optionalString(event.eventId) ? { eventId: optionalString(event.eventId) } : {}),
     ...(optionalNumber(event.sequence) === undefined
       ? {}
@@ -304,7 +305,9 @@ function upsertExecutionCard(
       typeof block.content === "string" &&
       modelCallIndex !== undefined &&
       previous.modelCallIndex === modelCallIndex &&
-      previous.replyId === replyId
+      previous.replyId === replyId &&
+      // 过程说明与正式回答即使同属一次模型调用也不能拼成一段。
+      previous.textRole === block.textRole
     ) {
       blocks = [
         ...blocks.slice(0, -1),
@@ -331,6 +334,58 @@ function upsertExecutionCard(
   }
 
   return cards.map((card, index) => (index === cardIndex ? nextCard : card));
+}
+
+/**
+ * 智能体结果用 text_replace 把同一次模型调用里流过的草稿收敛成正式回答：
+ * 只替换同 replyId + modelCallIndex 的最近一个 text 块（内容、textRole、时间）；
+ * 历史有缺口找不到草稿时按常规规则追加一个 text 块，正式回答不能丢。
+ * 缺 replyId 或 modelCallIndex 的替换事件无法定位，直接忽略。
+ */
+function replaceExecutionText(
+  cards: DataHubAgentExecutionCard[],
+  event: DataHubStreamEvent,
+  agentName: string
+): DataHubAgentExecutionCard[] {
+  const content = getDataHubEventPayload(event);
+  const replyId = optionalString(event.replyId);
+  const modelCallIndex = optionalNumber(event.modelCallIndex);
+  if (typeof content !== "string" || !content || !replyId || modelCallIndex === undefined) {
+    return cards;
+  }
+
+  for (let cardIndex = cards.length - 1; cardIndex >= 0; cardIndex -= 1) {
+    const blocks = cards[cardIndex].blocks;
+    for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+      const block = blocks[blockIndex];
+      if (
+        block.type !== "text" ||
+        block.replyId !== replyId ||
+        block.modelCallIndex !== modelCallIndex
+      ) {
+        continue;
+      }
+      const replaced: DataHubExecutionBlock = {
+        ...block,
+        content,
+        ...(event.textRole ? { textRole: event.textRole } : {}),
+        ...(event.timestamp === undefined ? {} : { timestamp: event.timestamp })
+      };
+      return cards.map((card, index) =>
+        index === cardIndex
+          ? {
+              ...card,
+              blocks: blocks.map((candidate, position) =>
+                position === blockIndex ? replaced : candidate
+              ),
+              ...(event.timestamp === undefined ? {} : { updatedAt: event.timestamp })
+            }
+          : card
+      );
+    }
+  }
+
+  return upsertExecutionCard(cards, event, agentName);
 }
 
 function completeCards(
@@ -522,7 +577,9 @@ function projectSessionEvent(
   const eventAgentName = resolveAgentName(event, identity, session, fallback);
   let cards = renameCards(session.cards, session.agentName, nextAgentName);
 
-  if (executionCardEventTypes.has(event.type)) {
+  if (event.type === "text_replace") {
+    cards = replaceExecutionText(cards, event, eventAgentName);
+  } else if (executionCardEventTypes.has(event.type)) {
     cards = upsertExecutionCard(cards, event, eventAgentName);
   }
   if (status === "done" || status === "error" || status === "cancelled") {

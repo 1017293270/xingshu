@@ -14,6 +14,7 @@ import type {
   DataHubContentBlock,
   DataHubDataSourceSelected,
   DataHubDoneData,
+  DataHubProcessNote,
   DataHubReactStepData,
   DataHubRoutingDecomposeData,
   DataHubStreamEvent,
@@ -25,7 +26,9 @@ import type {
 import { getDataHubEventPayload } from "@/services/dataHubEventAdapter";
 import {
   dedupeDataHubAnswerBlocks,
-  mergeRepeatedAnswerChunk
+  hasDataHubTextRoles,
+  mergeRepeatedAnswerChunk,
+  splitDataHubRoleAnswer
 } from "@/services/dataHubAnswerDedupe";
 import {
   appendDataHubClarification,
@@ -1119,13 +1122,14 @@ function normalizeArtifact(data: unknown): AskArtifactRef | undefined {
   };
 }
 
+/** 追加一段流式文本；新建了块时返回它，并进上一块时返回 undefined。 */
 function appendContentBlock(
   blocks: DataHubContentBlock[],
   content: string,
   event: DataHubStreamEvent
-) {
+): DataHubContentBlock | undefined {
   if (!content) {
-    return;
+    return undefined;
   }
 
   const previous = blocks[blocks.length - 1];
@@ -1133,20 +1137,58 @@ function appendContentBlock(
     previous &&
     previous.replyId === event.replyId &&
     previous.modelCallIndex === event.modelCallIndex &&
+    // 过程说明与正式回答即使同属一次模型调用也不能拼成一段。
+    previous.textRole === event.textRole &&
     (event.modelCallIndex !== undefined ||
       (event.replyId === undefined && previous.replyId === undefined));
 
   if (sameModelCall) {
     // 同一次模型调用还可能在增量之后补发整段全文，直接拼接会把这段话写成两遍。
     previous.content = mergeRepeatedAnswerChunk(previous.content, content) ?? previous.content + content;
-    return;
+    return undefined;
   }
 
-  blocks.push({
+  const block: DataHubContentBlock = {
     content,
     replyId: event.replyId,
-    modelCallIndex: event.modelCallIndex
-  });
+    modelCallIndex: event.modelCallIndex,
+    ...(event.textRole ? { textRole: event.textRole } : {})
+  };
+  blocks.push(block);
+  return block;
+}
+
+/**
+ * text_replace：把同 replyId + modelCallIndex 的最近一个正文块换成收敛后的全文并写入 textRole；
+ * 历史有缺口找不到时追加一块，正式回答不能丢。缺身份的替换无法定位，直接忽略。
+ * 新建了块时返回它。
+ */
+function replaceContentBlock(
+  blocks: DataHubContentBlock[],
+  content: string,
+  event: DataHubStreamEvent
+): DataHubContentBlock | undefined {
+  if (!content || !event.replyId?.trim() || event.modelCallIndex === undefined) {
+    return undefined;
+  }
+
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block.replyId === event.replyId && block.modelCallIndex === event.modelCallIndex) {
+      block.content = content;
+      if (event.textRole) block.textRole = event.textRole;
+      return undefined;
+    }
+  }
+
+  const block: DataHubContentBlock = {
+    content,
+    replyId: event.replyId,
+    modelCallIndex: event.modelCallIndex,
+    ...(event.textRole ? { textRole: event.textRole } : {})
+  };
+  blocks.push(block);
+  return block;
 }
 
 function normalizeDataSource(data: unknown): DataHubDataSourceSelected | undefined {
@@ -1625,6 +1667,11 @@ export function createDataHubAskTurn(
     chartResults: [],
     clarifications: []
   };
+  // 思考块与正文块按到达顺序记一条时间线，「思考过程」据此把分析说明和过程说明交织排列。
+  const timeline: DataHubContentBlock[] = [];
+  const track = (block: DataHubContentBlock | undefined) => {
+    if (block) timeline.push(block);
+  };
 
   for (const event of events) {
     const payload = getDataHubEventPayload(event);
@@ -1665,9 +1712,11 @@ export function createDataHubAskTurn(
     }
 
     if (event.type === "thinking" || event.type === "final_thinking" || event.isThinking) {
-      appendContentBlock(turn.thinkingBlocks, readText(payload), event);
+      track(appendContentBlock(turn.thinkingBlocks, readText(payload), event));
     } else if (event.type === "content" || event.type === "text") {
-      appendContentBlock(turn.answerBlocks, readText(payload), event);
+      track(appendContentBlock(turn.answerBlocks, readText(payload), event));
+    } else if (event.type === "text_replace") {
+      track(replaceContentBlock(turn.answerBlocks, readText(payload), event));
     }
 
     if (event.type === "info" || event.type === "hallucination") {
@@ -1734,27 +1783,46 @@ export function createDataHubAskTurn(
     appendCitationDocument(turn.citationDocuments, normalizeCitationDocument(citation));
   }
 
+  // 清洗、去重会换出新对象，新对象沿用原块在时间线上的位置；不在时间线上的（终态补发）排在最后。
+  const positions = new Map<DataHubContentBlock, number>();
+  timeline.forEach((block, index) => positions.set(block, index));
+  const keepPosition = (block: DataHubContentBlock, source: DataHubContentBlock) => {
+    positions.set(block, positions.get(source) ?? timeline.length);
+    return block;
+  };
+
   if (turn.done?.thinkingContent) {
     turn.thinkingBlocks.push({ content: turn.done.thinkingContent });
   }
-  turn.thinkingBlocks = dedupeDataHubAnswerBlocks(turn.thinkingBlocks.map((block) => ({
+  turn.thinkingBlocks = dedupeDataHubAnswerBlocks(turn.thinkingBlocks.map((block) => keepPosition({
     ...block, content: cleanDataHubThinkingText(block.content)
-  })).filter((block) => block.content.trim()));
+  }, block)).filter((block) => block.content.trim()));
   turn.thinkingContent = turn.thinkingBlocks.map((block) => block.content).join("\n\n");
 
   if (errorMessage && !turn.error) {
     turn.error = { message: errorMessage };
   }
 
-  // 后端会在增量之外把整段正文再发一遍：结果事件在 replyId 对不上时补发全文，
-  // 编排根智能体每结束一次模型调用也整段公开一次。先把同义块收敛成一份，
-  // 再据此判定正式回答，流式过程中与终态就都只剩一份正文。
-  const envelope = cleanDataHubAnswerBlocks(turn.answerBlocks);
-  turn.answerBlocks = dedupeDataHubAnswerBlocks(envelope.blocks);
+  let processTextBlocks: DataHubContentBlock[] = [];
+  let envelopeThinking: string;
+  if (hasDataHubTextRoles(turn.answerBlocks)) {
+    // 新协议：服务端已标明哪段是过程说明、哪段是正式回答，正文只取正式回答。
+    const split = splitDataHubRoleAnswer(turn.answerBlocks);
+    turn.answerBlocks = split.answer ? [split.answer] : [];
+    processTextBlocks = split.process.map(({ source, content }) => keepPosition({ ...source, content }, source));
+    envelopeThinking = split.thinking;
+  } else {
+    // 后端会在增量之外把整段正文再发一遍：结果事件在 replyId 对不上时补发全文，
+    // 编排根智能体每结束一次模型调用也整段公开一次。先把同义块收敛成一份，
+    // 再据此判定正式回答，流式过程中与终态就都只剩一份正文。
+    const envelope = cleanDataHubAnswerBlocks(turn.answerBlocks);
+    turn.answerBlocks = dedupeDataHubAnswerBlocks(envelope.blocks);
+    envelopeThinking = envelope.thinking;
+  }
 
   const streamedAnswer = turn.answerBlocks.map((block) => block.content).join("");
   const summaryThinking = splitDataHubThinkingEnvelope(String(turn.done?.summary ?? "")).thinking;
-  const protocolThinking = Array.from(new Set([envelope.thinking, summaryThinking]
+  const protocolThinking = Array.from(new Set([envelopeThinking, summaryThinking]
     .map(cleanDataHubThinkingText).filter(Boolean))).join("\n");
   if (protocolThinking && !turn.thinkingContent.includes(protocolThinking)) {
     turn.thinkingBlocks.push({ content: protocolThinking });
@@ -1775,6 +1843,23 @@ export function createDataHubAskTurn(
       : [{ content: officialAnswer }]
     : [];
   turn.assistantContent = officialAnswer;
+  turn.processNotes = orderProcessNotes(turn.thinkingBlocks, processTextBlocks, positions, timeline.length);
 
   return turn;
+}
+
+/** 分析说明与过程说明按到达顺序合成一列；同一位置时分析说明在前。 */
+function orderProcessNotes(
+  analysisBlocks: DataHubContentBlock[],
+  progressBlocks: DataHubContentBlock[],
+  positions: Map<DataHubContentBlock, number>,
+  end: number
+): DataHubProcessNote[] {
+  return [
+    ...analysisBlocks.map((block) => ({ kind: "analysis" as const, block })),
+    ...progressBlocks.map((block) => ({ kind: "progress" as const, block }))
+  ]
+    .map((note, order) => ({ ...note, order, position: positions.get(note.block) ?? end }))
+    .sort((left, right) => left.position - right.position || left.order - right.order)
+    .map(({ kind, block }) => ({ kind, content: block.content }));
 }

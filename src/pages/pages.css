@@ -1984,6 +1984,186 @@
   font-size: var(--xs-fs-caption);
 }
 
+/* 可信状态是出处脚注区的第一行，查询依据紧随其后，两者共用上方那条细线。 */
+.analysis-answer-trust-footnote {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.analysis-answer-trust-footnote > .analysis-answer-preamble {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* 一行图标加文字，不做胶囊、底色块或描边徽章；颜色只表达等级。 */
+.analysis-answer-trust {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 24px;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-medium);
+  line-height: 1.5;
+}
+
+.analysis-answer-trust__icon {
+  flex: none;
+}
+
+.analysis-answer-trust[data-level="TRUSTED"] {
+  color: var(--xs-primary-2);
+}
+
+.analysis-answer-trust[data-level="PARTIAL"] {
+  color: var(--xs-warning-ink);
+}
+
+.analysis-answer-trust[data-level="PARTIAL"] .analysis-answer-trust__icon {
+  color: var(--xs-warning);
+}
+
+.analysis-answer-trust__help {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--xs-text-3);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--xs-radius-small);
+  background: transparent;
+}
+
+.analysis-answer-trust__help:hover,
+.analysis-answer-trust__help[aria-expanded="true"] {
+  color: var(--xs-text-2);
+}
+
+/* 焦点环贴着 24px 热区画，不压到左边的等级文字。 */
+.analysis-answer-trust__help:focus-visible {
+  outline-offset: 0;
+}
+
+/* 只有表格回答时，可信状态单独放在表格回答前面。 */
+.analysis-result-stage > .analysis-answer-trust {
+  margin-top: 4px;
+}
+
+/* 可信说明浮层：覆盖 antd 默认的圆角、阴影与内边距，回到白底细边框低阴影。
+   右侧 16px 透明留白计入定位尺寸，窄屏左移贴边时卡片离屏幕右缘仍留 16px。 */
+.xs-data-trust-popover.ant-popover {
+  padding-right: 16px;
+}
+
+.xs-data-trust-popover.ant-popover .ant-popover-inner {
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 14px;
+  border: 1px solid var(--xs-border);
+  border-radius: var(--xs-radius-card);
+  background: var(--xs-surface);
+  box-shadow: var(--xs-shadow-lift);
+}
+
+.xs-data-trust-popover__content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--xs-text-2);
+  font-size: var(--xs-fs-label);
+  font-weight: var(--xs-fw-regular);
+  line-height: 1.6;
+}
+
+.xs-data-trust-popover__content p {
+  margin: 0;
+}
+
+.xs-data-trust-popover__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--xs-text);
+  font-weight: var(--xs-fw-bold);
+}
+
+.xs-data-trust-popover__level-icon {
+  flex: none;
+}
+
+.xs-data-trust-popover__content[data-level="TRUSTED"] .xs-data-trust-popover__level-icon {
+  color: var(--xs-primary-2);
+}
+
+.xs-data-trust-popover__content[data-level="PARTIAL"] .xs-data-trust-popover__level-icon {
+  color: var(--xs-warning);
+}
+
+.xs-data-trust-popover__measures {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xs-border);
+}
+
+.xs-data-trust-popover__caption,
+.xs-data-trust-popover__note {
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+  line-height: 1.5;
+}
+
+.xs-data-trust-popover__list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xs-data-trust-popover__list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--xs-text);
+}
+
+.xs-data-trust-popover__mark {
+  flex: none;
+  color: var(--xs-text-3);
+}
+
+.xs-data-trust-popover__list li[data-trusted="true"] .xs-data-trust-popover__mark {
+  color: var(--xs-success);
+}
+
+.xs-data-trust-popover__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xs-data-trust-popover__state {
+  flex: none;
+  color: var(--xs-text-3);
+  font-size: var(--xs-fs-caption);
+}
+
 /* 表格回答紧跟文字回答：表名一行小标题，表体沿用查询结果的紧凑表格。 */
 .analysis-table-answer {
   display: grid;

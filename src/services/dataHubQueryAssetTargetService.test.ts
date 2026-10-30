@@ -419,3 +419,33 @@ describe("query asset answers", () => {
     expect(getDataHubQueryAssetAnswerText(projection, {}, "本轮回答")).toBe("本轮回答");
   });
 });
+
+describe("textRole child conclusions", () => {
+  const child = { sessionId: "ask-child", parentSessionId: "root", subagentId: "ask-data-1", agentId: "ask-data", replyId: "child-reply" };
+  const progress = "语义 SQL 报错（列数不匹配），我改用标准查询分别统计两个分项。";
+  const answer = "学生心理测试合格数量：263；学生综合测试合格数量：424。";
+
+  it("lifts only the formal answer and never the child's process notes", () => {
+    const projection = projectDataHubExecutionEvents([
+      { type: "subagent_exposed", ...child, content: { sessionId: "ask-child", agentId: "ask-data" } },
+      { type: "text", ...child, content: "我需要先了解查询技能的规范。", modelCallIndex: 1, textRole: "progress" },
+      { type: "text", ...child, content: progress, modelCallIndex: 2, textRole: "progress" },
+      { type: "table", ...child, content: { columns: ["项目", "数量"], rows: [["心理测试", 263]] } },
+      { type: "text", ...child, content: "学生心理测试合格数量：263", modelCallIndex: 3, textRole: "progress" },
+      { type: "text_replace", ...child, content: answer, modelCallIndex: 3, textRole: "answer" },
+      { type: "done", ...child, content: {} }
+    ], { mainSessionId: "root" });
+
+    expect(getDataHubChildAnswerBlocks(projection).map((block) => block.content)).toEqual([answer]);
+    expect(getDataHubSessionAnswerText(projection, "ask-child")).toBe(answer);
+  });
+
+  it("has no conclusion while a marked child has only said process notes", () => {
+    const projection = projectDataHubExecutionEvents([
+      { type: "subagent_exposed", ...child, content: { sessionId: "ask-child", agentId: "ask-data" } },
+      { type: "text", ...child, content: progress, modelCallIndex: 1, textRole: "progress" },
+      { type: "done", ...child, content: {} }
+    ], { mainSessionId: "root" });
+    expect(getDataHubChildAnswerBlocks(projection)).toEqual([]);
+  });
+});

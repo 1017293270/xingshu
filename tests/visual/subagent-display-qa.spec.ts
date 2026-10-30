@@ -295,8 +295,13 @@ test("capture preparing state", async ({ page }) => {
   await page.getByRole("button", { name: "发送" }).click();
   const preparing = page.getByRole("region", { name: "思考过程", exact: true });
   await expect(preparing).toHaveAttribute("data-status", "running");
+  // 思考过程默认收起，折叠头只说白话状态；展开后才看到等待提示。
+  const preparingToggle = preparing.getByRole("button", { name: /^思考过程/ });
+  await expect(preparingToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(preparingToggle).toContainText("正在分析问题");
+  await preparingToggle.click();
   await expect(preparing).toContainText("正在整理思路");
-  await expect(preparing.getByRole("button", { name: /^思考过程/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(preparingToggle).toHaveAttribute("aria-expanded", "true");
   await preparing.screenshot({ path: "outputs/subagent-display-qa/after-thinking-focused.png", animations: "allow" });
   await page.setViewportSize({ width: 390, height: 844 });
   await preparing.scrollIntoViewIfNeeded();

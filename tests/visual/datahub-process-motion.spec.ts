@@ -53,6 +53,11 @@ for (const label of ["思考过程", "查询过程"]) {
     const region = page.getByRole("region", { name: label, exact: true });
     const toggle = region.getByRole("button", { name: new RegExp(`^${label}`) });
     const content = region.locator(":scope > .xs-datahub-collapse");
+    // 思考过程任何状态下都默认收起，先手动展开再量收起动画。
+    if (label === "思考过程") {
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await toggle.click();
+    }
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect.poll(() => content.evaluate((node) => getComputedStyle(node).opacity)).toBe("1");
     const openHeight = await content.evaluate((node) => node.getBoundingClientRect().height);

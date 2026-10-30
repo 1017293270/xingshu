@@ -145,8 +145,9 @@ function hasAssistantTextEvent(events: DataHubStreamEvent[]) {
       return false;
     }
 
-    if (event.type === "content" || event.type === "text") {
-      return true;
+    // 过程说明不是回答；text_replace 才是收敛后的正式回答。
+    if (event.type === "content" || event.type === "text" || event.type === "text_replace") {
+      return event.textRole !== "progress";
     }
 
     if (event.type !== "done") {

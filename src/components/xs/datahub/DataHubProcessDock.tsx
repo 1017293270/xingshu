@@ -2,24 +2,40 @@ import { CaretRight } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { XsSafeMarkdown } from "@/components/xs/XsSafeMarkdown";
 import type { DataHubRoutingDecomposeData } from "@/types/dataHub";
-import type { DataHubThinkingSection } from "@/services/dataHubThinkingSections";
+import type { DataHubProcessNote, DataHubThinkingSection } from "@/services/dataHubThinkingSections";
 import { useNow } from "./useNow";
 import "../../../pages/styles/datahub-execution.css";
 
+/** 运行中所处的阶段：只决定折叠头上的白话状态，不影响展开内容。 */
+export type DataHubProcessDockPhase = "thinking" | "query" | "result";
+
 export type DataHubProcessDockProps = {
-  /** 模型思考流（Markdown）；running 时随事件增量更新。 */
+  /** 没有分段数据时的兜底：整段当作主任务的分析说明。 */
   thinkingContent: string;
   sections?: DataHubThinkingSection[];
   sourceNote?: string;
   /** 路由拆解出的子任务。 */
   decompose?: DataHubRoutingDecomposeData;
   status: "running" | "done" | "error" | "cancelled";
+  /** 运行中所处的阶段，默认按分析问题说。 */
+  phase?: DataHubProcessDockPhase;
   /** running 时用于实时计时。 */
   startedAt?: number;
   /** 结束后展示本阶段实际耗时。 */
   durationMs?: number;
-  /** 未收到思考流时，仅在运行中显示等待提示。 */
+  /** 未收到任何说明时，仅在运行中保留这一行等待状态。 */
   showPlaceholder?: boolean;
+};
+
+const runningPhaseLabels: Record<DataHubProcessDockPhase, string> = {
+  thinking: "正在分析问题",
+  query: "正在查询数据",
+  result: "正在整理回答"
+};
+
+const noteKindLabels: Record<DataHubProcessNote["kind"], string> = {
+  analysis: "分析说明",
+  progress: "过程说明"
 };
 
 function formatSeconds(ms: number) {
@@ -27,8 +43,9 @@ function formatSeconds(ms: number) {
 }
 
 /**
- * 「思考过程（已完成，X秒）」折叠块：running 自动展开流式展示思考与任务拆解，
- * 结束后自动收成一行；用户手动点过折叠头后不再自动收放。
+ * 「思考过程」折叠块：分析说明与过程说明偏技术，任何状态下默认收起，
+ * 折叠头只说白话状态和耗时；展开后按智能体分段、按时间顺序逐条列出。
+ * 只有用户点击会展开或收起，阶段变化不再自动收放。
  */
 export function DataHubProcessDock({
   thinkingContent,
@@ -36,55 +53,47 @@ export function DataHubProcessDock({
   sourceNote,
   decompose,
   status,
+  phase = "thinking",
   startedAt,
   durationMs,
   showPlaceholder = false
 }: DataHubProcessDockProps) {
   const bodyId = useId();
-  const [expanded, setExpanded] = useState(status === "running");
-  const userPinnedRef = useRef(false);
-  const prevStatusRef = useRef(status);
-  const bodyMountedRef = useRef(expanded);
+  const [expanded, setExpanded] = useState(false);
+  const bodyMountedRef = useRef(false);
   const thinkingRef = useRef<HTMLDivElement | null>(null);
   const shownSections = sections ?? (thinkingContent.trim()
-    ? [{ key: "main", label: "主任务", content: thinkingContent, main: true }] : []);
-  const fullThinking = shownSections.map((section) => section.content).join("\n\n");
+    ? [{ key: "main", label: "主任务", notes: [{ kind: "analysis" as const, content: thinkingContent.trim() }], main: true }]
+    : []);
+  const noteCount = shownSections.reduce((count, section) => count + section.notes.length, 0);
+  const latestNote = shownSections.at(-1)?.notes.at(-1)?.content ?? "";
   const running = status === "running";
   const now = useNow(1000, running && startedAt != null);
 
   useEffect(() => {
-    if (prevStatusRef.current === status) {
-      return;
-    }
-    prevStatusRef.current = status;
-    if (userPinnedRef.current) {
-      return;
-    }
-    // 新一轮跑起来自动展开；结束自动收成一行摘要
-    setExpanded(status === "running");
-  }, [status]);
-
-  useEffect(() => {
+    // 用户展开着看运行中的说明时，新条目到达就跟到底部
     if (running && expanded && thinkingRef.current) {
       thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
     }
-  }, [running, expanded, fullThinking]);
+  }, [running, expanded, noteCount, latestNote]);
 
   if (expanded) {
     bodyMountedRef.current = true;
   }
 
   const subQuestions = decompose?.subQuestions?.map((item) => item.trim()).filter(Boolean) ?? [];
-  const hasContent = Boolean(fullThinking.trim()) || subQuestions.length > 0;
+  const hasContent = noteCount > 0 || subQuestions.length > 0;
   // 结束后没有公开内容，就不保留一个空的“已完成”阶段。
   if (!hasContent && !(showPlaceholder && running)) {
     return null;
   }
 
   const elapsedMs = running && startedAt != null ? Math.max(0, now - startedAt) : durationMs;
-  const stateLabel = running ? "" : status === "done" ? "已完成" : status === "cancelled" ? "已停止" : "已中断";
+  const stateLabel = running
+    ? runningPhaseLabels[phase]
+    : status === "done" ? "已完成" : status === "cancelled" ? "已停止" : "已中断";
   const timing = elapsedMs != null ? formatSeconds(elapsedMs) : "";
-  const summary = `思考过程 （${[stateLabel, timing].filter(Boolean).join("，") || "进行中"}）`;
+  const summary = `思考过程 （${[stateLabel, timing].filter(Boolean).join("，")}）`;
 
   return (
     <section className="datahub-process-dock" aria-label="思考过程" data-status={status}>
@@ -94,14 +103,11 @@ export function DataHubProcessDock({
         aria-label={summary}
         aria-controls={bodyId}
         aria-expanded={expanded}
-        onClick={() => {
-          userPinnedRef.current = true;
-          setExpanded((value) => !value);
-        }}
+        onClick={() => setExpanded((value) => !value)}
       >
         <CaretRight size={12} aria-hidden="true" />
         <span className="datahub-phase-title">思考过程</span>
-        <small>{[stateLabel, timing].filter(Boolean).join(" · ") || "进行中"}</small>
+        <small>{[stateLabel, timing].filter(Boolean).join(" · ")}</small>
       </button>
       <div
         id={bodyId}
@@ -121,7 +127,7 @@ export function DataHubProcessDock({
                   </ol>
                 </section>
               ) : null}
-              {fullThinking.trim() ? (
+              {noteCount > 0 ? (
                 <div
                   className="datahub-process-dock__thinking"
                   ref={thinkingRef}
@@ -130,7 +136,14 @@ export function DataHubProcessDock({
                   {shownSections.map((section) => (
                     <section className="datahub-process-dock__thinking-section" key={section.key}>
                       {shownSections.length > 1 || !section.main ? <h4>{section.label}</h4> : null}
-                      <XsSafeMarkdown content={section.content} />
+                      <ol className="datahub-process-notes">
+                        {section.notes.map((note, index) => (
+                          <li className="datahub-process-note" data-kind={note.kind} key={`${note.kind}-${index}`}>
+                            <span className="datahub-process-note__kind">{noteKindLabels[note.kind]}</span>
+                            <XsSafeMarkdown className="datahub-process-note__content" content={note.content} />
+                          </li>
+                        ))}
+                      </ol>
                     </section>
                   ))}
                 </div>

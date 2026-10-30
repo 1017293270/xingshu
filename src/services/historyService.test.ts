@@ -534,6 +534,82 @@ describe("historyService data-hub replay", () => {
     expect(rootTurn.assistantContent).not.toContain("子智能体内部答案");
   });
 
+  it("falls back to the persisted answer when the root only kept progress text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request) => {
+        if (String(_url).includes("/messages/list")) {
+          return new Response(
+            JSON.stringify({
+              code: 200,
+              message: "success",
+              data: [
+                { id: 1, sessionId: "ask-history", chatId: "ask-chat", role: "user", content: "合格人数", seqNum: 1 },
+                { id: 2, sessionId: "ask-history", chatId: "ask-chat", role: "assistant", content: "合格 263 人。", seqNum: 4 }
+              ]
+            })
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            code: 200,
+            message: "success",
+            data: [
+              {
+                id: 3,
+                sessionId: "ask-history",
+                chatId: "ask-chat",
+                type: "persisted_event",
+                data: JSON.stringify({
+                  type: "text",
+                  content: "语义 SQL 报错，我改用标准查询。",
+                  textRole: "progress",
+                  agentName: "问数智能体",
+                  sessionId: "ask-history",
+                  globalSessionId: "ask-history",
+                  chatId: "ask-chat",
+                  replyId: "reply-1",
+                  modelCallIndex: 1,
+                  finished: false
+                }),
+                seqNum: 2
+              },
+              {
+                id: 4,
+                sessionId: "ask-history",
+                chatId: "ask-chat",
+                type: "persisted_event",
+                data: JSON.stringify({
+                  type: "done",
+                  content: {},
+                  agentName: "问数智能体",
+                  sessionId: "ask-history",
+                  globalSessionId: "ask-history",
+                  chatId: "ask-chat",
+                  finished: true
+                }),
+                seqNum: 3
+              }
+            ]
+          })
+        );
+      })
+    );
+
+    const replay = await loadDataHubHistoryReplay("ask-history", "ask");
+    const rootTurn = createDataHubAskTurn(
+      replay.question,
+      replay.events,
+      "done",
+      "",
+      { sessionId: replay.sessionId, chatId: "ask-chat" }
+    );
+
+    expect(rootTurn.assistantContent).toBe("合格 263 人。");
+    expect(rootTurn.assistantContent).not.toContain("语义 SQL");
+  });
+
   it("prioritizes the root agent done mode over a child knowledge citation", async () => {
     vi.stubGlobal(
       "fetch",
